@@ -33,6 +33,71 @@
                 </HeaderedContentControl>
             </DataTemplate>
 
+            <Style x:Key="OverlayScrollViewerStyle" TargetType="ScrollViewer">
+                <Setter Property="HorizontalScrollBarVisibility" Value="Disabled" />
+                <Setter Property="VerticalScrollBarVisibility" Value="Auto" />
+                <Setter Property="Template">
+                    <Setter.Value>
+                        <ControlTemplate TargetType="ScrollViewer">
+                            <Grid Background="{TemplateBinding Background}">
+                                <ScrollContentPresenter x:Name="PART_ScrollContentPresenter"
+                                                        Margin="{TemplateBinding Padding}"
+                                                        CanContentScroll="{TemplateBinding CanContentScroll}" />
+                                <ScrollBar x:Name="PART_VerticalScrollBar"
+                                           HorizontalAlignment="Right"
+                                           Width="6"
+                                           MinWidth="6"
+                                           Background="Transparent"
+                                           Maximum="{TemplateBinding ScrollableHeight}"
+                                           ViewportSize="{TemplateBinding ViewportHeight}"
+                                           Value="{Binding VerticalOffset, RelativeSource={RelativeSource TemplatedParent}, Mode=OneWay}"
+                                           Visibility="{TemplateBinding ComputedVerticalScrollBarVisibility}"
+                                           AutomationProperties.Name="Прокрутка">
+                                    <ScrollBar.Template>
+                                        <ControlTemplate TargetType="ScrollBar">
+                                            <Track x:Name="PART_Track" IsDirectionReversed="True">
+                                                <Track.DecreaseRepeatButton>
+                                                    <RepeatButton Style="{StaticResource ScrollBar.PageButton}"
+                                                                  Command="ScrollBar.PageUpCommand" />
+                                                </Track.DecreaseRepeatButton>
+                                                <Track.IncreaseRepeatButton>
+                                                    <RepeatButton Style="{StaticResource ScrollBar.PageButton}"
+                                                                  Command="ScrollBar.PageDownCommand" />
+                                                </Track.IncreaseRepeatButton>
+                                                <Track.Thumb>
+                                                    <Thumb>
+                                                        <Thumb.Template>
+                                                            <ControlTemplate TargetType="Thumb">
+                                                                <Border x:Name="Bd"
+                                                                        Background="{DynamicResource Bg.ScrollThumb}"
+                                                                        CornerRadius="3"
+                                                                        Margin="1,0" />
+                                                                <ControlTemplate.Triggers>
+                                                                    <Trigger Property="IsMouseOver" Value="True">
+                                                                        <Setter TargetName="Bd"
+                                                                                Property="Background"
+                                                                                Value="{DynamicResource Bg.ScrollThumbHover}" />
+                                                                    </Trigger>
+                                                                    <Trigger Property="IsDragging" Value="True">
+                                                                        <Setter TargetName="Bd"
+                                                                                Property="Background"
+                                                                                Value="{DynamicResource Accent.Primary}" />
+                                                                    </Trigger>
+                                                                </ControlTemplate.Triggers>
+                                                            </ControlTemplate>
+                                                        </Thumb.Template>
+                                                    </Thumb>
+                                                </Track.Thumb>
+                                            </Track>
+                                        </ControlTemplate>
+                                    </ScrollBar.Template>
+                                </ScrollBar>
+                            </Grid>
+                        </ControlTemplate>
+                    </Setter.Value>
+                </Setter>
+            </Style>
+
             <Style x:Key="PlatformCardItemStyle" TargetType="ListBoxItem">
                 <Setter Property="Padding" Value="14,11" />
                 <Setter Property="Margin" Value="0,0,0,8" />
@@ -153,8 +218,8 @@
                 </Style>
             </Grid.Style>
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="304" />
-                <ColumnDefinition Width="20" />
+                <ColumnDefinition x:Name="MasterColumn" Width="312" />
+                <ColumnDefinition x:Name="MasterGapColumn" Width="12" />
                 <ColumnDefinition Width="*" />
             </Grid.ColumnDefinitions>
             <Grid.RowDefinitions>
@@ -165,12 +230,13 @@
             <ScrollViewer x:Name="MasterPane"
                           HorizontalScrollBarVisibility="Disabled">
                 <ScrollViewer.Style>
-                    <Style TargetType="ScrollViewer">
+                    <Style TargetType="ScrollViewer" BasedOn="{StaticResource OverlayScrollViewerStyle}">
                         <Setter Property="Grid.Column" Value="0" />
                         <Setter Property="Grid.Row" Value="0" />
                         <Setter Property="Grid.ColumnSpan" Value="1" />
                         <Setter Property="Grid.RowSpan" Value="2" />
                         <Setter Property="VerticalScrollBarVisibility" Value="Auto" />
+                        <Setter Property="Padding" Value="0,0,8,0" />
                         <Setter Property="Margin" Value="0" />
                         <Style.Triggers>
                             <DataTrigger Binding="{Binding IsCompactLayout, RelativeSource={RelativeSource AncestorType=UserControl}}" Value="True">
@@ -179,6 +245,7 @@
                                 <Setter Property="Grid.ColumnSpan" Value="3" />
                                 <Setter Property="Grid.RowSpan" Value="1" />
                                 <Setter Property="VerticalScrollBarVisibility" Value="Disabled" />
+                                <Setter Property="Padding" Value="0" />
                                 <Setter Property="Margin" Value="0,0,0,6" />
                             </DataTrigger>
                         </Style.Triggers>
@@ -231,7 +298,7 @@
                                 <WrapPanel>
                                     <WrapPanel.Style>
                                         <Style TargetType="WrapPanel">
-                                            <Setter Property="ItemWidth" Value="{Binding ActualWidth, RelativeSource={RelativeSource AncestorType=ListBox}}" />
+                                            <Setter Property="ItemWidth" Value="{Binding MasterCardWidth, RelativeSource={RelativeSource AncestorType=UserControl}}" />
                                             <Style.Triggers>
                                                 <DataTrigger Binding="{Binding IsCompactLayout, RelativeSource={RelativeSource AncestorType=UserControl}}" Value="True">
                                                     <Setter Property="ItemWidth" Value="{x:Static sys:Double.NaN}" />
@@ -247,6 +314,13 @@
                                 <Setter Property="Grid.Row" Value="1" />
                                 <Setter Property="Grid.Column" Value="0" />
                                 <Setter Property="Grid.ColumnSpan" Value="2" />
+                                <Setter Property="Template">
+                                    <Setter.Value>
+                                        <ControlTemplate TargetType="ListBox">
+                                            <ItemsPresenter />
+                                        </ControlTemplate>
+                                    </Setter.Value>
+                                </Setter>
                                 <Style.Triggers>
                                     <DataTrigger Binding="{Binding IsCompactLayout, RelativeSource={RelativeSource AncestorType=UserControl}}" Value="True">
                                         <Setter Property="Grid.ColumnSpan" Value="1" />
@@ -257,50 +331,34 @@
                         <ListBox.ItemTemplate>
                             <DataTemplate DataType="{x:Type localVm:MultistreamPlatformCard}">
                                 <StackPanel>
-                                    <DockPanel>
-                                        <Button DockPanel.Dock="Right"
-                                                Content="{Binding Status.ConnectionActionLabel}"
-                                                Style="{StaticResource Button.Secondary}"
-                                                Visibility="{Binding Status.ShowConnectionAction, Converter={StaticResource BoolToVisibility}}"
-                                                Command="{Binding Status.ToggleConnectionCommand}"
-                                                AutomationProperties.AutomationId="{Binding Status.Platform, StringFormat='MultistreamConnect{0}'}"
-                                                AutomationProperties.Name="{Binding Status.ConnectionActionName}"
-                                                MinHeight="26"
-                                                Padding="10,2"
-                                                FontSize="{DynamicResource Font.Size.S}"
-                                                Margin="8,0,0,0"
-                                                VerticalAlignment="Center" />
-                                        <Border DockPanel.Dock="Right"
-                                                Margin="8,0,0,0"
-                                                VerticalAlignment="Center">
-                                            <Border.Style>
-                                                <Style TargetType="Border" BasedOn="{StaticResource PlatformBadgeStyle}">
-                                                    <Setter Property="Visibility" Value="Visible" />
-                                                    <Style.Triggers>
-                                                        <DataTrigger Binding="{Binding Status.ShowConnectionAction}" Value="True">
-                                                            <Setter Property="Visibility" Value="Collapsed" />
-                                                        </DataTrigger>
-                                                        <DataTrigger Binding="{Binding Status.StatusBadgeText}" Value="{x:Null}">
-                                                            <Setter Property="Visibility" Value="Collapsed" />
-                                                        </DataTrigger>
-                                                    </Style.Triggers>
-                                                </Style>
-                                            </Border.Style>
-                                            <TextBlock Text="{Binding Status.StatusBadgeText}"
-                                                       FontSize="{DynamicResource Font.Size.Caption}" />
-                                        </Border>
-                                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                                            <controls:PlatformIconView Platform="{Binding Status.Platform}"
-                                                                       ToolTip="{Binding Status.DisplayName}"
-                                                                       Width="18"
-                                                                       Height="18"
-                                                                       Margin="0,0,8,0"
-                                                                       VerticalAlignment="Center" />
-                                            <TextBlock Text="{Binding Status.DisplayName}"
+                                    <Grid MinHeight="28">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto" />
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <controls:PlatformIconView Grid.Column="0"
+                                                                   Platform="{Binding Status.Platform}"
+                                                                   ToolTip="{Binding Status.DisplayName}"
+                                                                   Width="18"
+                                                                   Height="18"
+                                                                   Margin="0,0,8,0"
+                                                                   VerticalAlignment="Center" />
+                                        <Grid Grid.Column="1" HorizontalAlignment="Left" VerticalAlignment="Center">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="Auto" />
+                                            </Grid.ColumnDefinitions>
+                                            <TextBlock Grid.Column="0"
+                                                       Text="{Binding Status.DisplayName}"
+                                                       ToolTip="{Binding Status.DisplayName}"
+                                                       TextTrimming="CharacterEllipsis"
+                                                       TextWrapping="NoWrap"
                                                        Foreground="{DynamicResource Fg.Primary}"
                                                        FontWeight="{DynamicResource Font.Weight.SemiBold}"
                                                        VerticalAlignment="Center" />
-                                            <Border Margin="6,0,0,0"
+                                            <Border Grid.Column="1"
+                                                    Margin="6,0,0,0"
                                                     Padding="5,0"
                                                     VerticalAlignment="Center">
                                                 <Border.Style>
@@ -320,11 +378,47 @@
                                                 <TextBlock Text="{Binding Status.ChannelCount}"
                                                            FontSize="{DynamicResource Font.Size.Caption}" />
                                             </Border>
+                                        </Grid>
+                                        <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+                                            <Button Content="{Binding Status.ConnectionActionLabel}"
+                                                    Style="{StaticResource Button.Secondary}"
+                                                    Visibility="{Binding Status.ShowConnectionAction, Converter={StaticResource BoolToVisibility}}"
+                                                    Command="{Binding Status.ToggleConnectionCommand}"
+                                                    AutomationProperties.AutomationId="{Binding Status.Platform, StringFormat='MultistreamConnect{0}'}"
+                                                    AutomationProperties.Name="{Binding Status.ConnectionActionName}"
+                                                    MinHeight="26"
+                                                    Padding="10,2"
+                                                    FontSize="{DynamicResource Font.Size.S}"
+                                                    Margin="8,0,0,0"
+                                                    VerticalAlignment="Center" />
+                                            <Border Margin="8,0,0,0"
+                                                    VerticalAlignment="Center">
+                                                <Border.Style>
+                                                    <Style TargetType="Border" BasedOn="{StaticResource PlatformBadgeStyle}">
+                                                        <Setter Property="Visibility" Value="Visible" />
+                                                        <Style.Triggers>
+                                                            <DataTrigger Binding="{Binding Status.ShowConnectionAction}" Value="True">
+                                                                <Setter Property="Visibility" Value="Collapsed" />
+                                                            </DataTrigger>
+                                                            <DataTrigger Binding="{Binding Status.StatusBadgeText}" Value="{x:Null}">
+                                                                <Setter Property="Visibility" Value="Collapsed" />
+                                                            </DataTrigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </Border.Style>
+                                                <TextBlock Text="{Binding Status.StatusBadgeText}"
+                                                           FontSize="{DynamicResource Font.Size.Caption}" />
+                                            </Border>
                                         </StackPanel>
-                                    </DockPanel>
+                                    </Grid>
 
-                                    <StackPanel Orientation="Horizontal" Margin="0,6,0,0">
-                                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,6,0">
+                                    <Grid Margin="0,6,0,0" HorizontalAlignment="Left">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto" />
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,6,0">
                                             <StackPanel.Style>
                                                 <Style TargetType="StackPanel">
                                                     <Setter Property="Visibility" Value="Collapsed" />
@@ -347,13 +441,26 @@
                                                      ToolTip="{Binding Status.ChatText}"
                                                      keepshell:SeverityBrushBehavior.Fill="{Binding Status.ChatSeverity}" />
                                         </StackPanel>
-                                        <TextBlock Text="{Binding Status.ChannelName}"
+                                        <TextBlock Grid.Column="1"
+                                                   Text="{Binding Status.ChannelName}"
                                                    ToolTip="{Binding Status.ChannelName}"
                                                    TextTrimming="CharacterEllipsis"
+                                                   TextWrapping="NoWrap"
                                                    Foreground="{DynamicResource Fg.Secondary}"
                                                    FontSize="{DynamicResource Font.Size.S}"
-                                                   VerticalAlignment="Center" />
-                                        <Border Padding="7,1"
+                                                   VerticalAlignment="Center">
+                                            <TextBlock.Style>
+                                                <Style TargetType="TextBlock">
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding IsCompactLayout, RelativeSource={RelativeSource AncestorType=UserControl}}" Value="True">
+                                                            <Setter Property="MaxWidth" Value="220" />
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </TextBlock.Style>
+                                        </TextBlock>
+                                        <Border Grid.Column="2"
+                                                Padding="7,1"
                                                 Margin="6,0,0,0"
                                                 VerticalAlignment="Center">
                                             <Border.Style>
@@ -374,11 +481,11 @@
                                                        Foreground="{DynamicResource Fg.Secondary}"
                                                        FontSize="{DynamicResource Font.Size.Caption}" />
                                         </Border>
-                                    </StackPanel>
+                                    </Grid>
 
-                                    <WrapPanel Margin="0,6,0,0">
-                                        <WrapPanel.Style>
-                                            <Style TargetType="WrapPanel">
+                                    <StackPanel Margin="0,6,0,0">
+                                        <StackPanel.Style>
+                                            <Style TargetType="StackPanel">
                                                 <Setter Property="Visibility" Value="Visible" />
                                                 <Style.Triggers>
                                                     <DataTrigger Binding="{Binding IsCompactLayout, RelativeSource={RelativeSource AncestorType=UserControl}}" Value="True">
@@ -386,28 +493,36 @@
                                                     </DataTrigger>
                                                 </Style.Triggers>
                                             </Style>
-                                        </WrapPanel.Style>
-                                        <StackPanel Orientation="Horizontal" Margin="0,0,10,2">
-                                            <Ellipse Width="6"
+                                        </StackPanel.Style>
+                                        <DockPanel Margin="0,0,0,2">
+                                            <Ellipse DockPanel.Dock="Left"
+                                                     Width="6"
                                                      Height="6"
                                                      VerticalAlignment="Center"
                                                      Margin="0,0,5,0"
                                                      keepshell:SeverityBrushBehavior.Fill="{Binding Status.BroadcastSeverity}" />
                                             <TextBlock Text="{Binding Status.BroadcastText}"
+                                                       ToolTip="{Binding Status.BroadcastText}"
+                                                       TextTrimming="CharacterEllipsis"
+                                                       TextWrapping="NoWrap"
                                                        FontSize="{DynamicResource Font.Size.S}"
                                                        keepshell:SeverityBrushBehavior.Foreground="{Binding Status.BroadcastSeverity}" />
-                                        </StackPanel>
-                                        <StackPanel Orientation="Horizontal" Margin="0,0,0,2">
-                                            <Ellipse Width="6"
+                                        </DockPanel>
+                                        <DockPanel>
+                                            <Ellipse DockPanel.Dock="Left"
+                                                     Width="6"
                                                      Height="6"
                                                      VerticalAlignment="Center"
                                                      Margin="0,0,5,0"
                                                      keepshell:SeverityBrushBehavior.Fill="{Binding Status.ChatSeverity}" />
                                             <TextBlock Text="{Binding Status.ChatText}"
+                                                       ToolTip="{Binding Status.ChatText}"
+                                                       TextTrimming="CharacterEllipsis"
+                                                       TextWrapping="NoWrap"
                                                        FontSize="{DynamicResource Font.Size.S}"
                                                        keepshell:SeverityBrushBehavior.Foreground="{Binding Status.ChatSeverity}" />
-                                        </StackPanel>
-                                    </WrapPanel>
+                                        </DockPanel>
+                                    </StackPanel>
                                 </StackPanel>
                             </DataTemplate>
                         </ListBox.ItemTemplate>
@@ -511,12 +626,13 @@
                           RequestBringIntoView="SuppressNavigationAutoScroll"
                           HorizontalScrollBarVisibility="Disabled">
                 <ScrollViewer.Style>
-                    <Style TargetType="ScrollViewer">
+                    <Style TargetType="ScrollViewer" BasedOn="{StaticResource OverlayScrollViewerStyle}">
                         <Setter Property="Grid.Column" Value="2" />
                         <Setter Property="Grid.Row" Value="0" />
                         <Setter Property="Grid.ColumnSpan" Value="1" />
                         <Setter Property="Grid.RowSpan" Value="2" />
                         <Setter Property="VerticalScrollBarVisibility" Value="Auto" />
+                        <Setter Property="Padding" Value="0,0,12,0" />
                         <Setter Property="MaxHeight" Value="{x:Static sys:Double.PositiveInfinity}" />
                         <Setter Property="Margin" Value="0" />
                         <Style.Triggers>
@@ -529,7 +645,7 @@
                         </Style.Triggers>
                     </Style>
                 </ScrollViewer.Style>
-                <Grid Margin="0,0,12,0">
+                <Grid>
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*" MaxWidth="1480" />
                         <ColumnDefinition Width="Auto" />
@@ -554,7 +670,7 @@
                                 </ContentControl.Style>
                                 <ContentControl.ContentTemplate>
                                     <DataTemplate DataType="{x:Type localVm:MultistreamPlatformCard}">
-                                        <DockPanel Margin="0,0,0,12">
+                                        <DockPanel MinHeight="36" Margin="0,0,0,12">
                                             <StackPanel DockPanel.Dock="Right"
                                                         Orientation="Horizontal"
                                                         VerticalAlignment="Center"
@@ -569,35 +685,50 @@
                                                         Visibility="{Binding DataContext.ShowBotAuthButtonInHeader, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource BoolToVisibility}}" />
                                             </StackPanel>
 
-                                            <WrapPanel VerticalAlignment="Center">
-                                                <controls:PlatformIconView Platform="{Binding Status.Platform}"
+                                            <Grid HorizontalAlignment="Left" VerticalAlignment="Center">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="Auto" />
+                                                    <ColumnDefinition Width="Auto" />
+                                                    <ColumnDefinition Width="Auto" />
+                                                    <ColumnDefinition Width="*" />
+                                                    <ColumnDefinition Width="Auto" />
+                                                </Grid.ColumnDefinitions>
+                                                <controls:PlatformIconView Grid.Column="0"
+                                                                           Platform="{Binding Status.Platform}"
                                                                            ToolTip="{Binding Status.DisplayName}"
                                                                            Width="22"
                                                                            Height="22"
                                                                            Margin="0,0,8,0"
                                                                            VerticalAlignment="Center" />
-                                                <TextBlock Text="{Binding Status.DisplayName}"
+                                                <TextBlock Grid.Column="1"
+                                                           Text="{Binding Status.DisplayName}"
                                                            Foreground="{DynamicResource Fg.Primary}"
                                                            FontSize="{DynamicResource Font.Size.XL}"
                                                            FontWeight="{DynamicResource Font.Weight.SemiBold}"
                                                            VerticalAlignment="Center" />
-                                                <TextBlock Text="·"
+                                                <TextBlock Grid.Column="2"
+                                                           Text="·"
                                                            Foreground="{DynamicResource Fg.Muted}"
                                                            FontSize="{DynamicResource Font.Size.XL}"
                                                            Margin="8,0"
                                                            VerticalAlignment="Center" />
-                                                <TextBlock Text="{Binding Status.ChannelName}"
+                                                <TextBlock Grid.Column="3"
+                                                           Text="{Binding Status.ChannelName}"
+                                                           ToolTip="{Binding Status.ChannelName}"
+                                                           TextTrimming="CharacterEllipsis"
+                                                           TextWrapping="NoWrap"
                                                            Foreground="{DynamicResource Fg.Secondary}"
                                                            FontSize="{DynamicResource Font.Size.M}"
                                                            VerticalAlignment="Center"
                                                            Margin="0,0,8,0" />
-                                                <Border Style="{StaticResource PlatformBadgeStyle}"
+                                                <Border Grid.Column="4"
+                                                        Style="{StaticResource PlatformBadgeStyle}"
                                                         VerticalAlignment="Center"
                                                         Visibility="{Binding Status.StatusBadgeText, Converter={StaticResource NullToVisibility}}">
                                                     <TextBlock Text="{Binding Status.StatusBadgeText}"
                                                                FontSize="{DynamicResource Font.Size.Caption}" />
                                                 </Border>
-                                            </WrapPanel>
+                                            </Grid>
                                         </DockPanel>
                                     </DataTemplate>
                                 </ContentControl.ContentTemplate>
@@ -723,19 +854,41 @@
                                           Visibility="{Binding IsParametersTabSelected, Converter={StaticResource BoolToVisibility}}" />
                         </StackPanel>
 
-                        <StackPanel x:Name="AutomationSection"
-                                    Visibility="{Binding IsAutomationSelected, Converter={StaticResource BoolToVisibility}}">
-                            <StackPanel Margin="0,0,0,14">
-                                <TextBlock Text="Профили и автоматика"
-                                           AutomationProperties.AutomationId="MultistreamAutomationSection"
-                                           AutomationProperties.HeadingLevel="Level2"
-                                           Foreground="{DynamicResource Fg.Primary}"
-                                           FontSize="{DynamicResource Font.Size.XL}"
-                                           FontWeight="{DynamicResource Font.Weight.SemiBold}" />
-                                <TextBlock Text="Профили трансляции, автоматический запуск, рассылка и группы каналов."
-                                           Style="{StaticResource Form.Hint}"
-                                           Margin="0,4,0,0" />
-                            </StackPanel>
+                        <GroupBox x:Name="AutomationSection"
+                                  AutomationProperties.AutomationId="MultistreamAutomationSection"
+                                  AutomationProperties.Name="Профили и автоматика"
+                                  Focusable="False"
+                                  Visibility="{Binding IsAutomationSelected, Converter={StaticResource BoolToVisibility}}">
+                            <GroupBox.Template>
+                                <ControlTemplate TargetType="GroupBox">
+                                    <ContentPresenter />
+                                </ControlTemplate>
+                            </GroupBox.Template>
+                            <StackPanel>
+                                <DockPanel MinHeight="36" Margin="0,0,0,12">
+                                    <DockPanel.Style>
+                                        <Style TargetType="DockPanel">
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding IsCompactLayout, RelativeSource={RelativeSource AncestorType=UserControl}}" Value="True">
+                                                    <Setter Property="Visibility" Value="Collapsed" />
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </DockPanel.Style>
+                                    <TextBlock Text="Профили и автоматика"
+                                               AutomationProperties.HeadingLevel="Level2"
+                                               Foreground="{DynamicResource Fg.Primary}"
+                                               FontSize="{DynamicResource Font.Size.XL}"
+                                               FontWeight="{DynamicResource Font.Weight.SemiBold}"
+                                               VerticalAlignment="Center" />
+                                    <TextBlock Text="· Профили трансляции, рассылка, автозапуск и группы каналов"
+                                               Foreground="{DynamicResource Fg.Muted}"
+                                               FontSize="{DynamicResource Font.Size.S}"
+                                               TextTrimming="CharacterEllipsis"
+                                               TextWrapping="NoWrap"
+                                               Margin="10,0,0,0"
+                                               VerticalAlignment="Center" />
+                                </DockPanel>
 
                             <Border Background="{DynamicResource Bg.SurfaceAlt}"
                                     BorderBrush="{DynamicResource Border.Subtle}"
@@ -814,11 +967,12 @@
                                           Focusable="False"
                                           Visibility="{Binding IsAutomationTabSelected, Converter={StaticResource BoolToVisibility}}" />
 
-                            <ItemsControl ItemsSource="{Binding ChannelGroupsBlocks}"
-                                          ItemTemplate="{StaticResource SettingsBlockTemplate}"
-                                          Focusable="False"
-                                          Visibility="{Binding IsGroupsTabSelected, Converter={StaticResource BoolToVisibility}}" />
-                        </StackPanel>
+                                <ItemsControl ItemsSource="{Binding ChannelGroupsBlocks}"
+                                              ItemTemplate="{StaticResource SettingsBlockTemplate}"
+                                              Focusable="False"
+                                              Visibility="{Binding IsGroupsTabSelected, Converter={StaticResource BoolToVisibility}}" />
+                            </StackPanel>
+                        </GroupBox>
                     </StackPanel>
                 </Grid>
             </ScrollViewer>

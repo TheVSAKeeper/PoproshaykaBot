@@ -17,8 +17,17 @@ public partial class MultistreamPageView : UserControl, IView<MultistreamPageVie
         typeof(MultistreamPageView),
         new PropertyMetadata(false));
 
+    public static readonly DependencyProperty MasterCardWidthProperty = DependencyProperty.Register(
+        nameof(MasterCardWidth),
+        typeof(double),
+        typeof(MultistreamPageView),
+        new PropertyMetadata(BaseMasterColumnWidth - MasterRightGutter));
+
     private const double CompactEnterWidth = 880;
     private const double CompactExitWidth = 920;
+    private const double BaseMasterColumnWidth = 312;
+    private const double MasterRightGutter = 8;
+    private const double MasterDetailGap = 12;
 
     private MultistreamPageViewModel? _page;
     private bool _revealingSection;
@@ -55,6 +64,12 @@ public partial class MultistreamPageView : UserControl, IView<MultistreamPageVie
         set => SetValue(IsCompactLayoutProperty, value);
     }
 
+    public double MasterCardWidth
+    {
+        get => (double)GetValue(MasterCardWidthProperty);
+        set => SetValue(MasterCardWidthProperty, value);
+    }
+
     private void OnLoaded(object sender, RoutedEventArgs e)
     {
         FontScaleManager.Changed -= OnFontScaleChanged;
@@ -71,12 +86,26 @@ public partial class MultistreamPageView : UserControl, IView<MultistreamPageVie
 
     private void OnFontScaleChanged(object? sender, double _) => UpdateResponsiveLayout();
 
-    private void UpdateResponsiveLayout()
+    internal void UpdateResponsiveLayout()
     {
-        var next = ResolveCompactLayout(IsCompactLayout, ActualWidth, FontScaleManager.Current);
+        var scale = Math.Max(1.0, FontScaleManager.Current);
+        var next = ResolveCompactLayout(IsCompactLayout, ActualWidth, scale);
         if (next != IsCompactLayout)
         {
             IsCompactLayout = next;
+        }
+
+        if (IsCompactLayout)
+        {
+            MasterColumn.Width = new GridLength(0);
+            MasterGapColumn.Width = new GridLength(0);
+        }
+        else
+        {
+            var columnWidth = Math.Round(BaseMasterColumnWidth * scale);
+            MasterColumn.Width = new GridLength(columnWidth);
+            MasterGapColumn.Width = new GridLength(MasterDetailGap);
+            MasterCardWidth = columnWidth - MasterRightGutter;
         }
     }
 
@@ -140,45 +169,77 @@ public partial class MultistreamPageView : UserControl, IView<MultistreamPageVie
                 return;
             }
 
-            var section = page.TakeSectionRequest();
-            if (section == MultistreamSection.None)
-            {
-                return;
-            }
+            ApplySectionReveal(page);
+        });
+    }
 
-            DetailScroll.UpdateLayout();
-            var target = section switch
+    internal void ApplySectionRevealForTest(MultistreamPageViewModel page) => ApplySectionReveal(page);
+
+    private void ApplySectionReveal(MultistreamPageViewModel page)
+    {
+        var section = page.TakeSectionRequest();
+        if (section == MultistreamSection.None)
+        {
+            return;
+        }
+
+        DetailScroll.UpdateLayout();
+        if (section is MultistreamSection.Automation or MultistreamSection.Channels or MultistreamSection.Parameters)
+        {
+            var topTarget = section switch
             {
+                MultistreamSection.Automation => FindControl(AutomationSection, control => control.IsTabStop),
                 MultistreamSection.Parameters => FindControl(PlatformSettingsHost, control =>
                         AutomationProperties.GetAutomationId(control) == "MultistreamEnableYouTube")
                     ?? FindControl(PlatformSettingsHost, control => control.IsTabStop),
-                MultistreamSection.Platforms => FindPlatformTarget(page.SelectedCard),
-                MultistreamSection.Automation => FindControl(AutomationSection, control => control.IsTabStop),
-                MultistreamSection.BotAuthorization => FindControl(ChannelEditor, control =>
-                        AutomationProperties.GetAutomationId(control) is "ChannelBotAuthorization" or "DefaultBotAuthorization")
-                    ?? FindChannelTarget(),
                 _ => FindChannelTarget(),
             };
-            if (target is null)
-            {
-                return;
-            }
 
             _revealingSection = true;
             try
             {
-                target.Focus();
-                if (target.IsDescendantOf(DetailScroll))
-                {
-                    var top = target.TransformToAncestor(DetailScroll).Transform(default).Y + DetailScroll.VerticalOffset;
-                    DetailScroll.ScrollToVerticalOffset(Math.Max(0, top - 12));
-                }
+                DetailScroll.ScrollToTop();
+                topTarget?.Focus();
             }
             finally
             {
                 _revealingSection = false;
             }
-        });
+
+            return;
+        }
+
+        var target = section switch
+        {
+            MultistreamSection.Platforms => FindPlatformTarget(page.SelectedCard),
+            MultistreamSection.BotAuthorization => FindControl(ChannelEditor, control =>
+                    AutomationProperties.GetAutomationId(control) is "ChannelBotAuthorization" or "DefaultBotAuthorization")
+                ?? FindChannelTarget(),
+            _ => FindChannelTarget(),
+        };
+        if (target is null)
+        {
+            return;
+        }
+
+        _revealingSection = true;
+        try
+        {
+            target.Focus();
+            if (target.IsDescendantOf(DetailScroll))
+            {
+                var bounds = target.TransformToAncestor(DetailScroll).TransformBounds(new(target.RenderSize));
+                if (bounds.Top < 0 || bounds.Bottom > DetailScroll.ViewportHeight)
+                {
+                    var top = bounds.Top + DetailScroll.VerticalOffset;
+                    DetailScroll.ScrollToVerticalOffset(Math.Max(0, top - 12));
+                }
+            }
+        }
+        finally
+        {
+            _revealingSection = false;
+        }
     }
 
     private Control? FindPlatformTarget(MultistreamPlatformCard? card)
