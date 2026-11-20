@@ -81,12 +81,14 @@ public sealed partial class SettingsPageViewModel : ObservableObject, IPageHeade
         _channelCatalog?.SetCredentialDrafts(
             contents.OfType<OAuthSettingsViewModel>().FirstOrDefault(),
             contents.OfType<YouTubeSettingsSectionViewModel>().FirstOrDefault());
-        SectionPresentations = PlatformSettingsPages.Create(presentations, broadcastProfiles, platformRegistry);
+        var extracted = PlatformSettingsPages.Create(presentations, broadcastProfiles, platformRegistry);
+        SectionPresentations = extracted.SettingsPresentations;
+        PlatformPresentations = extracted.PlatformPresentations;
+        PlatformLinkTargets = extracted.LinkTargets;
         Sections = new([.. SectionPresentations.Select(p => p.Section).Distinct()]);
 
         _rememberedSection = uiSettings.GetStringValue(SettingsKeys.SettingsSection) ?? string.Empty;
         Sections.Restore(PlatformSettingsPages.RestorePath(_rememberedSection));
-        SelectChannelPlatform();
         Sections.PropertyChanged += OnSectionsPropertyChanged;
 
         OnEnter();
@@ -103,6 +105,12 @@ public sealed partial class SettingsPageViewModel : ObservableObject, IPageHeade
 
     public IReadOnlyList<SettingsSectionPresentation> SectionPresentations { get; }
 
+    internal IReadOnlyList<SettingsSectionPresentation> PlatformPresentations { get; }
+
+    public IReadOnlyList<PlatformLinkTarget> PlatformLinkTargets { get; }
+
+    public string PlatformsCardTitle => PlatformSettingsPages.CardTitle;
+
     public bool HasChanges => Dirty || _contributors.Any(c => c.HasExternalChanges);
 
     public bool HasDraft => HasChanges
@@ -118,6 +126,7 @@ public sealed partial class SettingsPageViewModel : ObservableObject, IPageHeade
     public T GetSectionContent<T>() where T : class
     {
         return SectionPresentations
+            .Concat(PlatformPresentations)
             .SelectMany(p => p.Blocks)
             .Select(b => b.Content)
             .OfType<T>()
@@ -147,7 +156,6 @@ public sealed partial class SettingsPageViewModel : ObservableObject, IPageHeade
             return;
         }
 
-        SelectChannelPlatform();
         ReloadDraft();
         RunSelectedSectionEntryChecks();
     }
@@ -229,16 +237,8 @@ public sealed partial class SettingsPageViewModel : ObservableObject, IPageHeade
 
     private void OnSectionsPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (e.PropertyName == nameof(SettingsSectionList.NoMatches)
-            && Sections.Selected is { Key: PlatformSettingsPages.SectionKey } platforms
-            && PlatformSettingsPages.FindSearchGroup(Sections.Query, platforms.Children) is { } group)
-        {
-            Sections.SelectedChild = platforms.FindChild(group) ?? Sections.SelectedChild;
-        }
-
         if (string.Equals(e.PropertyName, nameof(SettingsSectionList.SelectedPath), StringComparison.Ordinal))
         {
-            SelectChannelPlatform();
             RememberSelection();
             return;
         }
@@ -251,18 +251,9 @@ public sealed partial class SettingsPageViewModel : ObservableObject, IPageHeade
         }
     }
 
-    private void SelectChannelPlatform()
-    {
-        if (_channelCatalog is not null && Sections.Selected?.Key == PlatformSettingsPages.SectionKey
-            && PlatformSettingsPages.GetPlatform(Sections.SelectedChild) is { } platform)
-        {
-            _channelCatalog.SelectedPlatform = platform;
-        }
-    }
-
     [RelayCommand]
-    private void NavigateToMultistream(SettingsSubsection? group) =>
-        MultistreamRequested?.Invoke(this, PlatformSettingsPages.GetPlatform(group));
+    private void NavigateToMultistream(PlatformLinkTarget? target) =>
+        MultistreamRequested?.Invoke(this, target?.Platform);
 
     private void RememberSelection()
     {
