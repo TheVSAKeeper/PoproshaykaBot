@@ -3,19 +3,26 @@ using PoproshaykaBot.Core.Platforms;
 
 namespace PoproshaykaBot.Wpf.ViewModels.Settings;
 
+public sealed record PlatformLinkTarget(string Key, string Title, StreamingPlatform? Platform);
+
+internal sealed record PlatformPagesExtraction(
+    IReadOnlyList<SettingsSectionPresentation> SettingsPresentations,
+    IReadOnlyList<SettingsSectionPresentation> PlatformPresentations,
+    IReadOnlyList<PlatformLinkTarget> LinkTargets);
+
 internal static class PlatformSettingsPages
 {
     public const string SectionKey = "platforms";
+    public const string SectionTitle = "Площадки";
+    public const string CardTitle = "Площадки и мультистрим";
     public const string ChannelCatalogKey = "channels/catalog";
 
-    private const string TwitchKey = "twitch";
-    private const string YouTubeKey = "youtube";
     internal const string MultistreamKey = "multistream";
     private const string TwitchSearch = "twitch твич helix eventsub чат отображение";
     private const string YouTubeSearch = "youtube ютуб google cloud квота testing production desktop";
     private const string MultistreamSearch = "мультистрим профиль профили вещание трансляция автозапуск группы рейтинг рассылка остановка";
 
-    public static IReadOnlyList<SettingsSectionPresentation> Create(
+    public static PlatformPagesExtraction Create(
         IReadOnlyList<SettingsSectionPresentation> presentations,
         BroadcastProfilesSettingsSectionViewModel? profiles,
         IChatPlatformRegistry? registry)
@@ -28,9 +35,12 @@ internal static class PlatformSettingsPages
             : registry.All.ToDictionary(platform => platform.Id, platform => platform.DisplayName);
 
         var groups = new List<(SettingsSubsection Tab, IReadOnlyList<SettingsSectionBlockDescriptor> Blocks)>();
+        var linkTargets = new List<PlatformLinkTarget>();
         foreach (var (platform, name) in platformNames)
         {
-            AddGroup(platform.ToString().ToLowerInvariant(), name, [.. byBlock[ChannelCatalogKey], .. byPlatform[platform]]);
+            var key = platform.ToString().ToLowerInvariant();
+            AddGroup(key, name, [.. byBlock[ChannelCatalogKey], .. byPlatform[platform]]);
+            linkTargets.Add(new(key, name, platform));
         }
 
         List<SettingsSectionBlockDescriptor> multistreamBlocks = [.. byBlock["stream/auto"], .. byBlock["stream/lifecycle"], .. byBlock["channels/groups"]];
@@ -41,16 +51,20 @@ internal static class PlatformSettingsPages
                 "Выберите профиль, чтобы изменить его настройки и целевые площадки.", profiles));
         }
 
-        AddGroup(MultistreamKey, "Мультистрим", multistreamBlocks);
+        if (multistreamBlocks.Count > 0)
+        {
+            AddGroup(MultistreamKey, "Профили и автоматика", multistreamBlocks);
+            linkTargets.Add(new(MultistreamKey, "Профили и автоматика", null));
+        }
+
         if (groups.Count == 0)
         {
-            return presentations;
+            return new(presentations, [], []);
         }
 
         var section = new SettingsSection(
-            SectionKey, "Площадки", PackIconLucideKind.Layers,
-            $"стрим платформа канал каталог мониторинг переключение oauth авторизация аккаунт бот стример client id secret {TwitchSearch} {YouTubeSearch} {MultistreamSearch} {string.Join(' ', platformNames.Values)}",
-            [.. groups.Select(group => group.Tab)]);
+            SectionKey, SectionTitle, PackIconLucideKind.Layers,
+            $"стрим платформа канал каталог мониторинг переключение oauth авторизация аккаунт бот стример client id secret {TwitchSearch} {YouTubeSearch} {MultistreamSearch} {string.Join(' ', platformNames.Values)}");
 
         var result = new List<SettingsSectionPresentation>();
         foreach (var page in presentations)
@@ -72,9 +86,11 @@ internal static class PlatformSettingsPages
             }
         }
 
-        result.InsertRange(result.FirstOrDefault()?.Section.Key == "basic" ? 1 : 0,
-            groups.Select(group => new SettingsSectionPresentation(section, group.Blocks, false, group.Tab)));
-        return result;
+        result.Insert(result.FirstOrDefault()?.Section.Key == "basic" ? 1 : 0,
+            new SettingsSectionPresentation(section, [], false));
+        IReadOnlyList<SettingsSectionPresentation> platformPresentations =
+            [.. groups.Select(group => new SettingsSectionPresentation(section, group.Blocks, false, group.Tab))];
+        return new(result, platformPresentations, linkTargets);
 
         void AddGroup(string key, string title, IReadOnlyList<SettingsSectionBlockDescriptor> blocks)
         {
@@ -88,36 +104,11 @@ internal static class PlatformSettingsPages
     public static StreamingPlatform? GetPlatform(SettingsSubsection? group) =>
         Enum.TryParse<StreamingPlatform>(group?.Key, ignoreCase: true, out var platform) ? platform : null;
 
-    public static string? FindSearchGroup(string query, IEnumerable<SettingsSubsection> groups)
-    {
-        var terms = query.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-        var matches = new List<string>();
-        foreach (var group in groups)
-        {
-            var search = group.Key switch
-            {
-                TwitchKey => TwitchSearch,
-                YouTubeKey => YouTubeSearch,
-                MultistreamKey => MultistreamSearch,
-                _ => $"{group.Key} {group.Title}",
-            };
-            if (terms.Any(term => search.Contains(term, StringComparison.OrdinalIgnoreCase)))
-            {
-                matches.Add(group.Key);
-            }
-        }
-
-        return matches.Count == 1 ? matches[0] : null;
-    }
-
     public static string RestorePath(string path) => path.Split('/', 2)[0] switch
     {
-        "oauth" => $"{SectionKey}/{TwitchKey}",
-        "youtube" => $"{SectionKey}/{YouTubeKey}",
-        "channels" when path == "channels/groups" => $"{SectionKey}/{MultistreamKey}",
-        "channels" => $"{SectionKey}/{TwitchKey}",
-        "basic" when path == "basic/channel" => $"{SectionKey}/{TwitchKey}",
-        "stream" when path is "stream/auto" or "stream/lifecycle" => $"{SectionKey}/{MultistreamKey}",
+        SectionKey or "oauth" or "youtube" or "channels" => SectionKey,
+        "basic" when path == "basic/channel" => SectionKey,
+        "stream" when path is "stream/auto" or "stream/lifecycle" => SectionKey,
         _ => path,
     };
 }
