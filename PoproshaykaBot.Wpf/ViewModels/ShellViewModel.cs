@@ -199,6 +199,29 @@ public sealed partial class ShellViewModel : ShellViewModelBase, IDisposable
         _ => "Подключить бота",
     };
 
+    public string ConnectButtonTooltip
+    {
+        get
+        {
+            if (_platformRegistry is null)
+            {
+                return "Управление ботом на всех включённых площадках";
+            }
+
+            var enabled = _platformRegistry.All
+                .Where(static platform => platform.IsEnabled)
+                .Select(static platform => platform.DisplayName)
+                .ToArray();
+
+            return enabled.Length switch
+            {
+                0 => "Нет включённых площадок для подключения",
+                1 => $"Управление ботом на площадке: {enabled[0]}",
+                _ => $"Управление ботом на всех включённых площадках: {string.Join(", ", enabled)}",
+            };
+        }
+    }
+
     public override async Task<bool> RequestCloseAsync()
     {
         if (_disposed || _closing)
@@ -808,12 +831,14 @@ public sealed partial class ShellViewModel : ShellViewModelBase, IDisposable
         OnboardingBanner.Refresh();
         DebugBanner.Refresh();
         RefreshPartialFailureStatus();
+        OnPropertyChanged(nameof(ConnectButtonTooltip));
     }
 
     private void OnLifecyclePhaseChanged(BotLifecyclePhaseChanged phaseEvent)
     {
         ApplyPhase(phaseEvent.Phase);
         RefreshPartialFailureStatus();
+        OnPropertyChanged(nameof(ConnectButtonTooltip));
 
         if (phaseEvent.Phase == BotLifecyclePhase.Failed)
         {
@@ -834,6 +859,7 @@ public sealed partial class ShellViewModel : ShellViewModelBase, IDisposable
             _platformConnectionErrors.Remove(platformEvent.Platform);
         }
         RefreshPartialFailureStatus();
+        OnPropertyChanged(nameof(ConnectButtonTooltip));
     }
 
     private void OnChannelSwitchFailed(ChannelSwitchFailed failed)

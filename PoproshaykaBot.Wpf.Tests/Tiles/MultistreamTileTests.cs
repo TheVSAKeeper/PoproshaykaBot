@@ -82,6 +82,8 @@ public sealed class MultistreamTileTests
                 Assert.That(row.ToggleConnectionCommand.CanExecute(null), Is.False);
                 Assert.That(twitchRow.ChatText, Is.EqualTo("Чат: площадка выключена"));
                 Assert.That(twitchRow.PlatformActionLabel, Is.EqualTo("Настроить"));
+                Assert.That(twitchRow.StatusBadgeText, Is.EqualTo("Отключён"));
+                Assert.That(twitchRow.IsDisabled, Is.True);
                 Assert.That(twitchRow.IsSetupRequired, Is.True);
                 Assert.That(twitchRow.ShowConnectionAction, Is.False);
                 Assert.That(platformRequested, Is.EqualTo(new[] { platform }));
@@ -99,6 +101,8 @@ public sealed class MultistreamTileTests
             {
                 Assert.That(row.PlatformActionLabel, Is.EqualTo("Настроить"));
                 Assert.That(row.ConnectionActionLabel, Is.EqualTo("Подключить"));
+                Assert.That(row.ConnectionActionWithPlatform, Is.EqualTo("Подключить YouTube"));
+                Assert.That(row.StatusBadgeText, Is.Null);
                 Assert.That(row.IsSetupRequired, Is.False);
                 Assert.That(row.ShowConnectionAction, Is.True);
                 Assert.That(row.ToggleConnectionCommand.CanExecute(null), Is.True);
@@ -277,6 +281,70 @@ public sealed class MultistreamTileTests
             Assert.That(row.ShowConnectionAction, Is.True);
             Assert.That(row.ConnectionActionLabel, Is.EqualTo("Отключается…"));
             Assert.That(row.ToggleConnectionCommand.CanExecute(null), Is.False);
+        });
+    }
+
+    [Test]
+    public async Task Disabled_platforms_show_enable_only_when_settings_controls_support_it()
+    {
+        var directory = Directory.CreateTempSubdirectory("poproshayka-multistream-disabled-");
+        try
+        {
+            var youtube = new FakePlatform(StreamingPlatform.YouTube, () => false);
+            var vkLive = new FakePlatform(StreamingPlatform.VkLive, () => false);
+            var registry = new ChatPlatformRegistry([youtube, vkLive]);
+            var catalog = new ChannelCatalogStore(filePath: Path.Combine(directory.FullName, "channels.json"));
+            var bus = new InMemoryEventBus(NullLogger<InMemoryEventBus>.Instance);
+            var dispatcher = new ManualUiDispatcher();
+            await using var connection = new BotConnectionManager(
+                new AppHost([], NullLogger<AppHost>.Instance), [], null, bus, NullLogger<BotConnectionManager>.Instance);
+            var youtubeSettings = new YouTubeSettingsStore(filePath: Path.Combine(directory.FullName, "youtube.json"));
+            using var tile = new MultistreamTileViewModel(registry, catalog, connection, new PlatformAuthRegistry([]),
+                [], bus, dispatcher, youtubeSettings);
+            tile.ApplyPlatformControls([new StubControls(StreamingPlatform.YouTube, canEnableFromSettings: true)]);
+
+            var ytRow = tile.Rows.Single(row => row.Platform == StreamingPlatform.YouTube);
+            var vkRow = tile.Rows.Single(row => row.Platform == StreamingPlatform.VkLive);
+
+            Assert.Multiple(() =>
+            {
+                Assert.That(ytRow.IsDisabled, Is.True);
+                Assert.That(ytRow.PlatformActionLabel, Is.EqualTo("Включить"));
+                Assert.That(vkRow.IsDisabled, Is.True);
+                Assert.That(vkRow.PlatformActionLabel, Is.EqualTo("Настроить"));
+            });
+        }
+        finally
+        {
+            directory.Delete(recursive: true);
+        }
+    }
+
+    private sealed class StubControls(StreamingPlatform platform, bool canEnableFromSettings) : PoproshaykaBot.Wpf.ViewModels.IMultistreamPlatformControls
+    {
+        public StreamingPlatform Platform => platform;
+        public bool RequiresCardSetup => canEnableFromSettings;
+        public bool CanEnableFromSettings => canEnableFromSettings;
+    }
+
+    [TestCase(0, false, null)]
+    [TestCase(1, false, null)]
+    [TestCase(2, true, "2 канала")]
+    [TestCase(3, true, "3 канала")]
+    [TestCase(5, true, "5 каналов")]
+    [TestCase(11, true, "11 каналов")]
+    [TestCase(21, true, "21 канал")]
+    public void Row_formats_Russian_channel_count_pill(int count, bool expectedMultiple, string? expectedText)
+    {
+        var row = new MultistreamPlatformRowViewModel(new FakePlatform(StreamingPlatform.YouTube), () => { }, () => { })
+        {
+            ChannelCount = count,
+        };
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(row.HasMultipleChannels, Is.EqualTo(expectedMultiple));
+            Assert.That(row.ChannelCountText, Is.EqualTo(expectedText));
         });
     }
 
