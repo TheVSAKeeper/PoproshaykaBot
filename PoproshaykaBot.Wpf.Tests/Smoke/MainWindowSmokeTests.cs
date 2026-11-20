@@ -87,12 +87,17 @@ public class MainWindowSmokeTests
         Assert.That(setup, Is.Not.Null, "Настройка YouTube должна быть доступна из плитки на Обзоре.");
         setup!.AsButton().Invoke();
 
-        var platform = WaitForDescendant(cf => cf.ByAutomationId("MultistreamEditorPlatform").And(cf.ByName("Каналы YouTube")));
         var enable = WaitForDescendant(cf => cf.ByAutomationId("MultistreamEnableYouTube"));
+        Assert.That(enable, Is.Not.Null, "Выключенный YouTube должен открывать вкладку «Параметры и доступ» с галкой «Включить YouTube».");
+
+        var channelsTab = WaitForDescendant(cf => cf.ByAutomationId("MultistreamTabChannels"));
+        Assert.That(channelsTab, Is.Not.Null, "Вкладка «Каналы» должна быть доступна на странице «Мультистрим».");
+        channelsTab!.AsRadioButton().IsChecked = true;
+
+        var platform = WaitForDescendant(cf => cf.ByAutomationId("MultistreamEditorPlatform").And(cf.ByName("Каналы YouTube")));
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(platform, Is.Not.Null, "Кнопка плитки должна открыть редактор каналов YouTube.");
-            Assert.That(enable, Is.Not.Null, "Включение YouTube должно быть видно в карточке площадки.");
+            Assert.That(platform, Is.Not.Null, "Переключение на вкладку «Каналы» должно показать редактор каналов YouTube.");
             Assert.That(_session!.MainWindow.FindFirstDescendant(cf => cf.ByName("Управление подключением по площадкам")), Is.Null,
                 "Управление отдельными площадками больше не должно находиться в меню шапки.");
         }
@@ -103,22 +108,32 @@ public class MainWindowSmokeTests
     {
         InvokeNamedButton("Настройки");
         InvokeNamedButton("Площадки");
-        InvokeNamedButton("YouTube");
 
         var link = WaitForDescendant(cf => cf.ByAutomationId("MultistreamSettingsLink-youtube"));
-        Assert.That(link, Is.Not.Null, "Старый раздел YouTube должен вести на вкладку «Мультистрим».");
+        Assert.That(link, Is.Not.Null, "Раздел «Площадки и мультистрим» должен содержать ссылку на YouTube в «Мультистриме».");
         link!.AsButton().Invoke();
 
+        var enable = WaitForDescendant(cf => cf.ByAutomationId("MultistreamEnableYouTube"));
+        Assert.That(enable, Is.Not.Null, "Выключенный YouTube должен открываться на вкладке «Параметры и доступ» с галкой «Включить YouTube».");
+
+        var channelsTab = WaitForDescendant(cf => cf.ByAutomationId("MultistreamTabChannels"));
+        Assert.That(channelsTab, Is.Not.Null, "Вкладка «Каналы» должна быть доступна на странице «Мультистрим».");
+        channelsTab!.AsRadioButton().IsChecked = true;
+
         var editor = WaitForDescendant(cf => cf.ByAutomationId("MultistreamEditorPlatform").And(cf.ByName("Каналы YouTube")));
-        Assert.That(editor, Is.Not.Null, "Ссылка должна открывать каналы YouTube.");
+        Assert.That(editor, Is.Not.Null, "Переключение на вкладку «Каналы» должно показать редактор каналов YouTube.");
 
         var automation = WaitForDescendant(cf => cf.ByAutomationId("MultistreamOpenAutomation"));
-        Assert.That(automation, Is.Not.Null, "Автоматика и профили должны быть доступны на той же вкладке.");
+        Assert.That(automation, Is.Not.Null, "Пункт «Профили и автоматика» должен быть доступен в боковом списке.");
         automation!.AsButton().Invoke();
 
         var section = WaitForDescendant(cf => cf.ByAutomationId("MultistreamAutomationSection"));
-        Assert.That(section, Is.Not.Null);
-        Assert.That(section!.Patterns.ExpandCollapse.Pattern.ExpandCollapseState.Value, Is.EqualTo(ExpandCollapseState.Expanded));
+        var profilesTab = WaitForDescendant(cf => cf.ByAutomationId("MultistreamAutoTabProfiles"));
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(section, Is.Not.Null, "Должна открываться рабочая область «Профили и автоматика».");
+            Assert.That(profilesTab, Is.Not.Null, "Во вкладках автоматики должна быть вкладка «Профили трансляции».");
+        }
     }
 
     private void InvokeNamedButton(string name)
