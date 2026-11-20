@@ -20,6 +20,7 @@ public sealed class YouTubeChatPlatform : IChatPlatform
     private readonly IPlatformMessenger _messenger;
     private readonly YouTubeSettingsStore _settingsStore;
     private readonly YouTubeAccountsStore _accountsStore;
+    private readonly ChannelCatalogStore? _channelCatalogStore;
     private readonly ITargetChannelProvider _targetChannelProvider;
     private readonly ILogger<YouTubeChatPlatform>? _logger;
     private readonly IYouTubeChatDiagnostics? _chatDiagnostics;
@@ -33,7 +34,8 @@ public sealed class YouTubeChatPlatform : IChatPlatform
         YouTubeAccountsStore accountsStore,
         ITargetChannelProvider targetChannelProvider,
         ILogger<YouTubeChatPlatform>? logger = null,
-        IYouTubeChatDiagnostics? chatDiagnostics = null)
+        IYouTubeChatDiagnostics? chatDiagnostics = null,
+        ChannelCatalogStore? channelCatalogStore = null)
     {
         _streamStatus = streamStatus;
         _sessionContext = sessionContext;
@@ -41,6 +43,7 @@ public sealed class YouTubeChatPlatform : IChatPlatform
         _messenger = messenger;
         _settingsStore = settingsStore;
         _accountsStore = accountsStore;
+        _channelCatalogStore = channelCatalogStore;
         _targetChannelProvider = targetChannelProvider;
         _logger = logger;
         _chatDiagnostics = chatDiagnostics;
@@ -76,7 +79,9 @@ public sealed class YouTubeChatPlatform : IChatPlatform
     {
         get
         {
-            var bot = _accountsStore.Load(PlatformAuthRole.Bot);
+            var contextId = _sessionContext.Current?.BotContextId
+                ?? _channelCatalogStore?.GetActiveChannel(Id)?.BotContextId;
+            var bot = _accountsStore.Load(PlatformAuthRole.Bot, contextId);
 
             if (string.IsNullOrWhiteSpace(bot.ChannelId) && string.IsNullOrWhiteSpace(bot.ChannelTitle))
             {

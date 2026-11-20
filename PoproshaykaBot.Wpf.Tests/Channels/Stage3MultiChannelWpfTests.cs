@@ -1,6 +1,9 @@
 ﻿using System.Diagnostics.CodeAnalysis;
 using System.IO;
 using System.Reflection;
+using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
+using System.Windows.Data;
 using KeepShell.Services.Platform;
 using KeepShell.ViewModels;
 using Microsoft.Extensions.Logging;
@@ -81,6 +84,46 @@ public sealed class Stage3MultiChannelWpfTests
             Assert.That(editor.ValidateAssignments(), Is.Null);
             Assert.That(accounts.ListAccounts().Single().Key.AccountId, Is.EqualTo("90"));
             Assert.That(editor.VisibleChannels.Single().ToEntry().GetAccountAssignment(PlatformAuthRole.Broadcaster), Is.Null);
+        });
+    }
+
+    [Test]
+    public async Task Empty_catalog_authorizes_a_default_bot_for_channel_lookup_without_adding_the_bot_as_a_channel()
+    {
+        var accounts = new AccountsStore(filePath: Path.Combine(_root, "accounts.json"));
+        var catalog = new ChannelCatalogStore(filePath: Path.Combine(_root, "channels.json"));
+        var settings = new SettingsManager(NullLogger<SettingsManager>.Instance, Path.Combine(_root, "settings.json"));
+        settings.Mutate(current =>
+        {
+            current.Twitch.ClientId = "test-client";
+            current.Twitch.ClientSecret = "test-secret";
+        });
+        var adapter = new NullResolveAdapter(StreamingPlatform.Twitch, resolve: (raw, context, _) =>
+        {
+            Assert.That(context, Is.EqualTo(AuthContextIds.Default));
+            return Task.FromResult<ResolvedChannelIdentity?>(new(new(StreamingPlatform.Twitch, "10"), raw, raw, "https://twitch.tv/streamer"));
+        });
+        var vm = new ChannelCatalogSettingsSectionViewModel(catalog, [adapter], twitchAccountsStore: accounts,
+            twitchOAuth: DispatchProxy.Create<ITwitchOAuthService, InertProxy>(), settingsManager: settings,
+            shellLauncher: new NoOpLauncher(), embeddedTwitchAuth: new TestEmbeddedAuth());
+        vm.Load();
+
+        Assert.That(vm.AuthorizeDefaultBotCommand.CanExecute(null), Is.True);
+        await vm.AuthorizeDefaultBotCommand.ExecuteAsync(null);
+        Assert.Multiple(() =>
+        {
+            Assert.That(vm.HasChannels, Is.False);
+            Assert.That(vm.StatusNoticeSeverity, Is.EqualTo(StatusSeverity.Success));
+            Assert.That(accounts.Load(PlatformAuthRole.Bot).UserId, Is.EqualTo("90"));
+        });
+
+        vm.NewChannelInput = "streamer";
+        await vm.AddChannelCommand.ExecuteAsync(null);
+        Assert.Multiple(() =>
+        {
+            Assert.That(vm.SelectedChannel?.ChannelId, Is.EqualTo("10"));
+            Assert.That(vm.SelectedChannel?.ToEntry().GetAccountAssignment(PlatformAuthRole.Bot), Is.Null);
+            Assert.That(vm.AuthorizeDefaultBotCommand.CanExecute(null), Is.False);
         });
     }
 
@@ -196,7 +239,7 @@ public sealed class Stage3MultiChannelWpfTests
         });
 
         var stats = new UserStatisticsRepository(NullLogger<UserStatisticsRepository>.Instance);
-        var catalogVm = new ChannelCatalogSettingsSectionViewModel(catalog);
+        var catalogVm = new ChannelCatalogSettingsSectionViewModel(catalog, [new NullResolveAdapter(StreamingPlatform.YouTube)]);
         var groupsVm = new ChannelGroupsSettingsSectionViewModel(catalog, stats);
         var contributor = new ChannelsSettingsSectionContributor(catalogVm, groupsVm, catalog);
 
@@ -225,6 +268,301 @@ public sealed class Stage3MultiChannelWpfTests
         catalogVm.SelectedSwitchModeOption = catalogVm.SwitchModeOptions.First(o => o.Mode == ChannelSwitchMode.Manual);
         var blocked = await contributor.SaveAsync(new(), appSettingsWritten: true);
         Assert.That(blocked.Written, Is.False);
+    }
+
+    [Test]
+    public async Task Refused_active_switch_preserves_saved_channel_and_removal_can_be_retried()
+    {
+        const StreamingPlatform platform = StreamingPlatform.VkLive;
+        var catalog = new ChannelCatalogStore(filePath: Path.Combine(_root, "refused.json"));
+        catalog.Mutate(settings =>
+        {
+            settings.Channels =
+            [
+                new() { Platform = platform, ChannelId = "a", IsConfigured = true },
+                new() { Platform = platform, ChannelId = "b", IsConfigured = true },
+                new() { Platform = platform, ChannelId = "c", IsConfigured = true },
+            ];
+            settings.Platforms = [new() { Platform = platform, ActiveChannelId = "a" }];
+        });
+        var coordinator = new StubSwitchCoordinator(catalog);
+        var vm = new ChannelCatalogSettingsSectionViewModel(catalog) { SelectedPlatform = platform };
+        var contributor = new ChannelsSettingsSectionContributor(
+            vm, new(catalog, new UserStatisticsRepository(NullLogger<UserStatisticsRepository>.Instance)), catalog, coordinator);
+        var session = new SettingsSessionState { Settings = new() };
+        contributor.Load(session);
+        using var dirty = contributor.SubscribeDirty(session, static () => { }, static () => { });
+
+        var refuse = true;
+        coordinator.Switch = target =>
+        {
+            Assert.That(catalog.GetActiveChannel(platform)?.ChannelId, Is.EqualTo("a"));
+            Assert.That(catalog.FindEntry(new(platform, "a"))?.IsConfigured, Is.True);
+            if (refuse)
+            {
+                return new(ChannelSwitchOutcome.BlockedByDebugSession, new ChannelKey(platform, "a"), "Отказ переключения");
+            }
+
+            return new(ChannelSwitchOutcome.Switched, target);
+        };
+
+        vm.VisibleChannels.First().RemoveCommand.Execute(null);
+        var result = await contributor.SaveAsync(new(), appSettingsWritten: true);
+        Assert.Multiple(() =>
+        {
+            Assert.That(result.Written, Is.False);
+            Assert.That(result.FailureMessage, Is.EqualTo("Отказ переключения"));
+            Assert.That(catalog.GetPlatformSettings(platform).ActiveChannelId, Is.EqualTo("a"));
+            Assert.That(vm.SelectedChannel?.ChannelId, Is.EqualTo("b"));
+        });
+
+        refuse = false;
+        Assert.That((await contributor.SaveAsync(new(), appSettingsWritten: true)).Written, Is.True);
+        Assert.Multiple(() =>
+        {
+            Assert.That(catalog.GetPlatformSettings(platform).ActiveChannelId, Is.EqualTo("b"));
+            Assert.That(catalog.FindEntry(new(platform, "a")), Is.Null);
+            Assert.That(coordinator.Switched, Has.Count.EqualTo(2));
+        });
+
+        catalog.Mutate(settings =>
+        {
+            settings.Channels.Add(new() { Platform = platform, ChannelId = "a", IsConfigured = true });
+            settings.Platforms.Single().ActiveChannelId = "c";
+        });
+        vm.SelectedChannel!.DisplayName = "Правка после сохранения";
+        Assert.That((await contributor.SaveAsync(new(), appSettingsWritten: true)).Written, Is.True);
+        Assert.Multiple(() =>
+        {
+            Assert.That(catalog.GetPlatformSettings(platform).ActiveChannelId, Is.EqualTo("c"));
+            Assert.That(catalog.FindEntry(new(platform, "a"))?.IsConfigured, Is.True);
+            Assert.That(vm.SelectedChannel.ChannelId, Is.EqualTo("b"));
+            Assert.That(coordinator.Switched, Has.Count.EqualTo(2));
+        });
+    }
+
+    [Test]
+    public async Task Saving_again_preserves_a_new_external_switch_policy_and_next_channel()
+    {
+        const StreamingPlatform platform = StreamingPlatform.VkLive;
+        var catalog = new ChannelCatalogStore(filePath: Path.Combine(_root, "repeat.json"));
+        catalog.Mutate(settings =>
+        {
+            settings.Channels =
+            [
+                new() { Platform = platform, ChannelId = "a", IsConfigured = true },
+                new() { Platform = platform, ChannelId = "b", IsConfigured = true },
+            ];
+            settings.Platforms = [new() { Platform = platform, ActiveChannelId = "a" }];
+        });
+        var vm = new ChannelCatalogSettingsSectionViewModel(catalog, [new NullResolveAdapter(platform)]) { SelectedPlatform = platform };
+        var contributor = new ChannelsSettingsSectionContributor(
+            vm, new(catalog, new UserStatisticsRepository(NullLogger<UserStatisticsRepository>.Instance)), catalog);
+        var session = new SettingsSessionState { Settings = new() };
+        contributor.Load(session);
+        using var dirty = contributor.SubscribeDirty(session, static () => { }, static () => { });
+
+        vm.SelectedSwitchModeOption = vm.SwitchModeOptions.Single(option => option.Mode == ChannelSwitchMode.PreselectedNext);
+        vm.SelectedPreselectedNextOption = vm.PreselectedNextOptions.Single(option => option.ChannelId == "b");
+        Assert.That((await contributor.SaveAsync(new(), appSettingsWritten: true)).Written, Is.True);
+
+        catalog.Mutate(settings =>
+        {
+            settings.Platforms.Single().SwitchMode = ChannelSwitchMode.AutoDiscover;
+            settings.Platforms.Single().PreselectedNextChannelId = null;
+            settings.Channels.Single(channel => channel.ChannelId == "a").Handle = "external";
+        });
+        vm.SelectedChannel!.DisplayName = "Локальное имя";
+        Assert.That((await contributor.SaveAsync(new(), appSettingsWritten: true)).Written, Is.True);
+        Assert.Multiple(() =>
+        {
+            Assert.That(catalog.GetPlatformSettings(platform).SwitchMode, Is.EqualTo(ChannelSwitchMode.AutoDiscover));
+            Assert.That(catalog.GetPlatformSettings(platform).PreselectedNextChannelId, Is.Null);
+            Assert.That(catalog.FindEntry(new(platform, "a"))?.Handle, Is.EqualTo("external"));
+            Assert.That(vm.SelectedChannel.ChannelId, Is.EqualTo("a"));
+        });
+    }
+
+    [Test]
+    public void Supported_empty_account_list_shows_warning_and_existing_roles_do_not_block_unrelated_edits()
+    {
+        const StreamingPlatform platform = StreamingPlatform.VkLive;
+        var catalog = new ChannelCatalogStore(filePath: Path.Combine(_root, "empty-accounts.json"));
+        catalog.Mutate(settings => settings.Channels =
+        [
+            new() { Platform = StreamingPlatform.Twitch, ChannelId = "local", IsConfigured = true },
+            new() { Platform = platform, ChannelId = "external", IsConfigured = true, BotAccountId = "missing", BotVerifiedSubjectId = "missing" },
+            new() { Platform = platform, ChannelId = "empty", IsConfigured = true },
+        ]);
+        var vm = new ChannelCatalogSettingsSectionViewModel(catalog, [new NullResolveAdapter(platform, Accounts: [])],
+            platformRegistry: new StubPlatformRegistry(new StubPlatform(platform, "Площадка из реестра", "external")));
+        vm.Load();
+        vm.SelectedChannel!.DisplayName = "Локальное имя";
+        Assert.That(vm.ValidateAssignments(), Is.Null);
+
+        vm.SelectedPlatform = platform;
+        var role = vm.VisibleChannels.Single(channel => channel.ChannelId == "empty").Roles.Single(role => role.Role == PlatformAuthRole.Bot);
+        Assert.Multiple(() =>
+        {
+            Assert.That(role.CanManageAccount, Is.True);
+            Assert.That(role.StatusSeverity, Is.EqualTo(StatusSeverity.Warning));
+            Assert.That(vm.ValidateAssignments(), Is.Null);
+        });
+        role.Assign("candidate", "vk-bot");
+        Assert.That(vm.ValidateAssignments(), Does.Contain("Площадка из реестра"));
+    }
+
+    [Test]
+    [Apartment(ApartmentState.STA)]
+    public void Next_channel_selector_keeps_a_valid_selection_after_draft_removal()
+    {
+        var catalog = new ChannelCatalogStore(filePath: Path.Combine(_root, "next-selector.json"));
+        catalog.Mutate(settings =>
+        {
+            settings.Channels =
+            [
+                new() { Platform = StreamingPlatform.Twitch, ChannelId = "a", IsConfigured = true },
+                new() { Platform = StreamingPlatform.Twitch, ChannelId = "b", IsConfigured = true },
+                new() { Platform = StreamingPlatform.Twitch, ChannelId = "c", IsConfigured = true },
+            ];
+            settings.Platforms = [new() { Platform = StreamingPlatform.Twitch, ActiveChannelId = "a", PreselectedNextChannelId = "b" }];
+        });
+        var vm = new ChannelCatalogSettingsSectionViewModel(catalog);
+        vm.Load();
+        var selector = new ComboBox { DataContext = vm };
+        selector.SetBinding(ItemsControl.ItemsSourceProperty, nameof(vm.PreselectedNextOptions));
+        selector.SetBinding(Selector.SelectedItemProperty, new Binding(nameof(vm.SelectedPreselectedNextOption)) { Mode = BindingMode.TwoWay });
+        Assert.That(selector.SelectedItem, Is.SameAs(vm.PreselectedNextOptions.Single(option => option.ChannelId == "b")));
+
+        var next = vm.VisibleChannels.Single(channel => channel.ChannelId == "b");
+        next.DisplayName = "Новое название";
+        Assert.That(selector.SelectedItem, Is.EqualTo(new PreselectedNextChannelOption("b", "Новое название (b)")));
+
+        next.RemoveCommand.Execute(null);
+        Assert.That(selector.SelectedItem, Is.SameAs(vm.PreselectedNextOptions.Single(option => option.ChannelId is null)));
+        Assert.That(vm.SelectedPreselectedNextOption.ChannelId, Is.Null);
+    }
+
+    [Test]
+    public async Task Registered_platform_resolves_verifies_and_saves_channel_routing()
+    {
+        const StreamingPlatform platform = StreamingPlatform.VkLive;
+        var target = new ChannelKey(platform, "vk-c");
+        var catalog = new ChannelCatalogStore(filePath: Path.Combine(_root, "channels.json"));
+        Assert.That(catalog.Save(new()
+        {
+            Channels =
+            [
+                new() { Platform = platform, ChannelId = "vk-a", IsConfigured = true },
+                new() { Platform = platform, ChannelId = "vk-b", IsConfigured = true },
+                new() { Platform = platform, ChannelId = "vk-history", KnownAliases = ["Архивный канал"] },
+            ],
+            Platforms = [new() { Platform = platform, ActiveChannelId = "vk-a", SwitchMode = ChannelSwitchMode.AutoDiscover }],
+        }), Is.True);
+
+        var adapter = new NullResolveAdapter(
+            platform,
+            (channel, role, context) =>
+            {
+                Assert.That((channel, role, context), Is.EqualTo((target, PlatformAuthRole.Bot, "vk-bot-grant")));
+                return new(true, "vk-bot");
+            },
+            (raw, context, _) =>
+            {
+                Assert.That((raw, context), Is.EqualTo(("@vk-c", "vk-bot-grant")));
+                return Task.FromResult<ResolvedChannelIdentity?>(new(target, "Третий канал", raw, "https://vkvideo.ru/@vk-c"));
+            },
+            Accounts:
+            [
+                new(new(platform, "vk-bot"), "Бот VK",
+                    [new("vk-bot-grant", PlatformAuthRole.Bot, "Бот", "vk-bot", "Бот VK", HasToken: true, IsDefault: false)]),
+            ]);
+
+        var catalogVm = new ChannelCatalogSettingsSectionViewModel(catalog, [adapter]) { SelectedPlatform = platform };
+        var coordinator = new StubSwitchCoordinator(catalog);
+        var contributor = new ChannelsSettingsSectionContributor(
+            catalogVm, new(catalog, new UserStatisticsRepository(NullLogger<UserStatisticsRepository>.Instance)), catalog, coordinator);
+        var session = new SettingsSessionState { Settings = new() };
+        contributor.Load(session);
+        using var dirty = contributor.SubscribeDirty(session, static () => { }, static () => { });
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(catalogVm.SelectedChannel?.ChannelId, Is.EqualTo("vk-a"));
+            Assert.That(catalogVm.SelectedSwitchModeOption.Mode, Is.EqualTo(ChannelSwitchMode.AutoDiscover));
+            Assert.That(catalogVm.SupportsOwnChannelAuthorization, Is.False);
+        });
+
+        catalogVm.NewChannelInput = "@vk-c";
+        await catalogVm.AddChannelCommand.ExecuteAsync(null);
+        var channel = catalogVm.SelectedChannel!;
+        var bot = channel.Roles.Single(role => role.Role == PlatformAuthRole.Bot);
+        Assert.Multiple(() =>
+        {
+            Assert.That(channel.ChannelId, Is.EqualTo(target.ChannelId));
+            Assert.That(channel.SupportsMonitoring, Is.True);
+            Assert.That(channel.MonitoringEnabled, Is.True);
+            Assert.That(bot.CanAuthorize, Is.False);
+        });
+        bot.SelectedAccount = bot.Accounts.Single();
+        await bot.VerifyCommand.ExecuteAsync(null);
+        Assert.That(contributor.ValidateBeforeSave(), Is.Null);
+        channel.MonitoringEnabled = false;
+        channel.MakeActiveCommand.Execute(null);
+        catalogVm.SelectedSwitchModeOption = catalogVm.SwitchModeOptions.Single(option => option.Mode == ChannelSwitchMode.PreselectedNext);
+        catalogVm.SelectedPreselectedNextOption = catalogVm.PreselectedNextOptions.Single(option => option.ChannelId == "vk-b");
+
+        catalog.Mutate(settings =>
+        {
+            settings.Channels.Add(new() { Platform = StreamingPlatform.YouTube, ChannelId = "yt-external", IsConfigured = true });
+            settings.Platforms.Add(new() { Platform = StreamingPlatform.YouTube, ActiveChannelId = "yt-external" });
+        });
+        Assert.That((await contributor.SaveAsync(new(), appSettingsWritten: true)).Written, Is.True);
+        Assert.That(coordinator.Switched, Is.EqualTo(new[] { (platform, target, true) }));
+
+        catalogVm.Load();
+        var saved = catalog.FindEntry(target)!;
+        Assert.Multiple(() =>
+        {
+            Assert.That(catalogVm.SelectedChannel?.ChannelId, Is.EqualTo(target.ChannelId));
+            Assert.That(catalogVm.SelectedSwitchModeOption.Mode, Is.EqualTo(ChannelSwitchMode.PreselectedNext));
+            Assert.That(catalogVm.SelectedPreselectedNextOption.ChannelId, Is.EqualTo("vk-b"));
+            Assert.That(saved.MonitoringEnabled, Is.False);
+            Assert.That(saved.GetAccountAssignment(PlatformAuthRole.Bot)?.IsVerified, Is.True);
+            Assert.That(catalog.FindEntry(new(platform, "vk-history"))?.IsConfigured, Is.False);
+            Assert.That(catalog.GetActiveChannel(StreamingPlatform.YouTube)?.ChannelId, Is.EqualTo("yt-external"));
+        });
+    }
+
+    [Test]
+    public void Platform_without_account_or_monitoring_capabilities_keeps_saved_assignments_and_policy()
+    {
+        const StreamingPlatform platform = StreamingPlatform.VkLive;
+        var catalog = new ChannelCatalogStore(filePath: Path.Combine(_root, "channels.json"));
+        Assert.That(catalog.Save(new()
+        {
+            Channels = [new() { Platform = platform, ChannelId = "vk-a", IsConfigured = true, BotAccountId = "vk-bot", BotVerifiedSubjectId = "vk-bot" }],
+            Platforms = [new() { Platform = platform, ActiveChannelId = "vk-a", SwitchMode = ChannelSwitchMode.AutoDiscover }],
+        }), Is.True);
+        var adapter = new NullResolveAdapter(platform, SupportedCapabilities: PlatformCapabilities.None);
+        var catalogVm = new ChannelCatalogSettingsSectionViewModel(catalog, [adapter]) { SelectedPlatform = platform };
+        catalogVm.Load();
+        var channel = catalogVm.VisibleChannels.Single();
+        Assert.Multiple(() =>
+        {
+            Assert.That(channel.SupportsMonitoring, Is.False);
+            Assert.That(catalogVm.SwitchModeOptions.Select(option => option.Mode), Is.EqualTo(new[] { ChannelSwitchMode.Manual }));
+            Assert.That(channel.Roles.Select(role => role.CanManageAccount), Is.All.False);
+            Assert.That(catalogVm.ValidateAssignments(), Is.Null);
+        });
+        channel.DisplayName = "Канал VK";
+        var settings = catalog.Load();
+        catalogVm.ApplyTo(settings);
+        Assert.Multiple(() =>
+        {
+            Assert.That(settings.Platforms.Single().SwitchMode, Is.EqualTo(ChannelSwitchMode.AutoDiscover));
+            Assert.That(settings.Channels.Single().GetAccountAssignment(PlatformAuthRole.Bot)?.IsVerified, Is.True);
+        });
     }
 
     [Test]
@@ -368,10 +706,14 @@ public sealed class Stage3MultiChannelWpfTests
     private sealed class NullResolveAdapter(
         StreamingPlatform platform,
         Func<ChannelKey, PlatformAuthRole, string, ChannelAccessVerification>? verify = null,
-        Func<string, string?, CancellationToken, Task<ResolvedChannelIdentity?>>? resolve = null) : IPlatformChannelAdapter
+        Func<string, string?, CancellationToken, Task<ResolvedChannelIdentity?>>? resolve = null,
+        IReadOnlyList<PlatformAccount>? Accounts = null,
+        PlatformCapabilities SupportedCapabilities = PlatformCapabilities.BackgroundStreamMonitoring | PlatformCapabilities.MultiChannelMonitoring)
+        : IPlatformChannelAdapter
     {
         public StreamingPlatform Platform => platform;
-        public PlatformCapabilities Capabilities => PlatformCapabilities.BackgroundStreamMonitoring;
+        public PlatformCapabilities Capabilities => SupportedCapabilities;
+        public IReadOnlyList<PlatformAccount>? ListAccounts() => Accounts;
         public Task<ResolvedChannelIdentity?> ResolveChannelIdentityAsync(string rawInput, string? preferredContextId, CancellationToken cancellationToken)
             => resolve?.Invoke(rawInput, preferredContextId, cancellationToken) ?? Task.FromResult<ResolvedChannelIdentity?>(null);
         public Task<ChannelAccessVerification> VerifyChannelAccessAsync(ChannelKey channel, PlatformAuthRole role, string contextId, CancellationToken cancellationToken)
@@ -492,7 +834,6 @@ public sealed class Stage3MultiChannelWpfTests
 
         var platform = new StubPlatform(StreamingPlatform.YouTube, "YouTube", "Канал A");
         var registry = new StubPlatformRegistry(platform);
-        var coordinator = new StubSwitchCoordinator();
 
         using var tile = new StreamInfoTileViewModel(
             registry,
@@ -500,12 +841,11 @@ public sealed class Stage3MultiChannelWpfTests
             NullLogger<StreamInfoTileViewModel>.Instance,
             new ManualUiDispatcher(),
             new NoOpLauncher(),
-            catalogStore: catalog,
-            switchCoordinator: coordinator);
+            catalogStore: catalog);
 
         Assert.Multiple(() =>
         {
-            Assert.That(tile.HasMultipleChannels, Is.True);
+            Assert.That(tile.HasActiveChannel, Is.True);
             Assert.That(tile.ActiveChannelDisplayName, Is.EqualTo("Канал A"));
             Assert.That(tile.HasPreselectedNext, Is.True);
             Assert.That(tile.PreselectedNextText, Does.Contain("Канал B"));
@@ -535,6 +875,45 @@ public sealed class Stage3MultiChannelWpfTests
             Assert.That(ytGroup.Channels.Severity, Is.EqualTo(StatusSeverity.Error));
             Assert.That(ytGroup.Channels.Tooltip, Does.Contain("Доступ канала B"));
         });
+
+        catalog.Mutate(settings =>
+        {
+            var routing = settings.Platforms.Single();
+            routing.ActiveChannelId = "UC_B";
+            routing.PreselectedNextChannelId = "UC_A";
+        });
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(tile.ActiveChannelDisplayName, Is.EqualTo("Канал B"));
+            Assert.That(tile.PreselectedNextText, Does.Contain("Канал A"));
+        });
+    }
+
+    [Test]
+    public void StreamInfoTile_uses_the_twitch_debug_target_instead_of_the_catalog()
+    {
+        var catalog = new ChannelCatalogStore(filePath: Path.Combine(_root, "channels.json"));
+        catalog.Mutate(settings => settings.Channels.Add(new()
+        {
+            Platform = StreamingPlatform.Twitch,
+            ChannelId = "123",
+            DisplayName = "Канал из каталога",
+            IsConfigured = true,
+        }));
+
+        using var tile = new StreamInfoTileViewModel(
+            new StubPlatformRegistry(new StubPlatform(StreamingPlatform.Twitch, "Twitch", "debug-channel")
+            {
+                UsesChannelCatalog = false,
+            }),
+            new InMemoryEventBus(NullLogger<InMemoryEventBus>.Instance),
+            NullLogger<StreamInfoTileViewModel>.Instance,
+            new ManualUiDispatcher(),
+            new NoOpLauncher(),
+            catalogStore: catalog);
+
+        Assert.That(tile.ActiveChannelDisplayName, Is.EqualTo("debug-channel"));
     }
 
     private sealed class NoOpLauncher : IShellLauncher
@@ -544,8 +923,10 @@ public sealed class Stage3MultiChannelWpfTests
         public bool Start(string executable, params string[] arguments) => true;
     }
 
-    private sealed class StubSwitchCoordinator : IChannelSwitchCoordinator
+    private sealed class StubSwitchCoordinator(ChannelCatalogStore? catalog = null) : IChannelSwitchCoordinator
     {
+        public Func<ChannelKey, ChannelSwitchResult>? Switch { get; set; }
+        public List<(StreamingPlatform Platform, ChannelKey Channel, bool PreservePreselectedNext)> Switched { get; } = [];
         public List<(StreamingPlatform Platform, ChannelKey Channel)> Confirmed { get; } = [];
         public List<StreamingPlatform> DismissedPlatforms { get; } = [];
 
@@ -555,12 +936,30 @@ public sealed class Stage3MultiChannelWpfTests
         public Task<ChannelSwitchResult> SwitchActiveChannelAsync(StreamingPlatform platform, ChannelKey targetChannel,
             bool preservePreselectedNext, CancellationToken cancellationToken = default)
         {
+            Switched.Add((platform, targetChannel, preservePreselectedNext));
             return SwitchActiveChannelAsync(platform, targetChannel, cancellationToken);
         }
 
         public Task<ChannelSwitchResult> SwitchActiveChannelAsync(StreamingPlatform platform, ChannelKey targetChannel,
             CancellationToken cancellationToken = default)
-            => Task.FromResult(new ChannelSwitchResult(ChannelSwitchOutcome.Switched, targetChannel));
+            => Task.FromResult(Switch?.Invoke(targetChannel) ?? new ChannelSwitchResult(ChannelSwitchOutcome.Switched, targetChannel));
+
+        public async Task<ChannelSwitchResult> SwitchCatalogChannelAsync(ChannelCatalogEntry targetChannel,
+            CancellationToken cancellationToken = default)
+        {
+            var result = await SwitchActiveChannelAsync(targetChannel.Platform, targetChannel.Key, preservePreselectedNext: true, cancellationToken);
+            if (result.Succeeded && catalog is not null)
+            {
+                catalog.Mutate(settings =>
+                {
+                    settings.Channels.RemoveAll(channel => channel.Key == targetChannel.Key);
+                    settings.Channels.Add(targetChannel);
+                    settings.Platforms.Single(routing => routing.Platform == targetChannel.Platform).ActiveChannelId = targetChannel.ChannelId;
+                });
+            }
+
+            return result;
+        }
 
         public Task<ChannelSwitchResult?> SetPreselectedNextAsync(StreamingPlatform platform, ChannelKey? targetChannel, CancellationToken cancellationToken = default)
             => Task.FromResult<ChannelSwitchResult?>(null);
@@ -609,6 +1008,7 @@ public sealed class Stage3MultiChannelWpfTests
         public IStreamStatus StreamStatus { get; } = new StubStreamStatus();
         public PlatformBotIdentity? BotIdentity => null;
         public string? ConfiguredChannel => configuredChannel;
+        public bool UsesChannelCatalog { get; init; } = true;
         public IPlatformMessenger Messenger => null!;
         public IChatDecorations Decorations => NullChatDecorations.Instance;
         public string? BuildStreamUrl(StreamInfo? currentStream = null) => null;

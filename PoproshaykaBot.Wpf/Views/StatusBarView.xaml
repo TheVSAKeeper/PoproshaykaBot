@@ -31,13 +31,16 @@
             <StackPanel Orientation="Horizontal"
                         Margin="12,0,0,0"
                         Visibility="{Binding IsVisible, Converter={StaticResource BoolToVisibility}}">
-                <controls:PlatformIconView Platform="{Binding Platform}"
-                                           Width="12"
-                                           Height="12"
-                                           VerticalAlignment="Center"
-                                           Margin="0,0,2,0"
-                                           ToolTip="{Binding DisplayName}"
-                                           Visibility="{Binding DataContext.StreamMonitoring.ShowPlatformIcons, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource BoolToVisibility}}" />
+                <Border Background="Transparent"
+                        VerticalAlignment="Center"
+                        Margin="0,0,2,0"
+                        ToolTip="{Binding DisplayName}"
+                        Visibility="{Binding DataContext.StreamMonitoring.ShowPlatformIcons, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource BoolToVisibility}}">
+                    <controls:PlatformIconView Platform="{Binding Platform}"
+                                               AutomationProperties.Name="{Binding DisplayName}"
+                                               Width="12"
+                                               Height="12" />
+                </Border>
                 <ContentPresenter Content="{Binding Bot}"
                                   ContentTemplate="{StaticResource MonitoringIndicator}" />
                 <ContentPresenter Content="{Binding Broadcaster}"

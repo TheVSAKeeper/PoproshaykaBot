@@ -65,7 +65,7 @@ public sealed class TwitchConnectionSettingsContributor : ISettingsSectionContri
                 "oauth/app",
                 "Приложение Twitch",
                 "Ключи приложения из консоли разработчика Twitch – через них входят и бот, и стример.",
-                _oauth),
+                _oauth) { Platform = PoproshaykaBot.Core.Platforms.StreamingPlatform.Twitch },
             new(
                 "oauth/bot",
                 "Аккаунт бота",

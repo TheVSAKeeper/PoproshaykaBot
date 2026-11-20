@@ -156,7 +156,8 @@
                       SelectedItem="{Binding SelectedPlatformFilter, Mode=TwoWay}"
                       DisplayMemberPath="Label"
                       MinWidth="112"
-                      AutomationProperties.Name="Фильтр площадки чата" />
+                      ToolTip="Показать сообщения выбранной площадки в ленте"
+                      AutomationProperties.Name="Фильтр сообщений по площадке" />
             <TextBlock Text="Лента сообщений"
                        Style="{StaticResource TextBlock.Subtle}"
                        VerticalAlignment="Center" />

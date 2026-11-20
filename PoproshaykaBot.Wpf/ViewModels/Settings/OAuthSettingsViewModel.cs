@@ -1,5 +1,4 @@
 ﻿using CommunityToolkit.Mvvm.ComponentModel;
-using CommunityToolkit.Mvvm.Input;
 using Microsoft.Extensions.Logging;
 using PoproshaykaBot.Core.Platforms.Auth;
 using PoproshaykaBot.Core.Settings;
@@ -61,8 +60,6 @@ public sealed partial class OAuthSettingsViewModel : ObservableValidator, IDispo
     }
 
     public event EventHandler? SettingChanged;
-
-    public event EventHandler? LaunchOnboardingRequested;
 
     public string Title => "Авторизация";
 
@@ -159,12 +156,6 @@ public sealed partial class OAuthSettingsViewModel : ObservableValidator, IDispo
         return uri.IsDefaultPort
             ? new ValidationResult("Укажите порт явно: по нему настраивается встроенный HTTP сервер")
             : ValidationResult.Success;
-    }
-
-    [RelayCommand]
-    private void LaunchOnboarding()
-    {
-        LaunchOnboardingRequested?.Invoke(this, EventArgs.Empty);
     }
 
     private OAuthCredentialsSnapshot GetCredentials()

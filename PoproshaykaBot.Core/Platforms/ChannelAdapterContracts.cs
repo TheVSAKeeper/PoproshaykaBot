@@ -69,6 +69,8 @@ public interface IPlatformChannelAdapter
 
     PlatformCapabilities Capabilities { get; }
 
+    IReadOnlyList<PlatformAccount>? ListAccounts() => null;
+
     Task<ResolvedChannelIdentity?> ResolveChannelIdentityAsync(
         string rawInput,
         string? preferredContextId,

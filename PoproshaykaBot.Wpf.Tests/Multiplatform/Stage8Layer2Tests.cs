@@ -35,13 +35,16 @@ namespace PoproshaykaBot.Wpf.Tests.Multiplatform;
 [TestFixture]
 internal sealed class Stage8Layer2Tests
 {
-    [Test]
-    public async Task StreamMonitoring_hides_icons_for_single_twitch_and_resets_disabled_youtube_disconnect()
+    [TestCase(StreamingPlatform.YouTube, "YouTube")]
+    [TestCase(StreamingPlatform.VkLive, "VK Live")]
+    public async Task StreamMonitoring_hides_icons_for_single_twitch_and_resets_disabled_platform_disconnect(
+        StreamingPlatform platform,
+        string displayName)
     {
         var bus = new InMemoryEventBus(NullLogger<InMemoryEventBus>.Instance);
         var twitch = new StubPlatform(StreamingPlatform.Twitch, "Twitch", PlatformCapabilities.ChannelMetadataEdit, true, StreamStatus.Offline, null, "streamer");
-        var youtube = new StubPlatform(StreamingPlatform.YouTube, "YouTube", PlatformCapabilities.None, false, StreamStatus.Offline, null, null);
-        var registry = new StubPlatformRegistry(twitch, youtube);
+        var second = new StubPlatform(platform, displayName, PlatformCapabilities.None, false, StreamStatus.Offline, null, null);
+        var registry = new StubPlatformRegistry(twitch, second);
 
         using var vm = new StreamMonitoringViewModel(bus, registry);
 
@@ -53,10 +56,12 @@ internal sealed class Stage8Layer2Tests
             Assert.That(vm.ShowPlatformIcons, Is.False);
             Assert.That(vm.Groups[0].IsVisible, Is.True);
             Assert.That(vm.Groups[1].IsVisible, Is.False);
+            Assert.That(vm.Groups[1].Platform, Is.EqualTo(platform));
+            Assert.That(vm.Groups[1].DisplayName, Is.EqualTo(displayName));
         });
 
-        youtube.IsEnabledValue = true;
-        await bus.PublishAsync(new StreamMonitoringStatusChanged(StreamingPlatform.YouTube, PlatformAuthRole.Broadcaster, StreamMonitoringStatus.Reconnecting, "повтор после ошибки API"));
+        second.IsEnabledValue = true;
+        await bus.PublishAsync(new StreamMonitoringStatusChanged(platform, PlatformAuthRole.Broadcaster, StreamMonitoringStatus.Reconnecting, "повтор после ошибки API"));
 
         Assert.Multiple(() =>
         {
@@ -65,8 +70,8 @@ internal sealed class Stage8Layer2Tests
             Assert.That(vm.Groups[1].Broadcaster.Severity, Is.EqualTo(StatusSeverity.Warning));
         });
 
-        youtube.IsEnabledValue = false;
-        await bus.PublishAsync(new StreamMonitoringStatusChanged(StreamingPlatform.YouTube, PlatformAuthRole.Broadcaster, StreamMonitoringStatus.Disconnected));
+        second.IsEnabledValue = false;
+        await bus.PublishAsync(new StreamMonitoringStatusChanged(platform, PlatformAuthRole.Broadcaster, StreamMonitoringStatus.Disconnected));
 
         Assert.Multiple(() =>
         {
@@ -217,7 +222,8 @@ internal sealed class Stage8Layer2Tests
             var historySettings = new StubHistorySettingsProvider(new ChatSettings { ShowHistoryInApp = true });
             using var historyManager = new ChatHistoryManager(settingsManager, bus, historySettings);
             var yt = new StubPlatform(StreamingPlatform.YouTube, "YouTube", PlatformCapabilities.ServerChatHistory, true, StreamStatus.Online, null, "UC1");
-            var registry = new StubPlatformRegistry(yt);
+            var vk = new StubPlatform(StreamingPlatform.VkLive, "VK Видео Live", PlatformCapabilities.None, true, StreamStatus.Offline, null, "vk-channel");
+            var registry = new StubPlatformRegistry(yt, vk);
 
             var t0 = new DateTimeOffset(2026, 11, 16, 12, 0, 0, TimeSpan.Zero);
             var scope = new ChatHistoryScope(StreamingPlatform.YouTube, "UC1", "yt-channel");
@@ -250,6 +256,12 @@ internal sealed class Stage8Layer2Tests
 
             using var tile = new MultiplatformChatTileViewModel(historyManager, bus, historySettings, platformRegistry: registry);
             Assert.That(tile.Items.OfType<ChatFeedMessageItemViewModel>().Select(static m => m.Key.MessageId), Is.EqualTo(new[] { "hist-1" }));
+            Assert.That(tile.PlatformOptions, Is.EqualTo(new PlatformFilterOption[]
+            {
+                PlatformFilterOption.All,
+                new(StreamingPlatform.YouTube, "YouTube"),
+                new(StreamingPlatform.VkLive, "VK Видео Live"),
+            }));
 
             var actions = new List<System.Collections.Specialized.NotifyCollectionChangedAction>();
             tile.Items.CollectionChanged += (_, e) => actions.Add(e.Action);
@@ -290,6 +302,26 @@ internal sealed class Stage8Layer2Tests
 
             await bus.PublishAsync(new ChatHistoryCleared(StreamingPlatform.YouTube, "yt-channel", t0.AddHours(1)));
             Assert.That(tile.Items.OfType<ChatFeedMessageItemViewModel>(), Is.Empty);
+
+            var vkMessage = new ChatMessageData
+            {
+                Platform = StreamingPlatform.VkLive,
+                Channel = "vk-channel",
+                ChannelId = "vk-channel",
+                MessageId = "vk-1",
+                Timestamp = t0.AddHours(2).UtcDateTime,
+                UserId = "vk-user",
+                DisplayName = "Пользователь",
+                Message = "Привет",
+            };
+            await bus.PublishAsync(new ChatMessageReceived(vkMessage.Platform, vkMessage.Channel, vkMessage.MessageId, vkMessage.UserId, "vk-user", vkMessage.DisplayName, vkMessage.Message, UserStatus.None, false, vkMessage));
+            await bus.PublishAsync(new ChatReadingGapDetected(StreamingPlatform.VkLive, "vk-channel", "vk-live", t0.AddHours(2)));
+
+            Assert.Multiple(() =>
+            {
+                Assert.That(tile.Items.OfType<ChatFeedMessageItemViewModel>().Single().PlatformDisplayName, Is.EqualTo(vk.DisplayName));
+                Assert.That(tile.Items.OfType<ChatFeedGapItemViewModel>().Single().PlatformDisplayName, Is.EqualTo(vk.DisplayName));
+            });
         }
         finally
         {
@@ -298,6 +330,44 @@ internal sealed class Stage8Layer2Tests
                 File.Delete(settingsPath);
             }
         }
+    }
+
+    [Test]
+    public void Chat_display_pane_uses_registry_label_in_fallback()
+    {
+        var vk = new StubPlatform(StreamingPlatform.VkLive, "VK Видео Live", PlatformCapabilities.None, true, StreamStatus.Offline, null, "vk-channel");
+        var pane = new ChatDisplayPaneViewModel(new RecordingLauncher(), new StubPlatformRegistry(vk));
+        pane.SetTarget(StreamingPlatform.VkLive, null, null, shown: true);
+        pane.ShowGenericFallback();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(pane.DisplayName, Is.EqualTo(vk.DisplayName));
+            Assert.That(pane.FallbackHeading, Is.EqualTo($"Не удалось открыть чат {vk.DisplayName}"));
+        });
+    }
+
+    [Test]
+    public void Tile_platform_selection_cycles_registered_platforms_and_preserves_manual_choice()
+    {
+        var twitch = new StubPlatform(StreamingPlatform.Twitch, "Twitch", PlatformCapabilities.None, true, StreamStatus.Offline, null, "tw");
+        var vk = new StubPlatform(StreamingPlatform.VkLive, "VK Видео Live", PlatformCapabilities.None, false, StreamStatus.Online, null, "vk");
+        var selection = new TilePlatformSelection(new StubPlatformRegistry(twitch, vk));
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(selection.AvailablePlatforms, Is.EqualTo(new[] { StreamingPlatform.Twitch, StreamingPlatform.VkLive }));
+            Assert.That(selection.SelectedPlatform, Is.EqualTo(StreamingPlatform.VkLive));
+            Assert.That(selection.SelectedDisplayName, Is.EqualTo(vk.DisplayName));
+        });
+
+        Assert.That(selection.Cycle(), Is.True);
+        Assert.That(selection.Refresh(), Is.False);
+        Assert.That(selection.SelectedPlatform, Is.EqualTo(StreamingPlatform.Twitch));
+
+        vk.MutableStream.Status = StreamStatus.Offline;
+        selection.Refresh();
+        Assert.That(selection.AvailablePlatforms, Is.EqualTo(new[] { StreamingPlatform.Twitch }));
     }
 
     [Test]
@@ -351,7 +421,7 @@ internal sealed class Stage8Layer2Tests
 
         twitch.MutableStream.Status = StreamStatus.Online;
         twitch.MutableStream.Info = twitchInfo;
-        tile.HeaderActions.First(a => a.ToolTip == "Переключить площадку").Command.Execute(null);
+        tile.HeaderActions.First(a => a.ToolTip == "Сменить площадку в информации о стриме").Command.Execute(null);
 
         Assert.Multiple(() =>
         {
@@ -361,8 +431,12 @@ internal sealed class Stage8Layer2Tests
         });
     }
 
-    [Test]
-    public async Task BroadcastStatusTile_uses_broadcast_state_targets_and_youtube_fallback_channel()
+    [TestCase(StreamingPlatform.YouTube, "YouTube", "UC_yt")]
+    [TestCase(StreamingPlatform.VkLive, "VK Live", "vk_channel")]
+    public async Task BroadcastStatusTile_uses_broadcast_state_targets_and_configured_fallback_channel(
+        StreamingPlatform platform,
+        string displayName,
+        string channel)
     {
         var bus = new InMemoryEventBus(NullLogger<InMemoryEventBus>.Instance);
         var settingsPath = Path.Combine(Path.GetTempPath(), $"pb-stage8-broadcast-{Guid.NewGuid():N}.json");
@@ -370,9 +444,9 @@ internal sealed class Stage8Layer2Tests
         try
         {
             var twitch = new StubPlatform(StreamingPlatform.Twitch, "Twitch", PlatformCapabilities.ChannelMetadataEdit, false, StreamStatus.Offline, null, null);
-            var yt = new StubPlatform(StreamingPlatform.YouTube, "YouTube", PlatformCapabilities.None, true, StreamStatus.Online, null, "UC_yt");
-            var registry = new StubPlatformRegistry(twitch, yt);
-            var targets = new StubTargetsProvider(new HashSet<StreamingPlatform> { StreamingPlatform.Twitch, StreamingPlatform.YouTube });
+            var second = new StubPlatform(platform, displayName, PlatformCapabilities.None, true, StreamStatus.Online, null, channel);
+            var registry = new StubPlatformRegistry(twitch, second);
+            var targets = new StubTargetsProvider(new HashSet<StreamingPlatform> { StreamingPlatform.Twitch, platform });
             var state = new StubBroadcastState { IsAnyLive = false };
             await using var scheduler = new BroadcastScheduler(
                 new InertBroadcastMessenger(),
@@ -386,7 +460,7 @@ internal sealed class Stage8Layer2Tests
 
             Assert.Multiple(() =>
             {
-                Assert.That(tile.PlatformsText, Is.EqualTo("Twitch, YouTube"));
+                Assert.That(tile.PlatformsText, Is.EqualTo($"Twitch, {displayName}"));
                 Assert.That(tile.HeaderActions[0].IsEnabled, Is.True);
             });
 
@@ -396,10 +470,10 @@ internal sealed class Stage8Layer2Tests
 
             settings.Mutate(s => s.Twitch.AutoBroadcast.AutoBroadcastEnabled = true);
             state.IsAnyLive = false;
-            await bus.PublishAsync(new StreamWentOffline(StreamingPlatform.YouTube, "UC_yt"));
+            await bus.PublishAsync(new StreamWentOffline(platform, channel));
 
             Assert.That(tile.StatusSeverity, Is.EqualTo(StatusSeverity.Warning));
-            scheduler.Start("UC_yt");
+            scheduler.Start(channel);
             tile.HeaderActions[1].Command.Execute(null);
             Assert.That(scheduler.IsActive, Is.False);
         }

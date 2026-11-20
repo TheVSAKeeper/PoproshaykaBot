@@ -4,6 +4,7 @@ using KeepShell.Bootstrap;
 using KeepShell.ViewModels;
 using Microsoft.Extensions.Logging;
 using PoproshaykaBot.Core.Dashboard;
+using PoproshaykaBot.Core.Platforms;
 using PoproshaykaBot.Core.Settings.Stores;
 using PoproshaykaBot.Core.Settings.Ui;
 using PoproshaykaBot.Wpf.Bootstrap;
@@ -53,6 +54,12 @@ public sealed partial class DashboardViewModel : ObservableObject, IDisposable
             {
                 userLinkSource.UserRequested += OnTileUserRequested;
             }
+
+            if (tile is MultistreamTileViewModel multistream)
+            {
+                multistream.ConnectionToggleRequested += OnTileConnectionToggleRequested;
+                multistream.PlatformRequested += OnTilePlatformRequested;
+            }
         }
 
         Reload();
@@ -69,6 +76,8 @@ public sealed partial class DashboardViewModel : ObservableObject, IDisposable
     public event EventHandler? LayoutChanged;
 
     public event EventHandler<PoproshaykaBot.Core.Platforms.PlatformUserKey>? UserRequested;
+    public event EventHandler<StreamingPlatform>? ConnectionToggleRequested;
+    public event EventHandler<StreamingPlatform>? PlatformRequested;
 
     public IReadOnlyList<TileBand> Bands { get; private set; } = [];
 
@@ -244,6 +253,12 @@ public sealed partial class DashboardViewModel : ObservableObject, IDisposable
             {
                 userLinkSource.UserRequested -= OnTileUserRequested;
             }
+
+            if (tile is MultistreamTileViewModel multistream)
+            {
+                multistream.ConnectionToggleRequested -= OnTileConnectionToggleRequested;
+                multistream.PlatformRequested -= OnTilePlatformRequested;
+            }
         }
 
         foreach (var tile in _observed)
@@ -257,6 +272,16 @@ public sealed partial class DashboardViewModel : ObservableObject, IDisposable
     private void OnTileUserRequested(object? sender, PoproshaykaBot.Core.Platforms.PlatformUserKey key)
     {
         UserRequested?.Invoke(this, key);
+    }
+
+    private void OnTileConnectionToggleRequested(object? sender, StreamingPlatform platform)
+    {
+        ConnectionToggleRequested?.Invoke(this, platform);
+    }
+
+    private void OnTilePlatformRequested(object? sender, StreamingPlatform platform)
+    {
+        PlatformRequested?.Invoke(this, platform);
     }
 
     [RelayCommand]

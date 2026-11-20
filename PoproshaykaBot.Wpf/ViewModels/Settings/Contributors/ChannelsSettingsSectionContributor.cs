@@ -117,32 +117,41 @@ public sealed class ChannelsSettingsSectionContributor : ISettingsSectionContrib
             return SettingsSectionSaveOutcome.Clean;
         }
 
-        var pendingSwitches = _catalogEdited ? _catalogViewModel.GetPendingActiveChanges() : [];
-        var next = _catalogStore.Load();
-        if (_catalogEdited)
+        if (_catalogEdited && _switchCoordinator is not null)
         {
-            _catalogViewModel.ApplyTo(next);
+            foreach (var target in _catalogViewModel.GetPendingActiveChanges(_catalogStore.Load()))
+            {
+                var result = await _switchCoordinator.SwitchCatalogChannelAsync(target);
+                if (!result.Succeeded)
+                {
+                    return new(false, [], FailureMessage: result.ErrorMessage ?? "Не удалось переключить активный канал.");
+                }
+
+                _catalogViewModel.AcceptActiveSwitch(target.Key);
+            }
         }
 
-        if (_groupsEdited)
+        var written = _catalogStore.Mutate(settings =>
         {
-            _groupsViewModel.ApplyTo(next);
-        }
+            if (_catalogEdited)
+            {
+                _catalogViewModel.ApplyTo(settings, applyActive: _switchCoordinator is null);
+            }
 
-        var written = _catalogStore.Save(next);
+            if (_groupsEdited)
+            {
+                _groupsViewModel.ApplyTo(settings);
+            }
+        });
         if (written)
         {
+            if (_catalogEdited)
+            {
+                _catalogViewModel.AcceptSavedCatalog(_catalogStore.Load());
+            }
+
             _catalogEdited = false;
             _groupsEdited = false;
-
-            if (_switchCoordinator is not null)
-            {
-                foreach (var (platform, targetKey) in pendingSwitches)
-                {
-                    await _switchCoordinator.SwitchActiveChannelAsync(platform, targetKey,
-                        preservePreselectedNext: true, CancellationToken.None).ConfigureAwait(false);
-                }
-            }
         }
 
         return SettingsSectionSaveOutcome.FromWrite(written);

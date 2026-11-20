@@ -29,8 +29,9 @@ public sealed partial class ShellViewModel : ShellViewModelBase, IDisposable
     private readonly ShellPreferences _preferences;
     private readonly IDialogService _dialogService;
     private readonly List<IDisposable> _subscriptions = [];
-    private readonly Dictionary<StreamingPlatform, PlatformConnectionItemViewModel> _platformConnectionsById = [];
+    private readonly Dictionary<StreamingPlatform, string> _platformConnectionErrors = [];
     private readonly NavigationItem _settingsSection;
+    private readonly NavigationItem? _multistreamSection;
     private readonly SettingsPageViewModel _settingsPage;
     private readonly ChatHistoryManager _chatHistory;
     private readonly ISettingsStore _uiSettings;
@@ -46,6 +47,8 @@ public sealed partial class ShellViewModel : ShellViewModelBase, IDisposable
     private readonly UpdateSettingsSectionViewModel? _updateSettings;
     private NavigationItem? _current;
     private bool _returningToPage;
+    private bool _leavingPage;
+    private bool _closing;
     private string? _lastPartialFailureKey;
     private int _userRequestVersion;
     private bool _disposed;
@@ -54,9 +57,6 @@ public sealed partial class ShellViewModel : ShellViewModelBase, IDisposable
     [NotifyPropertyChangedFor(nameof(ConnectButtonText))]
     [NotifyCanExecuteChangedFor(nameof(ToggleConnectCommand))]
     private BotLifecyclePhase _phase;
-
-    [ObservableProperty]
-    private bool _showPlatformMenu;
 
     public ShellViewModel(
         ModalHostViewModel modal,
@@ -84,7 +84,8 @@ public sealed partial class ShellViewModel : ShellViewModelBase, IDisposable
         IMainWindowController mainWindow,
         IChatPlatformRegistry? platformRegistry = null,
         ChannelSwitchPromptBannerViewModel? channelSwitchBanner = null,
-        UpdateSettingsSectionViewModel? updateSettings = null)
+        UpdateSettingsSectionViewModel? updateSettings = null,
+        MultistreamPageViewModel? multistreamPage = null)
         : base(modal)
     {
         _unsavedChangesPrompt = unsavedChangesPrompt;
@@ -105,34 +106,42 @@ public sealed partial class ShellViewModel : ShellViewModelBase, IDisposable
 
         Overview = overview;
         Overview.UserRequested += OnUserRequested;
+        Overview.ConnectionToggleRequested += OnOverviewConnectionToggleRequested;
+        Overview.PlatformRequested += OnOverviewPlatformRequested;
 
         _settingsPage = settingsPage;
         _settingsPage.SettingsSaved += OnSettingsSaved;
+        _settingsPage.MultistreamRequested += OnMultistreamRequested;
         _chatHistory = chatHistory;
         _uiSettings = uiSettings;
         _uiDispatcher = uiDispatcher;
         _uiSettings.WriteFailed += OnUiSettingsWriteFailed;
-        _settingsSection = new("Настройки", PackIconLucideKind.Settings, settingsPage, activate: GuardReturn(settingsPage.OnEnter), key: SectionKeys.Settings);
+        _settingsSection = new("Настройки", PackIconLucideKind.Settings, settingsPage, key: SectionKeys.Settings);
 
         _statisticsPage = statisticsPage;
-        _statisticsSection = new("Пользователи", PackIconLucideKind.Users, statisticsPage, activate: statisticsPage.OnEnter, key: SectionKeys.Users) { StartsGroup = true };
+        _statisticsSection = new("Пользователи", PackIconLucideKind.Users, statisticsPage, key: SectionKeys.Users) { StartsGroup = true };
         _streamHistorySection = new(
             "История стримов",
             PackIconLucideKind.History,
             streamHistoryPage,
-            activate: streamHistoryPage.OnEnter,
             key: SectionKeys.Streams);
-        _commandsSection = new("Команды", PackIconLucideKind.Terminal, commandsPage, activate: GuardReturn(commandsPage.OnEnter), key: SectionKeys.Commands);
+        _commandsSection = new("Команды", PackIconLucideKind.Terminal, commandsPage, key: SectionKeys.Commands);
 
         _streamHistoryPage = streamHistoryPage;
         _streamHistoryPage.UserRequested += OnUserRequested;
 
-        _overviewSection = new("Обзор", PackIconLucideKind.LayoutDashboard, overview, activate: overview.OnEnter, key: SectionKeys.Overview)
+        _overviewSection = new("Обзор", PackIconLucideKind.LayoutDashboard, overview, key: SectionKeys.Overview)
         {
             KeepAlive = true,
         };
 
         Sections.Add(_overviewSection);
+        if (multistreamPage is not null)
+        {
+            _multistreamSection = new("Мультистрим", PackIconLucideKind.Layers, multistreamPage, key: SectionKeys.Multistream);
+            Sections.Add(_multistreamSection);
+        }
+
         Sections.Add(_statisticsSection);
         Sections.Add(_streamHistorySection);
         Sections.Add(_commandsSection);
@@ -142,8 +151,6 @@ public sealed partial class ShellViewModel : ShellViewModelBase, IDisposable
         IsNavCollapsed = _preferences.NavCollapsed;
 
         Selected = FindSectionByKey(_preferences.LastPage) ?? Sections[0];
-
-        InitializePlatformConnections();
 
         _subscriptions.Add(eventBus.SubscribeOnUi<BotLifecyclePhaseChanged>(OnLifecyclePhaseChanged));
         _subscriptions.Add(eventBus.SubscribeOnUi<PlatformConnectionChanged>(OnPlatformConnectionChanged));
@@ -173,7 +180,6 @@ public sealed partial class ShellViewModel : ShellViewModelBase, IDisposable
 
     public DashboardViewModel Overview { get; }
 
-    public IReadOnlyList<PlatformConnectionItemViewModel> PlatformConnections { get; private set; } = [];
 
     public string BuildLabel => AppBuildBadge.Current.Value;
 
@@ -188,14 +194,32 @@ public sealed partial class ShellViewModel : ShellViewModelBase, IDisposable
     public string ConnectButtonText => Phase switch
     {
         BotLifecyclePhase.Connecting => "Отменить",
-        BotLifecyclePhase.Connected => "Отключить",
+        BotLifecyclePhase.Connected => "Отключить бота",
         BotLifecyclePhase.Disconnecting => "Отключение...",
-        _ => "Подключить",
+        _ => "Подключить бота",
     };
 
     public override async Task<bool> RequestCloseAsync()
     {
-        if (!await ConfirmDirtyPagesOnCloseAsync())
+        if (_disposed || _closing)
+        {
+            return false;
+        }
+
+        _closing = true;
+        try
+        {
+            return await TryCloseAsync();
+        }
+        finally
+        {
+            _closing = false;
+        }
+    }
+
+    private async Task<bool> TryCloseAsync()
+    {
+        if (_leavingPage || _settingsPage.IsSaving || !await ConfirmDirtyPagesOnCloseAsync())
         {
             UpdateBanner.ResetInstallState();
             _updateSettings?.ResetInstallState();
@@ -233,8 +257,11 @@ public sealed partial class ShellViewModel : ShellViewModelBase, IDisposable
         _disposed = true;
         _uiSettings.WriteFailed -= OnUiSettingsWriteFailed;
         _settingsPage.SettingsSaved -= OnSettingsSaved;
+        _settingsPage.MultistreamRequested -= OnMultistreamRequested;
         _streamHistoryPage.UserRequested -= OnUserRequested;
         Overview.UserRequested -= OnUserRequested;
+        Overview.ConnectionToggleRequested -= OnOverviewConnectionToggleRequested;
+        Overview.PlatformRequested -= OnOverviewPlatformRequested;
         _preferences.PropertyChanged -= OnPreferencesPropertyChanged;
 
         if (ChannelSwitchBanner is not null)
@@ -255,20 +282,37 @@ public sealed partial class ShellViewModel : ShellViewModelBase, IDisposable
         Selected = _settingsSection;
     }
 
-    [RelayCommand]
-    private void OpenPlatformSettings()
+    private void OnOverviewConnectionToggleRequested(object? sender, StreamingPlatform platform)
     {
-        if (!ReferenceEquals(_current, _settingsSection)
-            && !TryLeaveDirtyPage(_settingsSection, _settingsPage.OpenPlatformSettings))
+        if (TogglePlatformCommand.CanExecute(platform))
+        {
+            TogglePlatformCommand.Execute(platform);
+        }
+    }
+
+    private void OnOverviewPlatformRequested(object? sender, StreamingPlatform platform) => OpenMultistream(platform, fromOverview: true);
+
+    private void OnMultistreamRequested(object? sender, StreamingPlatform? platform) => OpenMultistream(platform);
+
+    private void OpenMultistream(StreamingPlatform? platform, bool fromOverview = false)
+    {
+        if (_multistreamSection?.Content is not MultistreamPageViewModel page)
         {
             return;
         }
 
-        NavigateToSettings();
-        if (ReferenceEquals(_current, _settingsSection))
+        Action open = platform switch
         {
-            _settingsPage.OpenPlatformSettings();
+            null => page.OpenAutomation,
+            { } selected when fromOverview => () => page.OpenPlatformFromOverview(selected),
+            { } selected => () => page.OpenPlatform(selected),
+        };
+        if (!TryLeaveDirtyPage(_multistreamSection, open))
+        {
+            return;
         }
+
+        Navigate(_multistreamSection, open);
     }
 
     [RelayCommand]
@@ -279,6 +323,11 @@ public sealed partial class ShellViewModel : ShellViewModelBase, IDisposable
 
     private void OnUserRequested(object? sender, PoproshaykaBot.Core.Platforms.PlatformUserKey key)
     {
+        if (NavigationBlocked)
+        {
+            return;
+        }
+
         var version = ++_userRequestVersion;
 
         if (!_statisticsPage.NeedsPreloadWait)
@@ -297,7 +346,7 @@ public sealed partial class ShellViewModel : ShellViewModelBase, IDisposable
     {
         var found = await _statisticsPage.TrySelectAfterPreloadAsync(key);
 
-        if (_disposed || version != _userRequestVersion)
+        if (NavigationBlocked || version != _userRequestVersion)
         {
             return;
         }
@@ -375,15 +424,16 @@ public sealed partial class ShellViewModel : ShellViewModelBase, IDisposable
 
     protected override void OnSelectionChanged(NavigationItem? value)
     {
-        if (!_returningToPage && !ReferenceEquals(value, _current) && !TryLeaveDirtyPage(value))
+        if (!_returningToPage && !TryLeaveDirtyPage(value))
         {
             return;
         }
 
-        base.OnSelectionChanged(value);
-
-        OnPropertyChanged(nameof(ContentMargin));
-        OnPropertyChanged(nameof(IsOverviewSelected));
+        if (!ReferenceEquals(value, Selected))
+        {
+            Selected = value;
+            return;
+        }
 
         _current = value;
 
@@ -391,19 +441,40 @@ public sealed partial class ShellViewModel : ShellViewModelBase, IDisposable
         {
             _preferences.LastPage = value.Key;
         }
+
+        if (!_returningToPage)
+        {
+            ActivatePage(value?.Content);
+        }
+
+        base.OnSelectionChanged(value);
+        OnPropertyChanged(nameof(ContentMargin));
+        OnPropertyChanged(nameof(IsOverviewSelected));
     }
 
-    private Action GuardReturn(Action activate)
+    private static void ActivatePage(object? page)
     {
-        return () =>
+        switch (page)
         {
-            if (_returningToPage)
-            {
-                return;
-            }
-
-            activate();
-        };
+            case SettingsPageViewModel settings:
+                settings.OnEnter();
+                break;
+            case MultistreamPageViewModel multistream:
+                multistream.OnEnter();
+                break;
+            case CommandsPageViewModel commands:
+                commands.OnEnter();
+                break;
+            case DashboardViewModel overview:
+                overview.OnEnter();
+                break;
+            case UserStatisticsPageViewModel statistics:
+                statistics.OnEnter();
+                break;
+            case StreamHistoryPageViewModel history:
+                history.OnEnter();
+                break;
+        }
     }
 
     private static IUnsavedChangesPage? DirtyPageOf(NavigationItem? section)
@@ -413,11 +484,22 @@ public sealed partial class ShellViewModel : ShellViewModelBase, IDisposable
 
     private IEnumerable<NavigationItem> GatedSections()
     {
-        yield return _settingsSection;
+        if (_current is { } current)
+        {
+            yield return current;
+        }
+
+        if (_current?.Content is not (SettingsPageViewModel or MultistreamPageViewModel))
+        {
+            yield return _settingsSection;
+        }
 
         foreach (var section in Sections)
         {
-            yield return section;
+            if (!ReferenceEquals(section, _current) && !ReferenceEquals(section, _multistreamSection))
+            {
+                yield return section;
+            }
         }
     }
 
@@ -433,9 +515,13 @@ public sealed partial class ShellViewModel : ShellViewModelBase, IDisposable
             switch (_unsavedChangesPrompt.Ask(page.UnsavedChangesSubject, "закрытием"))
             {
                 case UnsavedChangesDecision.Save:
-                    await page.TrySaveUnsavedChangesAsync();
+                    var saved = await page.TrySaveUnsavedChangesAsync();
+                    if (_disposed)
+                    {
+                        return false;
+                    }
 
-                    if (page.HasUnsavedChanges)
+                    if (!saved || page.HasUnsavedChanges)
                     {
                         ReturnToPage(section);
                         return false;
@@ -458,29 +544,57 @@ public sealed partial class ShellViewModel : ShellViewModelBase, IDisposable
 
     private bool TryLeaveDirtyPage(NavigationItem? target, Action? afterNavigation = null)
     {
-        if (_current is not { } section || DirtyPageOf(section) is not { } page)
+        if (NavigationBlocked)
+        {
+            ReturnToPage(_current);
+            return false;
+        }
+
+        if (ReferenceEquals(_current, target) || _current is not { } section || DirtyPageOf(section) is not { } page)
         {
             return true;
         }
 
-        switch (_unsavedChangesPrompt.Ask(page.UnsavedChangesSubject, "переходом"))
+        _leavingPage = true;
+        var saving = false;
+        try
         {
-            case UnsavedChangesDecision.Save:
-                ReturnToPage(section);
-                _ = SaveThenNavigateAsync(page, target, afterNavigation);
-                return false;
-
-            case UnsavedChangesDecision.Discard:
-                page.DiscardUnsavedChanges();
-                return true;
-
-            default:
+            var decision = _unsavedChangesPrompt.Ask(page.UnsavedChangesSubject, "переходом");
+            if (_disposed)
+            {
                 ReturnToPage(section);
                 return false;
+            }
+
+            switch (decision)
+            {
+                case UnsavedChangesDecision.Save:
+                    ReturnToPage(section);
+                    saving = true;
+                    _ = SaveThenNavigateAsync(section, page, target, afterNavigation);
+                    return false;
+
+                case UnsavedChangesDecision.Discard:
+                    page.DiscardUnsavedChanges();
+                    return true;
+
+                default:
+                    ReturnToPage(section);
+                    return false;
+            }
+        }
+        finally
+        {
+            if (!saving)
+            {
+                _leavingPage = false;
+            }
         }
     }
 
-    private void ReturnToPage(NavigationItem section)
+    private bool NavigationBlocked => _disposed || _closing || _leavingPage || _settingsPage.IsSaving;
+
+    private void ReturnToPage(NavigationItem? section)
     {
         _returningToPage = true;
 
@@ -494,17 +608,31 @@ public sealed partial class ShellViewModel : ShellViewModelBase, IDisposable
         }
     }
 
-    private async Task SaveThenNavigateAsync(IUnsavedChangesPage page, NavigationItem? target, Action? afterNavigation)
+    private async Task SaveThenNavigateAsync(
+        NavigationItem source, IUnsavedChangesPage page, NavigationItem? target, Action? afterNavigation)
     {
-        await page.TrySaveUnsavedChangesAsync();
+        bool saved;
+        try
+        {
+            saved = await page.TrySaveUnsavedChangesAsync();
+        }
+        finally
+        {
+            _leavingPage = false;
+        }
 
-        if (page.HasUnsavedChanges || target is null)
+        if (NavigationBlocked || !ReferenceEquals(_current, source) || !saved || page.HasUnsavedChanges || target is null)
         {
             return;
         }
 
+        Navigate(target, afterNavigation);
+    }
+
+    private void Navigate(NavigationItem target, Action? afterNavigation)
+    {
         Selected = target;
-        if (ReferenceEquals(_current, target))
+        if (!NavigationBlocked && ReferenceEquals(_current, target))
         {
             afterNavigation?.Invoke();
         }
@@ -560,19 +688,20 @@ public sealed partial class ShellViewModel : ShellViewModelBase, IDisposable
     [RelayCommand]
     private async Task TogglePlatformAsync(StreamingPlatform platform)
     {
-        if (!_platformConnectionsById.TryGetValue(platform, out var item))
+        if (_platformRegistry?.Find(platform) is not { } registeredPlatform)
         {
             return;
         }
 
-        switch (item.Phase)
+        var platformName = registeredPlatform.DisplayName;
+        switch (_connectionManager.GetPhase(platform))
         {
             case BotLifecyclePhase.Connecting:
                 _connectionManager.CancelConnection(platform);
                 break;
 
             case BotLifecyclePhase.Connected:
-                _logger.PlatformDisconnectRequested(item.DisplayName);
+                _logger.PlatformDisconnectRequested(platformName);
 
                 try
                 {
@@ -580,7 +709,7 @@ public sealed partial class ShellViewModel : ShellViewModelBase, IDisposable
                 }
                 catch (Exception exception)
                 {
-                    _logger.PlatformDisconnectFailed(exception, item.DisplayName);
+                    _logger.PlatformDisconnectFailed(exception, platformName);
                 }
 
                 break;
@@ -589,7 +718,12 @@ public sealed partial class ShellViewModel : ShellViewModelBase, IDisposable
                 break;
 
             default:
-                _logger.PlatformConnectRequested(item.DisplayName);
+                if (!registeredPlatform.IsEnabled)
+                {
+                    return;
+                }
+
+                _logger.PlatformConnectRequested(platformName);
 
                 try
                 {
@@ -597,7 +731,7 @@ public sealed partial class ShellViewModel : ShellViewModelBase, IDisposable
                 }
                 catch (InvalidOperationException exception)
                 {
-                    _logger.PlatformStartConnectionFailed(exception, item.DisplayName);
+                    _logger.PlatformStartConnectionFailed(exception, platformName);
                 }
 
                 break;
@@ -673,7 +807,6 @@ public sealed partial class ShellViewModel : ShellViewModelBase, IDisposable
     {
         OnboardingBanner.Refresh();
         DebugBanner.Refresh();
-        RefreshPlatformStates();
         RefreshPartialFailureStatus();
     }
 
@@ -692,70 +825,15 @@ public sealed partial class ShellViewModel : ShellViewModelBase, IDisposable
 
     private void OnPlatformConnectionChanged(PlatformConnectionChanged platformEvent)
     {
-        if (!_platformConnectionsById.TryGetValue(platformEvent.Platform, out var item))
+        if (platformEvent.Phase == BotLifecyclePhase.Failed)
         {
-            return;
+            _platformConnectionErrors[platformEvent.Platform] = FormatConnectionError(platformEvent.Exception);
         }
-
-        item.IsEnabled = IsPlatformEnabled(platformEvent.Platform);
-        item.Phase = platformEvent.Phase;
-        item.LastErrorMessage = platformEvent.Phase == BotLifecyclePhase.Failed
-            ? FormatConnectionError(platformEvent.Exception)
-            : null;
-
-        RefreshPlatformMenuVisibility();
+        else
+        {
+            _platformConnectionErrors.Remove(platformEvent.Platform);
+        }
         RefreshPartialFailureStatus();
-    }
-
-    private void InitializePlatformConnections()
-    {
-        var items = new List<PlatformConnectionItemViewModel>();
-
-        foreach (var platform in PlatformVisuals.OrderedPlatforms)
-        {
-            if (_platformRegistry is not null && _platformRegistry.Find(platform) is null)
-            {
-                continue;
-            }
-
-            var item = new PlatformConnectionItemViewModel(platform)
-            {
-                IsEnabled = IsPlatformEnabled(platform),
-                Phase = _connectionManager.GetPhase(platform),
-            };
-            items.Add(item);
-            _platformConnectionsById[platform] = item;
-        }
-
-        PlatformConnections = items;
-        RefreshPlatformMenuVisibility();
-    }
-
-    private void RefreshPlatformStates()
-    {
-        foreach (var item in PlatformConnections)
-        {
-            item.IsEnabled = IsPlatformEnabled(item.Platform);
-            item.Phase = _connectionManager.GetPhase(item.Platform);
-        }
-
-        RefreshPlatformMenuVisibility();
-    }
-
-    private bool IsPlatformEnabled(StreamingPlatform platform)
-    {
-        if (_platformRegistry?.Find(platform) is { } registered)
-        {
-            return registered.IsEnabled;
-        }
-
-        return platform == StreamingPlatform.Twitch;
-    }
-
-    private void RefreshPlatformMenuVisibility()
-    {
-        ShowPlatformMenu = PlatformConnections.Count(static item =>
-            item.IsEnabled || item.Phase is not BotLifecyclePhase.Idle and not BotLifecyclePhase.Disconnected) > 1;
     }
 
     private void OnChannelSwitchFailed(ChannelSwitchFailed failed)
@@ -781,19 +859,21 @@ public sealed partial class ShellViewModel : ShellViewModelBase, IDisposable
         var failedParts = new List<string>();
         var failedNames = new List<string>();
 
-        foreach (var item in PlatformConnections)
+        foreach (var platform in _platformRegistry?.All ?? [])
         {
-            if (item.Phase == BotLifecyclePhase.Connected)
+            var displayName = platform.DisplayName;
+            var phase = _connectionManager.GetPhase(platform.Id);
+            if (phase == BotLifecyclePhase.Connected)
             {
-                connectedNames.Add(item.DisplayName);
+                connectedNames.Add(displayName);
             }
-            else if (item.IsEnabled && item.Phase == BotLifecyclePhase.Failed)
+            else if (phase == BotLifecyclePhase.Failed && platform.IsEnabled)
             {
-                failedNames.Add(item.DisplayName);
-                var reason = string.IsNullOrWhiteSpace(item.LastErrorMessage)
+                failedNames.Add(displayName);
+                var reason = !_platformConnectionErrors.TryGetValue(platform.Id, out var error) || string.IsNullOrWhiteSpace(error)
                     ? "подробности в журнале"
-                    : item.LastErrorMessage;
-                failedParts.Add($"{item.DisplayName}: {reason}");
+                    : error;
+                failedParts.Add($"{displayName}: {reason}");
             }
         }
 
@@ -875,56 +955,4 @@ public sealed partial class ShellViewModel : ShellViewModelBase, IDisposable
         StatusText = text;
         StatusSeverity = severity;
     }
-}
-
-public sealed partial class PlatformConnectionItemViewModel : ObservableObject
-{
-    [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(ActionLabel), nameof(StatusLabel), nameof(CanToggle), nameof(MenuHeader), nameof(Tooltip))]
-    private BotLifecyclePhase _phase;
-
-    [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(CanToggle), nameof(MenuHeader))]
-    private bool _isEnabled;
-
-    [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(Tooltip))]
-    private string? _lastErrorMessage;
-
-    public PlatformConnectionItemViewModel(StreamingPlatform platform)
-    {
-        Platform = platform;
-        DisplayName = PlatformVisuals.GetDisplayName(platform);
-    }
-
-    public StreamingPlatform Platform { get; }
-
-    public string DisplayName { get; }
-
-    public string ActionLabel => Phase switch
-    {
-        BotLifecyclePhase.Connecting => "Отменить",
-        BotLifecyclePhase.Connected => "Отключить",
-        BotLifecyclePhase.Disconnecting => "Отключение...",
-        _ => "Подключить",
-    };
-
-    public string StatusLabel => Phase switch
-    {
-        BotLifecyclePhase.Connecting => "подключение",
-        BotLifecyclePhase.Connected => "подключён",
-        BotLifecyclePhase.Disconnecting => "отключение",
-        BotLifecyclePhase.Cancelled => "отменено",
-        BotLifecyclePhase.Failed => "ошибка",
-        _ => "отключён",
-    };
-
-    public bool CanToggle => Phase != BotLifecyclePhase.Disconnecting
-        && (IsEnabled || Phase is BotLifecyclePhase.Connected or BotLifecyclePhase.Connecting);
-
-    public string MenuHeader => $"{DisplayName} ({StatusLabel}) – {ActionLabel}";
-
-    public string Tooltip => string.IsNullOrWhiteSpace(LastErrorMessage)
-        ? $"{DisplayName}: {StatusLabel}"
-        : $"{DisplayName}: {StatusLabel} – {LastErrorMessage}";
 }

@@ -11,10 +11,15 @@ public sealed record ChannelAccountOption(string AccountId, string DisplayName, 
 
 public sealed partial class ChannelAccountRoleViewModel : ObservableObject
 {
+    private const string ReauthorizationNotice = "Войдите в назначенный аккаунт заново.";
+
     private readonly Action _onEdited;
     private readonly Func<ChannelAccountRoleViewModel, Task> _verify;
     private readonly Func<ChannelAccountRoleViewModel, Task> _authorize;
+    private (string? Account, string Context, string? Verified) _saved;
     private string? _verifiedId;
+    private bool _supportsAccounts;
+    private bool _canVerify;
 
     [ObservableProperty]
     private IReadOnlyList<ChannelAccountOption> _accounts = [];
@@ -45,6 +50,7 @@ public sealed partial class ChannelAccountRoleViewModel : ObservableObject
         ContextId = assignment?.ContextId ?? AuthContextIds.Normalize(role == PlatformAuthRole.Bot ? entry.BotContextId : entry.BroadcasterContextId);
         AccountId = assignment?.Account.AccountId;
         _verifiedId = assignment?.IsVerified == true ? AccountId : null;
+        AcceptEdits();
         _status = _verifiedId is null ? "Требуется проверка" : "Доступ подтверждён";
         _statusSeverity = _verifiedId is null ? StatusSeverity.Warning : StatusSeverity.Success;
     }
@@ -53,15 +59,25 @@ public sealed partial class ChannelAccountRoleViewModel : ObservableObject
 
     public string Title => Role == PlatformAuthRole.Bot ? "Бот" : "Стример";
 
+    public string AuthorizationLabel => Role == PlatformAuthRole.Bot ? "Войти как бот" : "Войти как стример";
+
+    public string AuthorizationAutomationId => Role == PlatformAuthRole.Bot ? "ChannelBotAuthorization" : "ChannelBroadcasterAuthorization";
+
     public string ContextId { get; private set; }
 
     public string? AccountId { get; private set; }
 
     public bool CanAuthorize { get; private set; }
 
-    public bool CanSelectAccount => !IsBusy;
+    public bool CanManageAccount => CanAuthorize || _supportsAccounts;
+
+    public bool CanSelectAccount => _canVerify && !IsBusy && Accounts.Count > 0;
 
     public bool NeedsVerification => AccountId is not null && _verifiedId != AccountId;
+
+    internal bool IsEdited => _saved != (AccountId, ContextId, _verifiedId);
+
+    internal void AcceptEdits() => _saved = (AccountId, ContextId, _verifiedId);
 
     public ChannelAccountOption? SelectedAccount
     {
@@ -75,9 +91,21 @@ public sealed partial class ChannelAccountRoleViewModel : ObservableObject
         }
     }
 
-    public void RefreshAccounts(IReadOnlyList<PlatformAccount> accounts, bool canAuthorize)
+    public void RefreshAccounts(IReadOnlyList<PlatformAccount>? accounts, bool canAuthorize, bool canVerify)
     {
+        CanAuthorize = canAuthorize;
+        _supportsAccounts = accounts is not null;
+        _canVerify = canVerify && _supportsAccounts;
+        if (accounts is null)
+        {
+            Accounts = [];
+            SetStatus(string.Empty, StatusSeverity.None);
+            NotifyAccountOptionsChanged();
+            return;
+        }
+
         var options = new List<ChannelAccountOption>();
+        var hasAssignedAuthorization = false;
         foreach (var account in accounts)
         {
             var grants = account.Authorizations.Where(grant => grant.Role == Role).ToArray();
@@ -87,6 +115,11 @@ public sealed partial class ChannelAccountRoleViewModel : ObservableObject
                 : grants.FirstOrDefault(value => value.HasToken) ?? grants.FirstOrDefault();
             if (grant is not null)
             {
+                if (account.Key.AccountId == AccountId && grant.ContextId == ContextId)
+                {
+                    hasAssignedAuthorization = grant.HasToken;
+                }
+
                 var label = grant.HasToken ? account.DisplayName : $"{account.DisplayName} · нужен вход";
                 options.Add(new(account.Key.AccountId, label, grant.ContextId));
             }
@@ -95,8 +128,7 @@ public sealed partial class ChannelAccountRoleViewModel : ObservableObject
         var selected = options.FirstOrDefault(option => option.AccountId == AccountId);
         if (AccountId is { } assigned && (selected is null || selected.ContextId != ContextId))
         {
-            _verifiedId = null;
-            SetStatus("Подключите назначенный аккаунт заново", StatusSeverity.Warning);
+            SetStatus(ReauthorizationNotice, StatusSeverity.Warning);
             if (selected is null)
             {
                 options.Add(new(assigned, $"{assigned} · нужен вход", ContextId));
@@ -104,13 +136,33 @@ public sealed partial class ChannelAccountRoleViewModel : ObservableObject
         }
         else if (selected is null)
         {
-            SetStatus("Аккаунт не выбран", StatusSeverity.None);
+            SetStatus(Role == PlatformAuthRole.Bot
+                ? "Войдите как бот или выберите аккаунт бота и проверьте доступ."
+                : "При необходимости выберите аккаунт стримера и проверьте доступ.",
+                Role == PlatformAuthRole.Bot ? StatusSeverity.Warning : StatusSeverity.None);
+        }
+        else if (!hasAssignedAuthorization)
+        {
+            SetStatus(ReauthorizationNotice, StatusSeverity.Warning);
+        }
+        else if (Status == ReauthorizationNotice)
+        {
+            SetStatus(NeedsVerification ? "Требуется проверка" : "Доступ подтверждён",
+                NeedsVerification ? StatusSeverity.Warning : StatusSeverity.Success);
         }
 
-        CanAuthorize = canAuthorize;
         Accounts = options;
+        NotifyAccountOptionsChanged();
+    }
+
+    private void NotifyAccountOptionsChanged()
+    {
+        OnPropertyChanged(nameof(CanAuthorize));
+        OnPropertyChanged(nameof(CanManageAccount));
+        OnPropertyChanged(nameof(CanSelectAccount));
         OnPropertyChanged(nameof(SelectedAccount));
         AuthorizeCommand.NotifyCanExecuteChanged();
+        VerifyCommand.NotifyCanExecuteChanged();
     }
 
     public void Assign(string accountId, string contextId)
@@ -169,7 +221,7 @@ public sealed partial class ChannelAccountRoleViewModel : ObservableObject
 
     private bool CanAuthorizeNow() => CanAuthorize && !IsBusy;
 
-    private bool CanVerifyNow() => !IsBusy && !string.IsNullOrWhiteSpace(AccountId);
+    private bool CanVerifyNow() => _canVerify && !IsBusy && !string.IsNullOrWhiteSpace(AccountId);
 
     [RelayCommand(CanExecute = nameof(CanAuthorizeNow))]
     private async Task AuthorizeAsync()

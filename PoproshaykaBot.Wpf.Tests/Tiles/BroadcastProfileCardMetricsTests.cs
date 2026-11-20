@@ -1,5 +1,6 @@
 ﻿using KeepShell.Testing;
 using PoproshaykaBot.Core.Broadcast.Profiles;
+using PoproshaykaBot.Core.Platforms;
 using PoproshaykaBot.Wpf.ViewModels.Tiles;
 using PoproshaykaBot.Wpf.Views.Tiles;
 using System.Windows;
@@ -176,6 +177,7 @@ public class BroadcastProfileCardMetricsTests
             (_, _) => Task.CompletedTask,
             _ => Task.CompletedTask,
             _ => { },
-            _ => { });
+            _ => { },
+            [new(StreamingPlatform.Twitch, "Twitch")]);
     }
 }

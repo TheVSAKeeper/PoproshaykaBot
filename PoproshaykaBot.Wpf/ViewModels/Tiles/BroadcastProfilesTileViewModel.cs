@@ -33,6 +33,7 @@ public sealed partial class BroadcastProfilesTileViewModel : DashboardTileViewMo
 
     private readonly BroadcastProfilesManager _manager;
     private readonly BroadcastProfilesStore _profiles;
+    private readonly IChatPlatformRegistry _platforms;
     private readonly IStreamStatus _stream;
     private readonly IChannelInformationApplier _applier;
     private readonly ITwitchChannelsApi _channelsApi;
@@ -78,11 +79,13 @@ public sealed partial class BroadcastProfilesTileViewModel : DashboardTileViewMo
         IDialogService dialogService,
         IServiceScopeFactory scopeFactory,
         IEventBus bus,
+        IChatPlatformRegistry platforms,
         ILogger<BroadcastProfilesTileViewModel>? logger = null)
         : base("broadcast-profiles", "Профиль трансляции", maxWidth: 500, maxHeight: 320, minHeight: 144)
     {
         _manager = manager;
         _profiles = profiles;
+        _platforms = platforms;
         _stream = stream;
         _applier = applier;
         _channelsApi = channelsApi;
@@ -114,7 +117,7 @@ public sealed partial class BroadcastProfilesTileViewModel : DashboardTileViewMo
     {
         var profile = new BroadcastProfile { Name = $"Новый профиль {DateTime.Now:HH:mm:ss}" };
 
-        if (await EditInDialogAsync(profile, new HashSet<StreamingPlatform> { StreamingPlatform.Twitch }) is { } selectedPlatforms)
+        if (await EditInDialogAsync(profile, null) is { } selectedPlatforms)
         {
             Persist(profile, selectedPlatforms);
         }
@@ -254,7 +257,7 @@ public sealed partial class BroadcastProfilesTileViewModel : DashboardTileViewMo
 
     private async Task<IReadOnlyCollection<StreamingPlatform>?> EditInDialogAsync(
         BroadcastProfile profile,
-        IReadOnlySet<StreamingPlatform> platforms)
+        IReadOnlySet<StreamingPlatform>? platforms)
     {
         using var scope = _scopeFactory.CreateScope();
         var dialog = scope.ServiceProvider.GetRequiredService<BroadcastProfileEditDialogViewModel>();
@@ -327,7 +330,10 @@ public sealed partial class BroadcastProfilesTileViewModel : DashboardTileViewMo
                     EditProfileAsync,
                     DuplicateProfile,
                     DeleteProfile,
-                    _manager.GetPlatforms(p.Id));
+                    _manager.GetPlatforms(p.Id)
+                        .Order()
+                        .Select(platform => new BroadcastProfileTarget(platform, _platforms.GetDisplayName(platform)))
+                        .ToArray());
             }));
 
         if (_applyingProfileId.HasValue)

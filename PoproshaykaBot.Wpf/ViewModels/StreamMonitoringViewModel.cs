@@ -5,13 +5,12 @@ using PoproshaykaBot.Core.Platforms;
 using PoproshaykaBot.Core.Platforms.Auth;
 using PoproshaykaBot.Core.Streaming;
 using PoproshaykaBot.Wpf.Infrastructure;
-using PoproshaykaBot.Wpf.Infrastructure.Platforms;
 
 namespace PoproshaykaBot.Wpf.ViewModels;
 
 public sealed partial class StreamMonitoringViewModel : ObservableObject, IDisposable
 {
-    private readonly IChatPlatformRegistry? _platformRegistry;
+    private readonly IChatPlatformRegistry _platformRegistry;
     private readonly Dictionary<StreamingPlatform, PlatformMonitoringGroupViewModel> _groupsByPlatform;
     private readonly IDisposable _subscription;
     private readonly IDisposable _channelSubscription;
@@ -24,14 +23,14 @@ public sealed partial class StreamMonitoringViewModel : ObservableObject, IDispo
 
     public StreamMonitoringViewModel(
         IEventBus eventBus,
-        IChatPlatformRegistry? platformRegistry = null)
+        IChatPlatformRegistry platformRegistry)
     {
         ArgumentNullException.ThrowIfNull(eventBus);
 
         _platformRegistry = platformRegistry;
 
-        var groups = PlatformVisuals.OrderedPlatforms
-            .Select(static platform => new PlatformMonitoringGroupViewModel(platform))
+        var groups = platformRegistry.All
+            .Select(static platform => new PlatformMonitoringGroupViewModel(platform.Id, platform.DisplayName))
             .ToArray();
 
         Groups = groups;
@@ -56,7 +55,7 @@ public sealed partial class StreamMonitoringViewModel : ObservableObject, IDispo
         }
 
         var resetOnDisconnect = statusEvent.Status == StreamMonitoringStatus.Disconnected
-            && _platformRegistry?.Find(statusEvent.Platform) is { IsEnabled: false };
+            && _platformRegistry.Find(statusEvent.Platform) is { IsEnabled: false };
 
         group.Apply(statusEvent.Role, statusEvent.Status, statusEvent.Detail, resetOnDisconnect);
         RefreshVisibility();
@@ -106,10 +105,10 @@ public sealed partial class PlatformMonitoringGroupViewModel : ObservableObject
     [ObservableProperty]
     private bool _isVisible;
 
-    public PlatformMonitoringGroupViewModel(StreamingPlatform platform)
+    public PlatformMonitoringGroupViewModel(StreamingPlatform platform, string displayName)
     {
         Platform = platform;
-        DisplayName = PlatformVisuals.GetDisplayName(platform);
+        DisplayName = displayName;
     }
 
     public StreamingPlatform Platform { get; }

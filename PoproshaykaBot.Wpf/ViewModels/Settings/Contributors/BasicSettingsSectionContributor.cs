@@ -63,7 +63,7 @@ public sealed class BasicSettingsSectionContributor : ISettingsSectionContributo
                 "basic/channel",
                 "Отображение чата Twitch",
                 null,
-                _basic),
+                _basic) { Platform = PoproshaykaBot.Core.Platforms.StreamingPlatform.Twitch },
             new(
                 "basic/limits",
                 "Ограничения отправки",

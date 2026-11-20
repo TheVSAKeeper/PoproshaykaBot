@@ -18,6 +18,11 @@
                        TextWrapping="Wrap"
                        Margin="0,0,0,14" />
 
+            <CheckBox Style="{StaticResource CheckBox.Default}"
+                      IsChecked="{Binding Editor.Enabled, Mode=TwoWay}"
+                      Content="Включить интеграцию YouTube"
+                      Margin="0,0,0,14" />
+
             <ContentControl Content="{Binding Editor}"
                             Focusable="False" />
 

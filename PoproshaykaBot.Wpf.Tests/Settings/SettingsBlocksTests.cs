@@ -5,18 +5,22 @@ using KeepShell.Testing;
 using KeepShell.ViewModels;
 using MahApps.Metro.IconPacks;
 using Microsoft.Extensions.Logging.Abstractions;
+using PoproshaykaBot.Core.Chat;
 using PoproshaykaBot.Core.Dashboard;
 using PoproshaykaBot.Core.Debugging;
 using PoproshaykaBot.Core.Infrastructure.Events;
+using PoproshaykaBot.Core.Platforms;
 using PoproshaykaBot.Core.Server;
 using PoproshaykaBot.Core.Settings;
 using PoproshaykaBot.Core.Settings.Stores;
 using PoproshaykaBot.Core.Settings.Update;
 using PoproshaykaBot.Core.Statistics;
+using PoproshaykaBot.Core.Streaming;
 using PoproshaykaBot.Core.Twitch.Auth;
 using PoproshaykaBot.Core.Update;
 using PoproshaykaBot.Core.YouTube.Auth;
 using PoproshaykaBot.Wpf.Infrastructure;
+using PoproshaykaBot.Wpf.Infrastructure.Platforms;
 using PoproshaykaBot.Wpf.Tests.Support;
 using PoproshaykaBot.Wpf.ViewModels;
 using PoproshaykaBot.Wpf.ViewModels.Settings;
@@ -37,6 +41,44 @@ namespace PoproshaykaBot.Wpf.Tests.Settings;
 [NonParallelizable]
 public class SettingsBlocksTests
 {
+    [Test]
+    public void PlatformSettingsUseRegisteredProvidersAndTheirOwnBlocks()
+    {
+        var vk = new VkSettingsPlatform();
+        var catalog = new SettingsSectionBlockDescriptor("channels/catalog", "Каналы", null, new object());
+        var credentials = new SettingsSectionBlockDescriptor("vk/credentials", "Приложение VK", null, new object())
+        {
+            Platform = StreamingPlatform.VkLive,
+        };
+        var presentations = PlatformSettingsPages.Create(
+        [
+            new(new("channels", "Каналы", PackIconLucideKind.Layers, ""), [catalog], false),
+            new(new("vk", "VK Видео Live", PackIconLucideKind.Layers, ""), [credentials], false),
+        ], profiles: null, registry: new ChatPlatformRegistry([vk]));
+
+        var presentation = presentations.Single();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(presentation.Group?.Title, Is.EqualTo("VK Видео Live"));
+            Assert.That(PlatformSettingsPages.GetPlatform(presentation.Group), Is.EqualTo(StreamingPlatform.VkLive));
+            Assert.That(presentation.Blocks, Is.EqualTo(new[] { catalog, credentials }));
+            Assert.That(PlatformVisuals.Get(StreamingPlatform.VkLive).Platform, Is.EqualTo(StreamingPlatform.VkLive));
+            Assert.That(PlatformVisuals.ResolveGeometry(StreamingPlatform.VkLive),
+                Is.Not.SameAs(PlatformVisuals.ResolveGeometry(StreamingPlatform.Twitch)));
+        }
+    }
+
+    private sealed class VkSettingsPlatform : IChatPlatform
+    {
+        public StreamingPlatform Id => StreamingPlatform.VkLive;
+        public string DisplayName => "VK Видео Live";
+        public PlatformCapabilities Capabilities => PlatformCapabilities.None;
+        public bool IsEnabled => true;
+        public bool IsConnected => false;
+        public IStreamStatus StreamStatus => throw new NotSupportedException();
+        public IPlatformMessenger Messenger => throw new NotSupportedException();
+    }
+
     private static readonly string[] Dictionaries =
     [
         "pack://application:,,,/KeepShell;component/Resources/Themes/Light.xaml",

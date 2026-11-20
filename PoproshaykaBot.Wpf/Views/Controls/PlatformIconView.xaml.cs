@@ -13,10 +13,16 @@ public partial class PlatformIconView : UserControl
         typeof(PlatformIconView),
         new PropertyMetadata(StreamingPlatform.Twitch, OnPlatformChanged));
 
+    static PlatformIconView()
+    {
+        ToolTipProperty.OverrideMetadata(typeof(PlatformIconView), new FrameworkPropertyMetadata(null, null, CoerceToolTip));
+    }
+
     public PlatformIconView()
     {
         InitializeComponent();
         ApplyVisual();
+        CoerceValue(ToolTipProperty);
     }
 
     public StreamingPlatform Platform
@@ -30,15 +36,17 @@ public partial class PlatformIconView : UserControl
         if (d is PlatformIconView view)
         {
             view.ApplyVisual();
+            view.CoerceValue(ToolTipProperty);
         }
     }
+
+    private static object CoerceToolTip(DependencyObject d, object? value) =>
+        value ?? PlatformVisuals.GetDisplayName(((PlatformIconView)d).Platform);
 
     private void ApplyVisual()
     {
         var platform = Platform;
-        var descriptor = PlatformVisuals.Get(platform);
         IconPath.Data = PlatformVisuals.ResolveGeometry(platform, this);
         IconPath.Fill = PlatformVisuals.ResolveBrandBrush(platform, this);
-        ToolTip = descriptor.DisplayName;
     }
 }

@@ -85,7 +85,8 @@ public class CompactLayoutTests
             game,
             null!,
             null!,
-            NullLogger<BroadcastProfileEditDialogViewModel>.Instance);
+            NullLogger<BroadcastProfileEditDialogViewModel>.Instance,
+            new ChatPlatformRegistry([]));
         var profileView = new BroadcastProfileEditDialogView { DataContext = profileVm };
         Arrange(profileView, new(600, 620));
 

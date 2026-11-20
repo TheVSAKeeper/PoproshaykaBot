@@ -1,0 +1,16 @@
+﻿<UserControl x:Class="PoproshaykaBot.Wpf.Views.YouTubeMultistreamPlatformControlsView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             Visibility="{Binding Settings, Converter={StaticResource NullToVisibility}}">
+    <StackPanel Margin="0,12,0,0">
+        <CheckBox Content="Включить YouTube"
+                  Style="{StaticResource CheckBox.Default}"
+                  FontWeight="{DynamicResource Font.Weight.SemiBold}"
+                  AutomationProperties.AutomationId="MultistreamEnableYouTube"
+                  IsChecked="{Binding Settings.Enabled, Mode=TwoWay}" />
+        <TextBlock Text="Изменение вступит в силу после сохранения."
+                   Style="{StaticResource Form.Hint}"
+                   TextWrapping="Wrap"
+                   Margin="0,3,0,0" />
+    </StackPanel>
+</UserControl>

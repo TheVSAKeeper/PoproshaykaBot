@@ -27,7 +27,8 @@ public static class DashboardLayoutDefaults
         AddTile(layout, "obs-info", 4, 0, 1, 1);
         AddTile(layout, "stream-preview", 0, 1, 1, 2);
         AddTile(layout, "chat-overlay-preview", 2, 1, 1, 3);
-        AddTile(layout, "twitch-chat", 0, 2, 1, 5);
+        AddTile(layout, "multistream", 0, 2, 1, 2);
+        AddTile(layout, "twitch-chat", 2, 2, 1, 3);
 
         return layout;
     }

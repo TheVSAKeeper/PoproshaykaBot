@@ -1,0 +1,79 @@
+﻿<UserControl x:Class="PoproshaykaBot.Wpf.Views.Tiles.MultistreamTileView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:keepshell="https://schemas.keepshell.dev/wpf"
+             xmlns:controls="clr-namespace:PoproshaykaBot.Wpf.Views.Controls">
+    <UserControl.Resources>
+        <Style x:Key="PlatformStatus" TargetType="TextBlock">
+            <Setter Property="TextWrapping" Value="Wrap" />
+            <Setter Property="FontSize" Value="{DynamicResource Font.Size.S}" />
+        </Style>
+    </UserControl.Resources>
+    <ItemsControl ItemsSource="{Binding Rows}" VerticalAlignment="Top">
+        <ItemsControl.ItemTemplate>
+            <DataTemplate>
+                <Border Style="{StaticResource Card.Inset}" Margin="0,0,0,8" Padding="10,7">
+                    <StackPanel>
+                        <Grid Margin="0,0,0,4">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                                <controls:PlatformIconView Platform="{Binding Platform}"
+                                                           ToolTip="{Binding DisplayName}"
+                                                       Width="16"
+                                                       Height="16"
+                                                       Margin="0,0,6,0"
+                                                       VerticalAlignment="Center" />
+                            <TextBlock Grid.Column="1"
+                                       Text="{Binding DisplayName}"
+                                       Foreground="{DynamicResource Fg.Primary}"
+                                       FontWeight="SemiBold"
+                                       VerticalAlignment="Center" />
+                            <TextBlock Grid.Column="2"
+                                       Text="{Binding ChannelName}"
+                                       ToolTip="{Binding ChannelName}"
+                                       Foreground="{DynamicResource Fg.Secondary}"
+                                       TextTrimming="CharacterEllipsis"
+                                       VerticalAlignment="Center"
+                                       Margin="10,0,0,0" />
+                        </Grid>
+                        <TextBlock Style="{StaticResource PlatformStatus}"
+                                   Text="{Binding BroadcastText}"
+                                   keepshell:SeverityBrushBehavior.Foreground="{Binding BroadcastSeverity}" />
+                        <TextBlock Style="{StaticResource PlatformStatus}"
+                                   Text="{Binding ChatText}"
+                                   keepshell:SeverityBrushBehavior.Foreground="{Binding ChatSeverity}" />
+                        <WrapPanel Margin="0,2,0,0">
+                            <Button Style="{StaticResource Button.Secondary}"
+                                    MinHeight="30"
+                                    Padding="10,3"
+                                    FontSize="{DynamicResource Font.Size.S}"
+                                    Margin="0,4,8,0"
+                                    Content="{Binding ConnectionActionLabel}"
+                                    Command="{Binding ToggleConnectionCommand}"
+                                    Visibility="{Binding ShowConnectionAction, Converter={StaticResource BoolToVisibility}}"
+                                    AutomationProperties.Name="{Binding ConnectionActionName}" />
+                            <Button x:Name="OpenPlatform"
+                                    Style="{StaticResource Button.Ghost}"
+                                    MinHeight="30"
+                                    Padding="10,3"
+                                    FontSize="{DynamicResource Font.Size.S}"
+                                    Margin="0,4,0,0"
+                                    Content="{Binding PlatformActionLabel}"
+                                    Command="{Binding OpenPlatformCommand}"
+                                    AutomationProperties.AutomationId="{Binding Platform, StringFormat='MultistreamSettings{0}'}"
+                                    AutomationProperties.Name="{Binding PlatformActionName}" />
+                        </WrapPanel>
+                    </StackPanel>
+                </Border>
+                <DataTemplate.Triggers>
+                    <DataTrigger Binding="{Binding IsSetupRequired}" Value="True">
+                        <Setter TargetName="OpenPlatform" Property="Style" Value="{StaticResource Button.Primary}" />
+                    </DataTrigger>
+                </DataTemplate.Triggers>
+            </DataTemplate>
+        </ItemsControl.ItemTemplate>
+    </ItemsControl>
+</UserControl>

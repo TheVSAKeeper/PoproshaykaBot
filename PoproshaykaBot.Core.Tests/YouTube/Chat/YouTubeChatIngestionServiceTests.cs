@@ -703,6 +703,29 @@ public class YouTubeChatIngestionServiceTests
     }
 
     [Test]
+    public void YouTubeChatPlatform_BotIdentity_Uses_Live_Session_Then_Active_Catalog_Account()
+    {
+        const string botContext = "backup-bot";
+        _accountsStore.UpsertContext(PlatformAuthRole.Bot, botContext, "Резервный бот",
+            new() { ChannelId = "UCbackupBot", ChannelTitle = "Резервный бот" });
+        var catalog = new ChannelCatalogStore(filePath: Path.Combine(_directory, "channels.json"));
+        catalog.Save(new()
+        {
+            Channels = [new() { Platform = StreamingPlatform.YouTube, ChannelId = ChannelId, IsConfigured = true, BotContextId = botContext }],
+            Platforms = [new() { Platform = StreamingPlatform.YouTube, ActiveChannelId = ChannelId }],
+        });
+        var platform = new YouTubeChatPlatform(
+            _streamMonitor, _sessionContext, _streamMonitor, Substitute.For<IPlatformMessenger>(),
+            _settingsStore, _accountsStore, Substitute.For<ITargetChannelProvider>(), channelCatalogStore: catalog);
+
+        Assert.That(platform.BotIdentity?.DisplayName, Is.EqualTo("YTBot"));
+        _sessionContext.Begin(new(ChannelId, ChannelId, "UCbackupBot", "Резервный бот", botContext));
+        Assert.That(platform.BotIdentity, Is.EqualTo(new PlatformBotIdentity("UCbackupBot", "Резервный бот")));
+        _sessionContext.Clear();
+        Assert.That(platform.BotIdentity?.UserId, Is.EqualTo("UCbackupBot"));
+    }
+
+    [Test]
     public async Task Broadcast_Removal_And_Switch_Cancel_Open_Grpc_Stream_And_Block_Stale_Batches()
     {
         var received = new List<RawChatMessageReceived>();

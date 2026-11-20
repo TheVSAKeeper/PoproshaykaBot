@@ -40,6 +40,8 @@ public sealed class TwitchChatPlatform(
 
     public bool IsConnected => !string.IsNullOrWhiteSpace(channels.GetChannel(StreamingPlatform.Twitch));
 
+    public bool UsesChannelCatalog => targetChannelProvider?.Current.IsDebugSession != true;
+
     public ChatConnectionStatus? CaptureChatStatus(BotLifecyclePhase phase) =>
         chatIngestion?.CaptureChatStatus(phase, ConfiguredChannel);
 

@@ -17,6 +17,7 @@ public sealed record AutoDiscoverCandidateOption(ChannelKey Channel, string Disp
 public sealed partial class ChannelSwitchPromptBannerViewModel : ObservableObject, IDisposable
 {
     private readonly IChannelSwitchCoordinator _switchCoordinator;
+    private readonly IChatPlatformRegistry? _platformRegistry;
     private readonly ILogger<ChannelSwitchPromptBannerViewModel> _logger;
     private readonly Dictionary<StreamingPlatform, AutoDiscoverPrompt> _prompts = [];
     private readonly IDisposable _subscription;
@@ -45,13 +46,15 @@ public sealed partial class ChannelSwitchPromptBannerViewModel : ObservableObjec
     public ChannelSwitchPromptBannerViewModel(
         IChannelSwitchCoordinator switchCoordinator,
         IEventBus eventBus,
-        ILogger<ChannelSwitchPromptBannerViewModel> logger)
+        ILogger<ChannelSwitchPromptBannerViewModel> logger,
+        IChatPlatformRegistry? platformRegistry = null)
     {
         ArgumentNullException.ThrowIfNull(switchCoordinator);
         ArgumentNullException.ThrowIfNull(eventBus);
         ArgumentNullException.ThrowIfNull(logger);
 
         _switchCoordinator = switchCoordinator;
+        _platformRegistry = platformRegistry;
         _logger = logger;
 
         foreach (var prompt in _switchCoordinator.GetActivePrompts())
@@ -86,7 +89,7 @@ public sealed partial class ChannelSwitchPromptBannerViewModel : ObservableObjec
 
         var platform = _activePrompt.Platform;
         var candidate = SelectedCandidate;
-        var platformName = PlatformVisuals.GetDisplayName(platform);
+        var platformName = PlatformVisuals.GetDisplayName(platform, _platformRegistry);
         IsBusy = true;
 
         try
@@ -131,7 +134,7 @@ public sealed partial class ChannelSwitchPromptBannerViewModel : ObservableObjec
         }
 
         var platform = _activePrompt.Platform;
-        var platformName = PlatformVisuals.GetDisplayName(platform);
+        var platformName = PlatformVisuals.GetDisplayName(platform, _platformRegistry);
         IsBusy = true;
 
         try
@@ -211,7 +214,7 @@ public sealed partial class ChannelSwitchPromptBannerViewModel : ObservableObjec
 
         SelectedCandidate = Candidates[0];
         HasMultipleCandidates = Candidates.Count > 1;
-        var platformName = PlatformVisuals.GetDisplayName(_activePrompt.Platform);
+        var platformName = PlatformVisuals.GetDisplayName(_activePrompt.Platform, _platformRegistry);
 
         if (Candidates.Count == 1)
         {

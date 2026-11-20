@@ -1,5 +1,4 @@
-﻿using System.Collections.ObjectModel;
-using CommunityToolkit.Mvvm.ComponentModel;
+﻿using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using MahApps.Metro.IconPacks;
 using Microsoft.Extensions.Logging;
@@ -10,14 +9,11 @@ using PoproshaykaBot.Core.Platforms;
 using PoproshaykaBot.Core.Settings;
 using PoproshaykaBot.Core.Settings.Stores;
 using PoproshaykaBot.Core.Streaming;
-using PoproshaykaBot.Core.Streaming.Switching;
 using PoproshaykaBot.Wpf.Bootstrap;
 using PoproshaykaBot.Wpf.Infrastructure;
 using PoproshaykaBot.Wpf.Infrastructure.Platforms;
 
 namespace PoproshaykaBot.Wpf.ViewModels.Tiles;
-
-public sealed record StreamChannelOption(ChannelKey Channel, string DisplayName, bool IsOnline);
 
 public sealed partial class StreamInfoTileViewModel : DashboardTileViewModel, IDisposable
 {
@@ -28,7 +24,6 @@ public sealed partial class StreamInfoTileViewModel : DashboardTileViewModel, ID
     private readonly IUiDispatcher _uiDispatcher;
     private readonly YouTubeSettingsStore? _youtubeSettingsStore;
     private readonly ChannelCatalogStore? _catalogStore;
-    private readonly IChannelSwitchCoordinator? _switchCoordinator;
     private readonly Dictionary<StreamingPlatform, IPlatformChannelMonitor> _monitorsByPlatform = [];
     private readonly Dictionary<ChannelKey, ChannelMonitoringSnapshot> _monitoringSnapshots = [];
     private readonly IUiTimer _refreshTimer;
@@ -37,7 +32,6 @@ public sealed partial class StreamInfoTileViewModel : DashboardTileViewModel, ID
     private ToolbarItemViewModel _openChannelToolbarItem;
     private bool _refreshTimerRunning;
     private bool _hasMultipleYouTubeBroadcasts;
-    private bool _updatingChannelSelection;
     private StreamInfo? _currentStreamInfo;
 
     [ObservableProperty]
@@ -48,16 +42,8 @@ public sealed partial class StreamInfoTileViewModel : DashboardTileViewModel, ID
     private bool _hasMultiplePlatforms;
 
     [ObservableProperty]
-    private bool _hasMultipleChannels;
-
-    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasActiveChannel))]
     private string _activeChannelDisplayName = string.Empty;
-
-    [ObservableProperty]
-    private StreamChannelOption? _selectedChannelOption;
-
-    [ObservableProperty]
-    private bool _isSwitchingChannel;
 
     [ObservableProperty]
     private string _preselectedNextText = string.Empty;
@@ -104,7 +90,6 @@ public sealed partial class StreamInfoTileViewModel : DashboardTileViewModel, ID
         IShellLauncher shellLauncher,
         YouTubeSettingsStore? youtubeSettingsStore = null,
         ChannelCatalogStore? catalogStore = null,
-        IChannelSwitchCoordinator? switchCoordinator = null,
         IEnumerable<IPlatformChannelMonitor>? channelMonitors = null)
         : base("stream-info", "Информация о стриме", maxWidth: 420, maxHeight: 320, minHeight: 194)
     {
@@ -120,7 +105,6 @@ public sealed partial class StreamInfoTileViewModel : DashboardTileViewModel, ID
         _uiDispatcher = uiDispatcher;
         _youtubeSettingsStore = youtubeSettingsStore;
         _catalogStore = catalogStore;
-        _switchCoordinator = switchCoordinator;
         _shellLauncher = shellLauncher;
 
         if (channelMonitors is not null)
@@ -139,7 +123,7 @@ public sealed partial class StreamInfoTileViewModel : DashboardTileViewModel, ID
         _switchPlatformToolbarItem = new ToolbarItemViewModel(
             PackIconLucideKind.ArrowLeftRight,
             SwitchPlatformCommand,
-            toolTip: "Переключить площадку")
+            toolTip: "Сменить площадку в информации о стриме")
         {
             IsVisible = _platformSelection.HasMultiplePlatforms,
         };
@@ -182,36 +166,13 @@ public sealed partial class StreamInfoTileViewModel : DashboardTileViewModel, ID
         ApplyCurrentStatus();
     }
 
-    public ObservableCollection<StreamChannelOption> ConfiguredChannels { get; } = [];
-
-    public bool CanSwitchChannel => _switchCoordinator is not null && !IsSwitchingChannel;
-
-    partial void OnIsSwitchingChannelChanged(bool value)
-    {
-        OnPropertyChanged(nameof(CanSwitchChannel));
-    }
-
-    partial void OnSelectedChannelOptionChanged(StreamChannelOption? value)
-    {
-        if (_updatingChannelSelection || value is null || _switchCoordinator is null || IsSwitchingChannel)
-        {
-            return;
-        }
-
-        var routing = _catalogStore?.GetPlatformSettings(SelectedPlatform);
-        if (routing is not null && string.Equals(routing.ActiveChannelId, value.Channel.ChannelId, StringComparison.Ordinal))
-        {
-            return;
-        }
-
-        _ = SwitchToChannelAsync(value);
-    }
-
     public override PackIconLucideKind Icon => PackIconLucideKind.Radio;
 
     public override bool SizesToContent => true;
 
-    public string SelectedPlatformName => PlatformVisuals.GetDisplayName(SelectedPlatform);
+    public string SelectedPlatformName => _platformSelection.SelectedDisplayName;
+
+    public bool HasActiveChannel => !string.IsNullOrWhiteSpace(ActiveChannelDisplayName);
 
     public bool HasMultipleBroadcastsNotice =>
         SelectedPlatform == StreamingPlatform.YouTube
@@ -288,37 +249,6 @@ public sealed partial class StreamInfoTileViewModel : DashboardTileViewModel, ID
         if (evt.Platform == SelectedPlatform)
         {
             RefreshMultiChannelState();
-        }
-    }
-
-    private async Task SwitchToChannelAsync(StreamChannelOption option)
-    {
-        if (_switchCoordinator is null)
-        {
-            return;
-        }
-
-        IsSwitchingChannel = true;
-        try
-        {
-            var result = await _switchCoordinator.SwitchActiveChannelAsync(SelectedPlatform, option.Channel).ConfigureAwait(true);
-            if (result.Succeeded)
-            {
-                _logger.ChannelSwitchedByUser(SelectedPlatformName, option.DisplayName);
-            }
-            else
-            {
-                _logger.ChannelSwitchOperationFailed(null, SelectedPlatformName);
-            }
-        }
-        catch (Exception ex)
-        {
-            _logger.ChannelSwitchOperationFailed(ex, SelectedPlatformName);
-        }
-        finally
-        {
-            IsSwitchingChannel = false;
-            ApplyCurrentStatus();
         }
     }
 
@@ -451,58 +381,18 @@ public sealed partial class StreamInfoTileViewModel : DashboardTileViewModel, ID
             MonitoringIssueText = string.Empty;
         }
 
-        _updatingChannelSelection = true;
-        try
-        {
-            ConfiguredChannels.Clear();
-            if (_catalogStore is null)
-            {
-                HasMultipleChannels = false;
-                ActiveChannelDisplayName = _platformRegistry.GetConfiguredChannel(SelectedPlatform) ?? string.Empty;
-                SelectedChannelOption = null;
-                HasPreselectedNext = false;
-                PreselectedNextText = string.Empty;
-                return;
-            }
+        var catalog = _platformRegistry.Find(SelectedPlatform)?.UsesChannelCatalog is false ? null : _catalogStore;
+        var active = catalog?.GetActiveChannel(SelectedPlatform);
+        ActiveChannelDisplayName = active is null
+            ? _platformRegistry.GetConfiguredChannel(SelectedPlatform) ?? string.Empty
+            : string.IsNullOrWhiteSpace(active.DisplayName) ? active.ChannelId : active.DisplayName;
 
-            var configured = _catalogStore.GetConfiguredChannels(SelectedPlatform);
-            var routing = _catalogStore.GetPlatformSettings(SelectedPlatform);
-
-            foreach (var entry in configured)
-            {
-                var online = snapshots.TryGetValue(entry.Key, out var snapshot) && snapshot.Status == StreamStatus.Online;
-                ConfiguredChannels.Add(new StreamChannelOption(entry.Key, entry.DisplayName, online));
-            }
-
-            HasMultipleChannels = ConfiguredChannels.Count > 1;
-            var activeKey = !string.IsNullOrWhiteSpace(routing.ActiveChannelId)
-                ? new ChannelKey(SelectedPlatform, routing.ActiveChannelId)
-                : default;
-            var activeOption = activeKey.IsValid
-                ? ConfiguredChannels.FirstOrDefault(o => o.Channel == activeKey)
-                : null;
-            ActiveChannelDisplayName = activeOption?.DisplayName
-                ?? _platformRegistry.GetConfiguredChannel(SelectedPlatform)
-                ?? string.Empty;
-            SelectedChannelOption = activeOption ?? ConfiguredChannels.FirstOrDefault();
-
-            if (routing.SwitchMode == ChannelSwitchMode.PreselectedNext && !string.IsNullOrWhiteSpace(routing.PreselectedNextChannelId))
-            {
-                var nextKey = new ChannelKey(SelectedPlatform, routing.PreselectedNextChannelId);
-                var nextEntry = _catalogStore.FindEntry(nextKey);
-                HasPreselectedNext = nextEntry is not null;
-                PreselectedNextText = nextEntry is not null ? $"Следующий канал: {nextEntry.DisplayName}" : string.Empty;
-            }
-            else
-            {
-                HasPreselectedNext = false;
-                PreselectedNextText = string.Empty;
-            }
-        }
-        finally
-        {
-            _updatingChannelSelection = false;
-        }
+        var routing = catalog?.GetPlatformSettings(SelectedPlatform);
+        var next = routing is { SwitchMode: ChannelSwitchMode.PreselectedNext, PreselectedNextChannelId: { Length: > 0 } nextId }
+            ? catalog?.FindEntry(new(SelectedPlatform, nextId))
+            : null;
+        HasPreselectedNext = next is not null;
+        PreselectedNextText = next is null ? string.Empty : $"Следующий канал: {next.DisplayName}";
     }
 
     private void UpdateOpenChannelToolTip(string expectedToolTip)

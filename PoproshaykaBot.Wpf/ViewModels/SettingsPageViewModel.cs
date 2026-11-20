@@ -2,6 +2,7 @@
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.Extensions.Logging;
 using PoproshaykaBot.Core.Infrastructure.Events;
+using PoproshaykaBot.Core.Platforms;
 using PoproshaykaBot.Core.Server;
 using PoproshaykaBot.Core.Settings;
 using PoproshaykaBot.Core.Settings.Stores;
@@ -30,6 +31,11 @@ public sealed partial class SettingsPageViewModel : ObservableObject, IPageHeade
     private SettingsSessionState _session = new() { Settings = new() };
     private string _rememberedSection = string.Empty;
     private bool _suppressDirty;
+    private bool _disposed;
+
+    [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(SaveCommand), nameof(RevertCommand))]
+    private bool _isSaving;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasChanges))]
@@ -46,7 +52,8 @@ public sealed partial class SettingsPageViewModel : ObservableObject, IPageHeade
         ILogger<SettingsPageViewModel> logger,
         IDialogService dialogService,
         ISettingsStore uiSettings,
-        BroadcastProfilesSettingsSectionViewModel? broadcastProfiles = null)
+        BroadcastProfilesSettingsSectionViewModel? broadcastProfiles = null,
+        IChatPlatformRegistry? platformRegistry = null)
     {
         ArgumentNullException.ThrowIfNull(contributors);
         ArgumentNullException.ThrowIfNull(settingsManager);
@@ -74,7 +81,7 @@ public sealed partial class SettingsPageViewModel : ObservableObject, IPageHeade
         _channelCatalog?.SetCredentialDrafts(
             contents.OfType<OAuthSettingsViewModel>().FirstOrDefault(),
             contents.OfType<YouTubeSettingsSectionViewModel>().FirstOrDefault());
-        SectionPresentations = PlatformSettingsPages.Create(presentations, broadcastProfiles);
+        SectionPresentations = PlatformSettingsPages.Create(presentations, broadcastProfiles, platformRegistry);
         Sections = new([.. SectionPresentations.Select(p => p.Section).Distinct()]);
 
         _rememberedSection = uiSettings.GetStringValue(SettingsKeys.SettingsSection) ?? string.Empty;
@@ -86,6 +93,7 @@ public sealed partial class SettingsPageViewModel : ObservableObject, IPageHeade
     }
 
     public event EventHandler? SettingsSaved;
+    public event EventHandler<StreamingPlatform?>? MultistreamRequested;
 
     public string PageTitle => "Настройки";
 
@@ -98,9 +106,10 @@ public sealed partial class SettingsPageViewModel : ObservableObject, IPageHeade
     public bool HasChanges => Dirty || _contributors.Any(c => c.HasExternalChanges);
 
     public bool HasDraft => HasChanges
-        || Sections.Selected is not { } selected
-        || !_contributorsByKey.TryGetValue(selected.Key, out var contributor)
-        || !contributor.IsDraftless;
+        || (Sections.Selected?.Key != PlatformSettingsPages.SectionKey
+            && (Sections.Selected is not { } selected
+                || !_contributorsByKey.TryGetValue(selected.Key, out var contributor)
+                || !contributor.IsDraftless));
 
     public bool HasUnsavedChanges => HasChanges;
 
@@ -117,6 +126,11 @@ public sealed partial class SettingsPageViewModel : ObservableObject, IPageHeade
 
     public async Task<bool> TrySaveUnsavedChangesAsync()
     {
+        if (IsSaving || _disposed)
+        {
+            return false;
+        }
+
         await SaveCommand.ExecuteAsync(null);
         return !HasChanges;
     }
@@ -128,6 +142,23 @@ public sealed partial class SettingsPageViewModel : ObservableObject, IPageHeade
 
     public void OnEnter()
     {
+        if (!CanReloadDraft())
+        {
+            return;
+        }
+
+        SelectChannelPlatform();
+        ReloadDraft();
+        RunSelectedSectionEntryChecks();
+    }
+
+    internal void ReloadDraft()
+    {
+        if (!CanReloadDraft())
+        {
+            return;
+        }
+
         _suppressDirty = true;
 
         try
@@ -151,11 +182,11 @@ public sealed partial class SettingsPageViewModel : ObservableObject, IPageHeade
         }
 
         ResetDirty();
-        RunSelectedSectionEntryChecks();
     }
 
     public void Dispose()
     {
+        _disposed = true;
         Sections.PropertyChanged -= OnSectionsPropertyChanged;
         DisposeDirtySubscriptions();
 
@@ -200,7 +231,7 @@ public sealed partial class SettingsPageViewModel : ObservableObject, IPageHeade
     {
         if (e.PropertyName == nameof(SettingsSectionList.NoMatches)
             && Sections.Selected is { Key: PlatformSettingsPages.SectionKey } platforms
-            && PlatformSettingsPages.FindSearchGroup(Sections.Query) is { } group)
+            && PlatformSettingsPages.FindSearchGroup(Sections.Query, platforms.Children) is { } group)
         {
             Sections.SelectedChild = platforms.FindChild(group) ?? Sections.SelectedChild;
         }
@@ -229,14 +260,9 @@ public sealed partial class SettingsPageViewModel : ObservableObject, IPageHeade
         }
     }
 
-    public void OpenPlatformSettings()
-    {
-        if (Sections.Selected?.Key != PlatformSettingsPages.SectionKey)
-        {
-            Sections.Filter(string.Empty);
-            Sections.Restore(PlatformSettingsPages.SectionKey);
-        }
-    }
+    [RelayCommand]
+    private void NavigateToMultistream(SettingsSubsection? group) =>
+        MultistreamRequested?.Invoke(this, PlatformSettingsPages.GetPlatform(group));
 
     private void RememberSelection()
     {
@@ -257,8 +283,30 @@ public sealed partial class SettingsPageViewModel : ObservableObject, IPageHeade
         }
     }
 
-    [RelayCommand(CanExecute = nameof(HasChanges))]
+    private bool CanReloadDraft() => !IsSaving && !_disposed;
+
+    private bool CanSave() => CanReloadDraft() && HasChanges;
+
+    [RelayCommand(CanExecute = nameof(CanSave))]
     private async Task SaveAsync()
+    {
+        if (!CanReloadDraft())
+        {
+            return;
+        }
+
+        IsSaving = true;
+        try
+        {
+            await SaveDraftAsync();
+        }
+        finally
+        {
+            IsSaving = false;
+        }
+    }
+
+    private async Task SaveDraftAsync()
     {
         foreach (var contributor in _contributors)
         {
@@ -282,6 +330,7 @@ public sealed partial class SettingsPageViewModel : ObservableObject, IPageHeade
             var appSettingsWritten = _settingsManager.SaveSettings(_session.Settings);
             var written = appSettingsWritten;
             var portChanged = newPort != prevPort;
+            List<string> failures = [];
 
             foreach (var contributor in _contributors)
             {
@@ -297,6 +346,10 @@ public sealed partial class SettingsPageViewModel : ObservableObject, IPageHeade
                 var outcome = await contributor.SaveAsync(_session.Settings, appSettingsWritten);
                 written &= outcome.Written;
                 portChanged |= outcome.RequiresHttpServerRestart;
+                if (outcome.FailureMessage is { } failure)
+                {
+                    failures.Add(failure);
+                }
 
                 foreach (var @event in outcome.Events)
                 {
@@ -316,6 +369,18 @@ public sealed partial class SettingsPageViewModel : ObservableObject, IPageHeade
             if (portChanged && _kestrelHttpServer.IsRunning)
             {
                 restartFailed = !await TryRestartHttpServerAsync(prevPort, newPort);
+            }
+
+            if (_disposed)
+            {
+                return;
+            }
+
+            if (failures.Count > 0)
+            {
+                Dirty = true;
+                _dialogService.Warning("Настройки", string.Join(Environment.NewLine, failures));
+                return;
             }
 
             ResetDirty();
@@ -344,7 +409,7 @@ public sealed partial class SettingsPageViewModel : ObservableObject, IPageHeade
         }
     }
 
-    [RelayCommand]
+    [RelayCommand(CanExecute = nameof(CanReloadDraft))]
     private void Revert()
     {
         OnEnter();

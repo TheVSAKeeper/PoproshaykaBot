@@ -37,6 +37,19 @@ public static class PlatformVisuals
         Color.FromRgb(0xFF, 0x00, 0x00),
         "Открыть канал или эфир на YouTube");
 
+    private static readonly PlatformDescriptor DefaultDescriptor = new(
+        default,
+        "Площадка",
+        "",
+        "Icon.Platform.Default",
+        "Brush.Platform.Default",
+        "M2,5 H22 V19 H2 Z M4,7 V17 H20 V7 Z M10,9 L15,12 L10,15 Z",
+        Color.FromRgb(0x80, 0x87, 0x8E),
+        "Открыть канал или эфир");
+
+    private static readonly Geometry DefaultGeometry = CreateFrozenGeometry(DefaultDescriptor.FallbackPathData);
+    private static readonly Brush DefaultBrush = CreateFrozenBrush(DefaultDescriptor.FallbackBrandColor);
+
     private static readonly FrozenDictionary<StreamingPlatform, PlatformDescriptor> Descriptors =
         new Dictionary<StreamingPlatform, PlatformDescriptor>
         {
@@ -64,14 +77,13 @@ public static class PlatformVisuals
     {
         return Descriptors.TryGetValue(platform, out var descriptor)
             ? descriptor
-            : TwitchDescriptor;
+            : DefaultDescriptor with { Platform = platform };
     }
 
-    public static string GetDisplayName(StreamingPlatform platform)
+    public static string GetDisplayName(StreamingPlatform platform, IChatPlatformRegistry? registry = null)
     {
-        return Descriptors.TryGetValue(platform, out var descriptor)
-            ? descriptor.DisplayName
-            : platform.ToString();
+        return registry?.Find(platform)?.DisplayName
+            ?? Descriptors.GetValueOrDefault(platform, DefaultDescriptor).DisplayName;
     }
 
     public static Geometry ResolveGeometry(StreamingPlatform platform, FrameworkElement? host = null)
@@ -88,7 +100,7 @@ public static class PlatformVisuals
             return fromApp;
         }
 
-        return FallbackGeometries.GetValueOrDefault(platform) ?? FallbackGeometries[StreamingPlatform.Twitch];
+        return FallbackGeometries.GetValueOrDefault(platform) ?? DefaultGeometry;
     }
 
     public static Brush ResolveBrandBrush(StreamingPlatform platform, FrameworkElement? host = null)
@@ -105,7 +117,7 @@ public static class PlatformVisuals
             return fromApp;
         }
 
-        return FallbackBrushes.GetValueOrDefault(platform) ?? FallbackBrushes[StreamingPlatform.Twitch];
+        return FallbackBrushes.GetValueOrDefault(platform) ?? DefaultBrush;
     }
 
     private static Geometry CreateFrozenGeometry(string pathData)

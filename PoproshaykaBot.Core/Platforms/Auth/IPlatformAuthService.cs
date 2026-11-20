@@ -22,6 +22,8 @@ public interface IPlatformAuthService
         return HasUsableAccessToken(role);
     }
 
+    bool? HasAuthorizationMaterial(PlatformAuthRole role, string? contextId) => null;
+
     bool TryClearAccessToken(PlatformAuthRole role, string failedAccessToken);
 
     bool TryClearAccessToken(PlatformAuthRole role, string? contextId, string failedAccessToken)

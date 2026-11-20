@@ -142,6 +142,56 @@ public sealed class ChannelSwitchCoordinatorTests
     }
 
     [Test]
+    public async Task Disconnected_catalog_switch_stages_a_new_channel_and_publishes_the_previous_saved_active()
+    {
+        await _connectionManager.StopAsync(StreamingPlatform.YouTube);
+        _channelRegistry.Clear(StreamingPlatform.YouTube);
+        var newKey = new ChannelKey(StreamingPlatform.YouTube, "UC_DRAFT");
+        ActiveChannelChanged? published = null;
+        using var subscription = _eventBus.Subscribe<ActiveChannelChanged>(message => published = message);
+        var draft = new ChannelCatalogEntry { Platform = newKey.Platform, ChannelId = newKey.ChannelId, IsConfigured = true };
+
+        var result = await _coordinator.SwitchCatalogChannelAsync(draft);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(result.Succeeded, Is.True);
+            Assert.That(published?.PreviousChannel, Is.EqualTo(ChanA));
+            Assert.That(published?.NewChannel, Is.EqualTo(newKey));
+            Assert.That(_catalog.GetPlatformSettings(newKey.Platform).ActiveChannelId, Is.EqualTo(newKey.ChannelId));
+            Assert.That(_catalog.FindEntry(newKey)?.IsConfigured, Is.True);
+            Assert.That(_connectionAdapter.RetargetedTo, Is.Empty);
+        });
+    }
+
+    [TestCase(false)]
+    [TestCase(true)]
+    public async Task Refused_catalog_switch_keeps_old_binding_and_never_persists_the_draft_target(bool passesPreflight)
+    {
+        var target = new ChannelKey(StreamingPlatform.YouTube, "UC_DRAFT");
+        _connectionAdapter.FailTargets.Add(target);
+        var draft = new ChannelCatalogEntry
+        {
+            Platform = target.Platform,
+            ChannelId = target.ChannelId,
+            IsConfigured = true,
+            BotAccountId = "bot-1",
+            BotVerifiedSubjectId = passesPreflight ? "bot-1" : null,
+        };
+
+        var result = await _coordinator.SwitchCatalogChannelAsync(draft);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(result.Outcome, Is.EqualTo(ChannelSwitchOutcome.FailedKeptPrevious));
+            Assert.That(_catalog.GetPlatformSettings(target.Platform).ActiveChannelId, Is.EqualTo(ChanA.ChannelId));
+            Assert.That(_catalog.FindEntry(target), Is.Null);
+            Assert.That(_channelRegistry.GetBinding(target.Platform)?.Key, Is.EqualTo(ChanA));
+            Assert.That(_connectionAdapter.RetargetedTo, passesPreflight ? Is.EqualTo(new[] { ChanA }) : Is.Empty);
+        });
+    }
+
+    [Test]
     public async Task Manual_switch_from_settings_preserves_the_saved_next_channel()
     {
         const string NextId = "UC_C";
@@ -290,8 +340,10 @@ public sealed class ChannelSwitchCoordinatorTests
         });
     }
 
-    [Test]
-    public async Task AutoDiscover_rejects_mismatched_stream_id_and_rolls_back_when_catalog_save_blocked()
+    [TestCase(false, true)]
+    [TestCase(true, true)]
+    [TestCase(true, false)]
+    public async Task AutoDiscover_rejects_mismatched_stream_id_and_rolls_back_when_catalog_save_blocked(bool saveDraft, bool connected)
     {
         await _coordinator.SetSwitchModeAsync(StreamingPlatform.YouTube, ChannelSwitchMode.AutoDiscover);
         await PublishObservedAsync(ChanB, StreamStatus.Offline, StreamStatus.Online, "sb-first");
@@ -348,14 +400,28 @@ public sealed class ChannelSwitchCoordinatorTests
             _eventBus,
             _time,
             NullLogger<ChannelSwitchCoordinator>.Instance,
-            _connectionManager);
+            connected ? _connectionManager : null);
 
         _adapter.Probes[ChanB] = new(false, true, null);
-        var failedWrite = await gatedCoordinator.SwitchActiveChannelAsync(StreamingPlatform.YouTube, ChanB);
+        var newTarget = new ChannelKey(StreamingPlatform.YouTube, "UC_BLOCKED_DRAFT");
+        var failures = new List<ChannelSwitchFailed>();
+        using var failureSubscription = _eventBus.Subscribe<ChannelSwitchFailed>(failures.Add);
+        var failedWrite = saveDraft
+            ? await gatedCoordinator.SwitchCatalogChannelAsync(new()
+            {
+                Platform = newTarget.Platform,
+                ChannelId = newTarget.ChannelId,
+                IsConfigured = true,
+                BotAccountId = "bot-1",
+                BotVerifiedSubjectId = "bot-1",
+            })
+            : await gatedCoordinator.SwitchActiveChannelAsync(StreamingPlatform.YouTube, ChanB);
         Assert.Multiple(() =>
         {
             Assert.That(failedWrite.Outcome, Is.EqualTo(ChannelSwitchOutcome.FailedKeptPrevious));
+            Assert.That(failures.Single().KeptPreviousChat, Is.True);
             Assert.That(gatedCatalog.GetPlatformSettings(StreamingPlatform.YouTube).ActiveChannelId, Is.EqualTo("UC_A"));
+            Assert.That(gatedCatalog.FindEntry(newTarget), Is.Null);
         });
     }
 

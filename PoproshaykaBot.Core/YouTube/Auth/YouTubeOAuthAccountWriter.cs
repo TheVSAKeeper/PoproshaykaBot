@@ -100,6 +100,12 @@ public sealed class YouTubeOAuthAccountWriter(
         }
     }
 
+    internal bool HasAuthorizationMaterial(PlatformAuthRole role, string? contextId)
+    {
+        var account = accountsStore.Load(role, contextId);
+        return PlatformAuthRoles.HasCredentials(account.AccessToken, account.RefreshToken);
+    }
+
     public bool TryClearAccessToken(PlatformAuthRole role, string expectedToken)
     {
         return TryClearAccessToken(role, null, expectedToken);

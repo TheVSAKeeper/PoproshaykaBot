@@ -91,9 +91,25 @@
                 </Grid>
             </DataTemplate>
 
+            <DataTemplate x:Key="PlatformLinkTemplate"
+                          DataType="{x:Type settingsVm:SettingsSectionPresentation}">
+                <HeaderedContentControl Header="{Binding Title}"
+                                        Style="{StaticResource Form.Panel}"
+                                        HorizontalAlignment="Left"
+                                        MaxWidth="{StaticResource Setting.ContentWidth}">
+                    <Button Content="Открыть в разделе «Мультистрим»"
+                            Style="{StaticResource Button.Secondary}"
+                            HorizontalAlignment="Left"
+                            Command="{Binding DataContext.NavigateToMultistreamCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                            CommandParameter="{Binding Group}"
+                            AutomationProperties.AutomationId="{Binding Group.Key, StringFormat='MultistreamSettingsLink-{0}'}" />
+                </HeaderedContentControl>
+            </DataTemplate>
+
             <settings:SettingsSectionTemplateSelector x:Key="SectionTemplateSelector"
                                                       MultiBlockTemplate="{StaticResource MultiBlockSectionTemplate}"
-                                                      SingleBlockTemplate="{StaticResource SingleBlockSectionTemplate}" />
+                                                      SingleBlockTemplate="{StaticResource SingleBlockSectionTemplate}"
+                                                      PlatformLinkTemplate="{StaticResource PlatformLinkTemplate}" />
         </ResourceDictionary>
     </UserControl.Resources>
 
@@ -135,6 +151,15 @@
         </Border>
 
         <Grid>
+            <Grid.Style>
+                <Style TargetType="Grid">
+                    <Style.Triggers>
+                        <DataTrigger Binding="{Binding IsSaving}" Value="True">
+                            <Setter Property="IsEnabled" Value="False" />
+                        </DataTrigger>
+                    </Style.Triggers>
+                </Style>
+            </Grid.Style>
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="*" />

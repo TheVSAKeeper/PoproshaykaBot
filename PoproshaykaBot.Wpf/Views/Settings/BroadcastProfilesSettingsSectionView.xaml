@@ -3,6 +3,10 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:controls="clr-namespace:PoproshaykaBot.Wpf.Views.Controls">
     <StackPanel DataContext="{Binding Profiles, Mode=OneTime}">
+        <TextBlock Text="Добавление, изменение и удаление профилей сохраняются сразу после подтверждения."
+                   Style="{StaticResource Form.Hint}"
+                   TextWrapping="Wrap"
+                   Margin="0,0,0,8" />
         <TextBlock Text="{Binding UnsavedNotice}"
                    Style="{StaticResource Form.Hint}"
                    Foreground="{DynamicResource State.WarningText}"
@@ -42,25 +46,28 @@
                                 AutomationProperties.Name="{Binding Name, StringFormat='Изменить профиль {0}'}"
                                 Command="{Binding EditCommand}"
                                 Margin="12,0,0,0" />
-                        <ItemsControl DockPanel.Dock="Right"
-                                      ItemsSource="{Binding TargetPlatforms}"
-                                      VerticalAlignment="Center">
-                            <ItemsControl.ItemsPanel>
-                                <ItemsPanelTemplate>
-                                    <StackPanel Orientation="Horizontal" />
-                                </ItemsPanelTemplate>
-                            </ItemsControl.ItemsPanel>
-                            <ItemsControl.ItemTemplate>
-                                <DataTemplate>
-                                    <controls:PlatformIconView Platform="{Binding Mode=OneWay}"
-                                                               Margin="6,0,0,0" />
-                                </DataTemplate>
-                            </ItemsControl.ItemTemplate>
-                        </ItemsControl>
-                        <TextBlock Text="{Binding Name}"
-                                   Style="{StaticResource Form.Label}"
-                                   VerticalAlignment="Center"
-                                   TextWrapping="Wrap" />
+                        <StackPanel VerticalAlignment="Center">
+                            <TextBlock Text="{Binding Name}"
+                                       Style="{StaticResource Form.Label}"
+                                       TextWrapping="Wrap" />
+                            <ItemsControl ItemsSource="{Binding TargetPlatforms}">
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate>
+                                        <WrapPanel />
+                                    </ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <StackPanel Orientation="Horizontal" Margin="0,0,8,0">
+                                            <controls:PlatformIconView Platform="{Binding Platform, Mode=OneWay}" />
+                                            <TextBlock Text="{Binding DisplayName}"
+                                                       Style="{StaticResource Form.Hint}"
+                                                       Margin="4,0,0,0" />
+                                        </StackPanel>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </StackPanel>
                     </DockPanel>
                 </DataTemplate>
             </ItemsControl.ItemTemplate>

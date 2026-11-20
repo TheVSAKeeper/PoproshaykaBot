@@ -24,6 +24,13 @@ public sealed record PreselectedNextChannelOption(string? ChannelId, string Disp
 
 public sealed partial class ChannelCatalogSettingsSectionViewModel : ObservableObject
 {
+    private static readonly ChannelSwitchModeOption[] AllSwitchModeOptions =
+    [
+        new(ChannelSwitchMode.Manual, "Ручное переключение"),
+        new(ChannelSwitchMode.PreselectedNext, "Заранее выбранный следующий канал"),
+        new(ChannelSwitchMode.AutoDiscover, "Автопоиск старта на наблюдаемых каналах"),
+    ];
+
     private readonly ChannelCatalogStore _catalogStore;
     private readonly AccountsStore? _twitchAccountsStore;
     private readonly YouTubeAccountsStore? _youtubeAccountsStore;
@@ -35,9 +42,12 @@ public sealed partial class ChannelCatalogSettingsSectionViewModel : ObservableO
     private readonly TimeProvider _timeProvider;
     private readonly IEmbeddedTwitchAuthDialog? _embeddedTwitchAuth;
     private readonly ILogger<ChannelCatalogSettingsSectionViewModel>? _logger;
+    private readonly IChatPlatformRegistry? _platformRegistry;
     private readonly Dictionary<StreamingPlatform, IPlatformChannelAdapter> _adapters;
     private readonly List<ChannelCatalogItemViewModel> _allChannels = [];
+    private readonly HashSet<ChannelKey> _removedChannels = [];
     private readonly Dictionary<StreamingPlatform, ChannelSwitchMode> _switchModes = [];
+    private readonly Dictionary<StreamingPlatform, ChannelSwitchMode> _initialSwitchModes = [];
     private readonly Dictionary<StreamingPlatform, string?> _initialActiveChannels = [];
     private readonly Dictionary<StreamingPlatform, string?> _draftActiveChannels = [];
     private readonly Dictionary<StreamingPlatform, string?> _initialPreselectedNext = [];
@@ -48,15 +58,12 @@ public sealed partial class ChannelCatalogSettingsSectionViewModel : ObservableO
     private YouTubeSettingsSectionViewModel? _youtubeCredentials;
 
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(SelectedSwitchModeOption))]
-    [NotifyPropertyChangedFor(nameof(IsPreselectedNextMode))]
-    [NotifyPropertyChangedFor(nameof(SelectedPreselectedNextOption))]
-    [NotifyCanExecuteChangedFor(nameof(AuthorizeOwnChannelCommand))]
-    [NotifyPropertyChangedFor(nameof(HasChannels))]
+    [NotifyPropertyChangedFor(nameof(CanResolveChannel), nameof(SupportsOwnChannelAuthorization), nameof(SupportsDefaultBotAuthorization))]
+    [NotifyCanExecuteChangedFor(nameof(AddChannelCommand), nameof(AuthorizeOwnChannelCommand), nameof(AuthorizeDefaultBotCommand))]
     private StreamingPlatform _selectedPlatform = StreamingPlatform.Twitch;
 
     [ObservableProperty]
-    [NotifyCanExecuteChangedFor(nameof(AuthorizeOwnChannelCommand))]
+    [NotifyCanExecuteChangedFor(nameof(AuthorizeOwnChannelCommand), nameof(AuthorizeDefaultBotCommand))]
     private bool _isAuthorizingAccount;
 
     [ObservableProperty]
@@ -83,7 +90,8 @@ public sealed partial class ChannelCatalogSettingsSectionViewModel : ObservableO
         IShellLauncher? shellLauncher = null,
         TimeProvider? timeProvider = null,
         IEmbeddedTwitchAuthDialog? embeddedTwitchAuth = null,
-        ILogger<ChannelCatalogSettingsSectionViewModel>? logger = null)
+        ILogger<ChannelCatalogSettingsSectionViewModel>? logger = null,
+        IChatPlatformRegistry? platformRegistry = null)
     {
         ArgumentNullException.ThrowIfNull(catalogStore);
         _catalogStore = catalogStore;
@@ -97,15 +105,8 @@ public sealed partial class ChannelCatalogSettingsSectionViewModel : ObservableO
         _timeProvider = timeProvider ?? TimeProvider.System;
         _embeddedTwitchAuth = embeddedTwitchAuth;
         _logger = logger;
+        _platformRegistry = platformRegistry;
         _adapters = (adapters ?? []).ToDictionary(static a => a.Platform);
-
-        SwitchModeOptions =
-        [
-            new(ChannelSwitchMode.Manual, "Ручное переключение"),
-            new(ChannelSwitchMode.PreselectedNext, "Заранее выбранный следующий канал"),
-            new(ChannelSwitchMode.AutoDiscover, "Автопоиск старта на наблюдаемых каналах"),
-        ];
-
     }
 
     public event EventHandler? Edited;
@@ -116,7 +117,20 @@ public sealed partial class ChannelCatalogSettingsSectionViewModel : ObservableO
         _youtubeCredentials = youtube;
     }
 
-    public IReadOnlyList<ChannelSwitchModeOption> SwitchModeOptions { get; }
+    public IReadOnlyList<ChannelSwitchModeOption> SwitchModeOptions =>
+        SupportsAutomaticSwitching ? AllSwitchModeOptions : [AllSwitchModeOptions[0]];
+
+    public bool CanResolveChannel => _adapters.ContainsKey(SelectedPlatform);
+
+    public bool SupportsOwnChannelAuthorization => CanAuthorizeAccount(SelectedPlatform);
+
+    public bool SupportsDefaultBotAuthorization => CanAuthorizeAccount(SelectedPlatform);
+
+    private bool SupportsAutomaticSwitching =>
+        HasCapability(SelectedPlatform, PlatformCapabilities.MultiChannelMonitoring);
+
+    private bool HasCapability(StreamingPlatform platform, PlatformCapabilities capability) =>
+        _adapters.TryGetValue(platform, out var adapter) && adapter.Capabilities.HasFlag(capability);
 
     private bool CanAuthorizeAccount(StreamingPlatform platform) =>
         _shellLauncher is not null
@@ -125,10 +139,11 @@ public sealed partial class ChannelCatalogSettingsSectionViewModel : ObservableO
 
     public ObservableCollection<ChannelCatalogItemViewModel> VisibleChannels { get; } = [];
 
-    public ObservableCollection<PreselectedNextChannelOption> PreselectedNextOptions { get; } = [];
+    public IReadOnlyList<PreselectedNextChannelOption> PreselectedNextOptions { get; private set; } = [];
 
     public bool IsPreselectedNextMode =>
-        _switchModes.GetValueOrDefault(SelectedPlatform, ChannelSwitchMode.Manual) == ChannelSwitchMode.PreselectedNext;
+        SupportsAutomaticSwitching
+        && _switchModes.GetValueOrDefault(SelectedPlatform, ChannelSwitchMode.Manual) == ChannelSwitchMode.PreselectedNext;
 
     public PreselectedNextChannelOption SelectedPreselectedNextOption
     {
@@ -136,12 +151,11 @@ public sealed partial class ChannelCatalogSettingsSectionViewModel : ObservableO
         {
             var id = _draftPreselectedNext.GetValueOrDefault(SelectedPlatform);
             return PreselectedNextOptions.FirstOrDefault(o => string.Equals(o.ChannelId, id, StringComparison.Ordinal))
-                ?? PreselectedNextOptions.FirstOrDefault()
-                ?? new(null, "Не выбран");
+                ?? (PreselectedNextOptions.Count > 0 ? PreselectedNextOptions[0] : new(null, "Не выбран"));
         }
         set
         {
-            if (value is null)
+            if (value is null || !PreselectedNextOptions.Contains(value))
             {
                 return;
             }
@@ -160,16 +174,35 @@ public sealed partial class ChannelCatalogSettingsSectionViewModel : ObservableO
 
     public bool HasChannels => VisibleChannels.Count > 0;
 
+    internal void SelectActiveChannel()
+    {
+        var activeId = _catalogStore.GetActiveChannel(SelectedPlatform)?.ChannelId;
+        var activeChannel = VisibleChannels.FirstOrDefault(channel => channel.ChannelId == activeId);
+        if (activeChannel is not null
+            && _draftActiveChannels.GetValueOrDefault(SelectedPlatform) == _initialActiveChannels.GetValueOrDefault(SelectedPlatform))
+        {
+            _initialActiveChannels[SelectedPlatform] = _draftActiveChannels[SelectedPlatform] = activeId;
+            foreach (var channel in VisibleChannels)
+            {
+                channel.IsActive = ReferenceEquals(channel, activeChannel);
+            }
+        }
+
+        SelectedChannel = activeChannel
+            ?? VisibleChannels.FirstOrDefault(channel => channel.IsActive)
+            ?? VisibleChannels.FirstOrDefault();
+    }
+
     public ChannelSwitchModeOption SelectedSwitchModeOption
     {
         get
         {
             var mode = _switchModes.GetValueOrDefault(SelectedPlatform, ChannelSwitchMode.Manual);
-            return SwitchModeOptions.FirstOrDefault(o => o.Mode == mode) ?? SwitchModeOptions[0];
+            return SwitchModeOptions.FirstOrDefault(o => o.Mode == mode) ?? AllSwitchModeOptions[0];
         }
         set
         {
-            if (value is null)
+            if (value is null || !SwitchModeOptions.Contains(value))
             {
                 return;
             }
@@ -193,7 +226,9 @@ public sealed partial class ChannelCatalogSettingsSectionViewModel : ObservableO
         try
         {
             _allChannels.Clear();
+            _removedChannels.Clear();
             _switchModes.Clear();
+            _initialSwitchModes.Clear();
             _initialActiveChannels.Clear();
             _draftActiveChannels.Clear();
             _initialPreselectedNext.Clear();
@@ -201,14 +236,13 @@ public sealed partial class ChannelCatalogSettingsSectionViewModel : ObservableO
             StatusNotice = null;
 
             var settings = _catalogStore.Load();
-            foreach (var platform in PlatformVisuals.OrderedPlatforms)
+            foreach (var routing in settings.Platforms)
             {
-                var ps = settings.Platforms.FirstOrDefault(p => p.Platform == platform);
-                _switchModes[platform] = ps?.SwitchMode ?? ChannelSwitchMode.Manual;
-                _initialActiveChannels[platform] = ps?.ActiveChannelId;
-                _draftActiveChannels[platform] = ps?.ActiveChannelId;
-                _initialPreselectedNext[platform] = ps?.PreselectedNextChannelId;
-                _draftPreselectedNext[platform] = ps?.PreselectedNextChannelId;
+                _initialSwitchModes[routing.Platform] = _switchModes[routing.Platform] = routing.SwitchMode;
+                _initialActiveChannels[routing.Platform] = routing.ActiveChannelId;
+                _draftActiveChannels[routing.Platform] = routing.ActiveChannelId;
+                _initialPreselectedNext[routing.Platform] = routing.PreselectedNextChannelId;
+                _draftPreselectedNext[routing.Platform] = routing.PreselectedNextChannelId;
             }
 
             foreach (var entry in settings.Channels.Where(static c => c.IsConfigured))
@@ -217,6 +251,7 @@ public sealed partial class ChannelCatalogSettingsSectionViewModel : ObservableO
                 _allChannels.Add(new ChannelCatalogItemViewModel(
                     entry,
                     isActive,
+                    HasCapability(entry.Platform, PlatformCapabilities.BackgroundStreamMonitoring),
                     NotifyEdited,
                     VerifyAccessAsync,
                     AuthorizeRoleAsync,
@@ -232,64 +267,66 @@ public sealed partial class ChannelCatalogSettingsSectionViewModel : ObservableO
         }
     }
 
-    public void ApplyTo(ChannelsSettings target)
+    public void ApplyTo(ChannelsSettings target) => ApplyTo(target, applyActive: true);
+
+    internal void ApplyTo(ChannelsSettings target, bool applyActive)
     {
         ArgumentNullException.ThrowIfNull(target);
 
-        var preservedNonConfigured = target.Channels
-            .Where(static c => !c.IsConfigured)
-            .ToDictionary(static c => c.Key);
-
-        var resultChannels = new List<ChannelCatalogEntry>();
-        var configuredKeys = new HashSet<ChannelKey>();
-
+        var channels = target.Channels.ToDictionary(static entry => entry.Key);
         foreach (var item in _allChannels)
         {
-            var entry = item.ToEntry();
-            configuredKeys.Add(entry.Key);
-            if (preservedNonConfigured.TryGetValue(entry.Key, out var historical))
+            var key = new ChannelKey(item.Platform, item.ChannelId);
+            if (channels.TryGetValue(key, out var current) && current.IsConfigured)
             {
-                foreach (var alias in historical.KnownAliases)
-                {
-                    if (!entry.KnownAliases.Contains(alias, StringComparer.OrdinalIgnoreCase))
-                    {
-                        entry.KnownAliases.Add(alias);
-                    }
-                }
+                item.ApplyEditsTo(current);
             }
-
-            resultChannels.Add(entry);
-        }
-
-        foreach (var historical in preservedNonConfigured.Values)
-        {
-            if (!configuredKeys.Contains(historical.Key))
+            else if (item.IsNew)
             {
-                resultChannels.Add(historical);
+                var entry = item.ToEntry();
+                entry.KnownAliases = [.. entry.KnownAliases.Union(current?.KnownAliases ?? [], StringComparer.OrdinalIgnoreCase)];
+                channels[key] = entry;
             }
         }
 
-        target.Channels = resultChannels;
+        target.Channels = channels.Values.Where(entry => !entry.IsConfigured || !_removedChannels.Contains(entry.Key)).ToList();
 
         var existingPlatforms = target.Platforms.ToDictionary(static p => p.Platform);
-        var updatedPlatforms = new List<PlatformChannelRoutingSettings>();
+        var editedModes = _switchModes
+            .Where(draft => draft.Value != _initialSwitchModes.GetValueOrDefault(draft.Key, ChannelSwitchMode.Manual))
+            .Select(static draft => draft.Key)
+            .ToHashSet();
+        var editedPlatforms = editedModes
+            .Union(_draftActiveChannels.Where(draft => draft.Value != _initialActiveChannels.GetValueOrDefault(draft.Key))
+                .Select(static draft => draft.Key))
+            .Union(_draftPreselectedNext.Where(draft => draft.Value != _initialPreselectedNext.GetValueOrDefault(draft.Key))
+                .Select(static draft => draft.Key))
+            .Union(_removedChannels.Select(static channel => channel.Platform));
 
-        foreach (var platform in PlatformVisuals.OrderedPlatforms)
+        foreach (var platform in editedPlatforms)
         {
             existingPlatforms.TryGetValue(platform, out var livePlatform);
-            var mode = _switchModes.GetValueOrDefault(platform, livePlatform?.SwitchMode ?? ChannelSwitchMode.Manual);
+            var mode = editedModes.Contains(platform)
+                ? _switchModes[platform]
+                : livePlatform?.SwitchMode ?? ChannelSwitchMode.Manual;
             var initialActive = _initialActiveChannels.GetValueOrDefault(platform);
             var draftActive = _draftActiveChannels.GetValueOrDefault(platform);
             var activeChangedInDraft = !string.Equals(initialActive, draftActive, StringComparison.Ordinal);
 
-            var finalActive = activeChangedInDraft
+            var finalActive = activeChangedInDraft && applyActive
                 ? draftActive
-                : (livePlatform?.ActiveChannelId ?? draftActive);
+                : livePlatform?.ActiveChannelId;
 
             if (!string.IsNullOrWhiteSpace(finalActive)
-                && !resultChannels.Any(c => c.Platform == platform && c.IsConfigured && string.Equals(c.ChannelId, finalActive, StringComparison.Ordinal)))
+                && !target.Channels.Any(c => c.Platform == platform && c.IsConfigured && c.ChannelId == finalActive))
             {
-                finalActive = resultChannels.FirstOrDefault(c => c.Platform == platform && c.IsConfigured)?.ChannelId;
+                var replacement = target.Channels.FirstOrDefault(c => c.Platform == platform && c.IsConfigured);
+                if (!applyActive && replacement is not null)
+                {
+                    throw new InvalidOperationException("Активный канал изменился во время сохранения. Повторите сохранение.");
+                }
+
+                finalActive = replacement?.ChannelId;
             }
 
             var initialNext = _initialPreselectedNext.GetValueOrDefault(platform);
@@ -300,55 +337,95 @@ public sealed partial class ChannelCatalogSettingsSectionViewModel : ObservableO
                 : (livePlatform is not null ? livePlatform.PreselectedNextChannelId : draftNext);
 
             if (!string.IsNullOrWhiteSpace(finalNext)
-                && !resultChannels.Any(c => c.Platform == platform && c.IsConfigured && string.Equals(c.ChannelId, finalNext, StringComparison.Ordinal)))
+                && !target.Channels.Any(c => c.Platform == platform && c.IsConfigured && c.ChannelId == finalNext))
             {
                 finalNext = null;
             }
 
-            updatedPlatforms.Add(new()
+            existingPlatforms[platform] = new()
             {
                 Platform = platform,
                 ActiveChannelId = finalActive,
                 SwitchMode = mode,
                 PreselectedNextChannelId = finalNext,
-            });
+            };
         }
 
-        foreach (var extra in existingPlatforms.Values)
-        {
-            if (!PlatformVisuals.OrderedPlatforms.Contains(extra.Platform))
-            {
-                updatedPlatforms.Add(extra);
-            }
-        }
-
-        target.Platforms = updatedPlatforms;
+        target.Platforms = [.. existingPlatforms.Values];
     }
 
-    public IReadOnlyList<(StreamingPlatform Platform, ChannelKey Target)> GetPendingActiveChanges()
+    internal IReadOnlyList<ChannelCatalogEntry> GetPendingActiveChanges(ChannelsSettings target)
     {
-        var changes = new List<(StreamingPlatform, ChannelKey)>();
-        foreach (var platform in PlatformVisuals.OrderedPlatforms)
+        var editedPlatforms = _draftActiveChannels
+            .Where(draft => draft.Value != _initialActiveChannels.GetValueOrDefault(draft.Key))
+            .Select(static draft => draft.Key)
+            .Union(_removedChannels.Select(static key => key.Platform))
+            .ToArray();
+        var activeBefore = editedPlatforms.ToDictionary(platform => platform, platform => GetActiveEntry(target, platform)?.Key);
+        ApplyTo(target);
+
+        var changes = new List<ChannelCatalogEntry>();
+        foreach (var platform in editedPlatforms)
         {
-            var initialActive = _initialActiveChannels.GetValueOrDefault(platform);
-            var draftActive = _draftActiveChannels.GetValueOrDefault(platform);
-            if (!string.Equals(initialActive, draftActive, StringComparison.Ordinal) && !string.IsNullOrWhiteSpace(draftActive))
+            if (GetActiveEntry(target, platform) is { } activeAfter && activeAfter.Key != activeBefore[platform])
             {
-                changes.Add((platform, new ChannelKey(platform, draftActive)));
+                changes.Add(activeAfter);
             }
         }
 
         return changes;
     }
 
+    private static ChannelCatalogEntry? GetActiveEntry(ChannelsSettings settings, StreamingPlatform platform)
+    {
+        var activeId = settings.Platforms.FirstOrDefault(routing => routing.Platform == platform)?.ActiveChannelId;
+        var entries = settings.Channels.Where(entry => entry.Platform == platform && entry.IsConfigured);
+        return entries.FirstOrDefault(entry => entry.ChannelId == activeId) ?? entries.FirstOrDefault();
+    }
+
+    internal void AcceptActiveSwitch(ChannelKey active)
+    {
+        _initialActiveChannels[active.Platform] = active.ChannelId;
+        _allChannels.FirstOrDefault(item => item.Platform == active.Platform && item.ChannelId == active.ChannelId)?.AcceptEdits();
+    }
+
+    internal void AcceptSavedCatalog(ChannelsSettings saved)
+    {
+        _removedChannels.Clear();
+        _initialSwitchModes.Clear();
+        _initialActiveChannels.Clear();
+        _draftActiveChannels.Clear();
+        _initialPreselectedNext.Clear();
+        _draftPreselectedNext.Clear();
+        _switchModes.Clear();
+
+        foreach (var routing in saved.Platforms)
+        {
+            _initialActiveChannels[routing.Platform] = _draftActiveChannels[routing.Platform] = routing.ActiveChannelId;
+            _initialPreselectedNext[routing.Platform] = _draftPreselectedNext[routing.Platform] = routing.PreselectedNextChannelId;
+            _initialSwitchModes[routing.Platform] = _switchModes[routing.Platform] = routing.SwitchMode;
+        }
+
+        foreach (var item in _allChannels)
+        {
+            item.AcceptEdits();
+            item.IsActive = GetActiveEntry(saved, item.Platform)?.ChannelId == item.ChannelId;
+        }
+
+        RefreshPreselectedNextOptions();
+        OnPropertyChanged(nameof(SelectedSwitchModeOption));
+        OnPropertyChanged(nameof(IsPreselectedNextMode));
+    }
+
     public string? ValidateAssignments()
     {
         foreach (var channel in _allChannels)
         {
-            var pending = channel.Roles.FirstOrDefault(role => role.NeedsVerification);
+            var pending = channel.Roles.FirstOrDefault(role => role.IsEdited && role.NeedsVerification);
             if (pending is not null)
             {
-                return $"Проверьте доступ аккаунта «{pending.Title}» на канале «{channel.DisplayName}» ({PlatformVisuals.GetDisplayName(channel.Platform)}).";
+                var platformName = _platformRegistry?.Find(channel.Platform)?.DisplayName ?? PlatformVisuals.GetDisplayName(channel.Platform);
+                return $"Проверьте доступ аккаунта «{pending.Title}» на канале «{channel.DisplayName}» ({platformName}).";
             }
         }
 
@@ -357,10 +434,29 @@ public sealed partial class ChannelCatalogSettingsSectionViewModel : ObservableO
 
     partial void OnSelectedPlatformChanged(StreamingPlatform value)
     {
+        StatusNotice = null;
         RefreshPlatformView();
     }
 
     private bool CanAuthorizeOwnChannel() => !IsAuthorizingAccount && CanAuthorizeAccount(SelectedPlatform);
+
+    private bool CanAuthorizeDefaultBot() => !IsAuthorizingAccount && !HasChannels && SupportsDefaultBotAuthorization;
+
+    [RelayCommand(CanExecute = nameof(CanAuthorizeDefaultBot))]
+    private async Task AuthorizeDefaultBotAsync()
+    {
+        var platform = SelectedPlatform;
+        var draft = _draftGeneration;
+        void Report(string message, StatusSeverity severity)
+        {
+            if (draft == _draftGeneration && SelectedPlatform == platform)
+            {
+                SetNotice(message, severity);
+            }
+        }
+
+        await AuthorizeAccountAsync(platform, PlatformAuthRole.Bot, Report, useDefaultContext: true);
+    }
 
     [RelayCommand(CanExecute = nameof(CanAuthorizeOwnChannel))]
     private async Task AuthorizeOwnChannelAsync()
@@ -375,7 +471,7 @@ public sealed partial class ChannelCatalogSettingsSectionViewModel : ObservableO
         }
 
         var item = AddOrSelectChannel(account.OwnChannel);
-        var role = item.Roles[0];
+        var role = item.Roles.Single(candidate => candidate.Role == PlatformAuthRole.Broadcaster);
         role.Assign(account.OwnChannel.Channel.ChannelId, account.ContextId);
         await VerifyAccessAsync(item, role);
     }
@@ -395,7 +491,8 @@ public sealed partial class ChannelCatalogSettingsSectionViewModel : ObservableO
         await VerifyAccessAsync(item, role);
     }
 
-    private async Task<AuthorizedAccount?> AuthorizeAccountAsync(StreamingPlatform platform, PlatformAuthRole role, Action<string, StatusSeverity> report)
+    private async Task<AuthorizedAccount?> AuthorizeAccountAsync(
+        StreamingPlatform platform, PlatformAuthRole role, Action<string, StatusSeverity> report, bool useDefaultContext = false)
     {
         if (IsAuthorizingAccount)
         {
@@ -410,8 +507,8 @@ public sealed partial class ChannelCatalogSettingsSectionViewModel : ObservableO
         {
             var account = platform switch
             {
-                StreamingPlatform.Twitch => await AuthorizeTwitchAsync(role, report),
-                StreamingPlatform.YouTube => await AuthorizeYouTubeAsync(role, report),
+                StreamingPlatform.Twitch => await AuthorizeTwitchAsync(role, report, useDefaultContext),
+                StreamingPlatform.YouTube => await AuthorizeYouTubeAsync(role, report, useDefaultContext),
                 _ => null,
             };
             if (account is null)
@@ -441,7 +538,8 @@ public sealed partial class ChannelCatalogSettingsSectionViewModel : ObservableO
         }
     }
 
-    private async Task<AuthorizedAccount?> AuthorizeTwitchAsync(PlatformAuthRole role, Action<string, StatusSeverity> report)
+    private async Task<AuthorizedAccount?> AuthorizeTwitchAsync(
+        PlatformAuthRole role, Action<string, StatusSeverity> report, bool useDefaultContext)
     {
         if (_settingsManager is null || _twitchOAuth is null || _twitchAccountsStore is null || _shellLauncher is null)
         {
@@ -489,7 +587,9 @@ public sealed partial class ChannelCatalogSettingsSectionViewModel : ObservableO
         }
 
         var id = flow.UserId.Trim();
-        var contextId = FindGrant(StreamingPlatform.Twitch, role, id) ?? $"tw-{role.ToString().ToLowerInvariant()}-{id}";
+        var contextId = useDefaultContext
+            ? AuthContextIds.Default
+            : FindGrant(StreamingPlatform.Twitch, role, id) ?? $"tw-{role.ToString().ToLowerInvariant()}-{id}";
         var account = new TwitchAccountSettings();
         flow.ApplyTo(account, _timeProvider.GetUtcNow());
         var key = new ChannelKey(StreamingPlatform.Twitch, id);
@@ -497,7 +597,8 @@ public sealed partial class ChannelCatalogSettingsSectionViewModel : ObservableO
             contextId, new(key, flow.Login, flow.Login, $"https://twitch.tv/{flow.Login}"), report);
     }
 
-    private async Task<AuthorizedAccount?> AuthorizeYouTubeAsync(PlatformAuthRole role, Action<string, StatusSeverity> report)
+    private async Task<AuthorizedAccount?> AuthorizeYouTubeAsync(
+        PlatformAuthRole role, Action<string, StatusSeverity> report, bool useDefaultContext)
     {
         if (_youtubeSettingsStore is null || _youtubeOAuth is null || _youtubeAccountsStore is null || _shellLauncher is null)
         {
@@ -529,7 +630,9 @@ public sealed partial class ChannelCatalogSettingsSectionViewModel : ObservableO
 
         var id = flow.ChannelId.Trim();
         var name = string.IsNullOrWhiteSpace(flow.ChannelTitle) ? id : flow.ChannelTitle;
-        var contextId = FindGrant(StreamingPlatform.YouTube, role, id) ?? $"yt-{role.ToString().ToLowerInvariant()}-{id}";
+        var contextId = useDefaultContext
+            ? AuthContextIds.Default
+            : FindGrant(StreamingPlatform.YouTube, role, id) ?? $"yt-{role.ToString().ToLowerInvariant()}-{id}";
         var account = new YouTubeAccountSettings();
         flow.ApplyTo(account, _timeProvider.GetUtcNow());
         return CompleteAuthorization(_youtubeAccountsStore.UpsertContext(role, contextId, name, account),
@@ -555,12 +658,12 @@ public sealed partial class ChannelCatalogSettingsSectionViewModel : ObservableO
     }
 
     private string? FindGrant(StreamingPlatform platform, PlatformAuthRole role, string accountId) => ListAccounts(platform)
-        .FirstOrDefault(account => account.Key.AccountId == accountId)?.Authorizations
+        ?.FirstOrDefault(account => account.Key.AccountId == accountId)?.Authorizations
         .FirstOrDefault(grant => grant.Role == role && !grant.IsDefault)?.ContextId;
 
     private sealed record AuthorizedAccount(string ContextId, ResolvedChannelIdentity OwnChannel);
 
-    [RelayCommand]
+    [RelayCommand(CanExecute = nameof(CanResolveChannel))]
     private async Task AddChannelAsync()
     {
         var input = NewChannelInput.Trim();
@@ -581,7 +684,7 @@ public sealed partial class ChannelCatalogSettingsSectionViewModel : ObservableO
         ResolvedChannelIdentity? resolved;
         try
         {
-            var contextId = ListAccounts(targetPlatform)
+            var contextId = (ListAccounts(targetPlatform) ?? [])
                 .SelectMany(account => account.Authorizations)
                 .Where(grant => grant.HasToken)
                 .OrderBy(grant => targetPlatform == StreamingPlatform.YouTube && grant.Role == PlatformAuthRole.Bot ? 0 : 1)
@@ -642,7 +745,7 @@ public sealed partial class ChannelCatalogSettingsSectionViewModel : ObservableO
             ChannelUrl = channel.ChannelUrl,
             KnownAliases = [channel.DisplayName],
             IsConfigured = true,
-            MonitoringEnabled = true,
+            MonitoringEnabled = HasCapability(platform, PlatformCapabilities.BackgroundStreamMonitoring),
             BroadcasterContextId = AuthContextIds.Default,
             BotContextId = AuthContextIds.Default,
         };
@@ -656,11 +759,13 @@ public sealed partial class ChannelCatalogSettingsSectionViewModel : ObservableO
         var vm = new ChannelCatalogItemViewModel(
             entry,
             isFirstForPlatform,
+            entry.MonitoringEnabled,
             NotifyEdited,
             VerifyAccessAsync,
             AuthorizeRoleAsync,
             SetActiveInDraft,
-            RemoveChannel);
+            RemoveChannel) { IsNew = true };
+        _removedChannels.Remove(entry.Key);
         _allChannels.Add(vm);
         if (SelectedPlatform == platform)
         {
@@ -722,6 +827,11 @@ public sealed partial class ChannelCatalogSettingsSectionViewModel : ObservableO
     private void SetActiveInDraft(ChannelCatalogItemViewModel item)
     {
         _draftActiveChannels[item.Platform] = item.ChannelId;
+        if (_draftPreselectedNext.GetValueOrDefault(item.Platform) == item.ChannelId)
+        {
+            _draftPreselectedNext[item.Platform] = null;
+        }
+
         foreach (var candidate in _allChannels.Where(c => c.Platform == item.Platform))
         {
             candidate.IsActive = ReferenceEquals(candidate, item);
@@ -733,6 +843,16 @@ public sealed partial class ChannelCatalogSettingsSectionViewModel : ObservableO
     private void RemoveChannel(ChannelCatalogItemViewModel item)
     {
         _allChannels.Remove(item);
+        if (!item.IsNew)
+        {
+            _removedChannels.Add(new(item.Platform, item.ChannelId));
+        }
+
+        if (_draftPreselectedNext.GetValueOrDefault(item.Platform) == item.ChannelId)
+        {
+            _draftPreselectedNext[item.Platform] = null;
+        }
+
         if (string.Equals(_draftActiveChannels.GetValueOrDefault(item.Platform), item.ChannelId, StringComparison.Ordinal))
         {
             var next = _allChannels.FirstOrDefault(c => c.Platform == item.Platform);
@@ -749,6 +869,7 @@ public sealed partial class ChannelCatalogSettingsSectionViewModel : ObservableO
 
     private void RefreshPlatformView()
     {
+        var selectedId = SelectedChannel?.Platform == SelectedPlatform ? SelectedChannel.ChannelId : null;
         VisibleChannels.Clear();
         foreach (var item in _allChannels.Where(c => c.Platform == SelectedPlatform))
         {
@@ -756,40 +877,56 @@ public sealed partial class ChannelCatalogSettingsSectionViewModel : ObservableO
         }
 
         RefreshAccountOptions(SelectedPlatform);
-        ReloadPreselectedNextOptions(SelectedPlatform);
-        SelectedChannel = VisibleChannels.FirstOrDefault();
+        RefreshPreselectedNextOptions();
+        SelectedChannel = VisibleChannels.FirstOrDefault(channel => channel.ChannelId == selectedId)
+            ?? VisibleChannels.FirstOrDefault(channel => channel.IsActive)
+            ?? VisibleChannels.FirstOrDefault();
         OnPropertyChanged(nameof(HasChannels));
+        OnPropertyChanged(nameof(SwitchModeOptions));
         OnPropertyChanged(nameof(SelectedSwitchModeOption));
         OnPropertyChanged(nameof(IsPreselectedNextMode));
+        AuthorizeDefaultBotCommand.NotifyCanExecuteChanged();
+    }
+
+    private void RefreshPreselectedNextOptions()
+    {
+        List<PreselectedNextChannelOption> options = [new(null, "Не выбран")];
+        var active = _draftActiveChannels.GetValueOrDefault(SelectedPlatform);
+        foreach (var item in _allChannels.Where(c => c.Platform == SelectedPlatform && c.ChannelId != active))
+        {
+            options.Add(new(item.ChannelId, $"{item.DisplayName} ({item.ChannelId})"));
+        }
+
+        if (!PreselectedNextOptions.SequenceEqual(options))
+        {
+            PreselectedNextOptions = options;
+            OnPropertyChanged(nameof(PreselectedNextOptions));
+        }
+
         OnPropertyChanged(nameof(SelectedPreselectedNextOption));
     }
 
-    private void ReloadPreselectedNextOptions(StreamingPlatform platform)
+    private IReadOnlyList<PlatformAccount>? ListAccounts(StreamingPlatform platform)
     {
-        PreselectedNextOptions.Clear();
-        PreselectedNextOptions.Add(new(null, "Не выбран"));
-        foreach (var item in _allChannels.Where(c => c.Platform == platform))
+        var accounts = _adapters.GetValueOrDefault(platform)?.ListAccounts() ?? (platform switch
         {
-            PreselectedNextOptions.Add(new(item.ChannelId, $"{item.DisplayName} ({item.ChannelId})"));
-        }
+            StreamingPlatform.Twitch => _twitchAccountsStore?.ListAccounts(),
+            StreamingPlatform.YouTube => _youtubeAccountsStore?.ListAccounts(),
+            _ => null,
+        });
+        return accounts?.Where(account => account.Key.Platform == platform).ToArray();
     }
-
-    private IReadOnlyList<PlatformAccount> ListAccounts(StreamingPlatform platform) => platform switch
-    {
-        StreamingPlatform.Twitch => _twitchAccountsStore?.ListAccounts() ?? [],
-        StreamingPlatform.YouTube => _youtubeAccountsStore?.ListAccounts() ?? [],
-        _ => [],
-    };
 
     private void RefreshAccountOptions(StreamingPlatform platform)
     {
         var accounts = ListAccounts(platform);
         var canAuthorize = CanAuthorizeAccount(platform);
+        var canVerify = _adapters.ContainsKey(platform);
         foreach (var item in _allChannels.Where(item => item.Platform == platform))
         {
             foreach (var role in item.Roles)
             {
-                role.RefreshAccounts(accounts, canAuthorize);
+                role.RefreshAccounts(accounts, canAuthorize, canVerify);
             }
         }
     }
@@ -798,6 +935,7 @@ public sealed partial class ChannelCatalogSettingsSectionViewModel : ObservableO
     {
         if (!_suppressUpdates)
         {
+            RefreshPreselectedNextOptions();
             Edited?.Invoke(this, EventArgs.Empty);
         }
     }
@@ -811,6 +949,9 @@ public sealed partial class ChannelCatalogItemViewModel : ObservableObject
     private readonly List<string> _aliases;
     private readonly Dictionary<string, string> _parameters;
     private readonly string _channelUrl;
+    private string _savedDisplayName;
+    private string _savedHandle;
+    private bool _savedMonitoring;
 
     [ObservableProperty]
     private string _displayName;
@@ -827,6 +968,7 @@ public sealed partial class ChannelCatalogItemViewModel : ObservableObject
     public ChannelCatalogItemViewModel(
         ChannelCatalogEntry entry,
         bool isActive,
+        bool supportsMonitoring,
         Action onEdited,
         Func<ChannelCatalogItemViewModel, ChannelAccountRoleViewModel, Task> verifyAsync,
         Func<ChannelCatalogItemViewModel, ChannelAccountRoleViewModel, Task> authorizeAsync,
@@ -835,6 +977,7 @@ public sealed partial class ChannelCatalogItemViewModel : ObservableObject
     {
         Platform = entry.Platform;
         ChannelId = entry.ChannelId;
+        SupportsMonitoring = supportsMonitoring;
         _channelUrl = entry.ChannelUrl;
         _aliases = [.. entry.KnownAliases];
         _parameters = new(entry.Parameters, StringComparer.Ordinal);
@@ -845,11 +988,14 @@ public sealed partial class ChannelCatalogItemViewModel : ObservableObject
         _displayName = string.IsNullOrWhiteSpace(entry.DisplayName) ? entry.ChannelId : entry.DisplayName;
         _handle = entry.Handle;
         _monitoringEnabled = entry.MonitoringEnabled;
+        _savedDisplayName = _displayName;
+        _savedHandle = _handle;
+        _savedMonitoring = _monitoringEnabled;
         _isActive = isActive;
         Roles =
         [
-            new(entry, PlatformAuthRole.Broadcaster, onEdited, role => verifyAsync(this, role), role => authorizeAsync(this, role)),
             new(entry, PlatformAuthRole.Bot, onEdited, role => verifyAsync(this, role), role => authorizeAsync(this, role)),
+            new(entry, PlatformAuthRole.Broadcaster, onEdited, role => verifyAsync(this, role), role => authorizeAsync(this, role)),
         ];
     }
 
@@ -857,7 +1003,46 @@ public sealed partial class ChannelCatalogItemViewModel : ObservableObject
 
     public string ChannelId { get; }
 
+    public bool SupportsMonitoring { get; }
+
     public IReadOnlyList<ChannelAccountRoleViewModel> Roles { get; }
+
+    internal bool IsNew { get; set; }
+
+    internal void AcceptEdits()
+    {
+        IsNew = false;
+        _savedDisplayName = DisplayName;
+        _savedHandle = Handle;
+        _savedMonitoring = MonitoringEnabled;
+        foreach (var role in Roles)
+        {
+            role.AcceptEdits();
+        }
+    }
+
+    internal void ApplyEditsTo(ChannelCatalogEntry current)
+    {
+        if (IsNew || DisplayName != _savedDisplayName)
+        {
+            current.DisplayName = DisplayName.Trim();
+        }
+
+        if (IsNew || Handle != _savedHandle)
+        {
+            current.Handle = Handle.Trim();
+        }
+
+        if (IsNew || MonitoringEnabled != _savedMonitoring)
+        {
+            current.MonitoringEnabled = MonitoringEnabled;
+        }
+
+        foreach (var role in Roles.Where(role => IsNew || role.IsEdited))
+        {
+            role.ApplyTo(current);
+        }
+    }
 
     public ChannelCatalogEntry ToEntry()
     {

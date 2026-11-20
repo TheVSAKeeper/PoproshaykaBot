@@ -6,7 +6,7 @@ using System.Windows.Input;
 
 namespace PoproshaykaBot.Wpf.ViewModels.Tiles;
 
-public sealed partial class ChatDisplayPaneViewModel(IShellLauncher shellLauncher) : ObservableObject
+public sealed partial class ChatDisplayPaneViewModel(IShellLauncher shellLauncher, IChatPlatformRegistry? platformRegistry) : ObservableObject
 {
     [ObservableProperty]
     private bool _isShown;
@@ -32,7 +32,7 @@ public sealed partial class ChatDisplayPaneViewModel(IShellLauncher shellLaunche
     [NotifyPropertyChangedFor(nameof(DisplayName))]
     private StreamingPlatform _platform;
 
-    public string DisplayName => PlatformVisuals.GetDisplayName(Platform);
+    public string DisplayName => PlatformVisuals.GetDisplayName(Platform, platformRegistry);
     public Uri? ChannelUri { get; private set; }
 
     public ICommand? FallbackActionCommand => RuntimeMissing ? OpenRuntimeDownloadCommand
@@ -76,7 +76,7 @@ public sealed partial class ChatDisplayPaneViewModel(IShellLauncher shellLaunche
     {
         HasFallback = true;
         RuntimeMissing = false;
-        FallbackHeading = $"Не удалось открыть чат {PlatformVisuals.GetDisplayName(Platform)}";
+        FallbackHeading = $"Не удалось открыть чат {DisplayName}";
         FallbackDescription = ExternalUri is not null ? "Откройте чат в браузере или попробуйте обновить его."
             : "Попробуйте обновить чат. Подробности – в журнале.";
     }

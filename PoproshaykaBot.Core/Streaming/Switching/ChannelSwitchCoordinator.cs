@@ -49,6 +49,10 @@ public interface IChannelSwitchCoordinator
         bool preservePreselectedNext,
         CancellationToken cancellationToken = default);
 
+    Task<ChannelSwitchResult> SwitchCatalogChannelAsync(
+        ChannelCatalogEntry targetChannel,
+        CancellationToken cancellationToken = default);
+
     Task<ChannelSwitchResult?> SetPreselectedNextAsync(
         StreamingPlatform platform,
         ChannelKey? targetChannel,
@@ -178,14 +182,34 @@ public sealed class ChannelSwitchCoordinator :
         return SwitchActiveChannelAsync(platform, targetChannel, preservePreselectedNext: false, cancellationToken);
     }
 
-    public async Task<ChannelSwitchResult> SwitchActiveChannelAsync(
+    public Task<ChannelSwitchResult> SwitchActiveChannelAsync(
         StreamingPlatform platform,
         ChannelKey targetChannel,
         bool preservePreselectedNext,
         CancellationToken cancellationToken = default)
     {
+        return SwitchActiveChannelAsync(platform, targetChannel, preservePreselectedNext, draftEntry: null, cancellationToken);
+    }
+
+    public Task<ChannelSwitchResult> SwitchCatalogChannelAsync(
+        ChannelCatalogEntry targetChannel,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(targetChannel);
+        return SwitchActiveChannelAsync(targetChannel.Platform, targetChannel.Key, preservePreselectedNext: true,
+            targetChannel, cancellationToken);
+    }
+
+    private async Task<ChannelSwitchResult> SwitchActiveChannelAsync(
+        StreamingPlatform platform,
+        ChannelKey targetChannel,
+        bool preservePreselectedNext,
+        ChannelCatalogEntry? draftEntry,
+        CancellationToken cancellationToken)
+    {
         if (IsBlockedByDebugSession(platform))
         {
+            _logger.LogWarning("Переключение канала {Platform} отключено в режиме отладки", platform);
             return new(ChannelSwitchOutcome.BlockedByDebugSession, ResolveCurrentActiveKey(platform), "Переключение канала отключено в режиме отладки.");
         }
 
@@ -193,9 +217,10 @@ public sealed class ChannelSwitchCoordinator :
         await slot.Gate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
-            var entryB = _catalogStore.FindEntry(targetChannel);
-            if (entryB is null || !entryB.IsConfigured || entryB.Platform != platform)
+            var entryB = draftEntry ?? _catalogStore.FindEntry(targetChannel);
+            if (entryB is null || !entryB.Key.IsValid || !entryB.IsConfigured || entryB.Platform != platform)
             {
+                _logger.LogWarning("Целевой канал {Platform} {ChannelId} не найден в каталоге", platform, targetChannel.ChannelId);
                 return new(ChannelSwitchOutcome.ChannelNotFound, ResolveCurrentActiveKey(platform), "Целевой канал не найден в каталоге.");
             }
 
@@ -245,7 +270,8 @@ public sealed class ChannelSwitchCoordinator :
                 confirmedStreamB,
                 clearPreselected: !preservePreselectedNext,
                 ChannelSwitchMode.Manual,
-                cancellationToken).ConfigureAwait(false);
+                cancellationToken,
+                saveDraftEntry: draftEntry is not null).ConfigureAwait(false);
         }
         finally
         {
@@ -715,7 +741,8 @@ public sealed class ChannelSwitchCoordinator :
         StreamInfo? confirmedStreamB,
         bool clearPreselected,
         ChannelSwitchMode mode,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        bool saveDraftEntry = false)
     {
         var entryA = currentActiveKey is { IsValid: true } ak ? _catalogStore.FindEntry(ak) : null;
         var isConnected = _connectionManager?.IsPlatformConnected(platform) ?? false;
@@ -791,24 +818,55 @@ public sealed class ChannelSwitchCoordinator :
         var previousActiveId = currentActiveKey?.ChannelId;
         var previousPreselectedId = _catalogStore.GetPlatformSettings(platform).PreselectedNextChannelId;
 
-        var catalogSaved = _catalogStore.Mutate(settings =>
+        ChannelCatalogEntry? previousEntryB = null;
+        var catalogSaved = false;
+        var catalogChangedInMemory = false;
+        try
         {
-            var ps = EnsurePlatformSettings(settings, platform);
-            ps.ActiveChannelId = entryB.ChannelId;
-            if (clearPreselected)
+            catalogSaved = _catalogStore.Mutate(settings =>
             {
-                ps.PreselectedNextChannelId = null;
-            }
-        });
+                var ps = EnsurePlatformSettings(settings, platform);
+                ps.ActiveChannelId = entryB.ChannelId;
+                if (clearPreselected)
+                {
+                    ps.PreselectedNextChannelId = null;
+                }
+
+                if (saveDraftEntry)
+                {
+                    previousEntryB = settings.Channels.FirstOrDefault(channel => channel.Key == entryB.Key);
+                    SetCatalogEntry(settings, entryB);
+                }
+            });
+            catalogChangedInMemory = !catalogSaved;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            _logger.LogError(ex, "Ошибка записи каталога при переключении {Platform} на канал {ChannelId}", platform, entryB.ChannelId);
+        }
 
         if (!catalogSaved)
         {
-            _catalogStore.Mutate(settings =>
+            if (catalogChangedInMemory)
             {
-                var ps = EnsurePlatformSettings(settings, platform);
-                ps.ActiveChannelId = previousActiveId;
-                ps.PreselectedNextChannelId = previousPreselectedId;
-            });
+                _catalogStore.Mutate(settings =>
+                {
+                    var ps = EnsurePlatformSettings(settings, platform);
+                    ps.ActiveChannelId = previousActiveId;
+                    ps.PreselectedNextChannelId = previousPreselectedId;
+                    if (saveDraftEntry)
+                    {
+                        if (previousEntryB is null)
+                        {
+                            settings.Channels.RemoveAll(channel => channel.Key == entryB.Key);
+                        }
+                        else
+                        {
+                            SetCatalogEntry(settings, previousEntryB);
+                        }
+                    }
+                });
+            }
 
             if (isConnected && _connectionManager is not null && entryA is not null)
             {
@@ -830,6 +888,9 @@ public sealed class ChannelSwitchCoordinator :
             else if (!isConnected && entryA is not null)
             {
                 _reconciler.MirrorActiveChannelToLegacySettings(entryA);
+                var savedChannelReason = "Не удалось сохранить каталог каналов – переключение отменено, сохранён прежний канал.";
+                await PublishSwitchFailedAsync(platform, currentActiveKey, entryB.Key, keptPrevious: true, savedChannelReason).ConfigureAwait(false);
+                return new(ChannelSwitchOutcome.FailedKeptPrevious, currentActiveKey, savedChannelReason);
             }
 
             var gateReason = "Не удалось сохранить каталог каналов – переключение отменено.";
@@ -884,6 +945,19 @@ public sealed class ChannelSwitchCoordinator :
             mode);
 
         return new(ChannelSwitchOutcome.Switched, entryB.Key);
+    }
+
+    private static void SetCatalogEntry(ChannelsSettings settings, ChannelCatalogEntry entry)
+    {
+        var index = settings.Channels.FindIndex(channel => channel.Key == entry.Key);
+        if (index < 0)
+        {
+            settings.Channels.Add(entry);
+        }
+        else
+        {
+            settings.Channels[index] = entry;
+        }
     }
 
     private async Task<string?> VerifyChatPrerequisitesAsync(
