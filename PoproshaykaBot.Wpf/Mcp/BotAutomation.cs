@@ -1,12 +1,15 @@
 ﻿using Microsoft.Extensions.Logging;
 using PoproshaykaBot.Core.Broadcast;
 using PoproshaykaBot.Core.Debugging;
+using PoproshaykaBot.Core.Diagnostics;
 using PoproshaykaBot.Core.Infrastructure.Events.Lifecycle;
 using PoproshaykaBot.Core.Infrastructure.Hosting;
 using PoproshaykaBot.Core.Obs;
 using PoproshaykaBot.Core.Platforms;
+using PoproshaykaBot.Core.Platforms.Auth;
 using PoproshaykaBot.Core.Server;
 using PoproshaykaBot.Core.Settings;
+using PoproshaykaBot.Core.Settings.Stores;
 using PoproshaykaBot.Core.Streaming;
 using PoproshaykaBot.Wpf.Bootstrap;
 
@@ -21,7 +24,10 @@ public sealed class BotAutomation(
     SettingsManager settingsManager,
     ILogger<BotAutomation> logger,
     IChatPlatformRegistry? platformRegistry = null,
-    IBroadcastState? broadcastState = null)
+    IBroadcastState? broadcastState = null,
+    DiagnosticsSnapshotSource? diagnosticsSource = null,
+    ChannelCatalogStore? channelCatalog = null,
+    IEnumerable<IPlatformChannelMonitor>? channelMonitors = null)
 {
     public BotStateDto GetState()
     {
@@ -210,6 +216,110 @@ public sealed class BotAutomation(
         }
 
         return list;
+    }
+
+    public DiagnosticsSnapshot GetDiagnostics()
+    {
+        if (diagnosticsSource is null)
+        {
+            throw new InvalidOperationException("Источник диагностики недоступен.");
+        }
+
+        return diagnosticsSource.Capture();
+    }
+
+    public ChannelsStateDto GetChannelsState()
+    {
+        if (channelCatalog is null)
+        {
+            throw new InvalidOperationException("Каталог каналов недоступен.");
+        }
+
+        var settings = channelCatalog.Load();
+        var activeByPlatform = settings.Platforms.ToDictionary(
+            static p => p.Platform,
+            static p => p.ActiveChannelId);
+
+        var snapshotsByKey = new Dictionary<ChannelKey, ChannelMonitoringSnapshot>();
+        if (channelMonitors is not null)
+        {
+            foreach (var monitor in channelMonitors)
+            {
+                foreach (var snapshot in monitor.GetSnapshots())
+                {
+                    snapshotsByKey[snapshot.Channel] = snapshot;
+                }
+            }
+        }
+
+        var platforms = settings.Platforms
+            .Select(static p => new ChannelsStateDto.PlatformRoutingDto(
+                p.Platform,
+                p.ActiveChannelId,
+                p.SwitchMode,
+                p.PreselectedNextChannelId))
+            .ToArray();
+
+        var channels = settings.Channels
+            .Select(entry =>
+            {
+                activeByPlatform.TryGetValue(entry.Platform, out var activeId);
+                var isActive = !string.IsNullOrWhiteSpace(activeId)
+                    && string.Equals(entry.ChannelId, activeId, StringComparison.Ordinal);
+                snapshotsByKey.TryGetValue(entry.Key, out var monitoring);
+
+                return new ChannelsStateDto.ChannelEntryDto(
+                    entry.Platform,
+                    entry.ChannelId,
+                    entry.DisplayName,
+                    entry.Handle,
+                    entry.ChannelUrl,
+                    entry.IsConfigured,
+                    entry.MonitoringEnabled,
+                    isActive,
+                    ToRoleDto(entry, PlatformAuthRole.Bot),
+                    ToRoleDto(entry, PlatformAuthRole.Broadcaster),
+                    monitoring is null
+                        ? null
+                        : new ChannelsStateDto.ChannelMonitoringDto(
+                            monitoring.Availability,
+                            monitoring.Reason,
+                            monitoring.Detail,
+                            monitoring.Status,
+                            monitoring.Stream?.Title,
+                            monitoring.Stream?.GameName,
+                            monitoring.Stream?.ViewerCount,
+                            monitoring.ObservedAtUtc));
+            })
+            .ToArray();
+
+        var groups = settings.Groups
+            .Select(static g => new ChannelsStateDto.ChannelGroupDto(
+                g.Id,
+                g.Name,
+                [.. g.Channels.Select(static m => new ChannelsStateDto.ChannelGroupMemberDto(m.Platform, m.ChannelId))]))
+            .ToArray();
+
+        return new(platforms, channels, groups);
+    }
+
+    private static ChannelsStateDto.RoleAssignmentDto? ToRoleDto(ChannelCatalogEntry entry, PlatformAuthRole role)
+    {
+        var assignment = entry.GetAccountAssignment(role);
+        if (assignment is null)
+        {
+            return null;
+        }
+
+        var verifiedId = role == PlatformAuthRole.Bot
+            ? entry.BotVerifiedSubjectId
+            : entry.BroadcasterVerifiedSubjectId;
+
+        return new(
+            assignment.Account.AccountId,
+            assignment.ContextId,
+            verifiedId,
+            assignment.IsVerified);
     }
 
     private static BotStateDto.StreamStateDto ToStreamDto(StreamStatus status, StreamInfo? stream)

@@ -47,6 +47,22 @@ internal sealed class InnerTubeLiveChatParserTests
     }
 
     [Test]
+    public void ParseWatchBootstrap_Succeeds_WhenValidWatchHtmlAlsoContainsConsentMarkup()
+    {
+        var html = InnerTubeFixtureLoader.ReadText("watch_live_chat_selector.html")
+            + "<script>var consentUrl='https://consent.youtube.com/m'; var hint='Before you continue to YouTube';</script>";
+
+        var result = InnerTubeLiveChatParser.ParseWatchBootstrap(html, "SYNTHVID001");
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(result.ApiKey, Is.EqualTo("SYNTHETIC_API_KEY_001"));
+            Assert.That(result.ClientVersion, Is.EqualTo("2.20261116.01.00"));
+            Assert.That(result.InitialContinuation, Is.EqualTo("SYNTHETIC_BOOTSTRAP_TOP_CHAT_CONT_001"));
+        });
+    }
+
+    [Test]
     public void ParseBatch_Extracts_LiveChatSwitch_Filters_Ticker_And_Maps_RichRuns()
     {
         var response = JsonSerializer.Deserialize(

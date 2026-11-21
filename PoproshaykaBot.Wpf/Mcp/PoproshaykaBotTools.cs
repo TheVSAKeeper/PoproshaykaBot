@@ -22,6 +22,38 @@ public sealed class PoproshaykaBotTools
         return McpFormat.Serialize(automation.GetState());
     }
 
+    [McpServerTool(Name = "get_diagnostics")]
+    [Description("Полный снимок диагностики PoproshaykaBot без переключения экрана: память процесса и дочерних процессов WebView2, обе сессии Twitch EventSub (статус, попытки переподключения, последнее сообщение), состояние чата, SSE-оверлея, очереди отправки, фоновых задач, мониторинга/транспорта/квоты YouTube и счётчиков шины событий.")]
+    public static string GetDiagnostics(BotAutomation automation)
+    {
+        ArgumentNullException.ThrowIfNull(automation);
+
+        try
+        {
+            return McpFormat.Serialize(automation.GetDiagnostics());
+        }
+        catch (InvalidOperationException exception)
+        {
+            throw new McpException(exception.Message);
+        }
+    }
+
+    [McpServerTool(Name = "get_channels_state")]
+    [Description("Каталог каналов и состояние мониторинга по площадкам (без токенов и секретов): активный и следующий канал, режим переключения, назначенные и подтверждённые роли Bot/Broadcaster по каждому каналу, актуальные снимки мониторинга (доступность, причина деградации, статус эфира, зрители) и группы каналов.")]
+    public static string GetChannelsState(BotAutomation automation)
+    {
+        ArgumentNullException.ThrowIfNull(automation);
+
+        try
+        {
+            return McpFormat.Serialize(automation.GetChannelsState());
+        }
+        catch (InvalidOperationException exception)
+        {
+            throw new McpException(exception.Message);
+        }
+    }
+
     [McpServerTool(Name = "connect_bot")]
     [Description("Подключает бота к чату (ко всем включённым площадкам или к указанной в параметре platform: Twitch или YouTube) – тот же путь, что кнопка подключения в оболочке, без диалогов подтверждения. Подключение идёт в фоне: ответ несёт фазу сразу после запроса, дождаться Connected можно повторным get_bot_state. Отказывает, если бот уже подключается, подключён или отключается.")]
     public static string ConnectBot(

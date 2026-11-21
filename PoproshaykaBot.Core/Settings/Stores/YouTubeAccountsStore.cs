@@ -163,6 +163,11 @@ public sealed class YouTubeAccountsStore : RoleAccountsStoreBase<YouTubeAccounts
         return $"clientSecret {SettingsDescriber.Present(clientSecret)}; бот – {Describe(bot)}; вещатель – {Describe(broadcaster)}";
     }
 
+    public string DescribeSnapshot()
+    {
+        return DescribeAccounts(LoadFile());
+    }
+
     private static string DescribeAccounts(YouTubeAccountsFileDto state)
     {
         return $"{Describe(state.ClientSecret, state.BotAccount ?? new(), state.BroadcasterAccount ?? new())}; доп. контекстов {state.Contexts?.Count ?? 0}";

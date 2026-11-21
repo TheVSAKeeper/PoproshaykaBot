@@ -152,10 +152,7 @@ public static class YouTubeServiceCollectionExtensions
             return
             [
                 new("YouTubeSettings", YouTubeSettingsStore.Describe(youtubeSettings.Load())),
-                new("YouTubeAccounts", YouTubeAccountsStore.Describe(
-                    youtubeAccounts.LoadClientSecret(),
-                    youtubeAccounts.Load(PlatformAuthRole.Bot),
-                    youtubeAccounts.Load(PlatformAuthRole.Broadcaster))),
+                new("YouTubeAccounts", youtubeAccounts.DescribeSnapshot()),
             ];
         }));
 

@@ -1,8 +1,11 @@
 ﻿using PoproshaykaBot.Core.Chat.History;
+using PoproshaykaBot.Core.Debugging;
 using PoproshaykaBot.Core.Infrastructure.Events;
 using PoproshaykaBot.Core.Infrastructure.Events.Chat;
+using PoproshaykaBot.Core.Infrastructure.Events.Streaming;
 using PoproshaykaBot.Core.Platforms;
 using PoproshaykaBot.Core.Settings;
+using PoproshaykaBot.Core.Settings.Stores;
 
 namespace PoproshaykaBot.Core.Chat;
 
@@ -15,9 +18,14 @@ public sealed class ChatHistoryManager : IDisposable
     private readonly IChatHistorySettingsProvider? _historySettingsProvider;
     private readonly IChatHistoryPersistenceSink? _persistenceQueue;
     private readonly TimeProvider _timeProvider;
+    private readonly ChannelCatalogStore? _channelCatalogStore;
+    private readonly PlatformChannelRegistry? _channelRegistry;
+    private readonly ITargetChannelProvider? _targetChannelProvider;
+    private readonly IDisposable _activeChannelSubscription;
     private readonly Lock _sync = new();
     private readonly Dictionary<ChatHistoryScope, ChatHistoryBuffer> _buffers = [];
     private readonly Dictionary<StreamingPlatform, ChatHistoryScope> _activeScopesByPlatform = [];
+    private readonly Dictionary<StreamingPlatform, string> _activeChannelIdsByPlatform = [];
 
     private DateTimeOffset? _globalClearedAtUtc;
     private bool _disposed;
@@ -27,7 +35,10 @@ public sealed class ChatHistoryManager : IDisposable
         IEventBus eventBus,
         IChatHistorySettingsProvider? historySettingsProvider = null,
         IChatHistoryPersistenceSink? persistenceQueue = null,
-        TimeProvider? timeProvider = null)
+        TimeProvider? timeProvider = null,
+        ChannelCatalogStore? channelCatalogStore = null,
+        PlatformChannelRegistry? channelRegistry = null,
+        ITargetChannelProvider? targetChannelProvider = null)
     {
         ArgumentNullException.ThrowIfNull(settingsManager);
         ArgumentNullException.ThrowIfNull(eventBus);
@@ -37,6 +48,11 @@ public sealed class ChatHistoryManager : IDisposable
         _historySettingsProvider = historySettingsProvider;
         _persistenceQueue = persistenceQueue;
         _timeProvider = timeProvider ?? TimeProvider.System;
+        _channelCatalogStore = channelCatalogStore;
+        _channelRegistry = channelRegistry;
+        _targetChannelProvider = targetChannelProvider;
+
+        _activeChannelSubscription = _eventBus.Subscribe<ActiveChannelChanged>(OnActiveChannelChanged);
 
         if (_historySettingsProvider is not null)
         {
@@ -182,6 +198,28 @@ public sealed class ChatHistoryManager : IDisposable
         lock (_sync)
         {
             return IsActiveScopeUnderLock(scope);
+        }
+    }
+
+    public bool IsActiveChannel(StreamingPlatform platform, string? channelId)
+    {
+        if (string.IsNullOrWhiteSpace(channelId))
+        {
+            return true;
+        }
+
+        var normalizedId = NormalizeChannelId(platform, channelId);
+
+        lock (_sync)
+        {
+            var activeChannelId = ResolveAuthoritativeChannelIdUnderLock(platform);
+            if (activeChannelId is not null)
+            {
+                return string.Equals(normalizedId, activeChannelId, StringComparison.Ordinal);
+            }
+
+            return !_activeScopesByPlatform.TryGetValue(platform, out var active)
+                || string.Equals(normalizedId, active.ChannelId, StringComparison.Ordinal);
         }
     }
 
@@ -395,9 +433,27 @@ public sealed class ChatHistoryManager : IDisposable
         }
 
         _disposed = true;
+        _activeChannelSubscription.Dispose();
+
         if (_historySettingsProvider is not null)
         {
             _historySettingsProvider.Changed -= OnHistorySettingsChanged;
+        }
+    }
+
+    private void OnActiveChannelChanged(ActiveChannelChanged @event)
+    {
+        if (string.IsNullOrWhiteSpace(@event.NewChannel.ChannelId))
+        {
+            return;
+        }
+
+        var normalizedId = NormalizeChannelId(@event.Platform, @event.NewChannel.ChannelId);
+
+        lock (_sync)
+        {
+            _activeChannelIdsByPlatform[@event.Platform] = normalizedId;
+            SelectNewestBufferForChannelUnderLock(@event.Platform, normalizedId);
         }
     }
 
@@ -436,10 +492,19 @@ public sealed class ChatHistoryManager : IDisposable
 
     private void MarkActiveScopeUnderLock(ChatHistoryScope scope)
     {
-        if (!string.IsNullOrWhiteSpace(scope.ChannelId))
+        if (string.IsNullOrWhiteSpace(scope.ChannelId))
         {
-            _activeScopesByPlatform[scope.Platform] = scope;
+            return;
         }
+
+        var activeChannelId = ResolveAuthoritativeChannelIdUnderLock(scope.Platform);
+        if (activeChannelId is not null
+            && !string.Equals(scope.ChannelId, activeChannelId, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        _activeScopesByPlatform[scope.Platform] = scope;
     }
 
     private void UpdateRestoredActiveScopeUnderLock(ChatHistoryBuffer restoredBuffer)
@@ -450,7 +515,21 @@ public sealed class ChatHistoryManager : IDisposable
             return;
         }
 
+        var activeChannelId = ResolveAuthoritativeChannelIdUnderLock(scope.Platform);
+        if (activeChannelId is not null
+            && !string.Equals(scope.ChannelId, activeChannelId, StringComparison.Ordinal))
+        {
+            return;
+        }
+
         if (!_activeScopesByPlatform.TryGetValue(scope.Platform, out var currentActive))
+        {
+            _activeScopesByPlatform[scope.Platform] = scope;
+            return;
+        }
+
+        if (activeChannelId is not null
+            && !string.Equals(currentActive.ChannelId, activeChannelId, StringComparison.Ordinal))
         {
             _activeScopesByPlatform[scope.Platform] = scope;
             return;
@@ -469,7 +548,93 @@ public sealed class ChatHistoryManager : IDisposable
 
     private bool IsActiveScopeUnderLock(ChatHistoryScope scope)
     {
+        var activeChannelId = ResolveAuthoritativeChannelIdUnderLock(scope.Platform);
+        if (activeChannelId is not null)
+        {
+            if (!string.Equals(scope.ChannelId, activeChannelId, StringComparison.Ordinal))
+            {
+                return false;
+            }
+
+            if (_activeScopesByPlatform.TryGetValue(scope.Platform, out var activeForChannel)
+                && string.Equals(activeForChannel.ChannelId, activeChannelId, StringComparison.Ordinal))
+            {
+                return activeForChannel.Equals(scope);
+            }
+
+            return true;
+        }
+
         return !_activeScopesByPlatform.TryGetValue(scope.Platform, out var active) || active.Equals(scope);
+    }
+
+    private string? ResolveAuthoritativeChannelIdUnderLock(StreamingPlatform platform)
+    {
+        if (_activeChannelIdsByPlatform.TryGetValue(platform, out var explicitId))
+        {
+            return explicitId;
+        }
+
+        var boundId = _channelRegistry?.GetBinding(platform)?.Key.ChannelId;
+        if (!string.IsNullOrWhiteSpace(boundId))
+        {
+            return NormalizeChannelId(platform, boundId);
+        }
+
+        if (platform == StreamingPlatform.Twitch && _targetChannelProvider?.Current.IsDebugSession == true)
+        {
+            return null;
+        }
+
+        var catalogId = _channelCatalogStore?.GetActiveChannel(platform)?.ChannelId;
+        if (!string.IsNullOrWhiteSpace(catalogId))
+        {
+            return NormalizeChannelId(platform, catalogId);
+        }
+
+        return null;
+    }
+
+    private void SelectNewestBufferForChannelUnderLock(StreamingPlatform platform, string normalizedChannelId)
+    {
+        ChatHistoryBuffer? best = null;
+
+        foreach (var buffer in _buffers.Values)
+        {
+            if (buffer.Scope.Platform != platform
+                || !string.Equals(buffer.Scope.ChannelId, normalizedChannelId, StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            if (best is null)
+            {
+                best = buffer;
+                continue;
+            }
+
+            var candidateNewest = buffer.NewestMessageTimestampUtc;
+            var bestNewest = best.NewestMessageTimestampUtc;
+            if (candidateNewest is { } c && (bestNewest is null || c > bestNewest))
+            {
+                best = buffer;
+            }
+        }
+
+        if (best is not null)
+        {
+            _activeScopesByPlatform[platform] = best.Scope;
+        }
+        else
+        {
+            _activeScopesByPlatform.Remove(platform);
+        }
+    }
+
+    private static string NormalizeChannelId(StreamingPlatform platform, string channelId)
+    {
+        var trimmed = channelId.Trim();
+        return platform == StreamingPlatform.Twitch ? trimmed.ToLowerInvariant() : trimmed;
     }
 
     private int GetMaxItems()

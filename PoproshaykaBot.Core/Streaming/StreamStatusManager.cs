@@ -42,6 +42,8 @@ public sealed class StreamStatusManager : IStreamStatus, IPlatformChannelMonitor
     private readonly EventSubSubscriptionRetry _retry;
 
     private string? _activeSlotId;
+    private string _sessionBotContextId = AuthContextIds.Default;
+    private string[] _lastSubscribedChannelIds = [];
     private IDisposable? _channelUpdatedSubscription;
     private IDisposable? _activeChannelChangedSubscription;
     private CancellationTokenSource? _runCts;
@@ -524,12 +526,15 @@ public sealed class StreamStatusManager : IStreamStatus, IPlatformChannelMonitor
                 { "broadcaster_user_id", broadcasterId },
             };
 
-            var result = await _retry.CreateAsync(args.SubscriptionType,
-                "1",
-                condition,
-                sessionId,
-                async retried => await RecordSubscriptionAsync(generation, broadcasterId, key, retried),
-                cancellationToken);
+            var sessionBotContextId = Volatile.Read(ref _sessionBotContextId);
+            var result = await WithContextAsync(
+                sessionBotContextId,
+                () => _retry.CreateAsync(args.SubscriptionType,
+                    "1",
+                    condition,
+                    sessionId,
+                    async retried => await RecordSubscriptionAsync(generation, broadcasterId, key, retried),
+                    cancellationToken));
 
             await RecordSubscriptionAsync(generation, broadcasterId, key, result);
 
@@ -965,6 +970,13 @@ public sealed class StreamStatusManager : IStreamStatus, IPlatformChannelMonitor
             .ThenBy(static s => s.ChannelId, StringComparer.Ordinal)
             .ToArray();
 
+        var sessionBotContextId = ResolveSessionBotContextId(orderedSlots);
+        Volatile.Write(ref _sessionBotContextId, sessionBotContextId);
+        lock (_slotsLock)
+        {
+            _lastSubscribedChannelIds = [.. orderedSlots.Select(static s => s.ChannelId).OrderBy(static id => id, StringComparer.Ordinal)];
+        }
+
         foreach (var slot in orderedSlots)
         {
             if (slot.Reason == MonitoringUnavailableReason.MissingBotAuth)
@@ -990,7 +1002,7 @@ public sealed class StreamStatusManager : IStreamStatus, IPlatformChannelMonitor
                 {
                     var key = GetLedgerKey(slot.ChannelId, type);
                     var result = await WithContextAsync(
-                        slot.BotContextId,
+                        sessionBotContextId,
                         () => _retry.CreateAsync(type,
                             "1",
                             condition,
@@ -1297,9 +1309,61 @@ public sealed class StreamStatusManager : IStreamStatus, IPlatformChannelMonitor
             }
         }
 
-        if (_eventSubClient.SessionId is { Length: > 0 } sessionId && !_disposeCts.IsCancellationRequested)
+        if (_eventSubClient.SessionId is { Length: > 0 } sessionId
+            && !_disposeCts.IsCancellationRequested
+            && HasMonitoredSetChanged())
         {
             _ = SyncCatalogSubscriptionsAsync(sessionId);
+        }
+    }
+
+    private string ResolveSessionBotContextId(IReadOnlyList<TwitchChannelSlot> orderedSlots)
+    {
+        var boundContext = _channelRegistry?.GetBinding(StreamingPlatform.Twitch)?.BotContextId;
+        if (!string.IsNullOrWhiteSpace(boundContext) && HasUsableBotContext(boundContext))
+        {
+            return AuthContextIds.Normalize(boundContext);
+        }
+
+        foreach (var slot in orderedSlots)
+        {
+            if (slot.Reason != MonitoringUnavailableReason.MissingBotAuth && HasUsableBotContext(slot.BotContextId))
+            {
+                return AuthContextIds.Normalize(slot.BotContextId);
+            }
+        }
+
+        return AuthContextIds.Default;
+    }
+
+    private bool HasUsableBotContext(string contextId)
+    {
+        if (_authService is null)
+        {
+            return true;
+        }
+
+        var normalized = AuthContextIds.Normalize(contextId);
+        return AuthContextIds.IsDefault(normalized)
+            ? _authService.HasUsableAccessToken(PlatformAuthRole.Bot)
+            : _authService.HasUsableAccessToken(PlatformAuthRole.Bot, normalized);
+    }
+
+    private bool HasMonitoredSetChanged()
+    {
+        if (_channelCatalogStore is null || _targetChannelProvider.Current.IsDebugSession)
+        {
+            return true;
+        }
+
+        var currentIds = _channelCatalogStore.GetMonitoredChannels(StreamingPlatform.Twitch)
+            .Select(static c => c.ChannelId)
+            .OrderBy(static id => id, StringComparer.Ordinal)
+            .ToArray();
+
+        lock (_slotsLock)
+        {
+            return !_lastSubscribedChannelIds.SequenceEqual(currentIds, StringComparer.Ordinal);
         }
     }
 

@@ -198,7 +198,8 @@ public sealed class TwitchEventSubClient(ILogger<TwitchEventSubClient> logger) :
             return;
         }
 
-        _ = SafeRaiseAsync(OnDisconnected, new(disconnectReason ?? "Сессия EventSub завершена"), CancellationToken.None);
+        var closeCode = current.CloseStatus is { } closeStatus ? (int)closeStatus : (int?)null;
+        _ = SafeRaiseAsync(OnDisconnected, new(disconnectReason ?? "Сессия EventSub завершена", closeCode), CancellationToken.None);
     }
 
     private async Task RunSessionAsync(EventSubSession session, CancellationToken cancellationToken)

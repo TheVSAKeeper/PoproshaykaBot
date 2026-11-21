@@ -36,4 +36,4 @@ public sealed record EventSubReconnectArgs(string ReconnectUrl, string OldSessio
 
 public sealed record EventSubRevocationArgs(string SubscriptionId, string SubscriptionType, string Status);
 
-public sealed record EventSubDisconnectedArgs(string Reason);
+public sealed record EventSubDisconnectedArgs(string Reason, int? CloseCode = null);

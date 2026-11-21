@@ -158,7 +158,7 @@ public sealed class ChannelCatalogStore
             && string.Equals(c.ChannelId, key.ChannelId, StringComparison.Ordinal));
 
         if (existing is not null
-            && string.Equals(existing.DisplayName, trimmed, StringComparison.Ordinal)
+            && string.Equals(existing.DisplayName, trimmed, StringComparison.OrdinalIgnoreCase)
             && (existing.KnownAliases.Contains(trimmed, StringComparer.OrdinalIgnoreCase)
                 || string.Equals(existing.DisplayName, trimmed, StringComparison.OrdinalIgnoreCase)))
         {

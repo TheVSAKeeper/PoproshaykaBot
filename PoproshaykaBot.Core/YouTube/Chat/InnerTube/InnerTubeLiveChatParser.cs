@@ -46,13 +46,6 @@ internal static partial class InnerTubeLiveChatParser
                 "Страница трансляции InnerTube вернула пустой HTML.");
         }
 
-        if (IsConsentPage(html))
-        {
-            throw new InnerTubeChatException(
-                InnerTubeErrorKind.ConsentRequired,
-                "YouTube потребовал подтверждение consent перед доступом к странице трансляции.");
-        }
-
         var inaccessibleReason = DetectInaccessibleLiveReason(html);
 
         if (string.Equals(inaccessibleReason, "members-only", StringComparison.Ordinal))
@@ -91,6 +84,13 @@ internal static partial class InnerTubeLiveChatParser
             || string.IsNullOrWhiteSpace(clientVersion)
             || string.IsNullOrWhiteSpace(continuation))
         {
+            if (IsConsentPage(html))
+            {
+                throw new InnerTubeChatException(
+                    InnerTubeErrorKind.ConsentRequired,
+                    "YouTube потребовал подтверждение consent перед доступом к странице трансляции.");
+            }
+
             throw new InnerTubeChatException(
                 InnerTubeErrorKind.ParseFailure,
                 "На странице трансляции не найдены обязательные параметры InnerTube (apiKey/clientVersion/continuation).");

@@ -247,4 +247,116 @@ public sealed class EventSubConnectionHostTests
         Assert.That(_statusEvents.Select(e => e.Status), Does.Contain(StreamMonitoringStatus.Reconnecting),
             "обрыв broadcaster-WebSocket'а должен сигналиться в UI наравне с бот-сессией");
     }
+
+    [Test]
+    public async Task BroadcasterRoleHost_BotOnlyActiveChannel_DoesNotConnect_AndTogglesOnActiveChannelSwitch()
+    {
+        SeedAccessToken(PlatformAuthRole.Broadcaster, "broadcaster-token");
+        _accountsStore.Mutate(PlatformAuthRole.Broadcaster, a => a.UserId = "107618204");
+
+        var catalogPath = Path.Combine(Path.GetTempPath(), $"catalog-{Guid.NewGuid():N}.json");
+        try
+        {
+            var catalog = new ChannelCatalogStore(NullLogger<ChannelCatalogStore>.Instance, catalogPath);
+            catalog.Save(new()
+            {
+                Channels =
+                [
+                    new()
+                    {
+                        Platform = StreamingPlatform.Twitch,
+                        ChannelId = "177128531",
+                        DisplayName = "bobito217",
+                        IsConfigured = true,
+                        MonitoringEnabled = true,
+                        BotAccountId = "107618204",
+                        BotContextId = "default",
+                        BotVerifiedSubjectId = "107618204",
+                    },
+                    new()
+                    {
+                        Platform = StreamingPlatform.Twitch,
+                        ChannelId = "107618204",
+                        DisplayName = "thevsakeeper",
+                        IsConfigured = true,
+                        MonitoringEnabled = true,
+                        BroadcasterAccountId = "107618204",
+                        BroadcasterContextId = "default",
+                        BroadcasterVerifiedSubjectId = "107618204",
+                        BotAccountId = "107618204",
+                        BotContextId = "default",
+                        BotVerifiedSubjectId = "107618204",
+                    },
+                ],
+                Platforms =
+                [
+                    new() { Platform = StreamingPlatform.Twitch, ActiveChannelId = "177128531" },
+                ],
+            });
+
+            var registry = new PlatformChannelRegistry();
+            var target = Substitute.For<PoproshaykaBot.Core.Debugging.ITargetChannelProvider>();
+            target.Current.Returns(new PoproshaykaBot.Core.Debugging.TargetChannelState("bobito217", "bobito217", false, true));
+            var auth = new PoproshaykaBot.Core.Twitch.TwitchChannelAuthorization(_accountsStore, catalog, registry, target);
+
+            var broadcasterClient = Substitute.For<ITwitchEventSubClient>();
+            await using var broadcasterHost = new EventSubConnectionHost(
+                PlatformAuthRole.Broadcaster,
+                broadcasterClient,
+                _accountsStore,
+                _eventBus,
+                NullLogger<EventSubConnectionHost>.Instance,
+                auth);
+
+            await broadcasterHost.StartAsync(NullProgress, CancellationToken.None);
+            await broadcasterClient.DidNotReceive().StartAsync(Arg.Any<CancellationToken>());
+
+            catalog.Mutate(s => s.Platforms[0].ActiveChannelId = "107618204");
+            await _eventBus.PublishAsync(new ActiveChannelChanged(
+                StreamingPlatform.Twitch,
+                new ChannelKey(StreamingPlatform.Twitch, "177128531"),
+                new ChannelKey(StreamingPlatform.Twitch, "107618204"),
+                "thevsakeeper",
+                PoproshaykaBot.Core.Settings.ChannelSwitchMode.Manual));
+
+            await broadcasterClient.Received(1).StartAsync(Arg.Any<CancellationToken>());
+
+            catalog.Mutate(s => s.Platforms[0].ActiveChannelId = "177128531");
+            await _eventBus.PublishAsync(new ActiveChannelChanged(
+                StreamingPlatform.Twitch,
+                new ChannelKey(StreamingPlatform.Twitch, "107618204"),
+                new ChannelKey(StreamingPlatform.Twitch, "177128531"),
+                "bobito217",
+                PoproshaykaBot.Core.Settings.ChannelSwitchMode.Manual));
+
+            await broadcasterClient.Received(1).StopAsync(Arg.Any<CancellationToken>());
+        }
+        finally
+        {
+            if (File.Exists(catalogPath))
+            {
+                File.Delete(catalogPath);
+            }
+        }
+    }
+
+    [Test]
+    public async Task Disconnect_WithCloseCode4003_StopsAfterMaxAttempts_DespiteSessionWelcome()
+    {
+        await _host.StartAsync(NullProgress, CancellationToken.None);
+        _statusEvents.Clear();
+
+        for (var i = 0; i < 6; i++)
+        {
+            _eventSubClient.OnSessionWelcome += Raise.Event<EventSubAsyncHandler<EventSubSessionWelcomeArgs>>(
+                new EventSubSessionWelcomeArgs($"session-{i}", 10),
+                CancellationToken.None);
+
+            _eventSubClient.OnDisconnected += Raise.Event<EventSubAsyncHandler<EventSubDisconnectedArgs>>(
+                new EventSubDisconnectedArgs("Сессия EventSub завершена", 4003),
+                CancellationToken.None);
+        }
+
+        Assert.That(_statusEvents.Select(e => e.Status), Does.Contain(StreamMonitoringStatus.Failed));
+    }
 }

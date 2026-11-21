@@ -80,6 +80,52 @@ internal sealed class CompositeYouTubeLiveChatReaderTests
     }
 
     [Test]
+    public void ConsentRequired_EscalatesCooldown_AndResetsAfterInnerTubeSuccess()
+    {
+        using var handler = new QueueHttpMessageHandler((_, _) => throw new InvalidOperationException());
+        var clock = new TestTimeProvider { UtcNow = new DateTimeOffset(2026, 11, 21, 12, 0, 0, TimeSpan.Zero) };
+        var innerTube = new InnerTubeYouTubeLiveChatReader(
+            new InnerTubeLiveChatClient(new SingleHandlerHttpClientFactory(handler)),
+            timeProvider: clock);
+        var grpc = new OfficialGrpcYouTubeLiveChatReader(new StubStreamClient((_, ct) =>
+            SingleBatch(new([], null, TimeSpan.FromSeconds(5), null), ct)));
+        var rest = new OfficialRestYouTubeLiveChatReader(new StubPollingClient((_, _) =>
+            Task.FromResult(new YouTubeLiveChatBatch([], null, TimeSpan.FromSeconds(5), null))), clock);
+
+        var composite = new CompositeYouTubeLiveChatReader(innerTube, grpc, rest, clock);
+        var target = new YouTubeChatTarget("SYNTHVID001", "chat-1");
+        var consentEx = new InnerTubeChatException(InnerTubeErrorKind.ConsentRequired, "consent");
+
+        composite.HandleInnerTubeFailure(target, consentEx);
+        var first = composite.GetRemainingInnerTubeCooldown();
+
+        clock.UtcNow = clock.UtcNow.AddMinutes(10);
+        composite.HandleInnerTubeFailure(target, consentEx);
+        var second = composite.GetRemainingInnerTubeCooldown();
+
+        clock.UtcNow = clock.UtcNow.AddMinutes(20);
+        composite.HandleInnerTubeFailure(target, consentEx);
+        var third = composite.GetRemainingInnerTubeCooldown();
+
+        clock.UtcNow = clock.UtcNow.AddMinutes(40);
+        composite.HandleInnerTubeFailure(target, consentEx);
+        var fourth = composite.GetRemainingInnerTubeCooldown();
+
+        composite.RecordSuccess(YouTubeChatTransportKind.InnerTube);
+        composite.HandleInnerTubeFailure(target, consentEx);
+        var afterReset = composite.GetRemainingInnerTubeCooldown();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(first, Is.EqualTo(TimeSpan.FromMinutes(10)));
+            Assert.That(second, Is.EqualTo(TimeSpan.FromMinutes(20)));
+            Assert.That(third, Is.EqualTo(TimeSpan.FromMinutes(40)));
+            Assert.That(fourth, Is.EqualTo(TimeSpan.FromMinutes(60)));
+            Assert.That(afterReset, Is.EqualTo(TimeSpan.FromMinutes(10)));
+        });
+    }
+
+    [Test]
     public async Task SelectTransport_And_ReadBatchesAsync_Skip_InnerTube_When_RequiresOfficialMessageIds()
     {
         using var handler = new QueueHttpMessageHandler((_, _) => throw new InvalidOperationException());

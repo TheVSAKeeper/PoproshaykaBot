@@ -191,6 +191,123 @@ public sealed class BotAutomationStateTests
         });
     }
 
+    [Test]
+    public void GetChannelsState_ReturnsRoutingRolesWithoutSecrets_AndMonitoringSnapshots()
+    {
+        var catalogPath = Path.Combine(Path.GetTempPath(), $"pb-mcp-channels-{Guid.NewGuid():N}.json");
+        try
+        {
+            var catalog = new PoproshaykaBot.Core.Settings.Stores.ChannelCatalogStore(NullLogger<PoproshaykaBot.Core.Settings.Stores.ChannelCatalogStore>.Instance, catalogPath);
+            catalog.Save(new()
+            {
+                Channels =
+                [
+                    new()
+                    {
+                        Platform = PoproshaykaBot.Core.Platforms.StreamingPlatform.Twitch,
+                        ChannelId = "177128531",
+                        DisplayName = "bobito217",
+                        Handle = "bobito217",
+                        ChannelUrl = "https://twitch.tv/bobito217",
+                        IsConfigured = true,
+                        MonitoringEnabled = true,
+                        BotAccountId = "107618204",
+                        BotContextId = "tw-bot-107618204",
+                        BotVerifiedSubjectId = "107618204",
+                    },
+                ],
+                Platforms =
+                [
+                    new()
+                    {
+                        Platform = PoproshaykaBot.Core.Platforms.StreamingPlatform.Twitch,
+                        ActiveChannelId = "177128531",
+                        SwitchMode = PoproshaykaBot.Core.Settings.ChannelSwitchMode.Manual,
+                    },
+                ],
+            });
+
+            var monitor = new FakePlatformChannelMonitor(
+                PoproshaykaBot.Core.Platforms.StreamingPlatform.Twitch,
+                [
+                    new(
+                        new PoproshaykaBot.Core.Platforms.ChannelKey(PoproshaykaBot.Core.Platforms.StreamingPlatform.Twitch, "177128531"),
+                        "bobito217",
+                        PoproshaykaBot.Core.Platforms.ChannelMonitoringAvailability.Active,
+                        PoproshaykaBot.Core.Platforms.MonitoringUnavailableReason.None,
+                        null,
+                        StreamStatus.Online,
+                        new StreamInfo { Title = "Тарков", GameName = "Escape from Tarkov", ViewerCount = 3742 },
+                        DateTimeOffset.UtcNow,
+                        false),
+                ]);
+
+            var automation = new BotAutomation(
+                new FakeBotConnectionController(),
+                new FakeTargetChannelProvider(new("bobito217", "bobito217", false, true)),
+                new FakeStreamStatus(StreamStatus.Online, null),
+                new FakeHttpServerStatus(true, 1337),
+                new FakeObsSceneController(ObsConnectionSnapshot.Disconnected()),
+                new FakeSettingsManager(1337),
+                NullLogger<BotAutomation>.Instance,
+                channelCatalog: catalog,
+                channelMonitors: [monitor]);
+
+            var result = automation.GetChannelsState();
+
+            Assert.Multiple(() =>
+            {
+                Assert.That(result.Platforms, Has.Count.EqualTo(1));
+                Assert.That(result.Platforms[0].ActiveChannelId, Is.EqualTo("177128531"));
+                Assert.That(result.Channels, Has.Count.EqualTo(1));
+                Assert.That(result.Channels[0].IsActive, Is.True);
+                Assert.That(result.Channels[0].BotRole?.ContextId, Is.EqualTo("tw-bot-107618204"));
+                Assert.That(result.Channels[0].BotRole?.IsVerified, Is.True);
+                Assert.That(result.Channels[0].BroadcasterRole, Is.Null);
+                Assert.That(result.Channels[0].Monitoring?.Status, Is.EqualTo(StreamStatus.Online));
+                Assert.That(result.Channels[0].Monitoring?.ViewerCount, Is.EqualTo(3742));
+            });
+        }
+        finally
+        {
+            if (File.Exists(catalogPath))
+            {
+                File.Delete(catalogPath);
+            }
+        }
+    }
+
+    [Test]
+    public void GetDiagnostics_WhenSourceUnavailable_Throws()
+    {
+        var automation = CreateAutomation();
+
+        Assert.Throws<InvalidOperationException>(() => automation.GetDiagnostics());
+    }
+
+    private sealed class FakePlatformChannelMonitor(
+        PoproshaykaBot.Core.Platforms.StreamingPlatform platform,
+        IReadOnlyList<PoproshaykaBot.Core.Platforms.ChannelMonitoringSnapshot> snapshots)
+        : PoproshaykaBot.Core.Platforms.IPlatformChannelMonitor
+    {
+        public PoproshaykaBot.Core.Platforms.StreamingPlatform Platform { get; } = platform;
+
+        public string Name => "FakeMonitor";
+
+        public int StartOrder => 0;
+
+        public Task StartAsync(IProgress<string> progress, CancellationToken cancellationToken) => Task.CompletedTask;
+
+        public Task StopAsync(IProgress<string> progress, CancellationToken cancellationToken) => Task.CompletedTask;
+
+        public PoproshaykaBot.Core.Platforms.ChannelMonitoringSnapshot GetSnapshot(PoproshaykaBot.Core.Platforms.ChannelKey channel)
+            => snapshots.First(s => s.Channel == channel);
+
+        public IReadOnlyList<PoproshaykaBot.Core.Platforms.ChannelMonitoringSnapshot> GetSnapshots() => snapshots;
+
+        public Task RefreshAsync(PoproshaykaBot.Core.Platforms.ChannelKey? channel = null, CancellationToken cancellationToken = default) => Task.CompletedTask;
+    }
+
     private static BotAutomation CreateAutomation(
         FakeBotConnectionController? connection = null,
         TargetChannelState? target = null,

@@ -6,6 +6,7 @@ using PoproshaykaBot.Core.Chat.Commands;
 using PoproshaykaBot.Core.Chat.History;
 using PoproshaykaBot.Core.Infrastructure.Events;
 using PoproshaykaBot.Core.Infrastructure.Events.Chat;
+using PoproshaykaBot.Core.Infrastructure.Events.Streaming;
 using PoproshaykaBot.Core.Platforms;
 using PoproshaykaBot.Wpf.Infrastructure;
 using PoproshaykaBot.Wpf.Infrastructure.Platforms;
@@ -62,6 +63,7 @@ public sealed partial class MultiplatformChatTileViewModel : DashboardTileViewMo
         _subscriptions.Add(eventBus.SubscribeOnUi<ChatMessagesDeleted>(OnChatMessagesDeleted));
         _subscriptions.Add(eventBus.SubscribeOnUi<ChatHistoryCleared>(OnChatHistoryCleared));
         _subscriptions.Add(eventBus.SubscribeOnUi<ChatReadingGapDetected>(OnChatReadingGapDetected));
+        _subscriptions.Add(eventBus.SubscribeOnUi<ActiveChannelChanged>(OnActiveChannelChanged));
 
         if (_chatSettingsProvider is not null)
         {
@@ -211,10 +213,22 @@ public sealed partial class MultiplatformChatTileViewModel : DashboardTileViewMo
         }
     }
 
+    private void OnActiveChannelChanged(ActiveChannelChanged _)
+    {
+        LoadInitialHistory();
+
+        if (IsPinnedToBottom)
+        {
+            ScrollToBottomRequested?.Invoke(this, EventArgs.Empty);
+        }
+    }
+
     private void OnChatMessageReceived(ChatMessageReceived messageEvent)
     {
         var entry = messageEvent.HistoryEntry;
-        if (!ShouldDisplayEntry(entry, messageEvent.CommandResponse))
+        var incomingScope = ChatHistoryScope.FromMessage(entry, messageEvent.Channel);
+        if (!_chatHistory.IsActiveChannel(incomingScope.Platform, incomingScope.ChannelId)
+            || !ShouldDisplayEntry(entry, messageEvent.CommandResponse))
         {
             return;
         }

@@ -26,6 +26,7 @@ internal sealed class CompositeYouTubeLiveChatReader(
     private const int BlockedVideoCacheCapacity = 64;
 
     private static readonly TimeSpan InnerTubeCooldownDuration = TimeSpan.FromMinutes(10);
+    private static readonly TimeSpan MaxConsentCooldownDuration = TimeSpan.FromMinutes(60);
     private static readonly TimeSpan BlockedVideoDuration = TimeSpan.FromMinutes(30);
     private static readonly TimeSpan GrpcRetryInterval = TimeSpan.FromMinutes(10);
 
@@ -39,6 +40,7 @@ internal sealed class CompositeYouTubeLiveChatReader(
         : YouTubeChatTransportKind.OfficialGrpc;
     private DateTimeOffset? _innerTubeCooldownUntilUtc;
     private int _consecutiveInnerTubeTransientFailures;
+    private int _consecutiveConsentFailures;
     private DateTimeOffset? _grpcFallbackUntilUtc;
     private int _consecutiveGrpcFailures;
     private string? _lastLoggedSharedVideoId;
@@ -180,6 +182,7 @@ internal sealed class CompositeYouTubeLiveChatReader(
             if (transport == YouTubeChatTransportKind.InnerTube)
             {
                 _consecutiveInnerTubeTransientFailures = 0;
+                _consecutiveConsentFailures = 0;
             }
             else if (transport == YouTubeChatTransportKind.OfficialGrpc)
             {
@@ -244,10 +247,21 @@ internal sealed class CompositeYouTubeLiveChatReader(
             {
                 case InnerTubeErrorKind.RateLimited:
                 case InnerTubeErrorKind.Forbidden:
-                case InnerTubeErrorKind.ConsentRequired:
                     _innerTubeCooldownUntilUtc = nowUtc + InnerTubeCooldownDuration;
                     _consecutiveInnerTubeTransientFailures = 0;
                     loggedCooldownMinutes = (int)InnerTubeCooldownDuration.TotalMinutes;
+                    activatedFallback = true;
+                    break;
+
+                case InnerTubeErrorKind.ConsentRequired:
+                    _consecutiveConsentFailures++;
+                    var consentMultiplier = 1 << Math.Min(_consecutiveConsentFailures - 1, 3);
+                    var consentCooldown = TimeSpan.FromMinutes(Math.Min(
+                        MaxConsentCooldownDuration.TotalMinutes,
+                        InnerTubeCooldownDuration.TotalMinutes * consentMultiplier));
+                    _innerTubeCooldownUntilUtc = nowUtc + consentCooldown;
+                    _consecutiveInnerTubeTransientFailures = 0;
+                    loggedCooldownMinutes = (int)consentCooldown.TotalMinutes;
                     activatedFallback = true;
                     break;
 

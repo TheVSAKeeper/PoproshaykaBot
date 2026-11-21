@@ -59,6 +59,7 @@ public static class StreamingServiceCollectionExtensions
             sp.GetRequiredKeyedService<ITwitchEventSubClient>(clientKey),
             sp.GetRequiredService<AccountsStore>(),
             sp.GetRequiredService<IEventBus>(),
-            sp.GetRequiredService<ILogger<EventSubConnectionHost>>());
+            sp.GetRequiredService<ILogger<EventSubConnectionHost>>(),
+            sp.GetService<TwitchChannelAuthorization>());
     }
 }

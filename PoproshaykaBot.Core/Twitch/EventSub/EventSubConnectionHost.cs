@@ -13,25 +13,30 @@ namespace PoproshaykaBot.Core.Twitch.EventSub;
 public sealed class EventSubConnectionHost :
     IStreamHostedComponent,
     IEventHandler<PlatformAuthorizationRefreshed>,
+    IEventHandler<ActiveChannelChanged>,
     IAsyncDisposable
 {
     private const int MaxReconnectAttempts = 5;
-
-    private static readonly IProgress<string> NullProgress = new Progress<string>(_ => { });
+    private const int ConnectionUnusedCloseCode = 4003;
 
     private readonly PlatformAuthRole _role;
     private readonly ITwitchEventSubClient _eventSubClient;
     private readonly AccountsStore _accountsStore;
     private readonly IEventBus _eventBus;
     private readonly ILogger<EventSubConnectionHost> _logger;
+    private readonly TwitchChannelAuthorization? _channelAuthorization;
     private readonly ExponentialBackoffPolicy _reconnectionPolicy = new(MaxReconnectAttempts);
     private readonly IDisposable _authSubscription;
+    private readonly IDisposable _activeChannelSubscription;
 
     private readonly Lock _lockObj = new();
     private CancellationTokenSource? _runCts;
     private CancellationTokenSource? _reconnectCts;
     private bool _stopRequested;
+    private bool _monitoringActive;
     private bool _disposed;
+    private string? _activeContextId;
+    private int _unusedCloseStreak;
     private StreamMonitoringStatus? _status;
     private long _lastMessageAtUtcTicks;
 
@@ -40,18 +45,21 @@ public sealed class EventSubConnectionHost :
         ITwitchEventSubClient eventSubClient,
         AccountsStore accountsStore,
         IEventBus eventBus,
-        ILogger<EventSubConnectionHost> logger)
+        ILogger<EventSubConnectionHost> logger,
+        TwitchChannelAuthorization? channelAuthorization = null)
     {
         _role = role;
         _eventSubClient = eventSubClient;
         _accountsStore = accountsStore;
         _eventBus = eventBus;
         _logger = logger;
+        _channelAuthorization = channelAuthorization;
 
         _eventSubClient.OnSessionWelcome += OnSessionWelcomeAsync;
         _eventSubClient.OnNotification += OnNotificationAsync;
         _eventSubClient.OnDisconnected += OnDisconnectedAsync;
-        _authSubscription = _eventBus.Subscribe(this);
+        _authSubscription = _eventBus.Subscribe<PlatformAuthorizationRefreshed>(this);
+        _activeChannelSubscription = _eventBus.Subscribe<ActiveChannelChanged>(this);
     }
 
     public PlatformAuthRole Role => _role;
@@ -88,22 +96,38 @@ public sealed class EventSubConnectionHost :
 
     public async Task StartAsync(IProgress<string> progress, CancellationToken cancellationToken)
     {
-        if (!HasAccessToken())
+        lock (_lockObj)
+        {
+            _monitoringActive = true;
+        }
+
+        if (!TryResolveActiveContext(out var contextId))
         {
             _logger.LogInformation("EventSub WebSocket ({Role}): запуск отложен – нет access-токена для роли. Ждём PlatformAuthorizationRefreshed.", _role);
             return;
         }
 
-        await StartInternalAsync(cancellationToken).ConfigureAwait(false);
+        await StartInternalAsync(contextId, cancellationToken).ConfigureAwait(false);
     }
 
-    public async Task StopAsync(IProgress<string> progress, CancellationToken cancellationToken)
+    public Task StopAsync(IProgress<string> progress, CancellationToken cancellationToken)
+    {
+        lock (_lockObj)
+        {
+            _monitoringActive = false;
+        }
+
+        return StopCoreAsync(cancellationToken);
+    }
+
+    private async Task StopCoreAsync(CancellationToken cancellationToken)
     {
         CancellationTokenSource? cts;
 
         lock (_lockObj)
         {
             _stopRequested = true;
+            _activeContextId = null;
             CancelAndResetReconnectToken();
             cts = _runCts;
             _runCts = null;
@@ -149,12 +173,12 @@ public sealed class EventSubConnectionHost :
             isRunning = _runCts is { IsCancellationRequested: false };
         }
 
-        if (!HasAccessToken())
+        if (!TryResolveActiveContext(out var contextId))
         {
             if (isRunning)
             {
                 _logger.LogInformation("Остановка EventSub WebSocket ({Role}) – access-токен отсутствует", _role);
-                await StopAsync(NullProgress, cancellationToken).ConfigureAwait(false);
+                await StopCoreAsync(cancellationToken).ConfigureAwait(false);
             }
             else
             {
@@ -167,14 +191,89 @@ public sealed class EventSubConnectionHost :
         if (isRunning)
         {
             _logger.LogInformation("Перезапуск EventSub WebSocket ({Role}) после обновления авторизации", _role);
-            await StopAsync(NullProgress, cancellationToken).ConfigureAwait(false);
+            await StopCoreAsync(cancellationToken).ConfigureAwait(false);
         }
         else
         {
             _logger.LogInformation("Запуск EventSub WebSocket ({Role}) после получения авторизации", _role);
         }
 
-        await StartInternalAsync(cancellationToken).ConfigureAwait(false);
+        await StartInternalAsync(contextId, cancellationToken).ConfigureAwait(false);
+    }
+
+    public async Task HandleAsync(ActiveChannelChanged @event, CancellationToken cancellationToken)
+    {
+        if (@event.Platform != StreamingPlatform.Twitch || _disposed)
+        {
+            return;
+        }
+
+        bool isRunning;
+        bool monitoringActive;
+        string? activeContextId;
+        lock (_lockObj)
+        {
+            isRunning = _runCts is { IsCancellationRequested: false };
+            monitoringActive = _monitoringActive;
+            activeContextId = _activeContextId;
+        }
+
+        if (!monitoringActive && !isRunning)
+        {
+            return;
+        }
+
+        var hasToken = TryResolveActiveContext(out var nextContextId);
+
+        if (_role == PlatformAuthRole.Broadcaster)
+        {
+            if (!hasToken)
+            {
+                if (isRunning)
+                {
+                    _logger.LogInformation("Остановка EventSub WebSocket ({Role}) – активный канал переключён на режим без авторизации стримера", _role);
+                    await StopCoreAsync(cancellationToken).ConfigureAwait(false);
+                }
+
+                return;
+            }
+
+            if (isRunning)
+            {
+                _logger.LogInformation("Перезапуск EventSub WebSocket ({Role}) после смены активного канала", _role);
+                await StopCoreAsync(cancellationToken).ConfigureAwait(false);
+            }
+            else
+            {
+                _logger.LogInformation("Запуск EventSub WebSocket ({Role}) после смены активного канала", _role);
+            }
+
+            await StartInternalAsync(nextContextId, cancellationToken).ConfigureAwait(false);
+            return;
+        }
+
+        if (!hasToken)
+        {
+            if (isRunning)
+            {
+                _logger.LogInformation("Остановка EventSub WebSocket ({Role}) – нет авторизации бота после смены канала", _role);
+                await StopCoreAsync(cancellationToken).ConfigureAwait(false);
+            }
+
+            return;
+        }
+
+        if (isRunning && !string.Equals(activeContextId, nextContextId, StringComparison.Ordinal))
+        {
+            _logger.LogInformation("Перезапуск EventSub WebSocket ({Role}) – сменился контекст бота ({OldContext} → {NewContext})",
+                _role, activeContextId ?? "–", nextContextId);
+            await StopCoreAsync(cancellationToken).ConfigureAwait(false);
+            await StartInternalAsync(nextContextId, cancellationToken).ConfigureAwait(false);
+        }
+        else if (!isRunning && monitoringActive)
+        {
+            await StartInternalAsync(nextContextId, cancellationToken).ConfigureAwait(false);
+        }
     }
 
     public async ValueTask DisposeAsync()
@@ -187,6 +286,7 @@ public sealed class EventSubConnectionHost :
         _disposed = true;
 
         _authSubscription.Dispose();
+        _activeChannelSubscription.Dispose();
         _eventSubClient.OnSessionWelcome -= OnSessionWelcomeAsync;
         _eventSubClient.OnNotification -= OnNotificationAsync;
         _eventSubClient.OnDisconnected -= OnDisconnectedAsync;
@@ -194,6 +294,7 @@ public sealed class EventSubConnectionHost :
         CancellationTokenSource? runCts;
         lock (_lockObj)
         {
+            _monitoringActive = false;
             _stopRequested = true;
             CancelAndResetReconnectToken();
             runCts = _runCts;
@@ -210,13 +311,19 @@ public sealed class EventSubConnectionHost :
     private Task OnNotificationAsync(EventSubNotificationArgs args, CancellationToken cancellationToken)
     {
         Interlocked.Exchange(ref _lastMessageAtUtcTicks, DateTimeOffset.UtcNow.UtcTicks);
+        Interlocked.Exchange(ref _unusedCloseStreak, 0);
+        _reconnectionPolicy.Reset();
         return Task.CompletedTask;
     }
 
     private Task OnSessionWelcomeAsync(EventSubSessionWelcomeArgs args, CancellationToken cancellationToken)
     {
         Interlocked.Exchange(ref _lastMessageAtUtcTicks, DateTimeOffset.UtcNow.UtcTicks);
-        _reconnectionPolicy.Reset();
+        if (Volatile.Read(ref _unusedCloseStreak) == 0)
+        {
+            _reconnectionPolicy.Reset();
+        }
+
         _logger.LogInformation("EventSub session welcome ({Role}, SessionId: {SessionId}) – статус мониторинга: Connected", _role, args.SessionId);
         return PublishStatusAsync(StreamMonitoringStatus.Connected);
     }
@@ -231,6 +338,33 @@ public sealed class EventSubConnectionHost :
             return;
         }
 
+        if (!TryResolveActiveContext(out _))
+        {
+            _logger.LogInformation("EventSub WebSocket ({Role}) отключен ({Reason}); переподключение отменено – нет авторизации роли для активного канала",
+                _role, args.Reason);
+
+            lock (_lockObj)
+            {
+                _stopRequested = true;
+                _activeContextId = null;
+                CancelAndResetReconnectToken();
+                _runCts?.Dispose();
+                _runCts = null;
+            }
+
+            await PublishStatusAsync(StreamMonitoringStatus.Disconnected).ConfigureAwait(false);
+            return;
+        }
+
+        if (args.CloseCode == ConnectionUnusedCloseCode)
+        {
+            Interlocked.Increment(ref _unusedCloseStreak);
+        }
+        else
+        {
+            Interlocked.Exchange(ref _unusedCloseStreak, 0);
+        }
+
         if (!_reconnectionPolicy.TryNextAttempt(out var delay))
         {
             _logger.LogError("EventSub WebSocket ({Role}) отключен ({Reason}); превышено максимальное количество попыток переподключения ({MaxAttempts}). Остановлен.",
@@ -241,6 +375,7 @@ public sealed class EventSubConnectionHost :
             lock (_lockObj)
             {
                 _stopRequested = true;
+                _activeContextId = null;
             }
 
             return;
@@ -293,10 +428,27 @@ public sealed class EventSubConnectionHost :
         }
     }
 
-    private bool HasAccessToken()
+    private bool TryResolveActiveContext(out string contextId)
     {
+        contextId = AuthContextIds.Default;
+
         try
         {
+            if (_channelAuthorization is not null)
+            {
+                if (_channelAuthorization.TryGetAccount(_role, out var resolvedContext, out var account)
+                    && !string.IsNullOrEmpty(account.AccessToken))
+                {
+                    contextId = resolvedContext;
+                    return true;
+                }
+
+                if (_role == PlatformAuthRole.Broadcaster)
+                {
+                    return false;
+                }
+            }
+
             return !string.IsNullOrEmpty(_accountsStore.Load(_role).AccessToken);
         }
         catch (Exception ex)
@@ -306,7 +458,7 @@ public sealed class EventSubConnectionHost :
         }
     }
 
-    private async Task StartInternalAsync(CancellationToken cancellationToken)
+    private async Task StartInternalAsync(string contextId, CancellationToken cancellationToken)
     {
         CancellationTokenSource cts;
 
@@ -322,8 +474,10 @@ public sealed class EventSubConnectionHost :
             cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             _runCts = cts;
             _stopRequested = false;
+            _activeContextId = contextId;
         }
 
+        Interlocked.Exchange(ref _unusedCloseStreak, 0);
         _reconnectionPolicy.Reset();
 
         await PublishStatusAsync(StreamMonitoringStatus.Connecting).ConfigureAwait(false);
