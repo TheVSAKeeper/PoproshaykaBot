@@ -1,4 +1,5 @@
-﻿using CommunityToolkit.Mvvm.ComponentModel;
+﻿using System.Collections.ObjectModel;
+using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using MahApps.Metro.IconPacks;
 using Microsoft.Extensions.Logging;
@@ -40,6 +41,14 @@ public sealed partial class StreamInfoTileViewModel : DashboardTileViewModel, ID
 
     [ObservableProperty]
     private bool _hasMultiplePlatforms;
+
+    [ObservableProperty]
+    private string _totalLiveViewersText = string.Empty;
+
+    [ObservableProperty]
+    private bool _hasCombinedLiveSummary;
+
+    public ObservableCollection<StreamInfoPlatformTabViewModel> PlatformTabs { get; } = [];
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasActiveChannel))]
@@ -187,6 +196,15 @@ public sealed partial class StreamInfoTileViewModel : DashboardTileViewModel, ID
         }
     }
 
+    [RelayCommand]
+    private void SelectPlatform(StreamingPlatform platform)
+    {
+        if (_platformSelection.Select(platform))
+        {
+            ApplyCurrentStatus();
+        }
+    }
+
     [RelayCommand(CanExecute = nameof(CanRefresh))]
     private async Task RefreshAsync()
     {
@@ -275,6 +293,7 @@ public sealed partial class StreamInfoTileViewModel : DashboardTileViewModel, ID
         HasMultiplePlatforms = _platformSelection.HasMultiplePlatforms;
         _switchPlatformToolbarItem.IsVisible = HasMultiplePlatforms;
         UpdateOpenChannelToolTip(PlatformVisuals.Get(SelectedPlatform).OpenStreamTooltip);
+        RefreshPlatformTabs();
 
         var platform = _platformSelection.GetSelectedPlatform();
 
@@ -469,4 +488,105 @@ public sealed partial class StreamInfoTileViewModel : DashboardTileViewModel, ID
         }
         _subs.Clear();
     }
+
+    private void RefreshPlatformTabs()
+    {
+        var available = _platformSelection.AvailablePlatforms;
+        var needsRebuild = PlatformTabs.Count != available.Count;
+        if (!needsRebuild)
+        {
+            for (var i = 0; i < available.Count; i++)
+            {
+                if (PlatformTabs[i].Platform != available[i])
+                {
+                    needsRebuild = true;
+                    break;
+                }
+            }
+        }
+
+        if (needsRebuild)
+        {
+            PlatformTabs.Clear();
+            foreach (var platformId in available)
+            {
+                var displayName = _platformRegistry.Find(platformId)?.DisplayName ?? PlatformVisuals.GetDisplayName(platformId);
+                PlatformTabs.Add(new StreamInfoPlatformTabViewModel(platformId, displayName, SelectPlatform));
+            }
+        }
+
+        var onlineCount = 0;
+        var totalViewers = 0;
+        foreach (var tab in PlatformTabs)
+        {
+            var chatPlatform = _platformRegistry.Find(tab.Platform);
+            var streamStatus = chatPlatform?.StreamStatus.CurrentStatus ?? StreamStatus.Unknown;
+            var streamInfo = chatPlatform?.StreamStatus.CurrentStream;
+            var isOnline = streamStatus == StreamStatus.Online;
+
+            tab.IsSelected = tab.Platform == SelectedPlatform;
+            tab.IsOnline = isOnline;
+            tab.StatusSeverity = isOnline ? StatusSeverity.Success : StatusSeverity.None;
+            if (isOnline)
+            {
+                onlineCount++;
+                if (streamInfo is { IsBare: false })
+                {
+                    var viewers = Math.Max(0, streamInfo.ViewerCount);
+                    totalViewers += viewers;
+                    tab.ViewerCountText = viewers.ToString("N0", UiCulture.Russian);
+                }
+                else
+                {
+                    tab.ViewerCountText = "В эфире";
+                }
+            }
+            else
+            {
+                tab.ViewerCountText = "Офлайн";
+            }
+        }
+
+        if (onlineCount >= 2)
+        {
+            HasCombinedLiveSummary = true;
+            TotalLiveViewersText = $"Всего зрителей: {totalViewers.ToString("N0", UiCulture.Russian)}";
+        }
+        else
+        {
+            HasCombinedLiveSummary = false;
+            TotalLiveViewersText = string.Empty;
+        }
+    }
+}
+
+public sealed partial class StreamInfoPlatformTabViewModel(
+    StreamingPlatform platform,
+    string displayName,
+    Action<StreamingPlatform> select) : ObservableObject
+{
+    public StreamingPlatform Platform { get; } = platform;
+
+    public string DisplayName { get; } = displayName;
+
+    [ObservableProperty]
+    private bool _isSelected;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ToolTipText))]
+    private bool _isOnline;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ToolTipText))]
+    private string _viewerCountText = "Офлайн";
+
+    [ObservableProperty]
+    private StatusSeverity _statusSeverity;
+
+    public string ToolTipText => IsOnline
+        ? $"{DisplayName} – в эфире ({ViewerCountText})"
+        : $"{DisplayName} – офлайн";
+
+    [RelayCommand]
+    private void Select() => select(Platform);
 }

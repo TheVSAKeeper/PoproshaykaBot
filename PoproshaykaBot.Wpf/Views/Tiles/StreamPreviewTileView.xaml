@@ -10,6 +10,49 @@
              d:DataContext="{d:DesignInstance vm:StreamPreviewTileViewModel}"
              d:DesignWidth="380"
              d:DesignHeight="214">
+    <UserControl.Resources>
+        <Style x:Key="PreviewPlatformPillButton" TargetType="Button">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderBrush" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="Foreground" Value="{DynamicResource Fg.Secondary}" />
+            <Setter Property="FontFamily" Value="{DynamicResource Font.Sans}" />
+            <Setter Property="FontSize" Value="{DynamicResource Font.Size.XS}" />
+            <Setter Property="FontWeight" Value="{DynamicResource Font.Weight.Medium}" />
+            <Setter Property="Padding" Value="6,2" />
+            <Setter Property="MinHeight" Value="22" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Bd"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="{DynamicResource Radius.S}"
+                                Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center"
+                                              VerticalAlignment="Center" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Bg.SurfaceAlt}" />
+                                <Setter Property="Foreground" Value="{DynamicResource Fg.Primary}" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding IsSelected}" Value="True">
+                    <Setter Property="Background" Value="{DynamicResource Accent.Soft}" />
+                    <Setter Property="BorderBrush" Value="{DynamicResource Accent.Primary}" />
+                    <Setter Property="Foreground" Value="{DynamicResource Accent.Text}" />
+                    <Setter Property="FontWeight" Value="{DynamicResource Font.Weight.SemiBold}" />
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+    </UserControl.Resources>
 
     <Grid>
         <Image x:Name="FrameImage"
@@ -44,23 +87,46 @@
         <Border HorizontalAlignment="Left"
                 VerticalAlignment="Top"
                 Margin="8"
-                Padding="6,3"
-                CornerRadius="6"
+                Padding="3"
+                CornerRadius="{DynamicResource Radius.Pill}"
                 Background="{DynamicResource Bg.Surface}"
                 BorderBrush="{DynamicResource Border.Subtle}"
                 BorderThickness="1"
+                Opacity="0.94"
                 Visibility="{Binding HasMultiplePlatforms, Converter={StaticResource BoolToVisibility}}">
-            <StackPanel Orientation="Horizontal">
-                <platformControls:PlatformIconView Platform="{Binding SelectedPlatform, Mode=OneWay}"
-                                                   Width="12"
-                                                   Height="12"
-                                                   VerticalAlignment="Center"
-                                                   Margin="0,0,5,0" />
-                <TextBlock Text="{Binding SelectedPlatformName, Mode=OneWay}"
-                           FontSize="{DynamicResource Font.Size.XS}"
-                           Foreground="{DynamicResource Fg.Secondary}"
-                           VerticalAlignment="Center" />
-            </StackPanel>
+            <ItemsControl ItemsSource="{Binding PlatformTabs}">
+                <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate>
+                        <StackPanel Orientation="Horizontal" />
+                    </ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate>
+                        <Button Style="{StaticResource PreviewPlatformPillButton}"
+                                Command="{Binding DataContext.SelectPlatformCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                CommandParameter="{Binding Platform}"
+                                ToolTip="{Binding DisplayName}"
+                                AutomationProperties.AutomationId="{Binding Platform, StringFormat='StreamPreviewTab{0}'}"
+                                AutomationProperties.Name="{Binding DisplayName}">
+                            <StackPanel Orientation="Horizontal">
+                                <platformControls:PlatformIconView Platform="{Binding Platform, Mode=OneWay}"
+                                                                   Width="12"
+                                                                   Height="12"
+                                                                   VerticalAlignment="Center"
+                                                                   Margin="0,0,4,0" />
+                                <TextBlock Text="{Binding DisplayName, Mode=OneWay}"
+                                           VerticalAlignment="Center" />
+                                <Ellipse Width="6"
+                                         Height="6"
+                                         VerticalAlignment="Center"
+                                         Margin="5,0,0,0"
+                                         Fill="{DynamicResource State.Success}"
+                                         Visibility="{Binding IsOnline, Converter={StaticResource BoolToVisibility}}" />
+                            </StackPanel>
+                        </Button>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
         </Border>
     </Grid>
 </UserControl>

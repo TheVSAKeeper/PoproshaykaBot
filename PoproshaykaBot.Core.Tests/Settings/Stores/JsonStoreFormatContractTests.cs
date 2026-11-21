@@ -2,6 +2,7 @@
 using PoproshaykaBot.Core.Infrastructure.Events;
 using PoproshaykaBot.Core.Platforms.Auth;
 using PoproshaykaBot.Core.Polls;
+using PoproshaykaBot.Core.Settings.Obs;
 using PoproshaykaBot.Core.Settings.Stores;
 using PoproshaykaBot.Core.Settings.Update;
 using PoproshaykaBot.Core.Twitch.Auth;
@@ -219,7 +220,7 @@ public sealed class JsonStoreFormatContractTests
               "enableAnimations": true,
               "maxMessages": 50,
               "showTimestamp": true,
-              "showPlatformBadge": false,
+              "platformBadgeMode": "auto",
               "emoteSizePixels": 28,
               "badgeSizePixels": 18,
               "showUserAvatars": false,
@@ -262,6 +263,20 @@ public sealed class JsonStoreFormatContractTests
                 .Load()
                 .BackgroundColor,
             Is.EqualTo(Color.FromArgb(179, 0, 0, 0)));
+    }
+
+    [TestCase("""{"showPlatformBadge":true}""", ObsPlatformBadgeMode.Always)]
+    [TestCase("""{"showPlatformBadge":false}""", ObsPlatformBadgeMode.Auto)]
+    [TestCase("""{"platformBadgeMode":"hidden","showPlatformBadge":true}""", ObsPlatformBadgeMode.Hidden)]
+    [TestCase("""{"platformBadgeMode":"ALWAYS"}""", ObsPlatformBadgeMode.Always)]
+    public void ObsChatStore_MigratesLegacyShowPlatformBadgeAndNormalizesMode(string json, string expectedMode)
+    {
+        var path = Path.Combine(_directory.FullName, "obs-chat-legacy.json");
+        File.WriteAllText(path, json);
+
+        var loaded = new ObsChatStore(Substitute.For<IEventBus>(), NullLogger<ObsChatStore>.Instance, path).Load();
+
+        Assert.That(loaded.PlatformBadgeMode, Is.EqualTo(expectedMode));
     }
 
     [Test]

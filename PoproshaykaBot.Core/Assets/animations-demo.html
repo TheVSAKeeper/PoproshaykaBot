@@ -223,11 +223,13 @@
                         <label class="demo-field-label"
                                for="cfg-showTimestamp">Показывать время</label>
                     </div>
-                    <div class="demo-field demo-field-checkbox">
-                        <input id="cfg-showPlatformBadge"
-                               type="checkbox">
-                        <label class="demo-field-label"
-                               for="cfg-showPlatformBadge">Показывать значок площадки</label>
+                    <div class="demo-field">
+                        <label class="demo-field-label" for="cfg-platformBadgeMode">Значок площадки</label>
+                        <select id="cfg-platformBadgeMode">
+                            <option value="auto">Авто (при мультистриме)</option>
+                            <option value="always">Всегда показывать</option>
+                            <option value="hidden">Скрыть</option>
+                        </select>
                     </div>
                     <div class="demo-field">
                         <label class="demo-field-label" for="cfg-emoteSizePixels">Размер эмоутов</label>

@@ -165,6 +165,74 @@ public sealed class ObsChatSettingsSectionTests
         }
     }
 
+    [Test]
+    public void PlatformBadgeModeOptions_ContainsAutoAlwaysAndHidden()
+    {
+        var vm = CreateViewModel(out _, out _);
+
+        Assert.That(vm.PlatformBadgeModeOptions, Is.EqualTo(
+        [
+            new PlatformBadgeModeOption(ObsPlatformBadgeMode.Auto, "Авто (при мультистриме)"),
+            new PlatformBadgeModeOption(ObsPlatformBadgeMode.Always, "Всегда показывать"),
+            new PlatformBadgeModeOption(ObsPlatformBadgeMode.Hidden, "Скрыть"),
+        ]));
+    }
+
+    [Test]
+    public async Task PlatformBadgeMode_LoadEditDirtyApplyAndResetCycle()
+    {
+        var vm = CreateViewModel(out var obsChatStore, out var settingsManager);
+        var bus = new InMemoryEventBus(NullLogger<InMemoryEventBus>.Instance);
+        var gate = new SettingsWriteGate();
+        var dialogs = DispatchProxy.Create<IDialogService, InertProxy>();
+        var kestrel = new KestrelHttpServer(null!, settingsManager, [], NullLogger<KestrelHttpServer>.Instance, NullLoggerFactory.Instance);
+        var obsIntegration = new ObsIntegrationSectionViewModel(null!, settingsManager, NullLogger<ObsIntegrationSectionViewModel>.Instance, dialogs, null!);
+        var obsIntegrationStore = new ObsIntegrationStore(bus, null, Path.Combine(_directory.FullName, "obs-integration.json"), gate);
+        var contributor = new ObsSettingsSectionContributor(
+            obsIntegration,
+            vm,
+            new(kestrel, dialogs, null!),
+            obsIntegrationStore,
+            obsChatStore,
+            dialogs);
+
+        vm.LoadFrom(new() { PlatformBadgeMode = "unknown" });
+        var normalizedUnknown = vm.PlatformBadgeMode;
+
+        obsChatStore.Save(new() { PlatformBadgeMode = ObsPlatformBadgeMode.Always });
+
+        var session = new SettingsSessionState { Settings = settingsManager.Current };
+        contributor.Load(session);
+        var loadedMode = vm.PlatformBadgeMode;
+
+        var dirtyCount = 0;
+        using var sub = contributor.SubscribeDirty(session, () => dirtyCount++, () => { });
+
+        vm.PlatformBadgeMode = ObsPlatformBadgeMode.Hidden;
+        var dirtyAfterEdit = dirtyCount;
+
+        var target = new ObsChatSettings();
+        vm.ApplyTo(target);
+        contributor.BeginSave(settingsManager.Current);
+        var outcome = await contributor.SaveAsync(settingsManager.Current, appSettingsWritten: true);
+        var saved = obsChatStore.Load();
+
+        vm.ResetAllCommand.Execute(null);
+        var dirtyAfterReset = dirtyCount;
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(normalizedUnknown, Is.EqualTo(ObsPlatformBadgeMode.Auto));
+            Assert.That(loadedMode, Is.EqualTo(ObsPlatformBadgeMode.Always));
+            Assert.That(dirtyAfterEdit, Is.EqualTo(1));
+            Assert.That(target.PlatformBadgeMode, Is.EqualTo(ObsPlatformBadgeMode.Hidden));
+            Assert.That(outcome.Written, Is.True);
+            Assert.That(saved.PlatformBadgeMode, Is.EqualTo(ObsPlatformBadgeMode.Hidden));
+            Assert.That(vm.PlatformBadgeMode, Is.EqualTo(ObsPlatformBadgeMode.Auto));
+            Assert.That(dirtyAfterReset, Is.EqualTo(2));
+        }
+    }
+
     private ObsChatSettingsSectionViewModel CreateViewModel(out ObsChatStore obsChatStore, out SettingsManager settingsManager)
     {
         var bus = new InMemoryEventBus(NullLogger<InMemoryEventBus>.Instance);

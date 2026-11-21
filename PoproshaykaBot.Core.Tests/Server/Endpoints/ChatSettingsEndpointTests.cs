@@ -1,6 +1,7 @@
 ﻿using Microsoft.Extensions.DependencyInjection;
 using PoproshaykaBot.Core.Infrastructure.Events;
 using PoproshaykaBot.Core.Infrastructure.Events.Settings;
+using PoproshaykaBot.Core.Platforms;
 using PoproshaykaBot.Core.Server.Endpoints;
 using PoproshaykaBot.Core.Settings.Obs;
 using PoproshaykaBot.Core.Settings.Stores;
@@ -279,6 +280,46 @@ public sealed class ChatSettingsEndpointTests
             Assert.That(flowDoc.RootElement.GetProperty("overlayTheme").GetString(), Is.EqualTo(ObsOverlayTheme.Flow));
             Assert.That(unknownPost.StatusCode, Is.EqualTo(HttpStatusCode.OK));
             Assert.That(unknownDoc.RootElement.GetProperty("overlayTheme").GetString(), Is.EqualTo(ObsOverlayTheme.Classic));
+        }
+    }
+
+    [TestCase(ObsPlatformBadgeMode.Auto, 1, false)]
+    [TestCase(ObsPlatformBadgeMode.Auto, 2, true)]
+    [TestCase(ObsPlatformBadgeMode.Always, 1, true)]
+    [TestCase(ObsPlatformBadgeMode.Hidden, 2, false)]
+    public async Task GetChatSettings_ResolvesShowPlatformBadgeFromModeAndEnabledPlatformCount(
+        string mode,
+        int enabledCount,
+        bool expectedShowBadge)
+    {
+        var store = CreateStore(new() { PlatformBadgeMode = mode });
+        var registry = Substitute.For<IChatPlatformRegistry>();
+        var platforms = Enumerable.Range(0, enabledCount)
+            .Select(_ => Substitute.For<IChatPlatform>())
+            .ToArray();
+        registry.GetEnabled().Returns(platforms);
+
+        using var server = await EndpointTestServer.CreateAsync(services =>
+            {
+                services.AddRouting();
+                services.AddSingleton(store);
+                services.AddSingleton(registry);
+            },
+            sp => new ChatSettingsEndpoint(
+                sp.GetRequiredService<ObsChatStore>(),
+                platformRegistry: sp.GetRequiredService<IChatPlatformRegistry>()));
+
+        using var client = server.CreateClient();
+        using var response = await client.GetAsync("/api/chat-settings");
+
+        var json = await response.Content.ReadAsStringAsync();
+        using var doc = JsonDocument.Parse(json);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK));
+            Assert.That(doc.RootElement.GetProperty("platformBadgeMode").GetString(), Is.EqualTo(mode));
+            Assert.That(doc.RootElement.GetProperty("showPlatformBadge").GetBoolean(), Is.EqualTo(expectedShowBadge));
         }
     }
 }

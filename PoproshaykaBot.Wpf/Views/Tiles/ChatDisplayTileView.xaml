@@ -94,7 +94,8 @@
                            Visibility="{Binding IsShown, Converter={StaticResource BoolToVisibility}}">
                     <TextBlock DockPanel.Dock="Top" Text="{Binding DisplayName}" Style="{StaticResource ChatPaneTitle}" />
                     <Grid>
-                        <wv2:WebView2 x:Name="PlatformWebView" Style="{StaticResource ChatWebView}" />
+                        <wv2:WebView2 x:Name="PlatformWebView" Style="{StaticResource ChatWebView}"
+                                      ZoomFactor="{Binding DataContext.ZoomFactor, RelativeSource={RelativeSource AncestorType=UserControl}, Mode=TwoWay}" />
                         <ContentPresenter Content="{Binding}" ContentTemplate="{StaticResource ChatFallback}"
                                           Visibility="{Binding HasFallback, Converter={StaticResource BoolToVisibility}}" />
                     </Grid>

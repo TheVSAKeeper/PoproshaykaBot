@@ -108,18 +108,26 @@ public sealed class ObsChatThreePointSyncTests
     public void ShowPlatformBadge_DefaultsToFalse_AndObsJsGuardsAvatarFetchByPlatform()
     {
         var defaults = new ObsChatSettings();
-        var css = ObsChatCssSettings.FromObsChatSettings(defaults);
+        var singlePlatformCss = ObsChatCssSettings.FromObsChatSettings(defaults);
+        var multistreamCss = ObsChatCssSettings.FromObsChatSettings(defaults, enabledPlatformCount: 2);
         var jsSource = File.ReadAllText(LocateOverlayJs());
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
-            Assert.That(defaults.ShowPlatformBadge, Is.False);
-            Assert.That(css.ShowPlatformBadge, Is.False);
+            Assert.That(defaults.PlatformBadgeMode, Is.EqualTo(ObsPlatformBadgeMode.Auto));
+            Assert.That(singlePlatformCss.PlatformBadgeMode, Is.EqualTo(ObsPlatformBadgeMode.Auto));
+            Assert.That(singlePlatformCss.ShowPlatformBadge, Is.False);
+            Assert.That(multistreamCss.ShowPlatformBadge, Is.True);
+            Assert.That(ObsPlatformBadgeMode.ResolveShowBadge(ObsPlatformBadgeMode.Auto, 1), Is.False);
+            Assert.That(ObsPlatformBadgeMode.ResolveShowBadge(ObsPlatformBadgeMode.Auto, 2), Is.True);
+            Assert.That(ObsPlatformBadgeMode.ResolveShowBadge(ObsPlatformBadgeMode.Always, 1), Is.True);
+            Assert.That(ObsPlatformBadgeMode.ResolveShowBadge(ObsPlatformBadgeMode.Hidden, 2), Is.False);
             Assert.That(jsSource, Does.Contain("no-platform-badge"));
+            Assert.That(jsSource, Does.Contain("platformBadgeMode"));
             Assert.That(jsSource, Does.Contain("isTwitchPlatform"));
             Assert.That(jsSource, Does.Contain("!isTwitchPlatform(platform)"));
             Assert.That(jsSource, Does.Contain("renderPlatformBadge"));
-        });
+        }
     }
 
     private static IEnumerable<PropertyInfo> GetMutableSourceProperties()
@@ -155,6 +163,12 @@ public sealed class ObsChatThreePointSyncTests
                 prop.SetValue(target, string.Equals(s, ObsOverlayTheme.Flow, StringComparison.Ordinal)
                     ? ObsOverlayTheme.Classic
                     : ObsOverlayTheme.Flow);
+                return true;
+
+            case string s when prop.Name == nameof(ObsChatSettings.PlatformBadgeMode):
+                prop.SetValue(target, string.Equals(s, ObsPlatformBadgeMode.Always, StringComparison.Ordinal)
+                    ? ObsPlatformBadgeMode.Auto
+                    : ObsPlatformBadgeMode.Always);
                 return true;
 
             case string s when prop.Name.Contains("Animation"):

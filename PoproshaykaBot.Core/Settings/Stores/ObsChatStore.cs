@@ -3,11 +3,18 @@ using PoproshaykaBot.Core.Infrastructure;
 using PoproshaykaBot.Core.Infrastructure.Events;
 using PoproshaykaBot.Core.Infrastructure.Events.Settings;
 using PoproshaykaBot.Core.Settings.Obs;
+using System.Text.Json;
 
 namespace PoproshaykaBot.Core.Settings.Stores;
 
 public sealed class ObsChatStore
 {
+    private static readonly JsonDocumentOptions ParseDocumentOptions = new()
+    {
+        CommentHandling = JsonCommentHandling.Skip,
+        AllowTrailingCommas = true,
+    };
+
     private readonly IEventBus _eventBus;
     private readonly JsonStore<ObsChatSettings> _store;
 
@@ -18,7 +25,7 @@ public sealed class ObsChatStore
         var path = filePath ?? AppPaths.SettingsFile("obs-chat.json");
 
         _eventBus = eventBus;
-        _store = new(path, logger, describe: Describe, gate: gate);
+        _store = new(path, logger, parser: ParseFile, describe: Describe, gate: gate);
 
         logger?.LogDebug("ObsChatStore инициализирован из {FilePath}", path);
     }
@@ -46,5 +53,58 @@ public sealed class ObsChatStore
         _store.Save(committed);
 
         _ = _eventBus.PublishAsync(new ChatSettingsChangedEvent(committed));
+    }
+
+    private static ObsChatSettings? ParseFile(string json)
+    {
+        var parsed = JsonSerializer.Deserialize<ObsChatSettings>(json, JsonStoreOptions.Default);
+
+        if (parsed == null)
+        {
+            return null;
+        }
+
+        using var document = JsonDocument.Parse(json, ParseDocumentOptions);
+
+        if (document.RootElement.ValueKind != JsonValueKind.Object)
+        {
+            parsed.PlatformBadgeMode = ObsPlatformBadgeMode.Normalize(parsed.PlatformBadgeMode);
+            return parsed;
+        }
+
+        var hasMode = TryGetPropertyIgnoreCase(document.RootElement, "platformBadgeMode", out var modeElement)
+            && modeElement.ValueKind == JsonValueKind.String
+            && !string.IsNullOrWhiteSpace(modeElement.GetString());
+
+        if (hasMode)
+        {
+            parsed.PlatformBadgeMode = ObsPlatformBadgeMode.Normalize(parsed.PlatformBadgeMode);
+        }
+        else if (TryGetPropertyIgnoreCase(document.RootElement, "showPlatformBadge", out var legacyElement)
+            && legacyElement.ValueKind == JsonValueKind.True)
+        {
+            parsed.PlatformBadgeMode = ObsPlatformBadgeMode.Always;
+        }
+        else
+        {
+            parsed.PlatformBadgeMode = ObsPlatformBadgeMode.Auto;
+        }
+
+        return parsed;
+    }
+
+    private static bool TryGetPropertyIgnoreCase(JsonElement root, string name, out JsonElement value)
+    {
+        foreach (var property in root.EnumerateObject())
+        {
+            if (string.Equals(property.Name, name, StringComparison.OrdinalIgnoreCase))
+            {
+                value = property.Value;
+                return true;
+            }
+        }
+
+        value = default;
+        return false;
     }
 }

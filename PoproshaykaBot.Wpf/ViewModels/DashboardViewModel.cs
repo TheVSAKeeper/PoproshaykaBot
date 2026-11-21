@@ -59,6 +59,7 @@ public sealed partial class DashboardViewModel : ObservableObject, IDisposable
             {
                 multistream.ConnectionToggleRequested += OnTileConnectionToggleRequested;
                 multistream.PlatformRequested += OnTilePlatformRequested;
+                multistream.StatusReported += OnTileStatusReported;
             }
         }
 
@@ -78,6 +79,7 @@ public sealed partial class DashboardViewModel : ObservableObject, IDisposable
     public event EventHandler<PoproshaykaBot.Core.Platforms.PlatformUserKey>? UserRequested;
     public event EventHandler<StreamingPlatform>? ConnectionToggleRequested;
     public event EventHandler<StreamingPlatform>? PlatformRequested;
+    public event Action<string, StatusSeverity>? StatusReported;
 
     public IReadOnlyList<TileBand> Bands { get; private set; } = [];
 
@@ -258,6 +260,7 @@ public sealed partial class DashboardViewModel : ObservableObject, IDisposable
             {
                 multistream.ConnectionToggleRequested -= OnTileConnectionToggleRequested;
                 multistream.PlatformRequested -= OnTilePlatformRequested;
+                multistream.StatusReported -= OnTileStatusReported;
             }
         }
 
@@ -282,6 +285,11 @@ public sealed partial class DashboardViewModel : ObservableObject, IDisposable
     private void OnTilePlatformRequested(object? sender, StreamingPlatform platform)
     {
         PlatformRequested?.Invoke(this, platform);
+    }
+
+    private void OnTileStatusReported(string message, StatusSeverity severity)
+    {
+        StatusReported?.Invoke(message, severity);
     }
 
     [RelayCommand]

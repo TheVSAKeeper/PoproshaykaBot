@@ -1,6 +1,7 @@
 ﻿using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
 using PoproshaykaBot.Core.Chat;
+using PoproshaykaBot.Core.Platforms;
 using PoproshaykaBot.Core.Server.Obs;
 using PoproshaykaBot.Core.Settings;
 using PoproshaykaBot.Core.Settings.Obs;
@@ -20,6 +21,7 @@ public sealed class SseService : IAsyncDisposable
     private readonly SseClientRegistry _registry;
     private readonly SseDropMetrics _metrics;
     private readonly OverlayUserRankResolver? _rankResolver;
+    private readonly IChatPlatformRegistry? _platformRegistry;
 
     private readonly Channel<SseEnvelope> _messageChannel;
     private readonly Lock _lifecycleLock = new();
@@ -39,7 +41,8 @@ public sealed class SseService : IAsyncDisposable
         SseChannelOptions options,
         SseClientRegistry registry,
         SseDropMetrics metrics,
-        OverlayUserRankResolver? rankResolver = null)
+        OverlayUserRankResolver? rankResolver = null,
+        IChatPlatformRegistry? platformRegistry = null)
     {
         _settingsManager = settingsManager;
         _obsChatStore = obsChatStore;
@@ -48,6 +51,7 @@ public sealed class SseService : IAsyncDisposable
         _registry = registry;
         _metrics = metrics;
         _rankResolver = rankResolver;
+        _platformRegistry = platformRegistry;
 
         _messageChannel = Channel.CreateBounded<SseEnvelope>(new BoundedChannelOptions(_options.GlobalChannelCapacity)
         {
@@ -262,7 +266,8 @@ public sealed class SseService : IAsyncDisposable
 
         try
         {
-            var cssSettings = ObsChatCssSettings.FromObsChatSettings(settings);
+            var enabledPlatformCount = _platformRegistry?.GetEnabled().Count ?? 1;
+            var cssSettings = ObsChatCssSettings.FromObsChatSettings(settings, enabledPlatformCount);
             var json = JsonSerializer.Serialize(cssSettings, ServerJsonOptions.Default);
 
             Enqueue(new("chat_settings_changed", json));

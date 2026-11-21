@@ -399,6 +399,58 @@ public class StreamPreviewTileTests
         });
     }
 
+    [Test]
+    public void Мультистрим_вкладки_переключают_площадку_в_один_клик_и_подгружают_её_кадр()
+    {
+        var twitchThumb = WriteNamedThumbnail("twitch.png");
+        var youtubeThumb = WriteNamedThumbnail("youtube.png");
+        var twitchStream = new FakeStreamStatus(StreamStatus.Online, OnlineInfo(twitchThumb));
+        var youtubeStream = new FakeStreamStatus(StreamStatus.Online, OnlineInfo(youtubeThumb));
+        var registry = new MultiPlatformFakeRegistry(
+            new MultiFakeChatPlatform(StreamingPlatform.Twitch, "Twitch", twitchStream),
+            new MultiFakeChatPlatform(StreamingPlatform.YouTube, "YouTube", youtubeStream));
+        var bus = new InMemoryEventBus(NullLogger<InMemoryEventBus>.Instance);
+
+        using var tile = new StreamPreviewTileViewModel(
+            registry,
+            bus,
+            NullLogger<StreamPreviewTileViewModel>.Instance,
+            new ManualUiDispatcher());
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(tile.HasMultiplePlatforms, Is.True);
+            Assert.That(tile.PlatformTabs.Select(static t => t.Platform),
+                Is.EqualTo(new[] { StreamingPlatform.Twitch, StreamingPlatform.YouTube }));
+            Assert.That(tile.PlatformTabs[0].IsSelected, Is.True);
+            Assert.That(tile.PlatformTabs[0].IsOnline, Is.True);
+            Assert.That(tile.PlatformTabs[1].IsSelected, Is.False);
+            Assert.That(tile.PlatformTabs[1].IsOnline, Is.True);
+            Assert.That(tile.Thumbnail?.UriSource.LocalPath, Does.EndWith("twitch.png"));
+        });
+
+        tile.SelectPlatformCommand.Execute(StreamingPlatform.YouTube);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(tile.SelectedPlatform, Is.EqualTo(StreamingPlatform.YouTube));
+            Assert.That(tile.PlatformTabs[0].IsSelected, Is.False);
+            Assert.That(tile.PlatformTabs[1].IsSelected, Is.True);
+            Assert.That(tile.Thumbnail?.UriSource.LocalPath, Does.EndWith("youtube.png"));
+        });
+
+        youtubeStream.Status = StreamStatus.Offline;
+        bus.PublishAsync(new StreamWentOffline(StreamingPlatform.YouTube, "yt")).GetAwaiter().GetResult();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(tile.SelectedPlatform, Is.EqualTo(StreamingPlatform.YouTube));
+            Assert.That(tile.PlatformTabs[1].IsOnline, Is.False);
+            Assert.That(tile.PlatformTabs[0].IsOnline, Is.True);
+            Assert.That(tile.Thumbnail, Is.Null);
+        });
+    }
+
     private static void Arrange(FrameworkElement host)
     {
         for (var pass = 0; pass < 4; pass++)
@@ -485,9 +537,14 @@ public class StreamPreviewTileTests
 
     private string WriteFixedThumbnail()
     {
-        WriteImage("preview.png");
+        return WriteNamedThumbnail("preview.png");
+    }
 
-        return new Uri(_directory).AbsoluteUri.TrimEnd('/') + "/preview.png";
+    private string WriteNamedThumbnail(string name)
+    {
+        WriteImage(name);
+
+        return new Uri(_directory).AbsoluteUri.TrimEnd('/') + "/" + name;
     }
 
     private void WriteImage(string name)
@@ -571,6 +628,44 @@ public class StreamPreviewTileTests
 
             public string BuildStreamUrl(StreamInfo? stream = null) => "https://twitch.tv/streamer";
         }
+    }
+
+    private sealed class MultiPlatformFakeRegistry(params IChatPlatform[] platforms) : IChatPlatformRegistry
+    {
+        public IReadOnlyList<IChatPlatform> All => platforms;
+
+        public bool TryGet(StreamingPlatform platform, [NotNullWhen(true)] out IChatPlatform? chatPlatform)
+        {
+            chatPlatform = platforms.FirstOrDefault(p => p.Id == platform);
+            return chatPlatform is not null;
+        }
+
+        public IChatPlatform? Find(StreamingPlatform platform) => platforms.FirstOrDefault(p => p.Id == platform);
+
+        public IChatPlatform GetRequired(StreamingPlatform platform) => Find(platform) ?? throw new KeyNotFoundException();
+
+        public IReadOnlyList<IChatPlatform> GetEnabled() => platforms.Where(static p => p.IsEnabled).ToArray();
+
+        public IReadOnlyList<IChatPlatform> GetConnected() => platforms.Where(static p => p.IsConnected).ToArray();
+    }
+
+    private sealed class MultiFakeChatPlatform(StreamingPlatform id, string displayName, IStreamStatus streamStatus) : IChatPlatform
+    {
+        public StreamingPlatform Id => id;
+
+        public string DisplayName => displayName;
+
+        public PlatformCapabilities Capabilities => PlatformCapabilities.None;
+
+        public bool IsEnabled => true;
+
+        public bool IsConnected => false;
+
+        public IStreamStatus StreamStatus => streamStatus;
+
+        public IPlatformMessenger Messenger => null!;
+
+        public string ConfiguredChannel => "channel";
     }
 
     private sealed class FakeStreamStatus(StreamStatus status, StreamInfo? info) : IStreamStatus

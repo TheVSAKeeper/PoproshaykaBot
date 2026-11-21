@@ -246,9 +246,16 @@
                           IsChecked="{Binding ShowTimestamp, Mode=TwoWay}"
                           Margin="0,0,0,8" />
 
-                <CheckBox Style="{StaticResource CheckBox.Default}"
-                          Content="Показывать значок площадки"
-                          IsChecked="{Binding ShowPlatformBadge, Mode=TwoWay}" />
+                <TextBlock Text="Значок площадки"
+                           Style="{StaticResource Form.Label}"
+                           Margin="0,4,0,4" />
+
+                <ComboBox Style="{StaticResource ComboBox.Form}"
+                          ItemsSource="{Binding PlatformBadgeModeOptions}"
+                          DisplayMemberPath="Label"
+                          SelectedValuePath="Value"
+                          AutomationProperties.Name="Значок площадки"
+                          SelectedValue="{Binding PlatformBadgeMode, Mode=TwoWay}" />
             </StackPanel>
         </WrapPanel>
 

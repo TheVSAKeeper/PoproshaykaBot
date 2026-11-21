@@ -20,6 +20,7 @@ using PoproshaykaBot.Wpf.Views.Tiles;
 using System.IO;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Data;
 
 namespace PoproshaykaBot.Wpf.Tests.Tiles;
 
@@ -283,6 +284,57 @@ public sealed class WebViewTileModalHidingTests
         {
             button.ContextMenu!.IsOpen = false;
             window.Close();
+        }
+    }
+
+    [Test]
+    public void Масштаб_и_сброс_масштаба_работают_для_YouTube_чата()
+    {
+        var status = new FakeStreamStatus();
+        var registry = new ChatPlatformRegistry([
+            new FakeChatPlatform(StreamingPlatform.Twitch, "Twitch", new FakeStreamStatus()),
+            new FakeChatPlatform(StreamingPlatform.YouTube, "YouTube", status),
+        ]);
+
+        var viewModel = (ChatDisplayTileViewModel)CreateViewModel(Tile.Chat, registry);
+        var view = CreateView(Tile.Chat, viewModel);
+        var youtubeBrowser = (WebView2)view.FindName("PlatformWebView");
+        var resetZoomAction = viewModel.HeaderActions.Single(action => ReferenceEquals(action.Command, viewModel.ResetZoomCommand));
+
+        SelectMode(viewModel, StreamingPlatform.YouTube);
+        Layout(view);
+
+        var zoomBinding = BindingOperations.GetBinding(youtubeBrowser, WebView2.ZoomFactorProperty);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(viewModel.TwitchChat.IsShown, Is.False);
+            Assert.That(viewModel.PlatformChat.IsShown, Is.True);
+            Assert.That(resetZoomAction.IsVisible, Is.True);
+            Assert.That(resetZoomAction.IsEnabled, Is.True);
+            Assert.That(zoomBinding, Is.Not.Null);
+            Assert.That(zoomBinding!.Path.Path, Is.EqualTo("DataContext.ZoomFactor"));
+            Assert.That(zoomBinding.Mode, Is.EqualTo(BindingMode.TwoWay));
+        }
+
+        viewModel.ZoomFactor = 1.5;
+        Assert.That(youtubeBrowser.ZoomFactor, Is.EqualTo(1.5).Within(0.001));
+
+        viewModel.ResetZoomCommand.Execute(null);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(viewModel.ZoomFactor, Is.EqualTo(ChatDisplayStore.DefaultZoom).Within(0.001));
+            Assert.That(youtubeBrowser.ZoomFactor, Is.EqualTo(ChatDisplayStore.DefaultZoom).Within(0.001));
+        }
+
+        SelectMode(viewModel, StreamingPlatform.Twitch);
+        status.CurrentStatus = StreamStatus.Offline;
+        SelectMode(viewModel, StreamingPlatform.YouTube);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(resetZoomAction.IsVisible, Is.True);
+            Assert.That(resetZoomAction.IsEnabled, Is.False);
         }
     }
 

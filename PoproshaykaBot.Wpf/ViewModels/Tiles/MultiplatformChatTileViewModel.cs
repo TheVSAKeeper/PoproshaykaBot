@@ -8,10 +8,13 @@ using PoproshaykaBot.Core.Infrastructure.Events;
 using PoproshaykaBot.Core.Infrastructure.Events.Chat;
 using PoproshaykaBot.Core.Infrastructure.Events.Streaming;
 using PoproshaykaBot.Core.Platforms;
+using PoproshaykaBot.Wpf.Bootstrap;
 using PoproshaykaBot.Wpf.Infrastructure;
 using PoproshaykaBot.Wpf.Infrastructure.Platforms;
 using PoproshaykaBot.Wpf.ViewModels.Tiles.Chat;
 using System.Collections.ObjectModel;
+using System.Globalization;
+using System.Windows;
 
 namespace PoproshaykaBot.Wpf.ViewModels.Tiles;
 
@@ -19,14 +22,22 @@ public sealed partial class MultiplatformChatTileViewModel : DashboardTileViewMo
 {
     public const string TileTypeId = "multiplatform-chat";
     public const int MaxFeedItems = 250;
+    public const double DefaultFeedFontSize = 13.0;
+    public const double MinFeedFontSize = 11.0;
+    public const double MaxFeedFontSize = 24.0;
+    public const double FontSizeStep = 1.0;
 
     private readonly ChatHistoryManager _chatHistory;
     private readonly IChatHistorySettingsProvider? _chatSettingsProvider;
     private readonly IChatPlatformRegistry? _platformRegistry;
     private readonly IUiDispatcher? _uiDispatcher;
+    private readonly ISettingsStore? _uiSettings;
     private readonly List<IDisposable> _subscriptions = [];
     private readonly List<ChatFeedItemViewModel> _allItems = [];
     private readonly ChatFeedHistoryBoundaryItemViewModel _historyBoundaryItem = new();
+
+    private double _feedFontSize;
+    private bool _suppressPersist;
 
     [ObservableProperty]
     private PlatformFilterOption _selectedPlatformFilter = PlatformFilterOption.All;
@@ -39,12 +50,29 @@ public sealed partial class MultiplatformChatTileViewModel : DashboardTileViewMo
     [NotifyPropertyChangedFor(nameof(HasUnread), nameof(UnreadButtonText))]
     private int _unreadCount;
 
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(FeedLineHeight), nameof(FeedItemPadding))]
+    private bool _isCompactMode;
+
+    [ObservableProperty]
+    private bool _showTimestamps;
+
+    [ObservableProperty]
+    private bool _showPlatformIcons;
+
+    [ObservableProperty]
+    private bool _showRoleBadges;
+
+    [ObservableProperty]
+    private bool _isAppearancePanelOpen;
+
     public MultiplatformChatTileViewModel(
         ChatHistoryManager chatHistory,
         IEventBus eventBus,
         IChatHistorySettingsProvider? chatSettingsProvider = null,
         IUiDispatcher? uiDispatcher = null,
-        IChatPlatformRegistry? platformRegistry = null)
+        IChatPlatformRegistry? platformRegistry = null,
+        ISettingsStore? uiSettings = null)
         : base(TileTypeId, "Общий чат", minWidth: 280, minHeight: 220)
     {
         ArgumentNullException.ThrowIfNull(chatHistory);
@@ -54,9 +82,21 @@ public sealed partial class MultiplatformChatTileViewModel : DashboardTileViewMo
         _chatSettingsProvider = chatSettingsProvider;
         _platformRegistry = platformRegistry;
         _uiDispatcher = uiDispatcher;
+        _uiSettings = uiSettings;
         PlatformOptions = platformRegistry is null
             ? PlatformFilterOption.AllOptions
             : [PlatformFilterOption.All, .. platformRegistry.All.Select(static platform => new PlatformFilterOption(platform.Id, platform.DisplayName))];
+
+        _feedFontSize = LoadFontSize();
+        _isCompactMode = LoadBool(SettingsKeys.ChatFeedCompactMode, defaultValue: false);
+        _showTimestamps = LoadBool(SettingsKeys.ChatFeedShowTimestamps, defaultValue: true);
+        _showPlatformIcons = LoadBool(SettingsKeys.ChatFeedShowPlatformIcons, defaultValue: true);
+        _showRoleBadges = LoadBool(SettingsKeys.ChatFeedShowRoleBadges, defaultValue: true);
+
+        HeaderActions.Add(new ToolbarItemViewModel(
+            PackIconLucideKind.SlidersHorizontal,
+            ToggleAppearancePanelCommand,
+            "Настройки отображения ленты"));
 
         _subscriptions.Add(eventBus.SubscribeOnUi<ChatHistoryLoaded>(OnChatHistoryLoaded));
         _subscriptions.Add(eventBus.SubscribeOnUi<ChatMessageReceived>(OnChatMessageReceived));
@@ -93,6 +133,42 @@ public sealed partial class MultiplatformChatTileViewModel : DashboardTileViewMo
 
     public string UnreadButtonText => $"↓ Новые сообщения ({UnreadCount})";
 
+    public double FeedFontSize
+    {
+        get => _feedFontSize;
+        set
+        {
+            var normalized = ClampFontSize(value);
+            if (!SetProperty(ref _feedFontSize, normalized))
+            {
+                return;
+            }
+
+            NotifyFontMetricsChanged();
+            IncreaseFontSizeCommand.NotifyCanExecuteChanged();
+            DecreaseFontSizeCommand.NotifyCanExecuteChanged();
+            PersistSetting(SettingsKeys.ChatFeedFontSize, normalized.ToString("0.##", CultureInfo.InvariantCulture));
+        }
+    }
+
+    public double FeedMetaFontSize => Math.Max(10.0, FeedFontSize - 2.0);
+
+    public double FeedLineHeight => IsCompactMode
+        ? Math.Round(FeedFontSize * 1.28)
+        : Math.Round(FeedFontSize * 1.48);
+
+    public Thickness FeedItemPadding => IsCompactMode
+        ? new Thickness(2, 1, 2, 1)
+        : new Thickness(2, 3, 2, 3);
+
+    public double FeedPlatformIconSize => Math.Round(FeedFontSize * 1.05);
+
+    public string FeedFontSizeText => string.Create(CultureInfo.InvariantCulture, $"{FeedFontSize:0} px");
+
+    public bool CanDecreaseFontSize => FeedFontSize > MinFeedFontSize;
+
+    public bool CanIncreaseFontSize => FeedFontSize < MaxFeedFontSize;
+
     public void UpdateScrollPosition(bool isAtBottom)
     {
         IsPinnedToBottom = isAtBottom;
@@ -109,6 +185,44 @@ public sealed partial class MultiplatformChatTileViewModel : DashboardTileViewMo
         IsPinnedToBottom = true;
         UnreadCount = 0;
         ScrollToBottomRequested?.Invoke(this, EventArgs.Empty);
+    }
+
+    [RelayCommand(CanExecute = nameof(CanIncreaseFontSize))]
+    private void IncreaseFontSize()
+    {
+        FeedFontSize = Math.Min(MaxFeedFontSize, FeedFontSize + FontSizeStep);
+    }
+
+    [RelayCommand(CanExecute = nameof(CanDecreaseFontSize))]
+    private void DecreaseFontSize()
+    {
+        FeedFontSize = Math.Max(MinFeedFontSize, FeedFontSize - FontSizeStep);
+    }
+
+    [RelayCommand]
+    private void ToggleAppearancePanel()
+    {
+        IsAppearancePanelOpen = !IsAppearancePanelOpen;
+    }
+
+    [RelayCommand]
+    private void ResetAppearance()
+    {
+        _suppressPersist = true;
+        try
+        {
+            FeedFontSize = DefaultFeedFontSize;
+            IsCompactMode = false;
+            ShowTimestamps = true;
+            ShowPlatformIcons = true;
+            ShowRoleBadges = true;
+        }
+        finally
+        {
+            _suppressPersist = false;
+        }
+
+        PersistAllAppearanceSettings();
     }
 
     public void Dispose()
@@ -131,6 +245,83 @@ public sealed partial class MultiplatformChatTileViewModel : DashboardTileViewMo
         RebuildVisibleItems();
         ScrollToBottom();
     }
+
+    partial void OnIsCompactModeChanged(bool value)
+    {
+        PersistBool(SettingsKeys.ChatFeedCompactMode, value);
+    }
+
+    partial void OnShowTimestampsChanged(bool value)
+    {
+        PersistBool(SettingsKeys.ChatFeedShowTimestamps, value);
+    }
+
+    partial void OnShowPlatformIconsChanged(bool value)
+    {
+        PersistBool(SettingsKeys.ChatFeedShowPlatformIcons, value);
+    }
+
+    partial void OnShowRoleBadgesChanged(bool value)
+    {
+        PersistBool(SettingsKeys.ChatFeedShowRoleBadges, value);
+    }
+
+    private double LoadFontSize()
+    {
+        var raw = _uiSettings?.GetStringValue(SettingsKeys.ChatFeedFontSize);
+        if (double.TryParse(raw, NumberStyles.Float, CultureInfo.InvariantCulture, out var parsed)
+            && double.IsFinite(parsed))
+        {
+            return ClampFontSize(parsed);
+        }
+
+        return DefaultFeedFontSize;
+    }
+
+    private bool LoadBool(string key, bool defaultValue)
+    {
+        var raw = _uiSettings?.GetStringValue(key);
+        return bool.TryParse(raw, out var parsed) ? parsed : defaultValue;
+    }
+
+    private void PersistBool(string key, bool value)
+    {
+        PersistSetting(key, value ? "true" : "false");
+    }
+
+    private void PersistSetting(string key, string value)
+    {
+        if (_suppressPersist)
+        {
+            return;
+        }
+
+        _uiSettings?.SetValue(key, value);
+    }
+
+    private void PersistAllAppearanceSettings()
+    {
+        PersistSetting(SettingsKeys.ChatFeedFontSize, FeedFontSize.ToString("0.##", CultureInfo.InvariantCulture));
+        PersistBool(SettingsKeys.ChatFeedCompactMode, IsCompactMode);
+        PersistBool(SettingsKeys.ChatFeedShowTimestamps, ShowTimestamps);
+        PersistBool(SettingsKeys.ChatFeedShowPlatformIcons, ShowPlatformIcons);
+        PersistBool(SettingsKeys.ChatFeedShowRoleBadges, ShowRoleBadges);
+    }
+
+    private void NotifyFontMetricsChanged()
+    {
+        OnPropertyChanged(nameof(FeedMetaFontSize));
+        OnPropertyChanged(nameof(FeedLineHeight));
+        OnPropertyChanged(nameof(FeedPlatformIconSize));
+        OnPropertyChanged(nameof(FeedFontSizeText));
+        OnPropertyChanged(nameof(CanDecreaseFontSize));
+        OnPropertyChanged(nameof(CanIncreaseFontSize));
+    }
+
+    private static double ClampFontSize(double value) =>
+        double.IsFinite(value)
+            ? Math.Clamp(value, MinFeedFontSize, MaxFeedFontSize)
+            : DefaultFeedFontSize;
 
     private void OnChatSettingsChanged(Core.Settings.Chat.ChatSettings _)
     {

@@ -1,4 +1,5 @@
-﻿using CommunityToolkit.Mvvm.ComponentModel;
+﻿using System.Collections.ObjectModel;
+using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using KeepShell.Services;
 using KeepShell.ViewModels;
@@ -12,6 +13,7 @@ using PoproshaykaBot.Core.Infrastructure.Events.Streaming;
 using PoproshaykaBot.Core.Platforms;
 using PoproshaykaBot.Core.Settings;
 using PoproshaykaBot.Core.Settings.Stores;
+using PoproshaykaBot.Core.Streaming;
 using PoproshaykaBot.Wpf.Infrastructure;
 
 namespace PoproshaykaBot.Wpf.ViewModels.Tiles;
@@ -48,6 +50,11 @@ public sealed partial class BroadcastStatusTileViewModel : DashboardTileViewMode
 
     [ObservableProperty]
     private string _platformsText = "–";
+
+    [ObservableProperty]
+    private bool _hasTargetPlatformChips;
+
+    public ObservableCollection<BroadcastPlatformTargetChipViewModel> TargetPlatformChips { get; } = [];
 
     [ObservableProperty]
     private int _sentCount;
@@ -94,6 +101,7 @@ public sealed partial class BroadcastStatusTileViewModel : DashboardTileViewMode
         _subscriptions.Add(eventBus.SubscribeOnUi<StreamWentOffline>(_ => RefreshState()));
         _subscriptions.Add(eventBus.SubscribeOnUi<StreamMetadataResolved>(_ => RefreshState()));
         _subscriptions.Add(eventBus.SubscribeOnUi<BotLifecyclePhaseChanged>(_ => RefreshState()));
+        _subscriptions.Add(eventBus.SubscribeOnUi<PlatformConnectionChanged>(_ => RefreshState()));
         _subscriptions.Add(eventBus.SubscribeOnUi<ActiveChannelChanged>(_ => RefreshState()));
 
         if (_youtubeSettingsStore is not null)
@@ -101,10 +109,25 @@ public sealed partial class BroadcastStatusTileViewModel : DashboardTileViewMode
             _youtubeSettingsStore.Changed += OnYouTubeSettingsChanged;
         }
 
+        if (_catalogStore is not null)
+        {
+            _catalogStore.Changed += OnCatalogChanged;
+        }
+
         RefreshState();
     }
 
     private void OnYouTubeSettingsChanged()
+    {
+        DispatchRefreshState();
+    }
+
+    private void OnCatalogChanged(object? sender, EventArgs e)
+    {
+        DispatchRefreshState();
+    }
+
+    private void DispatchRefreshState()
     {
         if (_uiDispatcher is not null)
         {
@@ -200,7 +223,9 @@ public sealed partial class BroadcastStatusTileViewModel : DashboardTileViewMode
 
         IsActive = isActive;
         ModeText = isAuto ? "Авто" : "Ручной";
-        PlatformsText = FormatTargetPlatforms(_platformTargetsProvider.GetTargetPlatforms());
+        var targets = _platformTargetsProvider.GetTargetPlatforms();
+        PlatformsText = FormatTargetPlatforms(targets);
+        RefreshTargetPlatformChips(targets);
         SentCount = _scheduler.SentMessagesCount;
 
         var nextTime = _scheduler.NextBroadcastTime;
@@ -259,20 +284,89 @@ public sealed partial class BroadcastStatusTileViewModel : DashboardTileViewMode
         var labels = new List<string>(targets.Count);
         foreach (var platform in targets.Order())
         {
-            var display = _platformRegistry.GetDisplayName(platform);
-            if (_catalogStore is not null && _catalogStore.GetConfiguredChannels(platform).Count > 1)
-            {
-                var active = _platformRegistry.GetConfiguredChannel(platform);
-                if (!string.IsNullOrWhiteSpace(active))
-                {
-                    display = $"{display} ({active})";
-                }
-            }
-
-            labels.Add(display);
+            labels.Add(FormatPlatformDisplayName(platform));
         }
 
         return string.Join(", ", labels);
+    }
+
+    private string FormatPlatformDisplayName(StreamingPlatform platform)
+    {
+        var display = _platformRegistry.GetDisplayName(platform);
+        if (_catalogStore is not null && _catalogStore.GetConfiguredChannels(platform).Count > 1)
+        {
+            var active = _platformRegistry.GetConfiguredChannel(platform);
+            if (!string.IsNullOrWhiteSpace(active))
+            {
+                display = $"{display} ({active})";
+            }
+        }
+
+        return display;
+    }
+
+    private void RefreshTargetPlatformChips(IReadOnlySet<StreamingPlatform> targets)
+    {
+        var nextChips = new List<BroadcastPlatformTargetChipViewModel>(targets.Count);
+        foreach (var platform in targets.Order())
+        {
+            var displayName = FormatPlatformDisplayName(platform);
+            var chatPlatform = _platformRegistry.Find(platform);
+            var isEnabled = chatPlatform?.IsEnabled ?? false;
+            var isOnline = _broadcastState.IsPlatformLive(platform)
+                || chatPlatform?.StreamStatus.CurrentStatus == StreamStatus.Online;
+            var isConnected = chatPlatform?.IsConnected ?? false;
+
+            var (stateLabel, severity, tooltip) = ResolveTargetPlatformChipState(displayName, isEnabled, isOnline, isConnected);
+            nextChips.Add(new BroadcastPlatformTargetChipViewModel(platform, displayName, stateLabel, severity, tooltip));
+        }
+
+        var same = TargetPlatformChips.Count == nextChips.Count;
+        if (same)
+        {
+            for (var i = 0; i < nextChips.Count; i++)
+            {
+                if (TargetPlatformChips[i] != nextChips[i])
+                {
+                    same = false;
+                    break;
+                }
+            }
+        }
+
+        if (!same)
+        {
+            TargetPlatformChips.Clear();
+            foreach (var chip in nextChips)
+            {
+                TargetPlatformChips.Add(chip);
+            }
+        }
+
+        HasTargetPlatformChips = TargetPlatformChips.Count > 0;
+    }
+
+    private static (string StateLabel, StatusSeverity Severity, string ToolTipText) ResolveTargetPlatformChipState(
+        string displayName,
+        bool isEnabled,
+        bool isOnline,
+        bool isConnected)
+    {
+        if (!isEnabled)
+        {
+            return ("Выключена", StatusSeverity.Warning, $"{displayName} – площадка выключена, рассылка туда не отправится");
+        }
+
+        if (isOnline)
+        {
+            return isConnected
+                ? ("В эфире", StatusSeverity.Success, $"{displayName} – в эфире, чат подключён")
+                : ("В эфире", StatusSeverity.Warning, $"{displayName} – в эфире, но чат не подключён");
+        }
+
+        return isConnected
+            ? ("Подключён", StatusSeverity.Success, $"{displayName} – чат подключён, эфир не идёт")
+            : ("Офлайн", StatusSeverity.None, $"{displayName} – офлайн");
     }
 
     private static (string text, StatusSeverity severity) ResolveStatus(bool isActive, bool isAuto, bool streamOnline)
@@ -297,6 +391,11 @@ public sealed partial class BroadcastStatusTileViewModel : DashboardTileViewMode
             _youtubeSettingsStore.Changed -= OnYouTubeSettingsChanged;
         }
 
+        if (_catalogStore is not null)
+        {
+            _catalogStore.Changed -= OnCatalogChanged;
+        }
+
         foreach (var sub in _subscriptions)
         {
             sub.Dispose();
@@ -305,3 +404,10 @@ public sealed partial class BroadcastStatusTileViewModel : DashboardTileViewMode
         _subscriptions.Clear();
     }
 }
+
+public sealed record BroadcastPlatformTargetChipViewModel(
+    StreamingPlatform Platform,
+    string DisplayName,
+    string StateLabel,
+    StatusSeverity Severity,
+    string ToolTipText);

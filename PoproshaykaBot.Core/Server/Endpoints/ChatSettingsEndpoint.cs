@@ -2,6 +2,7 @@
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.Logging;
+using PoproshaykaBot.Core.Platforms;
 using PoproshaykaBot.Core.Server.Obs;
 using PoproshaykaBot.Core.Settings.Obs;
 using PoproshaykaBot.Core.Settings.Stores;
@@ -9,14 +10,18 @@ using System.Text.Json;
 
 namespace PoproshaykaBot.Core.Server.Endpoints;
 
-internal sealed class ChatSettingsEndpoint(ObsChatStore obsChatStore, ILogger<ChatSettingsEndpoint>? logger = null) : IEndpointMapper
+internal sealed class ChatSettingsEndpoint(
+    ObsChatStore obsChatStore,
+    ILogger<ChatSettingsEndpoint>? logger = null,
+    IChatPlatformRegistry? platformRegistry = null) : IEndpointMapper
 {
     public void Map(IEndpointRouteBuilder endpoints)
     {
         endpoints.MapGet("/api/chat-settings", () =>
         {
             var settings = obsChatStore.Load();
-            var cssSettings = ObsChatCssSettings.FromObsChatSettings(settings);
+            var enabledPlatformCount = platformRegistry?.GetEnabled().Count ?? 1;
+            var cssSettings = ObsChatCssSettings.FromObsChatSettings(settings, enabledPlatformCount);
             return Results.Json(cssSettings, ServerJsonOptions.Default);
         });
 

@@ -1,4 +1,5 @@
-﻿using CommunityToolkit.Mvvm.ComponentModel;
+﻿using System.Collections.ObjectModel;
+using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using KeepShell.ViewModels;
 using MahApps.Metro.IconPacks;
@@ -11,6 +12,7 @@ using PoproshaykaBot.Core.Settings.Stores;
 using PoproshaykaBot.Core.Streaming;
 using PoproshaykaBot.Wpf.Bootstrap;
 using PoproshaykaBot.Wpf.Infrastructure;
+using PoproshaykaBot.Wpf.Infrastructure.Platforms;
 using System.Globalization;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
@@ -26,6 +28,7 @@ public sealed partial class StreamPreviewTileViewModel : DashboardTileViewModel,
     private const int DecodeWidthStep = 64;
     private const double GrowthFactor = 1.5;
 
+    private readonly IChatPlatformRegistry _platformRegistry;
     private readonly TilePlatformSelection _platformSelection;
     private readonly ILogger<StreamPreviewTileViewModel> _logger;
     private readonly IUiDispatcher _uiDispatcher;
@@ -45,6 +48,8 @@ public sealed partial class StreamPreviewTileViewModel : DashboardTileViewModel,
 
     [ObservableProperty]
     private bool _hasMultiplePlatforms;
+
+    public ObservableCollection<StreamPreviewPlatformTabViewModel> PlatformTabs { get; } = [];
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(ContentFillsTile))]
@@ -71,6 +76,7 @@ public sealed partial class StreamPreviewTileViewModel : DashboardTileViewModel,
         ArgumentNullException.ThrowIfNull(bus);
         ArgumentNullException.ThrowIfNull(uiDispatcher);
 
+        _platformRegistry = platformRegistry;
         _platformSelection = new TilePlatformSelection(platformRegistry);
         _logger = logger;
         _uiDispatcher = uiDispatcher;
@@ -190,6 +196,15 @@ public sealed partial class StreamPreviewTileViewModel : DashboardTileViewModel,
         }
     }
 
+    [RelayCommand]
+    private void SelectPlatform(StreamingPlatform platform)
+    {
+        if (_platformSelection.Select(platform))
+        {
+            ApplyCurrentStatus();
+        }
+    }
+
     [RelayCommand(CanExecute = nameof(CanRefreshFrame))]
     private void RefreshFrame()
     {
@@ -249,6 +264,7 @@ public sealed partial class StreamPreviewTileViewModel : DashboardTileViewModel,
         SelectedPlatform = _platformSelection.SelectedPlatform;
         HasMultiplePlatforms = _platformSelection.HasMultiplePlatforms;
         _switchPlatformToolbarItem.IsVisible = HasMultiplePlatforms;
+        RefreshPlatformTabs();
 
         var stream = _platformSelection.GetSelectedPlatform()?.StreamStatus;
         if (stream is { CurrentStatus: StreamStatus.Online, CurrentStream: { IsBare: false } info })
@@ -258,6 +274,40 @@ public sealed partial class StreamPreviewTileViewModel : DashboardTileViewModel,
         }
 
         ClearFrame();
+    }
+
+    private void RefreshPlatformTabs()
+    {
+        var available = _platformSelection.AvailablePlatforms;
+        var needsRebuild = PlatformTabs.Count != available.Count;
+        if (!needsRebuild)
+        {
+            for (var i = 0; i < available.Count; i++)
+            {
+                if (PlatformTabs[i].Platform != available[i])
+                {
+                    needsRebuild = true;
+                    break;
+                }
+            }
+        }
+
+        if (needsRebuild)
+        {
+            PlatformTabs.Clear();
+            foreach (var platformId in available)
+            {
+                var displayName = _platformRegistry.Find(platformId)?.DisplayName ?? PlatformVisuals.GetDisplayName(platformId);
+                PlatformTabs.Add(new StreamPreviewPlatformTabViewModel(platformId, displayName));
+            }
+        }
+
+        foreach (var tab in PlatformTabs)
+        {
+            var chatPlatform = _platformRegistry.Find(tab.Platform);
+            tab.IsSelected = tab.Platform == SelectedPlatform;
+            tab.IsOnline = chatPlatform?.StreamStatus.CurrentStatus == StreamStatus.Online;
+        }
     }
 
     private void LoadThumbnail(string raw)
@@ -422,4 +472,19 @@ public sealed partial class StreamPreviewTileViewModel : DashboardTileViewModel,
         _pending = null;
         IsLoading = false;
     }
+}
+
+public sealed partial class StreamPreviewPlatformTabViewModel(
+    StreamingPlatform platform,
+    string displayName) : ObservableObject
+{
+    public StreamingPlatform Platform { get; } = platform;
+
+    public string DisplayName { get; } = displayName;
+
+    [ObservableProperty]
+    private bool _isSelected;
+
+    [ObservableProperty]
+    private bool _isOnline;
 }

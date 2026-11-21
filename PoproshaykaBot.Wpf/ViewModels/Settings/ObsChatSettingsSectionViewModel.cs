@@ -74,7 +74,7 @@ public sealed partial class ObsChatSettingsSectionViewModel : ObservableValidato
     private bool _showTimestamp = Defaults.ShowTimestamp;
 
     [ObservableProperty]
-    private bool _showPlatformBadge = Defaults.ShowPlatformBadge;
+    private string _platformBadgeMode = Defaults.PlatformBadgeMode;
 
     [ObservableProperty]
     private int _emoteSizePixels = Defaults.EmoteSizePixels;
@@ -176,6 +176,10 @@ public sealed partial class ObsChatSettingsSectionViewModel : ObservableValidato
             .Select(option => new OverlayThemeOption(option.Value, option.DisplayName))
             .ToArray();
 
+        PlatformBadgeModeOptions = ObsPlatformBadgeMode.Modes
+            .Select(option => new PlatformBadgeModeOption(option.Value, option.DisplayName))
+            .ToArray();
+
         EntryAnimationOptions = MessageAnimationType.EntryAnimations
             .Select(option => new AnimationOption(option.Value, option.DisplayName))
             .ToArray();
@@ -190,6 +194,8 @@ public sealed partial class ObsChatSettingsSectionViewModel : ObservableValidato
     public string Title => "Чат OBS";
 
     public IReadOnlyList<OverlayThemeOption> OverlayThemeOptions { get; }
+
+    public IReadOnlyList<PlatformBadgeModeOption> PlatformBadgeModeOptions { get; }
 
     public IReadOnlyList<AnimationOption> EntryAnimationOptions { get; }
 
@@ -224,7 +230,7 @@ public sealed partial class ObsChatSettingsSectionViewModel : ObservableValidato
 
         MaxMessages = settings.MaxMessages;
         ShowTimestamp = settings.ShowTimestamp;
-        ShowPlatformBadge = settings.ShowPlatformBadge;
+        PlatformBadgeMode = ObsPlatformBadgeMode.Normalize(settings.PlatformBadgeMode);
 
         EmoteSizePixels = settings.EmoteSizePixels;
         BadgeSizePixels = settings.BadgeSizePixels;
@@ -292,7 +298,7 @@ public sealed partial class ObsChatSettingsSectionViewModel : ObservableValidato
 
         target.MaxMessages = current.MaxMessages;
         target.ShowTimestamp = current.ShowTimestamp;
-        target.ShowPlatformBadge = current.ShowPlatformBadge;
+        target.PlatformBadgeMode = current.PlatformBadgeMode;
 
         target.EmoteSizePixels = current.EmoteSizePixels;
         target.BadgeSizePixels = current.BadgeSizePixels;
@@ -591,7 +597,7 @@ public sealed partial class ObsChatSettingsSectionViewModel : ObservableValidato
 
             MaxMessages = MaxMessages,
             ShowTimestamp = ShowTimestamp,
-            ShowPlatformBadge = ShowPlatformBadge,
+            PlatformBadgeMode = PlatformBadgeMode,
 
             EmoteSizePixels = EmoteSizePixels,
             BadgeSizePixels = BadgeSizePixels,
@@ -677,3 +683,5 @@ public sealed partial class ObsChatSettingsSectionViewModel : ObservableValidato
         };
     }
 }
+
+public sealed record PlatformBadgeModeOption(string Value, string Label);

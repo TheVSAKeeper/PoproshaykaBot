@@ -31,7 +31,7 @@
                   IsChecked="{Binding AutoBroadcastEnabled, Mode=TwoWay}"
                   Style="{StaticResource CheckBox.Default}"
                   Margin="0,0,0,8" />
-        <TextBlock Text="ℹ️ Автоматическое управление использует EventSub WebSocket для отслеживания статуса стрима. Рассылка будет автоматически запускаться при начале стрима и останавливаться при его завершении."
+        <TextBlock Text="Автоматическое управление отслеживает статус стрима на целевых площадках активного профиля рассылки (Twitch EventSub и мониторинг YouTube). Рассылка запускается при начале эфира и останавливается после его завершения."
                    Style="{StaticResource TextBlock.Subtle}"
                    TextWrapping="Wrap"
                    Foreground="{DynamicResource Fg.Muted}" />

@@ -15,9 +15,10 @@
 
     <UserControl.Resources>
         <DataTemplate DataType="{x:Type chat:ChatFeedMessageItemViewModel}">
-            <Grid Margin="0,2,4,2">
-                <Grid.Style>
-                    <Style TargetType="Grid">
+            <Border Margin="0,0,4,0"
+                    Padding="{Binding DataContext.FeedItemPadding, RelativeSource={RelativeSource AncestorType=UserControl}}">
+                <Border.Style>
+                    <Style TargetType="Border">
                         <Setter Property="Opacity" Value="1" />
                         <Style.Triggers>
                             <DataTrigger Binding="{Binding IsHistorical}" Value="True">
@@ -25,35 +26,42 @@
                             </DataTrigger>
                         </Style.Triggers>
                     </Style>
-                </Grid.Style>
+                </Border.Style>
 
                 <TextBlock TextWrapping="Wrap"
                            Foreground="{DynamicResource Fg.Primary}"
-                           LineHeight="19">
-                    <Run Text="{Binding TimestampText, Mode=OneWay}"
-                         Foreground="{DynamicResource Fg.Muted}"
-                         FontFamily="{DynamicResource Font.Mono}"
-                         FontSize="{DynamicResource Font.Size.XS}" />
-                    <Run Text=" " />
+                           FontSize="{Binding DataContext.FeedFontSize, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                           LineHeight="{Binding DataContext.FeedLineHeight, RelativeSource={RelativeSource AncestorType=UserControl}}">
                     <InlineUIContainer BaselineAlignment="Center">
-                        <platformControls:PlatformIconView Platform="{Binding Platform, Mode=OneWay}"
-                                                           Width="12"
-                                                           Height="12"
-                                                           Margin="0,0,4,0"
-                                                           ToolTip="{Binding PlatformDisplayName, Mode=OneWay}" />
+                        <TextBlock Text="{Binding TimestampText, Mode=OneWay}"
+                                   Foreground="{DynamicResource Fg.Muted}"
+                                   FontFamily="{DynamicResource Font.Mono}"
+                                   FontSize="{Binding DataContext.FeedMetaFontSize, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                   Margin="0,0,5,0"
+                                   Visibility="{Binding DataContext.ShowTimestamps, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource BoolToVisibility}}" />
                     </InlineUIContainer>
                     <InlineUIContainer BaselineAlignment="Center">
-                        <Border Background="{DynamicResource Bg.SurfaceAlt}"
-                                BorderBrush="{DynamicResource Border.Subtle}"
-                                BorderThickness="1"
-                                CornerRadius="4"
-                                Padding="4,0"
-                                Margin="0,0,4,0"
-                                Visibility="{Binding HasRoleBadge, Converter={StaticResource BoolToVisibility}}">
-                            <TextBlock Text="{Binding RoleBadgeText, Mode=OneWay}"
-                                       Foreground="{DynamicResource Fg.Secondary}"
-                                       FontSize="{DynamicResource Font.Size.XS}" />
-                        </Border>
+                        <platformControls:PlatformIconView Platform="{Binding Platform, Mode=OneWay}"
+                                                           Width="{Binding DataContext.FeedPlatformIconSize, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                           Height="{Binding DataContext.FeedPlatformIconSize, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                           Margin="0,0,4,0"
+                                                           ToolTip="{Binding PlatformDisplayName, Mode=OneWay}"
+                                                           Visibility="{Binding DataContext.ShowPlatformIcons, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource BoolToVisibility}}" />
+                    </InlineUIContainer>
+                    <InlineUIContainer BaselineAlignment="Center">
+                        <Grid Visibility="{Binding DataContext.ShowRoleBadges, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource BoolToVisibility}}">
+                            <Border Background="{DynamicResource Bg.SurfaceAlt}"
+                                    BorderBrush="{DynamicResource Border.Subtle}"
+                                    BorderThickness="1"
+                                    CornerRadius="4"
+                                    Padding="4,0"
+                                    Margin="0,0,4,0"
+                                    Visibility="{Binding HasRoleBadge, Converter={StaticResource BoolToVisibility}}">
+                                <TextBlock Text="{Binding RoleBadgeText, Mode=OneWay}"
+                                           Foreground="{DynamicResource Fg.Secondary}"
+                                           FontSize="{Binding DataContext.FeedMetaFontSize, RelativeSource={RelativeSource AncestorType=UserControl}}" />
+                            </Border>
+                        </Grid>
                     </InlineUIContainer>
                     <InlineUIContainer BaselineAlignment="Center">
                         <Border Background="{DynamicResource Bg.SurfaceAlt}"
@@ -63,7 +71,7 @@
                                 Visibility="{Binding IsHistorical, Converter={StaticResource BoolToVisibility}}">
                             <TextBlock Text="История"
                                        Foreground="{DynamicResource Fg.Muted}"
-                                       FontSize="{DynamicResource Font.Size.XS}" />
+                                       FontSize="{Binding DataContext.FeedMetaFontSize, RelativeSource={RelativeSource AncestorType=UserControl}}" />
                         </Border>
                     </InlineUIContainer>
                     <InlineUIContainer BaselineAlignment="Center">
@@ -76,7 +84,8 @@
                                 IsEnabled="{Binding HasUserLink, Mode=OneWay}"
                                 Command="{Binding OpenUserCommand}">
                             <TextBlock Text="{Binding DisplayName, Mode=OneWay}"
-                                       FontWeight="SemiBold">
+                                       FontWeight="SemiBold"
+                                       FontSize="{Binding DataContext.FeedFontSize, RelativeSource={RelativeSource AncestorType=UserControl}}">
                                 <TextBlock.Style>
                                     <Style TargetType="TextBlock">
                                         <Setter Property="Foreground" Value="{Binding AuthorBrush, Mode=OneWay}" />
@@ -92,58 +101,64 @@
                     </InlineUIContainer>
                     <Run Text="{Binding MessageText, Mode=OneWay}" />
                 </TextBlock>
-            </Grid>
+            </Border>
         </DataTemplate>
 
         <DataTemplate DataType="{x:Type chat:ChatFeedHistoryBoundaryItemViewModel}">
-            <Grid Margin="0,6">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="Auto" />
-                    <ColumnDefinition Width="*" />
-                </Grid.ColumnDefinitions>
-                <Border Grid.Column="0"
-                        Height="1"
-                        VerticalAlignment="Center"
-                        Background="{DynamicResource Border.Subtle}" />
-                <TextBlock Grid.Column="1"
-                           Text="{Binding Label, Mode=OneWay}"
-                           Margin="8,0"
-                           FontSize="{DynamicResource Font.Size.XS}"
-                           Foreground="{DynamicResource Fg.Muted}" />
-                <Border Grid.Column="2"
-                        Height="1"
-                        VerticalAlignment="Center"
-                        Background="{DynamicResource Border.Subtle}" />
-            </Grid>
+            <Border Padding="{Binding DataContext.FeedItemPadding, RelativeSource={RelativeSource AncestorType=UserControl}}">
+                <Grid Margin="0,3">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <Border Grid.Column="0"
+                            Height="1"
+                            VerticalAlignment="Center"
+                            Background="{DynamicResource Border.Subtle}" />
+                    <TextBlock Grid.Column="1"
+                               Text="{Binding Label, Mode=OneWay}"
+                               Margin="8,0"
+                               FontSize="{Binding DataContext.FeedMetaFontSize, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                               Foreground="{DynamicResource Fg.Muted}" />
+                    <Border Grid.Column="2"
+                            Height="1"
+                            VerticalAlignment="Center"
+                            Background="{DynamicResource Border.Subtle}" />
+                </Grid>
+            </Border>
         </DataTemplate>
 
         <DataTemplate DataType="{x:Type chat:ChatFeedGapItemViewModel}">
-            <Border Background="{DynamicResource Bg.SurfaceAlt}"
-                    BorderBrush="{DynamicResource Border.Subtle}"
-                    BorderThickness="1"
-                    CornerRadius="6"
-                    Padding="8,5"
-                    Margin="0,4">
-                <StackPanel Orientation="Horizontal">
-                    <platformControls:PlatformIconView Platform="{Binding Platform, Mode=OneWay}"
-                                                       Width="12"
-                                                       Height="12"
-                                                       VerticalAlignment="Center"
-                                                       Margin="0,0,6,0"
-                                                       ToolTip="{Binding PlatformDisplayName, Mode=OneWay}" />
-                    <TextBlock Text="{Binding TimestampText, Mode=OneWay}"
-                               Foreground="{DynamicResource Fg.Muted}"
-                               FontFamily="{DynamicResource Font.Mono}"
-                               FontSize="{DynamicResource Font.Size.XS}"
-                               VerticalAlignment="Center"
-                               Margin="0,0,6,0" />
-                    <TextBlock Text="{Binding Text, Mode=OneWay}"
-                               Foreground="{DynamicResource State.WarningText}"
-                               FontSize="{DynamicResource Font.Size.XS}"
-                               TextWrapping="Wrap"
-                               VerticalAlignment="Center" />
-                </StackPanel>
+            <Border Margin="0,0,4,0"
+                    Padding="{Binding DataContext.FeedItemPadding, RelativeSource={RelativeSource AncestorType=UserControl}}">
+                <Border Background="{DynamicResource Bg.SurfaceAlt}"
+                        BorderBrush="{DynamicResource Border.Subtle}"
+                        BorderThickness="1"
+                        CornerRadius="6"
+                        Padding="8,5">
+                    <StackPanel Orientation="Horizontal">
+                        <platformControls:PlatformIconView Platform="{Binding Platform, Mode=OneWay}"
+                                                           Width="{Binding DataContext.FeedPlatformIconSize, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                           Height="{Binding DataContext.FeedPlatformIconSize, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                           VerticalAlignment="Center"
+                                                           Margin="0,0,6,0"
+                                                           ToolTip="{Binding PlatformDisplayName, Mode=OneWay}"
+                                                           Visibility="{Binding DataContext.ShowPlatformIcons, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource BoolToVisibility}}" />
+                        <TextBlock Text="{Binding TimestampText, Mode=OneWay}"
+                                   Foreground="{DynamicResource Fg.Muted}"
+                                   FontFamily="{DynamicResource Font.Mono}"
+                                   FontSize="{Binding DataContext.FeedMetaFontSize, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                   VerticalAlignment="Center"
+                                   Margin="0,0,6,0"
+                                   Visibility="{Binding DataContext.ShowTimestamps, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource BoolToVisibility}}" />
+                        <TextBlock Text="{Binding Text, Mode=OneWay}"
+                                   Foreground="{DynamicResource State.WarningText}"
+                                   FontSize="{Binding DataContext.FeedMetaFontSize, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                   TextWrapping="Wrap"
+                                   VerticalAlignment="Center" />
+                    </StackPanel>
+                </Border>
             </Border>
         </DataTemplate>
     </UserControl.Resources>
@@ -162,6 +177,74 @@
                        Style="{StaticResource TextBlock.Subtle}"
                        VerticalAlignment="Center" />
         </DockPanel>
+
+        <Border x:Name="AppearancePanel"
+                Style="{StaticResource Card.Inset}"
+                DockPanel.Dock="Top"
+                Margin="0,0,0,6"
+                Padding="8,6"
+                Visibility="{Binding IsAppearancePanelOpen, Converter={StaticResource BoolToVisibility}}">
+            <WrapPanel Orientation="Horizontal"
+                       VerticalAlignment="Center">
+                <StackPanel Orientation="Horizontal"
+                            VerticalAlignment="Center"
+                            Margin="0,2,12,2">
+                    <Button Style="{StaticResource Button.Secondary}"
+                            Content="A−"
+                            Padding="6,2"
+                            MinHeight="24"
+                            Command="{Binding DecreaseFontSizeCommand}"
+                            ToolTip="Уменьшить шрифт ленты"
+                            AutomationProperties.Name="Уменьшить шрифт ленты" />
+                    <TextBlock Text="{Binding FeedFontSizeText, Mode=OneWay}"
+                               VerticalAlignment="Center"
+                               Margin="6,0"
+                               MinWidth="36"
+                               TextAlignment="Center"
+                               FontFamily="{DynamicResource Font.Mono}"
+                               FontSize="{DynamicResource Font.Size.XS}"
+                               Foreground="{DynamicResource Fg.Secondary}" />
+                    <Button Style="{StaticResource Button.Secondary}"
+                            Content="A+"
+                            Padding="6,2"
+                            MinHeight="24"
+                            Command="{Binding IncreaseFontSizeCommand}"
+                            ToolTip="Увеличить шрифт ленты"
+                            AutomationProperties.Name="Увеличить шрифт ленты" />
+                </StackPanel>
+
+                <CheckBox Style="{StaticResource CheckBox.Default}"
+                          Content="Компактно"
+                          IsChecked="{Binding IsCompactMode, Mode=TwoWay}"
+                          VerticalAlignment="Center"
+                          Margin="0,2,10,2" />
+                <CheckBox Style="{StaticResource CheckBox.Default}"
+                          Content="Время"
+                          IsChecked="{Binding ShowTimestamps, Mode=TwoWay}"
+                          VerticalAlignment="Center"
+                          Margin="0,2,10,2" />
+                <CheckBox Style="{StaticResource CheckBox.Default}"
+                          Content="Площадка"
+                          IsChecked="{Binding ShowPlatformIcons, Mode=TwoWay}"
+                          VerticalAlignment="Center"
+                          Margin="0,2,10,2" />
+                <CheckBox Style="{StaticResource CheckBox.Default}"
+                          Content="Роли"
+                          IsChecked="{Binding ShowRoleBadges, Mode=TwoWay}"
+                          VerticalAlignment="Center"
+                          Margin="0,2,10,2" />
+
+                <Button Style="{StaticResource Button.Ghost}"
+                        Content="Сброс"
+                        Padding="6,2"
+                        MinHeight="24"
+                        VerticalAlignment="Center"
+                        Margin="0,2,0,2"
+                        Command="{Binding ResetAppearanceCommand}"
+                        ToolTip="Сбросить настройки отображения ленты"
+                        AutomationProperties.Name="Сбросить настройки отображения ленты" />
+            </WrapPanel>
+        </Border>
 
         <Grid>
             <ListBox x:Name="FeedListBox"

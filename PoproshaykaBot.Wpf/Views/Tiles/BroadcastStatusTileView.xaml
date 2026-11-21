@@ -2,6 +2,7 @@
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:keepshell="https://schemas.keepshell.dev/wpf"
+             xmlns:controls="clr-namespace:PoproshaykaBot.Wpf.Views.Controls"
              xmlns:vm="clr-namespace:PoproshaykaBot.Wpf.ViewModels.Tiles"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
@@ -71,11 +72,50 @@
         <TextBlock Grid.Row="2"
                    Grid.Column="0"
                    Style="{StaticResource Label}"
+                   VerticalAlignment="Top"
+                   Margin="0,3,10,4"
                    Text="Площадки" />
-        <TextBlock Grid.Row="2"
-                   Grid.Column="1"
-                   Style="{StaticResource Value}"
-                   Text="{Binding PlatformsText, Mode=OneWay}" />
+        <Grid Grid.Row="2"
+              Grid.Column="1"
+              Margin="0,0,0,4">
+            <ItemsControl ItemsSource="{Binding TargetPlatformChips}"
+                          Visibility="{Binding HasTargetPlatformChips, Converter={StaticResource BoolToVisibility}}">
+                <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate>
+                        <WrapPanel />
+                    </ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate>
+                        <Border Style="{StaticResource Badge}"
+                                Padding="6,2"
+                                Margin="0,0,6,4"
+                                ToolTip="{Binding ToolTipText}">
+                            <StackPanel Orientation="Horizontal">
+                                <controls:PlatformIconView Platform="{Binding Platform, Mode=OneWay}"
+                                                           Width="12"
+                                                           Height="12"
+                                                           VerticalAlignment="Center"
+                                                           Margin="0,0,4,0" />
+                                <TextBlock Text="{Binding DisplayName, Mode=OneWay}"
+                                           FontSize="{DynamicResource Font.Size.XS}"
+                                           Foreground="{DynamicResource Fg.Primary}"
+                                           VerticalAlignment="Center" />
+                                <Ellipse Width="6"
+                                         Height="6"
+                                         VerticalAlignment="Center"
+                                         Margin="5,0,0,0"
+                                         keepshell:SeverityBrushBehavior.Fill="{Binding Severity}" />
+                            </StackPanel>
+                        </Border>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+            <TextBlock Style="{StaticResource Value}"
+                       Margin="0"
+                       Text="{Binding PlatformsText, Mode=OneWay}"
+                       Visibility="{Binding HasTargetPlatformChips, Converter={StaticResource InverseBoolToVisibility}}" />
+        </Grid>
 
         <TextBlock Grid.Row="3"
                    Grid.Column="0"

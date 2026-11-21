@@ -4,8 +4,11 @@
     const chatContainer = document.getElementById('chat');
     let maxMessages = 50;
     let showTimestamp = true;
+    let platformBadgeMode = 'auto';
+    let serverShowPlatformBadge = false;
     let showPlatformBadge = false;
     let enableAnimations = true;
+    const seenMessagePlatforms = new Set();
 
     const urlParams = new URLSearchParams(globalThis.location.search);
     const isPreview = urlParams.get('preview') === 'true';
@@ -132,9 +135,38 @@
         return !platform || platform === 'Twitch';
     }
 
+    function normalizePlatformBadgeMode(value) {
+        if (typeof value !== 'string') return 'auto';
+        const normalized = value.trim().toLowerCase();
+        return normalized === 'always' || normalized === 'hidden' ? normalized : 'auto';
+    }
+
+    function normalizePlatformName(platform) {
+        return typeof platform === 'string' ? platform.trim().toLowerCase() : '';
+    }
+
+    function resolvePlatformBadgeVisibility() {
+        if (platformBadgeMode === 'always') return true;
+        if (platformBadgeMode === 'hidden') return false;
+        return serverShowPlatformBadge
+            || seenMessagePlatforms.size > 1
+            || (seenMessagePlatforms.size === 1 && !seenMessagePlatforms.has('twitch'));
+    }
+
+    function syncPlatformBadgeVisibility() {
+        const next = resolvePlatformBadgeVisibility();
+        const changed = next !== showPlatformBadge;
+        showPlatformBadge = next;
+        toggleNegationClass('.message', 'no-platform-badge', showPlatformBadge);
+        if (changed && isFlowTheme() && chatContainer) {
+            chatContainer.querySelectorAll('.message.flow').forEach(scheduleFlowShape);
+        }
+    }
+
     function renderPlatformBadge(platform) {
         if (!platform) return '';
-        const normalized = String(platform).toLowerCase();
+        const normalized = normalizePlatformName(platform);
+        if (!normalized) return '';
         if (normalized === 'twitch') {
             return '<span class="platform-badge platform-badge--twitch" title="Twitch" aria-label="Twitch">'
                 + '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M4.3 3H20v11.7l-4.7 4.7h-3.9l-2.5 2.6H6.5v-2.6H3V6.2L4.3 3zm1.7 2v11.6h3.5v2.3l2.3-2.3h4.2l2.3-2.3V5H6zm8.8 3.2h1.9v5.2h-1.9V8.2zm-4.9 0h1.9v5.2H9.9V8.2z"/></svg>'
@@ -145,7 +177,8 @@
                 + '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M21.6 7.2a2.7 2.7 0 0 0-1.9-1.9C18 4.8 12 4.8 12 4.8s-6 0-7.7.5a2.7 2.7 0 0 0-1.9 1.9C2 8.9 2 12 2 12s0 3.1.4 4.8a2.7 2.7 0 0 0 1.9 1.9c1.7.5 7.7.5 7.7.5s6 0 7.7-.5a2.7 2.7 0 0 0 1.9-1.9c.4-1.7.4-4.8.4-4.8s0-3.1-.4-4.8zM10 15.1V8.9L15.4 12 10 15.1z"/></svg>'
                 + '</span>';
         }
-        return `<span class="platform-badge platform-badge--other">${escapeHtml(platform)}</span>`;
+        const safeLabel = escapeAttr(platform);
+        return `<span class="platform-badge platform-badge--other" title="${safeLabel}" aria-label="${safeLabel}">${escapeHtml(platform)}</span>`;
     }
 
     function resolveAvatar(userId, platform) {
@@ -1093,6 +1126,14 @@
             : Date.now();
         messageDiv.dataset.createdAt = String(createdAtMs);
 
+        const normalizedPlatform = normalizePlatformName(message.platform);
+        if (normalizedPlatform && !seenMessagePlatforms.has(normalizedPlatform)) {
+            seenMessagePlatforms.add(normalizedPlatform);
+            if (resolvePlatformBadgeVisibility() !== showPlatformBadge) {
+                syncPlatformBadgeVisibility();
+            }
+        }
+
         applyEntryAnimation(messageDiv, message, suppressEntryAnimation);
 
         const userTypeClasses = getUserTypeClasses(message.status || 0);
@@ -1498,7 +1539,6 @@
             ['enableMessageShadows', '.message', 'no-shadows', v => enableMessageShadows = v, () => enableMessageShadows],
             ['enableSpecialEffects', '.message', 'no-special-effects', v => enableSpecialEffects = v, () => enableSpecialEffects],
             ['showTimestamp', '#chat .message', 'no-timestamp', v => showTimestamp = v, () => showTimestamp],
-            ['showPlatformBadge', '.message', 'no-platform-badge', v => showPlatformBadge = v, () => showPlatformBadge],
             ['showUserAvatars', '.message', 'no-avatars', v => showUserAvatars = v, () => showUserAvatars],
             ['showMessageImages', '.message', 'no-message-images', v => showMessageImages = v, () => showMessageImages],
         ];
@@ -1509,6 +1549,16 @@
                 toggleNegationClass(selector, className, getter());
             }
         });
+
+        if (settings.platformBadgeMode !== undefined) {
+            platformBadgeMode = normalizePlatformBadgeMode(settings.platformBadgeMode);
+        }
+        if (settings.showPlatformBadge !== undefined) {
+            serverShowPlatformBadge = Boolean(settings.showPlatformBadge);
+        }
+        if (settings.platformBadgeMode !== undefined || settings.showPlatformBadge !== undefined) {
+            syncPlatformBadgeVisibility();
+        }
     }
 
     function applyAnimationSettings(settings) {

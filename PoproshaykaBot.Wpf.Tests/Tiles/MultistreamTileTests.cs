@@ -1,18 +1,27 @@
-﻿using KeepShell.Services.Platform;
+﻿using System.IO;
+using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Media;
+using KeepShell.Services.Platform;
+using KeepShell.ViewModels;
 using Microsoft.Extensions.Logging.Abstractions;
 using PoproshaykaBot.Core.Chat;
+using PoproshaykaBot.Core.Debugging;
 using PoproshaykaBot.Core.Diagnostics;
 using PoproshaykaBot.Core.Infrastructure.Events;
 using PoproshaykaBot.Core.Infrastructure.Events.Lifecycle;
+using PoproshaykaBot.Core.Infrastructure.Events.Streaming;
 using PoproshaykaBot.Core.Infrastructure.Hosting;
 using PoproshaykaBot.Core.Platforms;
 using PoproshaykaBot.Core.Platforms.Auth;
+using PoproshaykaBot.Core.Settings;
 using PoproshaykaBot.Core.Settings.Stores;
 using PoproshaykaBot.Core.Streaming;
+using PoproshaykaBot.Core.Streaming.Switching;
 using PoproshaykaBot.Core.YouTube.Auth;
 using PoproshaykaBot.Wpf.Tests.Support;
 using PoproshaykaBot.Wpf.ViewModels.Tiles;
-using System.IO;
+using PoproshaykaBot.Wpf.Views.Tiles;
 
 namespace PoproshaykaBot.Wpf.Tests.Tiles;
 
@@ -349,6 +358,302 @@ public sealed class MultistreamTileTests
     }
 
     [Test]
+    public async Task Выбор_канала_в_виджете_переключает_активный_канал_и_не_дёргает_список_по_таймеру()
+    {
+        var directory = Directory.CreateTempSubdirectory("poproshayka-multistream-switch-");
+        try
+        {
+            var platform = StreamingPlatform.YouTube;
+            var youtube = new FakePlatform(platform);
+            var platforms = new ChatPlatformRegistry([youtube]);
+            var catalog = new ChannelCatalogStore(filePath: Path.Combine(directory.FullName, "channels.json"));
+            Assert.That(catalog.Mutate(settings =>
+            {
+                settings.Channels.Add(new()
+                {
+                    Platform = platform,
+                    ChannelId = "UC-1",
+                    DisplayName = "Основной",
+                    IsConfigured = true,
+                });
+                settings.Channels.Add(new()
+                {
+                    Platform = platform,
+                    ChannelId = "UC-2",
+                    DisplayName = "Запасной",
+                    IsConfigured = true,
+                });
+                settings.Platforms.Add(new()
+                {
+                    Platform = platform,
+                    ActiveChannelId = "UC-1",
+                });
+            }), Is.True);
+
+            var switchGate = new TaskCompletionSource<ChannelSwitchResult>(TaskCreationOptions.RunContinuationsAsynchronously);
+            var coordinator = new FakeSwitchCoordinator((_, target) => switchGate.Task.ContinueWith(_ =>
+            {
+                catalog.Mutate(settings =>
+                {
+                    var routing = settings.Platforms.First(p => p.Platform == platform);
+                    routing.ActiveChannelId = target.ChannelId;
+                });
+                return new ChannelSwitchResult(ChannelSwitchOutcome.Switched, target);
+            }));
+            var bus = new InMemoryEventBus(NullLogger<InMemoryEventBus>.Instance);
+            var dispatcher = new ManualUiDispatcher();
+            var youtubeSettings = new YouTubeSettingsStore(filePath: Path.Combine(directory.FullName, "youtube.json"));
+            await using var connection = new BotConnectionManager(
+                new AppHost([], NullLogger<AppHost>.Instance),
+                [new FakeConnectionAdapter(platform)],
+                null, bus, NullLogger<BotConnectionManager>.Instance);
+
+            using var tile = new MultistreamTileViewModel(
+                platforms, catalog, connection, new PlatformAuthRegistry([]), [], bus, dispatcher, youtubeSettings,
+                coordinator);
+            tile.SetOnScreen(true);
+
+            var row = tile.Rows.Single();
+            var statuses = new List<(string Message, StatusSeverity Severity)>();
+            tile.StatusReported += (message, severity) => statuses.Add((message, severity));
+            var collectionChanges = 0;
+            row.Channels.CollectionChanged += (_, _) => collectionChanges++;
+
+            dispatcher.Timers.Single().Tick();
+            dispatcher.Timers.Single().Tick();
+
+            Assert.Multiple(() =>
+            {
+                Assert.That(row.HasChannelSelector, Is.True);
+                Assert.That(row.ShowStaticChannelName, Is.False);
+                Assert.That(row.CanSwitchChannel, Is.True);
+                Assert.That(row.Channels.Select(c => c.ChannelId), Is.EqualTo(new[] { "UC-1", "UC-2" }));
+                Assert.That(row.SelectedChannel?.ChannelId, Is.EqualTo("UC-1"));
+                Assert.That(collectionChanges, Is.EqualTo(0));
+            });
+
+            var targetOption = row.Channels.Single(c => c.ChannelId == "UC-2");
+            var switchTask = tile.SwitchChannelAsync(row, targetOption);
+
+            Assert.Multiple(() =>
+            {
+                Assert.That(row.IsSwitchingChannel, Is.True);
+                Assert.That(row.CanSwitchChannel, Is.False);
+                Assert.That(row.ToggleConnectionCommand.CanExecute(null), Is.False);
+                Assert.That(row.ChannelBadgeText, Is.EqualTo("Переключение…"));
+            });
+
+            switchGate.SetResult(new(ChannelSwitchOutcome.Switched, new(platform, "UC-2")));
+            await switchTask;
+
+            Assert.Multiple(() =>
+            {
+                Assert.That(row.IsSwitchingChannel, Is.False);
+                Assert.That(row.CanSwitchChannel, Is.True);
+                Assert.That(row.ToggleConnectionCommand.CanExecute(null), Is.True);
+                Assert.That(row.SelectedChannel?.ChannelId, Is.EqualTo("UC-2"));
+                Assert.That(row.ChannelName, Is.EqualTo("Запасной"));
+                Assert.That(row.HasSwitchError, Is.False);
+                Assert.That(row.ChannelBadgeText, Is.EqualTo("2 канала"));
+                Assert.That(coordinator.Calls, Is.EqualTo(new[] { new ChannelKey(platform, "UC-2") }));
+                Assert.That(statuses.Single().Message, Does.Contain("Запасной"));
+                Assert.That(statuses.Single().Severity, Is.EqualTo(StatusSeverity.Info));
+            });
+        }
+        finally
+        {
+            directory.Delete(recursive: true);
+        }
+    }
+
+    [Test]
+    public async Task Ошибка_переключения_возвращает_выбор_канала_и_показывает_предупреждение()
+    {
+        var directory = Directory.CreateTempSubdirectory("poproshayka-multistream-switch-fail-");
+        try
+        {
+            var platform = StreamingPlatform.Twitch;
+            var twitch = new FakePlatform(platform);
+            var platforms = new ChatPlatformRegistry([twitch]);
+            var catalog = new ChannelCatalogStore(filePath: Path.Combine(directory.FullName, "channels.json"));
+            Assert.That(catalog.Mutate(settings =>
+            {
+                settings.Channels.Add(new()
+                {
+                    Platform = platform,
+                    ChannelId = "101",
+                    DisplayName = "Дубль",
+                    IsConfigured = true,
+                });
+                settings.Channels.Add(new()
+                {
+                    Platform = platform,
+                    ChannelId = "202",
+                    DisplayName = "Дубль",
+                    IsConfigured = true,
+                });
+                settings.Platforms.Add(new()
+                {
+                    Platform = platform,
+                    ActiveChannelId = "101",
+                });
+            }), Is.True);
+
+            var coordinator = new FakeSwitchCoordinator((_, _) => Task.FromResult(
+                new ChannelSwitchResult(ChannelSwitchOutcome.FailedKeptPrevious, new(platform, "101"),
+                    "Подтвердите доступ аккаунта бота к каналу «Дубль».")));
+            var bus = new InMemoryEventBus(NullLogger<InMemoryEventBus>.Instance);
+            var dispatcher = new ManualUiDispatcher();
+            var youtubeSettings = new YouTubeSettingsStore(filePath: Path.Combine(directory.FullName, "youtube.json"));
+            await using var connection = new BotConnectionManager(
+                new AppHost([], NullLogger<AppHost>.Instance), [], null, bus, NullLogger<BotConnectionManager>.Instance);
+
+            using var tile = new MultistreamTileViewModel(
+                platforms, catalog, connection, new PlatformAuthRegistry([]), [], bus, dispatcher, youtubeSettings,
+                coordinator);
+            tile.SetOnScreen(true);
+
+            var row = tile.Rows.Single();
+            var statuses = new List<(string Message, StatusSeverity Severity)>();
+            tile.StatusReported += (message, severity) => statuses.Add((message, severity));
+
+            Assert.That(row.Channels.Select(c => c.Label), Is.EqualTo(new[] { "Дубль (101)", "Дубль (202)" }));
+
+            row.SelectedChannel = row.Channels[1];
+
+            Assert.Multiple(() =>
+            {
+                Assert.That(coordinator.Calls, Is.EqualTo(new[] { new ChannelKey(platform, "202") }));
+                Assert.That(row.SelectedChannel?.ChannelId, Is.EqualTo("101"));
+                Assert.That(row.HasSwitchError, Is.True);
+                Assert.That(row.SwitchErrorText, Does.Contain("Подтвердите доступ"));
+                Assert.That(row.SwitchErrorSeverity, Is.EqualTo(StatusSeverity.Warning));
+                Assert.That(statuses.Single().Severity, Is.EqualTo(StatusSeverity.Warning));
+            });
+
+            dispatcher.Timers.Single().Tick();
+            Assert.That(row.HasSwitchError, Is.True);
+        }
+        finally
+        {
+            directory.Delete(recursive: true);
+        }
+    }
+
+    [Test]
+    public async Task Отладка_Twitch_блокирует_выбор_канала_в_виджете()
+    {
+        var directory = Directory.CreateTempSubdirectory("poproshayka-multistream-debug-");
+        try
+        {
+            var platform = StreamingPlatform.Twitch;
+            var twitch = new FakePlatform(platform);
+            var platforms = new ChatPlatformRegistry([twitch]);
+            var catalog = new ChannelCatalogStore(filePath: Path.Combine(directory.FullName, "channels.json"));
+            Assert.That(catalog.Mutate(settings =>
+            {
+                settings.Channels.Add(new() { Platform = platform, ChannelId = "101", DisplayName = "Один", IsConfigured = true });
+                settings.Channels.Add(new() { Platform = platform, ChannelId = "202", DisplayName = "Два", IsConfigured = true });
+                settings.Platforms.Add(new() { Platform = platform, ActiveChannelId = "101" });
+            }), Is.True);
+
+            var coordinator = new FakeSwitchCoordinator((_, target) => Task.FromResult(
+                new ChannelSwitchResult(ChannelSwitchOutcome.Switched, target)));
+            var debugTarget = new FakeTargetChannelProvider(new("foreign", "one", true, false, false));
+            var bus = new InMemoryEventBus(NullLogger<InMemoryEventBus>.Instance);
+            var dispatcher = new ManualUiDispatcher();
+            var youtubeSettings = new YouTubeSettingsStore(filePath: Path.Combine(directory.FullName, "youtube.json"));
+            await using var connection = new BotConnectionManager(
+                new AppHost([], NullLogger<AppHost>.Instance), [], null, bus, NullLogger<BotConnectionManager>.Instance);
+
+            using var tile = new MultistreamTileViewModel(
+                platforms, catalog, connection, new PlatformAuthRegistry([]), [], bus, dispatcher, youtubeSettings,
+                coordinator, debugTarget);
+            tile.SetOnScreen(true);
+
+            var row = tile.Rows.Single();
+            Assert.Multiple(() =>
+            {
+                Assert.That(row.HasChannelSelector, Is.True);
+                Assert.That(row.CanSwitchChannel, Is.False);
+                Assert.That(row.ChannelSelectorTooltip, Does.Contain("отладки"));
+            });
+
+            row.SelectedChannel = row.Channels[1];
+            Assert.Multiple(() =>
+            {
+                Assert.That(coordinator.Calls, Is.Empty);
+                Assert.That(row.SelectedChannel?.ChannelId, Is.EqualTo("101"));
+            });
+        }
+        finally
+        {
+            directory.Delete(recursive: true);
+        }
+    }
+
+    [Test]
+    [Apartment(ApartmentState.STA)]
+    public async Task Разметка_виджета_показывает_список_каналов_только_при_нескольких_каналах()
+    {
+        EnsureWpfResources();
+        var directory = Directory.CreateTempSubdirectory("poproshayka-multistream-view-");
+        try
+        {
+            var twitch = new FakePlatform(StreamingPlatform.Twitch);
+            var youtube = new FakePlatform(StreamingPlatform.YouTube);
+            var platforms = new ChatPlatformRegistry([twitch, youtube]);
+            var catalog = new ChannelCatalogStore(filePath: Path.Combine(directory.FullName, "channels.json"));
+            Assert.That(catalog.Mutate(settings =>
+            {
+                settings.Channels.Add(new() { Platform = StreamingPlatform.Twitch, ChannelId = "tw-1", DisplayName = "Мой Twitch", IsConfigured = true });
+                settings.Channels.Add(new() { Platform = StreamingPlatform.YouTube, ChannelId = "yt-1", DisplayName = "Канал А", IsConfigured = true });
+                settings.Channels.Add(new() { Platform = StreamingPlatform.YouTube, ChannelId = "yt-2", DisplayName = "Канал Б", IsConfigured = true });
+                settings.Platforms.Add(new() { Platform = StreamingPlatform.YouTube, ActiveChannelId = "yt-1" });
+            }), Is.True);
+
+            var coordinator = new FakeSwitchCoordinator((_, target) =>
+            {
+                catalog.Mutate(settings => settings.Platforms.First(p => p.Platform == target.Platform).ActiveChannelId = target.ChannelId);
+                return Task.FromResult(new ChannelSwitchResult(ChannelSwitchOutcome.Switched, target));
+            });
+            var bus = new InMemoryEventBus(NullLogger<InMemoryEventBus>.Instance);
+            var dispatcher = new ManualUiDispatcher();
+            var youtubeSettings = new YouTubeSettingsStore(filePath: Path.Combine(directory.FullName, "youtube.json"));
+            await using var connection = new BotConnectionManager(
+                new AppHost([], NullLogger<AppHost>.Instance), [], null, bus, NullLogger<BotConnectionManager>.Instance);
+
+            using var tile = new MultistreamTileViewModel(
+                platforms, catalog, connection, new PlatformAuthRegistry([]), [], bus, dispatcher, youtubeSettings,
+                coordinator);
+
+            var view = new MultistreamTileView { DataContext = tile };
+            view.Measure(new(320, 600));
+            view.Arrange(new(0, 0, 320, 600));
+            view.UpdateLayout();
+
+            var combos = Descendants<ComboBox>(view).ToArray();
+            var twitchCombo = combos.Single(combo => System.Windows.Automation.AutomationProperties.GetAutomationId(combo) == "MultistreamChannelTwitch");
+            var youtubeCombo = combos.Single(combo => System.Windows.Automation.AutomationProperties.GetAutomationId(combo) == "MultistreamChannelYouTube");
+
+            Assert.Multiple(() =>
+            {
+                Assert.That(twitchCombo.Visibility, Is.EqualTo(Visibility.Collapsed));
+                Assert.That(youtubeCombo.Visibility, Is.EqualTo(Visibility.Visible));
+                Assert.That(youtubeCombo.Items.Count, Is.EqualTo(2));
+                Assert.That(((MultistreamChannelOption)youtubeCombo.SelectedItem).ChannelId, Is.EqualTo("yt-1"));
+            });
+
+            youtubeCombo.SelectedIndex = 1;
+            Assert.That(coordinator.Calls, Is.EqualTo(new[] { new ChannelKey(StreamingPlatform.YouTube, "yt-2") }));
+        }
+        finally
+        {
+            directory.Delete(recursive: true);
+        }
+    }
+
+    [Test]
     public void StreamInfoTile_показывает_ID_активного_канала_без_имени()
     {
         var directory = Directory.CreateTempSubdirectory("poproshayka-multistream-");
@@ -369,6 +674,200 @@ public sealed class MultistreamTileTests
                 new ManualUiDispatcher(), new NoOpLauncher(), catalogStore: catalog);
 
             Assert.That(tile.ActiveChannelDisplayName, Is.EqualTo("UC-active"));
+        }
+        finally
+        {
+            directory.Delete(recursive: true);
+        }
+    }
+
+    [Test]
+    public async Task Массовое_подключение_и_отключение_работает_при_двух_готовых_площадках()
+    {
+        var directory = Directory.CreateTempSubdirectory("poproshayka-multistream-bulk-");
+
+        try
+        {
+            var youtubeEnabled = true;
+            var twitch = new FakePlatform(StreamingPlatform.Twitch);
+            var youtube = new FakePlatform(StreamingPlatform.YouTube, () => youtubeEnabled);
+            var platforms = new ChatPlatformRegistry([twitch, youtube]);
+            var catalog = new ChannelCatalogStore(filePath: Path.Combine(directory.FullName, "channels.json"));
+            var youtubeSettings = new YouTubeSettingsStore(filePath: Path.Combine(directory.FullName, "youtube.json"));
+            var bus = new InMemoryEventBus(NullLogger<InMemoryEventBus>.Instance);
+            var dispatcher = new ManualUiDispatcher();
+            await using var connection = new BotConnectionManager(
+                new AppHost([], NullLogger<AppHost>.Instance),
+                [new FakeConnectionAdapter(StreamingPlatform.Twitch), new FakeConnectionAdapter(StreamingPlatform.YouTube)],
+                null, bus, NullLogger<BotConnectionManager>.Instance);
+
+            using var tile = new MultistreamTileViewModel(
+                platforms, catalog, connection, new PlatformAuthRegistry([]), [], bus, dispatcher, youtubeSettings);
+            tile.SetOnScreen(true);
+
+            Assert.Multiple(() =>
+            {
+                Assert.That(tile.SummaryText, Is.EqualTo("Нет подключённых площадок"));
+                Assert.That(tile.ShowBulkConnectionAction, Is.True);
+                Assert.That(tile.BulkConnectionLabel, Is.EqualTo("Подключить все"));
+                Assert.That(tile.BulkConnectionCommand.CanExecute(null), Is.True);
+            });
+
+            await tile.BulkConnectionCommand.ExecuteAsync(null);
+
+            Assert.Multiple(() =>
+            {
+                Assert.That(tile.IsBulkConnectionBusy, Is.False);
+                Assert.That(tile.SummaryText, Is.EqualTo("Подключено 2 из 2"));
+                Assert.That(tile.BulkConnectionLabel, Is.EqualTo("Отключить все"));
+                Assert.That(tile.Rows.All(static r => r.LifecyclePhase == BotLifecyclePhase.Connected), Is.True);
+            });
+
+            await connection.StopAsync(StreamingPlatform.YouTube);
+            dispatcher.Timers.Single().Tick();
+
+            Assert.Multiple(() =>
+            {
+                Assert.That(tile.SummaryText, Is.EqualTo("Подключено 1 из 2"));
+                Assert.That(tile.BulkConnectionLabel, Is.EqualTo("Подключить все"));
+            });
+
+            await tile.BulkConnectionCommand.ExecuteAsync(null);
+            Assert.That(tile.Rows.All(static r => r.LifecyclePhase == BotLifecyclePhase.Connected), Is.True);
+
+            await tile.BulkConnectionCommand.ExecuteAsync(null);
+
+            Assert.Multiple(() =>
+            {
+                Assert.That(tile.SummaryText, Is.EqualTo("Нет подключённых площадок"));
+                Assert.That(tile.BulkConnectionLabel, Is.EqualTo("Подключить все"));
+                Assert.That(tile.Rows.All(static r => r.LifecyclePhase == BotLifecyclePhase.Disconnected), Is.True);
+            });
+
+            youtubeEnabled = false;
+            dispatcher.Timers.Single().Tick();
+            Assert.That(tile.ShowBulkConnectionAction, Is.False);
+        }
+        finally
+        {
+            directory.Delete(recursive: true);
+        }
+    }
+
+    [Test]
+    public async Task Сводка_и_строки_показывают_зрителей_аптайм_бейджи_режима_и_предупреждение_мониторинга()
+    {
+        var directory = Directory.CreateTempSubdirectory("poproshayka-multistream-rich-");
+
+        try
+        {
+            var twitchInfo = new StreamInfo
+            {
+                Title = "Играем в тест на Twitch",
+                ViewerCount = 42,
+                StartedAt = DateTime.UtcNow.AddMinutes(-85),
+            };
+            var youtubeInfo = new StreamInfo
+            {
+                Title = "Стрим YouTube",
+                ViewerCount = 100,
+                StartedAt = DateTime.UtcNow.AddMinutes(-15),
+            };
+            var twitch = new FakePlatform(StreamingPlatform.Twitch)
+            {
+                StreamStatus = new FakeStreamStatus(StreamStatus.Online, twitchInfo),
+            };
+            var youtube = new FakePlatform(StreamingPlatform.YouTube)
+            {
+                StreamStatus = new FakeStreamStatus(StreamStatus.Online, youtubeInfo),
+            };
+            var platforms = new ChatPlatformRegistry([twitch, youtube]);
+            var catalog = new ChannelCatalogStore(filePath: Path.Combine(directory.FullName, "channels.json"));
+            Assert.That(catalog.Mutate(settings =>
+            {
+                settings.Channels.Add(new() { Platform = StreamingPlatform.Twitch, ChannelId = "tw-1", DisplayName = "Twitch 1", IsConfigured = true });
+                settings.Channels.Add(new() { Platform = StreamingPlatform.YouTube, ChannelId = "yt-1", DisplayName = "Канал 1", IsConfigured = true });
+                settings.Channels.Add(new() { Platform = StreamingPlatform.YouTube, ChannelId = "yt-2", DisplayName = "Канал 2", IsConfigured = true });
+                settings.Platforms.Add(new()
+                {
+                    Platform = StreamingPlatform.YouTube,
+                    ActiveChannelId = "yt-1",
+                    SwitchMode = ChannelSwitchMode.AutoDiscover,
+                });
+            }), Is.True);
+
+            var youtubeAuth = new FakeAuthorization(StreamingPlatform.YouTube, (role, _) => role == PlatformAuthRole.Bot);
+            var authorization = new PlatformAuthRegistry([youtubeAuth]);
+            var ytSnapshots = new[]
+            {
+                new ChannelMonitoringSnapshot(
+                    new(StreamingPlatform.YouTube, "yt-1"),
+                    "Канал 1",
+                    ChannelMonitoringAvailability.Degraded,
+                    MonitoringUnavailableReason.QuotaExhausted,
+                    "Квота API почти исчерпана",
+                    StreamStatus.Online,
+                    youtubeInfo,
+                    DateTimeOffset.UtcNow,
+                    false),
+                new ChannelMonitoringSnapshot(
+                    new(StreamingPlatform.YouTube, "yt-2"),
+                    "Канал 2",
+                    ChannelMonitoringAvailability.Active,
+                    MonitoringUnavailableReason.None,
+                    null,
+                    StreamStatus.Online,
+                    null,
+                    DateTimeOffset.UtcNow,
+                    false),
+            };
+            var monitor = new MultiSnapshotFakeMonitor(StreamingPlatform.YouTube, ytSnapshots);
+
+            var bus = new InMemoryEventBus(NullLogger<InMemoryEventBus>.Instance);
+            var dispatcher = new ManualUiDispatcher();
+            var youtubeSettings = new YouTubeSettingsStore(filePath: Path.Combine(directory.FullName, "youtube.json"));
+            await using var connection = new BotConnectionManager(
+                new AppHost([], NullLogger<AppHost>.Instance), [], null, bus, NullLogger<BotConnectionManager>.Instance);
+
+            using var tile = new MultistreamTileViewModel(
+                platforms, catalog, connection, authorization, [monitor], bus, dispatcher, youtubeSettings);
+            tile.SetOnScreen(true);
+
+            var twitchRow = tile.Rows.Single(r => r.Platform == StreamingPlatform.Twitch);
+            var ytRow = tile.Rows.Single(r => r.Platform == StreamingPlatform.YouTube);
+
+            Assert.Multiple(() =>
+            {
+                Assert.That(tile.SummaryText, Is.EqualTo("В эфире: 2 · 142 зр."));
+                Assert.That(tile.SummarySeverity, Is.EqualTo(StatusSeverity.Success));
+                Assert.That(twitchRow.HasViewerCount, Is.True);
+                Assert.That(twitchRow.ViewerCountText, Is.EqualTo("42 зр."));
+                Assert.That(twitchRow.HasLiveSummary, Is.True);
+                Assert.That(twitchRow.LiveSummaryText, Does.Contain("1 ч 2").And.Contain("Играем в тест на Twitch"));
+                Assert.That(ytRow.ViewerCountText, Is.EqualTo("100 зр."));
+                Assert.That(ytRow.IsBotOnly, Is.True);
+                Assert.That(ytRow.HasSwitchModeBadge, Is.True);
+                Assert.That(ytRow.SwitchModeBadgeText, Is.EqualTo("Автопереключение"));
+                Assert.That(ytRow.HasBackgroundLive, Is.True);
+                Assert.That(ytRow.BackgroundLiveCount, Is.EqualTo(1));
+                Assert.That(ytRow.BackgroundLiveText, Is.EqualTo("Ещё 1 в эфире"));
+                Assert.That(ytRow.HasContextBadges, Is.True);
+                Assert.That(ytRow.HasMonitoringWarning, Is.True);
+                Assert.That(ytRow.MonitoringWarningText, Does.Contain("Квота API почти исчерпана"));
+            });
+
+            Assert.That(catalog.Mutate(settings =>
+            {
+                var routing = settings.Platforms.Single(p => p.Platform == StreamingPlatform.YouTube);
+                routing.SwitchMode = ChannelSwitchMode.PreselectedNext;
+                routing.PreselectedNextChannelId = "yt-2";
+            }), Is.True);
+
+            Assert.Multiple(() =>
+            {
+                Assert.That(ytRow.SwitchModeBadgeText, Is.EqualTo("Следующий канал"));
+                Assert.That(ytRow.SwitchModeBadgeTooltip, Does.Contain("Канал 2"));
+            });
         }
         finally
         {
@@ -400,12 +899,28 @@ public sealed class MultistreamTileTests
         public ChatConnectionStatus CaptureChatStatus(BotLifecyclePhase phase) => new(ChatState, null, null, null, ChatIssue);
     }
 
-    private sealed class FakeStreamStatus(StreamStatus status = StreamStatus.Offline) : IStreamStatus
+    private sealed class FakeStreamStatus(StreamStatus status = StreamStatus.Offline, StreamInfo? stream = null) : IStreamStatus
     {
         public StreamStatus CurrentStatus => status;
-        public StreamInfo? CurrentStream => null;
-        public StreamStatusSnapshot GetSnapshot() => new(CurrentStatus, null, null);
+        public StreamInfo? CurrentStream => stream;
+        public StreamStatusSnapshot GetSnapshot() => new(CurrentStatus, stream, null);
         public Task RefreshLiveSnapshotAsync() => throw new NotSupportedException();
+    }
+
+    private sealed class MultiSnapshotFakeMonitor(
+        StreamingPlatform platform,
+        IReadOnlyList<ChannelMonitoringSnapshot> snapshots) : IPlatformChannelMonitor
+    {
+        public StreamingPlatform Platform => platform;
+        public string Name => "Монитор трансляций";
+        public int StartOrder => 0;
+        public ChannelMonitoringSnapshot GetSnapshot(ChannelKey channel) =>
+            snapshots.FirstOrDefault(s => s.Channel == channel)
+            ?? new(channel, channel.ChannelId, ChannelMonitoringAvailability.Active, MonitoringUnavailableReason.None, null, StreamStatus.Offline, null, null, false);
+        public IReadOnlyList<ChannelMonitoringSnapshot> GetSnapshots() => snapshots;
+        public Task RefreshAsync(ChannelKey? channel = null, CancellationToken cancellationToken = default) => Task.CompletedTask;
+        public Task StartAsync(IProgress<string> progress, CancellationToken cancellationToken) => Task.CompletedTask;
+        public Task StopAsync(IProgress<string> progress, CancellationToken cancellationToken) => Task.CompletedTask;
     }
 
     private sealed class FakeMonitor(StreamStatus status) : IPlatformChannelMonitor
@@ -443,5 +958,93 @@ public sealed class MultistreamTileTests
         public PlatformHost Host { get; } = new(platform, [], NullLogger<PlatformHost>.Instance);
         public Task<string> BeginSessionAsync(IProgress<string> progress, CancellationToken cancellationToken) => Task.FromResult("UC-live");
         public void EndSession() { }
+    }
+
+    private sealed class FakeTargetChannelProvider(TargetChannelState current) : ITargetChannelProvider
+    {
+        public TargetChannelState Current => current;
+        public void BeginSession() { }
+        public void EndSession() { }
+        public void SetSessionLogin(string login) { }
+    }
+
+    private sealed class FakeSwitchCoordinator(
+        Func<StreamingPlatform, ChannelKey, Task<ChannelSwitchResult>> onSwitch) : IChannelSwitchCoordinator
+    {
+        public List<ChannelKey> Calls { get; } = [];
+
+        public AutoDiscoverPrompt? GetActivePrompt(StreamingPlatform platform) => null;
+        public IReadOnlyList<AutoDiscoverPrompt> GetActivePrompts() => [];
+
+        public Task<ChannelSwitchResult> SwitchActiveChannelAsync(StreamingPlatform platform, ChannelKey targetChannel, CancellationToken cancellationToken = default)
+        {
+            Calls.Add(targetChannel);
+            return onSwitch(platform, targetChannel);
+        }
+
+        public Task<ChannelSwitchResult> SwitchActiveChannelAsync(StreamingPlatform platform, ChannelKey targetChannel, bool preservePreselectedNext, CancellationToken cancellationToken = default) =>
+            SwitchActiveChannelAsync(platform, targetChannel, cancellationToken);
+
+        public Task<ChannelSwitchResult> SwitchCatalogChannelAsync(ChannelCatalogEntry targetChannel, CancellationToken cancellationToken = default) =>
+            SwitchActiveChannelAsync(targetChannel.Platform, targetChannel.Key, cancellationToken);
+
+        public Task<ChannelSwitchResult?> SetPreselectedNextAsync(StreamingPlatform platform, ChannelKey? targetChannel, CancellationToken cancellationToken = default) =>
+            Task.FromResult<ChannelSwitchResult?>(null);
+
+        public Task SetSwitchModeAsync(StreamingPlatform platform, ChannelSwitchMode mode, CancellationToken cancellationToken = default) =>
+            Task.CompletedTask;
+
+        public Task<ChannelSwitchResult> ConfirmAutoDiscoverCandidateAsync(StreamingPlatform platform, ChannelKey candidateChannel, CancellationToken cancellationToken = default) =>
+            SwitchActiveChannelAsync(platform, candidateChannel, cancellationToken);
+
+        public Task DismissAutoDiscoverPromptAsync(StreamingPlatform platform, CancellationToken cancellationToken = default) =>
+            Task.CompletedTask;
+
+        public Task EvaluateStartupPendingAsync(StreamingPlatform platform, CancellationToken cancellationToken = default) =>
+            Task.CompletedTask;
+    }
+
+    private static void EnsureWpfResources()
+    {
+        if (Application.Current is null)
+        {
+            _ = new Application { ShutdownMode = ShutdownMode.OnExplicitShutdown };
+        }
+
+        string[] dictionaries =
+        [
+            "pack://application:,,,/KeepShell;component/Resources/Themes/Light.xaml",
+            "pack://application:,,,/KeepShell;component/Resources/Themes/Tokens.xaml",
+            "pack://application:,,,/KeepShell;component/Resources/Converters.xaml",
+            "pack://application:,,,/KeepShell;component/Resources/Styles/Controls.xaml",
+            "pack://application:,,,/PoproshaykaBot.Wpf;component/Infrastructure/Converters/AppConverters.xaml",
+            "pack://application:,,,/PoproshaykaBot.Wpf;component/Resources/PlatformIcons.xaml",
+        ];
+        var merged = Application.Current!.Resources.MergedDictionaries;
+        foreach (var uri in dictionaries)
+        {
+            if (!merged.Any(d => string.Equals(d.Source?.OriginalString, uri, StringComparison.OrdinalIgnoreCase)))
+            {
+                merged.Add(new() { Source = new(uri) });
+            }
+        }
+    }
+
+    private static IEnumerable<T> Descendants<T>(DependencyObject root)
+        where T : DependencyObject
+    {
+        for (var i = 0; i < VisualTreeHelper.GetChildrenCount(root); i++)
+        {
+            var child = VisualTreeHelper.GetChild(root, i);
+            if (child is T match)
+            {
+                yield return match;
+            }
+
+            foreach (var nested in Descendants<T>(child))
+            {
+                yield return nested;
+            }
+        }
     }
 }

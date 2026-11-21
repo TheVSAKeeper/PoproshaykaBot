@@ -20,6 +20,7 @@ public sealed class ObsChatCssSettings
     public bool EnableAnimations { get; set; } = true;
     public int MaxMessages { get; set; } = 50;
     public bool ShowTimestamp { get; set; } = true;
+    public string PlatformBadgeMode { get; set; } = ObsPlatformBadgeMode.Auto;
     public bool ShowPlatformBadge { get; set; }
 
     public string EmoteSize { get; set; } = "28px";
@@ -55,9 +56,10 @@ public sealed class ObsChatCssSettings
     public int FadeOutAnimationDurationMs { get; set; } = 1000;
     public string OverlayTheme { get; set; } = ObsOverlayTheme.Classic;
 
-    public static ObsChatCssSettings FromObsChatSettings(ObsChatSettings? settings)
+    public static ObsChatCssSettings FromObsChatSettings(ObsChatSettings? settings, int enabledPlatformCount = 1)
     {
         var safeSettings = settings ?? new ObsChatSettings();
+        var normalizedMode = ObsPlatformBadgeMode.Normalize(safeSettings.PlatformBadgeMode);
 
         return new()
         {
@@ -76,7 +78,8 @@ public sealed class ObsChatCssSettings
             EnableAnimations = safeSettings.EnableAnimations,
             MaxMessages = ObsChatRanges.Clamp(safeSettings.MaxMessages, ObsChatRanges.MaxMessagesMin, ObsChatRanges.MaxMessagesMax),
             ShowTimestamp = safeSettings.ShowTimestamp,
-            ShowPlatformBadge = safeSettings.ShowPlatformBadge,
+            PlatformBadgeMode = normalizedMode,
+            ShowPlatformBadge = ObsPlatformBadgeMode.ResolveShowBadge(normalizedMode, enabledPlatformCount),
 
             EmoteSize = $"{ObsChatRanges.Clamp(safeSettings.EmoteSizePixels, ObsChatRanges.EmoteSizeMin, ObsChatRanges.EmoteSizeMax)}px",
             BadgeSize = $"{ObsChatRanges.Clamp(safeSettings.BadgeSizePixels, ObsChatRanges.BadgeSizeMin, ObsChatRanges.BadgeSizeMax)}px",

@@ -108,6 +108,7 @@ public sealed partial class ShellViewModel : ShellViewModelBase, IDisposable
         Overview.UserRequested += OnUserRequested;
         Overview.ConnectionToggleRequested += OnOverviewConnectionToggleRequested;
         Overview.PlatformRequested += OnOverviewPlatformRequested;
+        Overview.StatusReported += OnOverviewStatusReported;
 
         _settingsPage = settingsPage;
         _settingsPage.SettingsSaved += OnSettingsSaved;
@@ -285,6 +286,7 @@ public sealed partial class ShellViewModel : ShellViewModelBase, IDisposable
         Overview.UserRequested -= OnUserRequested;
         Overview.ConnectionToggleRequested -= OnOverviewConnectionToggleRequested;
         Overview.PlatformRequested -= OnOverviewPlatformRequested;
+        Overview.StatusReported -= OnOverviewStatusReported;
         _preferences.PropertyChanged -= OnPreferencesPropertyChanged;
 
         if (ChannelSwitchBanner is not null)
@@ -314,6 +316,8 @@ public sealed partial class ShellViewModel : ShellViewModelBase, IDisposable
     }
 
     private void OnOverviewPlatformRequested(object? sender, StreamingPlatform platform) => OpenMultistream(platform, fromOverview: true);
+
+    private void OnOverviewStatusReported(string message, StatusSeverity severity) => SetStatus(message, severity);
 
     private void OnMultistreamRequested(object? sender, StreamingPlatform? platform) => OpenMultistream(platform);
 

@@ -249,7 +249,7 @@ public sealed partial class ChatDisplayTileViewModel : DashboardTileViewModel, I
         var uri = stream is not null ? ParseWebUri(platform?.BuildNativeChatUrl(stream)) : null;
         var platformChanged = PlatformChat.SetTarget(mode.Platform, uri, ParseWebUri(platform?.BuildStreamUrl(stream)), platformShown);
 
-        _resetZoomAction.IsVisible = twitchShown;
+        _resetZoomAction.IsVisible = twitchShown || platformShown;
         _resetSessionAction.IsVisible = twitchShown;
         _blockersAction.IsVisible = twitchShown;
         _openInBrowserAction.IsVisible = !mode.IsSplit;
@@ -268,8 +268,9 @@ public sealed partial class ChatDisplayTileViewModel : DashboardTileViewModel, I
     internal void UpdateWebViewActions()
     {
         var twitchReady = TwitchChat is { IsShown: true, RuntimeMissing: false, ChannelUri: not null };
-        _reloadAction.IsEnabled = twitchReady || PlatformChat is { IsShown: true, RuntimeMissing: false, ChannelUri: not null };
-        _resetZoomAction.IsEnabled = twitchReady;
+        var platformReady = PlatformChat is { IsShown: true, RuntimeMissing: false, ChannelUri: not null };
+        _reloadAction.IsEnabled = twitchReady || platformReady;
+        _resetZoomAction.IsEnabled = twitchReady || platformReady;
         _resetSessionAction.IsEnabled = twitchReady;
     }
 

@@ -236,6 +236,53 @@ html[data-overlay-theme="flow"] #chat .badge {
     vertical-align: -2px;
 }
 
+html[data-overlay-theme="flow"] #chat .platform-badge {
+    width: 1.38em;
+    height: 1.38em;
+    padding: 0.22em;
+    margin: -2px 6px 0 0;
+    vertical-align: middle;
+    border-radius: 999px;
+    background: rgba(23, 19, 31, 0.94);
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.45);
+}
+
+html[data-overlay-theme="flow"] #chat .platform-badge--twitch {
+    color: #c49bff;
+    border: 1.5px solid rgba(145, 70, 255, 0.85);
+}
+
+html[data-overlay-theme="flow"] #chat .platform-badge--youtube {
+    color: #ff6b6b;
+    border: 1.5px solid rgba(255, 59, 48, 0.88);
+}
+
+html[data-overlay-theme="flow"] #chat .platform-badge--other {
+    width: auto;
+    min-width: 1.38em;
+    padding: 0 0.36em;
+    color: #cbd5e1;
+    border: 1.5px solid rgba(148, 163, 184, 0.7);
+}
+
+html[data-overlay-theme="flow"] #chat .flow-capsule .platform-badge {
+    width: 1.24em;
+    height: 1.24em;
+    padding: 0.18em;
+    margin: -1px 5px 0 0;
+    vertical-align: middle;
+}
+
+html[data-overlay-theme="flow"] #chat .flow-capsule .platform-badge--other {
+    width: auto;
+    min-width: 1.24em;
+    padding: 0 0.32em;
+}
+
+html[data-overlay-theme="flow"] #chat .message.no-platform-badge .platform-badge {
+    display: none;
+}
+
 html[data-overlay-theme="flow"] #chat .emote {
     margin: -3px 1px;
 }
