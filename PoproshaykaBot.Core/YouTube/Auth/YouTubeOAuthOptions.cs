@@ -8,6 +8,8 @@ public sealed class YouTubeOAuthOptions
 
     public string TokenEndpoint { get; init; } = "https://oauth2.googleapis.com/token";
 
+    public string TokenInfoEndpoint { get; init; } = "https://oauth2.googleapis.com/tokeninfo";
+
     public string ChannelsEndpoint { get; init; } = "https://www.googleapis.com/youtube/v3/channels";
 
     public TimeSpan AuthTimeout { get; init; } = TimeSpan.FromMinutes(3);

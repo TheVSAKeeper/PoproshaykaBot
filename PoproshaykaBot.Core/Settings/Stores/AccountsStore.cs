@@ -63,6 +63,9 @@ public sealed class AccountsStore : RoleAccountsStoreBase<AccountsStore.Accounts
     public (bool Changed, bool Written) RemoveRoleContext(PlatformAuthRole role, string? contextId) =>
         RemoveRoleContextCore(role, contextId, OAuthRoleHelpers.ClearAccountInPlace);
 
+    public (IReadOnlyList<string> RemovedContextIds, bool Written) RemoveAccountRole(string userId, PlatformAuthRole role) =>
+        RemoveAccountRoleCore(userId, role, OAuthRoleHelpers.ClearAccountInPlace);
+
     public (IReadOnlyList<(PlatformAuthRole Role, string ContextId)> Removed, bool Written) RemoveAccount(string userId) =>
         RemoveAccountCore(userId, OAuthRoleHelpers.ClearAccountInPlace);
 

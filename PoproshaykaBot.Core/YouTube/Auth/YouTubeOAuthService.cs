@@ -7,7 +7,9 @@ public sealed class YouTubeOAuthService(
     YouTubeOAuthFlowCoordinator flowCoordinator,
     YouTubeOAuthTokenRefresher tokenRefresher,
     YouTubeOAuthAccountWriter accountWriter,
-    YouTubeOAuthStatusReporter statusReporter)
+    YouTubeOAuthStatusReporter statusReporter,
+    YouTubeOAuthTokenClient? tokenClient = null,
+    IYouTubeChannelIdentityClient? channelIdentityClient = null)
     : IYouTubeOAuthService, IPlatformAuthService, IDisposable
 {
     public StreamingPlatform Platform => StreamingPlatform.YouTube;
@@ -61,6 +63,54 @@ public sealed class YouTubeOAuthService(
         CancellationToken ct = default)
     {
         return tokenRefresher.RefreshTokenAsync(role, contextId, clientId, clientSecret, refreshToken, ct);
+    }
+
+    public Task<OAuthRefreshResult> RefreshTokenWithResultAsync(
+        PlatformAuthRole role,
+        string? contextId,
+        string clientId,
+        string clientSecret,
+        string refreshToken,
+        CancellationToken ct = default)
+    {
+        return tokenRefresher.RefreshTokenWithResultAsync(role, contextId, clientId, clientSecret, refreshToken, ct);
+    }
+
+    public async Task<YouTubeTokenValidationInfo?> ValidateAsync(string accessToken, CancellationToken ct = default)
+    {
+        if (tokenClient is null)
+        {
+            return null;
+        }
+
+        var info = await tokenClient.ValidateTokenAsync(accessToken, ct);
+        if (info is null)
+        {
+            return null;
+        }
+
+        if (channelIdentityClient is not null)
+        {
+            try
+            {
+                var channel = await channelIdentityClient.GetOwnChannelAsync(accessToken, ct);
+                return info with { ChannelId = channel.ChannelId, ChannelTitle = channel.ChannelTitle };
+            }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (YouTubeOAuthException)
+            {
+                return info;
+            }
+            catch (HttpRequestException)
+            {
+                return info;
+            }
+        }
+
+        return info;
     }
 
     public async Task<string?> GetAccessTokenAsync(PlatformAuthRole role, CancellationToken ct = default)

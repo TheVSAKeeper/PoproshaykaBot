@@ -157,7 +157,8 @@ public sealed class OAuthRoleTokenRefresher<TAccount> : IDisposable
 
             try
             {
-                return await ExecuteRefreshAsync(role, normalized, clientId, clientSecret, account.RefreshToken, fingerprint, ct);
+                var result = await ExecuteRefreshAsync(role, normalized, clientId, clientSecret, account.RefreshToken, fingerprint, ct);
+                return result.AccessToken;
             }
             catch (OperationCanceledException) when (ct.IsCancellationRequested)
             {
@@ -185,6 +186,18 @@ public sealed class OAuthRoleTokenRefresher<TAccount> : IDisposable
     }
 
     public async Task<string> RefreshTokenAsync(
+        PlatformAuthRole role,
+        string? contextId,
+        string clientId,
+        string clientSecret,
+        string refreshToken,
+        CancellationToken ct = default)
+    {
+        var result = await RefreshTokenWithResultAsync(role, contextId, clientId, clientSecret, refreshToken, ct);
+        return result.AccessToken;
+    }
+
+    public async Task<OAuthRefreshResult> RefreshTokenWithResultAsync(
         PlatformAuthRole role,
         string? contextId,
         string clientId,
@@ -271,7 +284,7 @@ public sealed class OAuthRoleTokenRefresher<TAccount> : IDisposable
         return expiresAt - _strategy.TokenRefreshMargin > _timeProvider.GetUtcNow();
     }
 
-    private async Task<string> ExecuteRefreshAsync(
+    private async Task<OAuthRefreshResult> ExecuteRefreshAsync(
         PlatformAuthRole role,
         string contextId,
         string clientId,
@@ -282,9 +295,9 @@ public sealed class OAuthRoleTokenRefresher<TAccount> : IDisposable
     {
         try
         {
-            var accessToken = await _strategy.RefreshAndSaveAsync(role, contextId, clientId, clientSecret, refreshToken, ct);
+            var result = await _strategy.RefreshAndSaveWithResultAsync(role, contextId, clientId, clientSecret, refreshToken, ct);
             ResetRetryState(role, contextId);
-            return accessToken;
+            return result;
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {

@@ -90,6 +90,17 @@ public sealed class TwitchOAuthService(
         return refresher.RefreshTokenAsync(role, contextId, clientId, clientSecret, refreshToken, ct);
     }
 
+    public Task<OAuthRefreshResult> RefreshTokenWithResultAsync(
+        PlatformAuthRole role,
+        string? contextId,
+        string clientId,
+        string clientSecret,
+        string refreshToken,
+        CancellationToken ct = default)
+    {
+        return refresher.RefreshTokenWithResultAsync(role, contextId, clientId, clientSecret, refreshToken, ct);
+    }
+
     public async Task<string?> GetAccessTokenAsync(PlatformAuthRole role, CancellationToken ct = default)
     {
         return await refresher.GetAccessTokenAsync(role, forceRefresh: false, ct);

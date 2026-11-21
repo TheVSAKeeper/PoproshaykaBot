@@ -98,6 +98,17 @@ public sealed class YouTubeOAuthTokenRefresher : IDisposable
         return _inner.RefreshTokenAsync(role, contextId, clientId, clientSecret, refreshToken, ct);
     }
 
+    public Task<OAuthRefreshResult> RefreshTokenWithResultAsync(
+        PlatformAuthRole role,
+        string? contextId,
+        string clientId,
+        string clientSecret,
+        string refreshToken,
+        CancellationToken ct = default)
+    {
+        return _inner.RefreshTokenWithResultAsync(role, contextId, clientId, clientSecret, refreshToken, ct);
+    }
+
     public void ResetRetryState(PlatformAuthRole role)
     {
         _inner.ResetRetryState(role);
@@ -207,9 +218,21 @@ public sealed class YouTubeOAuthTokenRefresher : IDisposable
             string refreshToken,
             CancellationToken ct)
         {
+            var result = await RefreshAndSaveWithResultAsync(role, contextId, clientId, clientSecret, refreshToken, ct);
+            return result.AccessToken;
+        }
+
+        public async Task<OAuthRefreshResult> RefreshAndSaveWithResultAsync(
+            PlatformAuthRole role,
+            string contextId,
+            string clientId,
+            string clientSecret,
+            string refreshToken,
+            CancellationToken ct)
+        {
             var token = await tokenClient.RefreshAsync(clientId, clientSecret, refreshToken, ct);
 
-            accountWriter.ApplyRefreshResult(
+            var persisted = accountWriter.ApplyRefreshResult(
                 role,
                 contextId,
                 token.AccessToken,
@@ -218,7 +241,7 @@ public sealed class YouTubeOAuthTokenRefresher : IDisposable
                 token.ExpiresInSeconds,
                 previousRefreshToken: refreshToken);
 
-            return token.AccessToken;
+            return new(token.AccessToken, persisted);
         }
 
         public OAuthRefreshFailureKind ClassifyFailure(Exception exception)

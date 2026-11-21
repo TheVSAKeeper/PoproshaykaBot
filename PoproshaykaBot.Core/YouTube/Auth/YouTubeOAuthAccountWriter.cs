@@ -58,7 +58,7 @@ public sealed class YouTubeOAuthAccountWriter(
         ApplyRefreshResult(role, null, accessToken, refreshToken, scopes, expiresInSeconds, publishAuthorizationRefreshed);
     }
 
-    public void ApplyRefreshResult(
+    public bool ApplyRefreshResult(
         PlatformAuthRole role,
         string? contextId,
         string accessToken,
@@ -91,20 +91,34 @@ public sealed class YouTubeOAuthAccountWriter(
             account.AccessTokenExpiresAt = expiresAt;
         }
 
+        bool applied;
+        bool written;
         IReadOnlyList<(PlatformAuthRole Role, string ContextId)> syncedSiblings;
         if (!string.IsNullOrWhiteSpace(previousRefreshToken))
         {
-            syncedSiblings = accountsStore.MutateAndSyncSharedRefreshToken(
+            var sync = accountsStore.MutateAndSyncSharedRefreshToken(
                 role,
                 normalized,
                 previousRefreshToken,
                 ApplyFields,
                 ApplyFields);
+            applied = sync.Applied;
+            written = sync.Written;
+            syncedSiblings = sync.SyncedSiblings;
         }
         else
         {
-            accountsStore.Mutate(role, normalized, ApplyFields);
+            applied = true;
+            written = accountsStore.Mutate(role, normalized, ApplyFields);
             syncedSiblings = [];
+        }
+
+        if (!applied)
+        {
+            logger.LogDebug("Обновление YouTube access-токена роли {Role} (контекст {ContextId}) пропущено: исходная авторизация уже изменена или удалена",
+                role,
+                normalized);
+            return false;
         }
 
         logger.LogDebug("Обновлён YouTube access-токен роли {Role} (контекст {ContextId}, refresh {RefreshAction})",
@@ -121,6 +135,8 @@ public sealed class YouTubeOAuthAccountWriter(
         {
             _ = eventBus.PublishAsync(new PlatformAuthorizationRefreshed(StreamingPlatform.YouTube, sibling.Role, sibling.ContextId));
         }
+
+        return written;
     }
 
     internal bool HasAuthorizationMaterial(PlatformAuthRole role, string? contextId)

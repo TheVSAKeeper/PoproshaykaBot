@@ -328,13 +328,14 @@ public sealed partial class MultistreamPageViewModel : ObservableObject, IPageHe
     [RelayCommand]
     public void SelectPlatformTab(MultistreamPlatformTab tab)
     {
+        var previous = SelectedPlatformTab;
         SelectedPlatformTab = tab switch
         {
             MultistreamPlatformTab.Parameters when !HasPlatformSettings => MultistreamPlatformTab.Channels,
             MultistreamPlatformTab.Accounts when !HasPlatformAccounts => MultistreamPlatformTab.Channels,
             _ => tab,
         };
-        if (SelectedPlatformTab == MultistreamPlatformTab.Accounts)
+        if (SelectedPlatformTab == MultistreamPlatformTab.Accounts && previous != MultistreamPlatformTab.Accounts)
         {
             Accounts?.Load();
         }
@@ -548,5 +549,9 @@ public sealed partial class MultistreamPageViewModel : ObservableObject, IPageHe
     public Task<bool> TrySaveUnsavedChangesAsync() => Settings.TrySaveUnsavedChangesAsync();
 
     [RelayCommand]
-    public void DiscardUnsavedChanges() => OnEnter();
+    public void DiscardUnsavedChanges()
+    {
+        Accounts?.DiscardUnsavedManualEdits();
+        OnEnter();
+    }
 }

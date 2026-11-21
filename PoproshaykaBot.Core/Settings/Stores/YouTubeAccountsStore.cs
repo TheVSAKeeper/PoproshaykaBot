@@ -82,6 +82,9 @@ public sealed class YouTubeAccountsStore : RoleAccountsStoreBase<YouTubeAccounts
     public (bool Changed, bool Written) RemoveRoleContext(PlatformAuthRole role, string? contextId) =>
         RemoveRoleContextCore(role, contextId, YouTubeOAuthRoleHelpers.ClearAccountInPlace);
 
+    public (IReadOnlyList<string> RemovedContextIds, bool Written) RemoveAccountRole(string channelId, PlatformAuthRole role) =>
+        RemoveAccountRoleCore(channelId, role, YouTubeOAuthRoleHelpers.ClearAccountInPlace);
+
     public (IReadOnlyList<(PlatformAuthRole Role, string ContextId)> Removed, bool Written) RemoveAccount(string channelId) =>
         RemoveAccountCore(channelId, YouTubeOAuthRoleHelpers.ClearAccountInPlace);
 

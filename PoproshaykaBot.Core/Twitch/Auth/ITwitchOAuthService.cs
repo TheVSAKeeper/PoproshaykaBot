@@ -52,6 +52,18 @@ public interface ITwitchOAuthService
         return RefreshTokenAsync(role, clientId, clientSecret, refreshToken, ct);
     }
 
+    async Task<OAuthRefreshResult> RefreshTokenWithResultAsync(
+        PlatformAuthRole role,
+        string? contextId,
+        string clientId,
+        string clientSecret,
+        string refreshToken,
+        CancellationToken ct = default)
+    {
+        var token = await RefreshTokenAsync(role, contextId, clientId, clientSecret, refreshToken, ct);
+        return new(token, Persisted: true);
+    }
+
     void ResetRetryState(PlatformAuthRole role, string? contextId) { }
 
     Task<string?> GetAccessTokenAsync(PlatformAuthRole role, CancellationToken ct = default);

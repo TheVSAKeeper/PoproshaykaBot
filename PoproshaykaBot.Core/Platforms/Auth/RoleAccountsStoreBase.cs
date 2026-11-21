@@ -3,6 +3,11 @@ using PoproshaykaBot.Core.Settings.Stores;
 
 namespace PoproshaykaBot.Core.Platforms.Auth;
 
+public readonly record struct SharedRefreshSyncResult(
+    bool Applied,
+    bool Written,
+    IReadOnlyList<(PlatformAuthRole Role, string ContextId)> SyncedSiblings);
+
 public abstract class RoleAccountsStoreBase<TFile, TAccount>
     where TFile : class, new()
     where TAccount : class, IRoleAccountSettings, new()
@@ -199,6 +204,92 @@ public abstract class RoleAccountsStoreBase<TFile, TAccount>
         return written;
     }
 
+    public bool UpsertContexts(IReadOnlyList<(PlatformAuthRole Role, string ContextId, string Label, TAccount Account)> entries)
+    {
+        ArgumentNullException.ThrowIfNull(entries);
+        if (entries.Count == 0)
+        {
+            return true;
+        }
+
+        foreach (var entry in entries)
+        {
+            PlatformAuthRoles.EnsureActive(entry.Role);
+            ArgumentException.ThrowIfNullOrWhiteSpace(entry.ContextId);
+            ArgumentNullException.ThrowIfNull(entry.Account);
+        }
+
+        var written = _store.Mutate(state =>
+        {
+            foreach (var entry in entries)
+            {
+                var normalized = AuthContextIds.Normalize(entry.ContextId);
+                if (AuthContextIds.IsDefault(normalized))
+                {
+                    var target = TakeAccount(state, entry.Role, null);
+                    CopyAccountFields(entry.Account, target);
+                    EnsureDefaultScopes(target, entry.Role);
+                    continue;
+                }
+
+                var contexts = GetContexts(state);
+                var existing = contexts.FirstOrDefault(c =>
+                    string.Equals(c.ContextId, normalized, StringComparison.Ordinal));
+                EnsureDefaultScopes(entry.Account, entry.Role);
+
+                if (existing is not null)
+                {
+                    existing.Role = entry.Role;
+                    existing.Label = string.IsNullOrWhiteSpace(entry.Label) ? normalized : entry.Label.Trim();
+                    existing.Account = entry.Account;
+                }
+                else
+                {
+                    contexts.Add(new()
+                    {
+                        ContextId = normalized,
+                        Role = entry.Role,
+                        Label = string.IsNullOrWhiteSpace(entry.Label) ? normalized : entry.Label.Trim(),
+                        Account = entry.Account,
+                    });
+                }
+            }
+        });
+
+        foreach (var role in entries.Select(static e => e.Role).Distinct())
+        {
+            OnRoleMutated(role, written);
+        }
+
+        return written;
+    }
+
+    public (bool Applied, bool Written) TryMutateExisting(PlatformAuthRole role, string? contextId, Func<TAccount, bool> mutator)
+    {
+        PlatformAuthRoles.EnsureActive(role);
+        ArgumentNullException.ThrowIfNull(mutator);
+
+        var normalized = AuthContextIds.Normalize(contextId);
+        var (applied, written) = _store.MutateIfWithResult(state =>
+        {
+            var account = TryFindExistingAccount(state, role, normalized);
+            if (account is null)
+            {
+                return false;
+            }
+
+            EnsureDefaultScopes(account, role);
+            return mutator(account);
+        });
+
+        if (applied)
+        {
+            OnRoleMutated(role, written);
+        }
+
+        return (applied, written);
+    }
+
     public bool RemoveContext(string contextId)
     {
         if (string.IsNullOrWhiteSpace(contextId) || AuthContextIds.IsDefault(contextId))
@@ -300,12 +391,55 @@ public abstract class RoleAccountsStoreBase<TFile, TAccount>
         return (removed, written);
     }
 
-    public IReadOnlyList<(PlatformAuthRole Role, string ContextId)> MutateAndSyncSharedRefreshToken(
+    protected (IReadOnlyList<string> RemovedContextIds, bool Written) RemoveAccountRoleCore(
+        string subjectId,
+        PlatformAuthRole role,
+        Action<TAccount> clearDefault)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(subjectId);
+        PlatformAuthRoles.EnsureActive(role);
+        ArgumentNullException.ThrowIfNull(clearDefault);
+
+        var targetId = subjectId.Trim();
+        var removed = new List<string>();
+        var written = _store.Mutate(state =>
+        {
+            var defaultAccount = GetAccount(state, role);
+            if (defaultAccount is not null && string.Equals(GetSubjectId(defaultAccount)?.Trim(), targetId, StringComparison.Ordinal))
+            {
+                clearDefault(defaultAccount);
+                removed.Add(AuthContextIds.Default);
+            }
+
+            var contexts = GetContexts(state);
+            for (var i = contexts.Count - 1; i >= 0; i--)
+            {
+                var item = contexts[i];
+                if (item.Role == role && string.Equals(GetSubjectId(item.Account)?.Trim(), targetId, StringComparison.Ordinal))
+                {
+                    removed.Add(AuthContextIds.Normalize(item.ContextId));
+                    contexts.RemoveAt(i);
+                }
+            }
+
+            ClearContextsIfEmpty(state);
+        });
+
+        if (removed.Count > 0)
+        {
+            OnRoleMutated(role, written);
+        }
+
+        return (removed, written);
+    }
+
+    public SharedRefreshSyncResult MutateAndSyncSharedRefreshToken(
         PlatformAuthRole primaryRole,
         string? primaryContextId,
         string? previousRefreshToken,
         Action<TAccount> updatePrimary,
-        Action<TAccount> updateSibling)
+        Action<TAccount> updateSibling,
+        string? expectedSubjectId = null)
     {
         PlatformAuthRoles.EnsureActive(primaryRole);
         ArgumentNullException.ThrowIfNull(updatePrimary);
@@ -313,67 +447,95 @@ public abstract class RoleAccountsStoreBase<TFile, TAccount>
 
         var normalized = AuthContextIds.Normalize(primaryContextId);
         var updatedSiblings = new List<(PlatformAuthRole Role, string ContextId)>();
+        var primaryUpdated = false;
 
-        var written = _store.Mutate(state =>
+        var (applied, written) = _store.MutateIfWithResult(state =>
         {
-            var primary = TakeAccount(state, primaryRole, normalized);
-            var primarySubject = GetSubjectId(primary)?.Trim();
-            updatePrimary(primary);
-            var resolvedSubject = GetSubjectId(primary)?.Trim();
-            if (!string.IsNullOrWhiteSpace(resolvedSubject))
-            {
-                primarySubject = resolvedSubject;
-            }
+            var primary = TryFindExistingAccount(state, primaryRole, normalized);
+            string? primarySubject = null;
 
-            if (string.IsNullOrWhiteSpace(previousRefreshToken) || string.IsNullOrWhiteSpace(primarySubject))
+            if (primary is not null
+                && !string.IsNullOrWhiteSpace(previousRefreshToken)
+                && string.Equals(primary.RefreshToken, previousRefreshToken, StringComparison.Ordinal))
             {
-                return;
-            }
-
-            foreach (var role in new[] { PlatformAuthRole.Bot, PlatformAuthRole.Broadcaster })
-            {
-                if (role == primaryRole && AuthContextIds.IsDefault(normalized))
+                primarySubject = GetSubjectId(primary)?.Trim();
+                updatePrimary(primary);
+                primaryUpdated = true;
+                var resolvedSubject = GetSubjectId(primary)?.Trim();
+                if (!string.IsNullOrWhiteSpace(resolvedSubject))
                 {
-                    continue;
-                }
-
-                var candidate = GetAccount(state, role);
-                if (candidate is not null
-                    && string.Equals(GetSubjectId(candidate)?.Trim(), primarySubject, StringComparison.Ordinal)
-                    && string.Equals(candidate.RefreshToken, previousRefreshToken, StringComparison.Ordinal))
-                {
-                    updateSibling(candidate);
-                    updatedSiblings.Add((role, AuthContextIds.Default));
+                    primarySubject = resolvedSubject;
                 }
             }
-
-            foreach (var item in GetContexts(state))
+            else if (!string.IsNullOrWhiteSpace(expectedSubjectId))
             {
-                var itemContext = AuthContextIds.Normalize(item.ContextId);
-                if (item.Role == primaryRole && string.Equals(itemContext, normalized, StringComparison.Ordinal))
+                primarySubject = expectedSubjectId.Trim();
+            }
+
+            if (!string.IsNullOrWhiteSpace(previousRefreshToken) && !string.IsNullOrWhiteSpace(primarySubject))
+            {
+                foreach (var role in new[] { PlatformAuthRole.Bot, PlatformAuthRole.Broadcaster })
                 {
-                    continue;
+                    if (role == primaryRole && AuthContextIds.IsDefault(normalized))
+                    {
+                        continue;
+                    }
+
+                    var candidate = GetAccount(state, role);
+                    if (candidate is not null
+                        && string.Equals(GetSubjectId(candidate)?.Trim(), primarySubject, StringComparison.Ordinal)
+                        && string.Equals(candidate.RefreshToken, previousRefreshToken, StringComparison.Ordinal))
+                    {
+                        updateSibling(candidate);
+                        updatedSiblings.Add((role, AuthContextIds.Default));
+                    }
                 }
 
-                if (string.Equals(GetSubjectId(item.Account)?.Trim(), primarySubject, StringComparison.Ordinal)
-                    && string.Equals(item.Account.RefreshToken, previousRefreshToken, StringComparison.Ordinal))
+                foreach (var item in GetContexts(state))
                 {
-                    updateSibling(item.Account);
-                    updatedSiblings.Add((item.Role, itemContext));
+                    var itemContext = AuthContextIds.Normalize(item.ContextId);
+                    if (item.Role == primaryRole && string.Equals(itemContext, normalized, StringComparison.Ordinal))
+                    {
+                        continue;
+                    }
+
+                    if (string.Equals(GetSubjectId(item.Account)?.Trim(), primarySubject, StringComparison.Ordinal)
+                        && string.Equals(item.Account.RefreshToken, previousRefreshToken, StringComparison.Ordinal))
+                    {
+                        updateSibling(item.Account);
+                        updatedSiblings.Add((item.Role, itemContext));
+                    }
                 }
             }
+
+            return primaryUpdated || updatedSiblings.Count > 0;
         });
 
-        OnRoleMutated(primaryRole, written);
+        if (primaryUpdated)
+        {
+            OnRoleMutated(primaryRole, written);
+        }
+
         foreach (var siblingRole in updatedSiblings.Select(static s => s.Role).Distinct())
         {
-            if (siblingRole != primaryRole)
+            if (!primaryUpdated || siblingRole != primaryRole)
             {
                 OnRoleMutated(siblingRole, written);
             }
         }
 
-        return updatedSiblings;
+        return new(applied, written, updatedSiblings);
+    }
+
+    private TAccount? TryFindExistingAccount(TFile state, PlatformAuthRole role, string normalizedContextId)
+    {
+        if (AuthContextIds.IsDefault(normalizedContextId))
+        {
+            return GetAccount(state, role);
+        }
+
+        return GetContexts(state).FirstOrDefault(c =>
+            c.Role == role && string.Equals(c.ContextId, normalizedContextId, StringComparison.Ordinal))?.Account;
     }
 
     public bool TryClearAccessToken(PlatformAuthRole role, string expectedToken)

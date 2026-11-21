@@ -35,7 +35,7 @@ public sealed class OAuthAccountWriter(
             publishAuthorizationRefreshed);
     }
 
-    public void UpdateSettings(
+    public bool UpdateSettings(
         PlatformAuthRole role,
         string? contextId,
         string accessToken,
@@ -69,20 +69,35 @@ public sealed class OAuthAccountWriter(
             account.AccessTokenExpiresAt = expiresAt;
         }
 
+        bool applied;
+        bool written;
         IReadOnlyList<(PlatformAuthRole Role, string ContextId)> syncedSiblings;
         if (!string.IsNullOrWhiteSpace(previousRefreshToken))
         {
-            syncedSiblings = accountsStore.MutateAndSyncSharedRefreshToken(
+            var sync = accountsStore.MutateAndSyncSharedRefreshToken(
                 role,
                 normalized,
                 previousRefreshToken,
                 ApplyFields,
-                ApplyFields);
+                ApplyFields,
+                expectedSubjectId: userId);
+            applied = sync.Applied;
+            written = sync.Written;
+            syncedSiblings = sync.SyncedSiblings;
         }
         else
         {
-            accountsStore.Mutate(role, normalized, ApplyFields);
+            applied = true;
+            written = accountsStore.Mutate(role, normalized, ApplyFields);
             syncedSiblings = [];
+        }
+
+        if (!applied)
+        {
+            logger.LogDebug("Обновление токенов роли {Role} (контекст {ContextId}) пропущено: исходная авторизация уже изменена или удалена",
+                role,
+                normalized);
+            return false;
         }
 
         logger.LogInformation("Токены роли {Role} (контекст {ContextId}) обновлены в настройках (login={Login}, expiresIn={ExpiresIn}s, scopes={ScopeCount})",
@@ -101,6 +116,8 @@ public sealed class OAuthAccountWriter(
         {
             _ = eventBus.PublishAsync(new PlatformAuthorizationRefreshed(StreamingPlatform.Twitch, sibling.Role, sibling.ContextId));
         }
+
+        return written;
     }
 
     internal bool HasAuthorizationMaterial(PlatformAuthRole role, string? contextId)

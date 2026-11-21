@@ -112,6 +112,14 @@ internal sealed class JsonStore<T>
         return MutateCore(mutator, applied => applied, out _);
     }
 
+    public (bool Applied, bool Written) MutateIfWithResult(Func<T, bool> mutator)
+    {
+        ArgumentNullException.ThrowIfNull(mutator);
+
+        var applied = MutateCore(mutator, static result => result, out var written);
+        return (applied, written);
+    }
+
     private TResult MutateCore<TResult>(Func<T, TResult> mutator, Func<TResult, bool> shouldWrite, out bool written)
     {
         TResult result;

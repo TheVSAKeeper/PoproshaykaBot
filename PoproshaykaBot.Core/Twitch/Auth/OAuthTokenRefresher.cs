@@ -102,6 +102,22 @@ public sealed class OAuthTokenRefresher : IDisposable
         return _inner.RefreshTokenAsync(role, contextId, clientId, clientSecret, refreshToken, ct);
     }
 
+    public Task<OAuthRefreshResult> RefreshTokenWithResultAsync(
+        PlatformAuthRole role,
+        string? contextId,
+        string clientId,
+        string clientSecret,
+        string refreshToken,
+        CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(refreshToken))
+        {
+            throw new ArgumentException("Refresh token не может быть пустым", nameof(refreshToken));
+        }
+
+        return _inner.RefreshTokenWithResultAsync(role, contextId, clientId, clientSecret, refreshToken, ct);
+    }
+
     public void ResetRetryState(PlatformAuthRole role)
     {
         _inner.ResetRetryState(role);
@@ -207,6 +223,18 @@ public sealed class OAuthTokenRefresher : IDisposable
             string refreshToken,
             CancellationToken ct)
         {
+            var result = await RefreshAndSaveWithResultAsync(role, contextId, clientId, clientSecret, refreshToken, ct);
+            return result.AccessToken;
+        }
+
+        public async Task<OAuthRefreshResult> RefreshAndSaveWithResultAsync(
+            PlatformAuthRole role,
+            string contextId,
+            string clientId,
+            string clientSecret,
+            string refreshToken,
+            CancellationToken ct)
+        {
             statusReporter.Report(role, "Обновление токена доступа...");
 
             var formData = new Dictionary<string, string>(StringComparer.Ordinal)
@@ -232,7 +260,7 @@ public sealed class OAuthTokenRefresher : IDisposable
                 logger,
                 checkBroadcasterChannel: AuthContextIds.IsDefault(contextId));
 
-            accountWriter.UpdateSettings(
+            var persisted = accountWriter.UpdateSettings(
                 role,
                 contextId,
                 tokenResponse.AccessToken,
@@ -251,7 +279,7 @@ public sealed class OAuthTokenRefresher : IDisposable
                 tokenResponse.Scope?.Count ?? 0);
 
             statusReporter.Report(role, "Токен доступа обновлён успешно!");
-            return tokenResponse.AccessToken;
+            return new(tokenResponse.AccessToken, persisted);
         }
 
         public OAuthRefreshFailureKind ClassifyFailure(Exception exception)

@@ -11,6 +11,12 @@ public sealed record YouTubeTokenResponse(
     int ExpiresInSeconds,
     IReadOnlyList<string> Scopes);
 
+public sealed record YouTubeTokenValidationInfo(
+    string? ChannelId,
+    string? ChannelTitle,
+    IReadOnlyList<string> Scopes,
+    int ExpiresInSeconds);
+
 public sealed class YouTubeOAuthTokenClient(
     IHttpClientFactory httpClientFactory,
     YouTubeOAuthOptions options,
@@ -60,6 +66,64 @@ public sealed class YouTubeOAuthTokenClient(
         }
 
         return await PostTokenRequestAsync(payload, "обновление access-токена", ct);
+    }
+
+    public async Task<YouTubeTokenValidationInfo?> ValidateTokenAsync(
+        string accessToken,
+        CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(accessToken))
+        {
+            return null;
+        }
+
+        using var client = httpClientFactory.CreateClient(YouTubeOAuthOptions.HttpClientName);
+        using var content = new FormUrlEncodedContent(
+        [
+            new KeyValuePair<string, string>("access_token", accessToken.Trim()),
+        ]);
+
+        using var response = await client.PostAsync(options.TokenInfoEndpoint, content, ct);
+        var body = await response.Content.ReadAsStringAsync(ct);
+
+        if (response.StatusCode is HttpStatusCode.BadRequest or HttpStatusCode.Unauthorized)
+        {
+            return null;
+        }
+
+        if (!response.IsSuccessStatusCode)
+        {
+            var error = TryParseError(body);
+            logger.LogWarning(
+                "Google OAuth ошибка при проверке access-токена: status={StatusCode}, error={ErrorCode}",
+                (int)response.StatusCode,
+                error?.Error ?? "-");
+            throw new YouTubeOAuthException(
+                FormatErrorMessage("проверка access-токена", response.StatusCode, error?.Error, error?.ErrorDescription),
+                error?.Error,
+                response.StatusCode);
+        }
+
+        using var document = JsonDocument.Parse(body);
+        var root = document.RootElement;
+        var scopes = root.TryGetProperty("scope", out var scopeElement) && scopeElement.ValueKind == JsonValueKind.String
+            ? scopeElement.GetString()!.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            : Array.Empty<string>();
+        var expiresIn = 0;
+        if (root.TryGetProperty("expires_in", out var expiresElement))
+        {
+            if (expiresElement.ValueKind == JsonValueKind.Number && expiresElement.TryGetInt32(out var numeric))
+            {
+                expiresIn = numeric;
+            }
+            else if (expiresElement.ValueKind == JsonValueKind.String
+                && int.TryParse(expiresElement.GetString(), System.Globalization.CultureInfo.InvariantCulture, out var parsed))
+            {
+                expiresIn = parsed;
+            }
+        }
+
+        return new(null, null, scopes, expiresIn);
     }
 
     private async Task<YouTubeTokenResponse> PostTokenRequestAsync(

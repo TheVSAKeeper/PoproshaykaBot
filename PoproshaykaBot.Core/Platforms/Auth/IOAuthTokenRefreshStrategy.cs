@@ -1,5 +1,7 @@
 ﻿namespace PoproshaykaBot.Core.Platforms.Auth;
 
+public readonly record struct OAuthRefreshResult(string AccessToken, bool Persisted);
+
 public enum OAuthRefreshFailureKind
 {
     None = 0,
@@ -50,6 +52,18 @@ public interface IOAuthTokenRefreshStrategy<in TAccount>
         CancellationToken ct)
     {
         return RefreshAndSaveAsync(role, clientId, clientSecret, refreshToken, ct);
+    }
+
+    async Task<OAuthRefreshResult> RefreshAndSaveWithResultAsync(
+        PlatformAuthRole role,
+        string contextId,
+        string clientId,
+        string clientSecret,
+        string refreshToken,
+        CancellationToken ct)
+    {
+        var accessToken = await RefreshAndSaveAsync(role, contextId, clientId, clientSecret, refreshToken, ct);
+        return new(accessToken, Persisted: true);
     }
 
     OAuthRefreshFailureKind ClassifyFailure(Exception exception);
