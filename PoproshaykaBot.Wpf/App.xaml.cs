@@ -580,6 +580,7 @@ public partial class App : Application
         services.AddTransient<DashboardLayoutSectionViewModel>();
         services.AddTransient<RanksSettingsSectionViewModel>();
         services.AddTransient<ChannelCatalogSettingsSectionViewModel>();
+        services.AddTransient<PlatformAccountsSectionViewModel>();
         services.AddTransient<ChannelGroupsSettingsSectionViewModel>();
         services.AddSingleton(provider => new BroadcastProfilesSettingsSectionViewModel(
             provider.GetServices<DashboardTileViewModel>().OfType<BroadcastProfilesTileViewModel>().Single()));

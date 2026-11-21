@@ -148,13 +148,14 @@ public sealed class Stage3MultiChannelWpfTests
         var role = editor.VisibleChannels.Single().Roles.Single(value => value.Role == PlatformAuthRole.Bot);
         Assert.Multiple(() =>
         {
-            Assert.That(role.SelectedAccount, Is.Null);
+            Assert.That(role.SelectedAccount?.IsUnassigned, Is.True);
+            Assert.That(role.AccountId, Is.Null);
             Assert.That(role.VerifyCommand.CanExecute(null), Is.False);
             Assert.That(editor.StatusNoticeSeverity, Is.EqualTo(StatusSeverity.Error));
         });
         role.SetVerification(new(true, "90"));
         Assert.That(role.AccountId, Is.Null);
-        role.SelectedAccount = role.Accounts.Single();
+        role.SelectedAccount = role.Accounts.Single(option => !option.IsUnassigned);
         Assert.That(role.VerifyCommand.CanExecute(null), Is.True);
         Assert.That(editor.ValidateAssignments(), Is.Not.Null);
     }
@@ -190,7 +191,7 @@ public sealed class Stage3MultiChannelWpfTests
         var platformAccount = accounts.ListAccounts().Single();
         var firstRole = editor.VisibleChannels.Single(c => c.ChannelId == "10").Roles.Single(role => role.Role == PlatformAuthRole.Bot);
         var secondRole = editor.VisibleChannels.Single(c => c.ChannelId == "20").Roles.Single(role => role.Role == PlatformAuthRole.Bot);
-        secondRole.SelectedAccount = secondRole.Accounts.Single();
+        secondRole.SelectedAccount = secondRole.Accounts.Single(option => !option.IsUnassigned);
         await secondRole.VerifyCommand.ExecuteAsync(null);
 
         Assert.Multiple(() =>
@@ -504,7 +505,7 @@ public sealed class Stage3MultiChannelWpfTests
             Assert.That(channel.MonitoringEnabled, Is.True);
             Assert.That(bot.CanAuthorize, Is.False);
         });
-        bot.SelectedAccount = bot.Accounts.Single();
+        bot.SelectedAccount = bot.Accounts.Single(option => !option.IsUnassigned);
         await bot.VerifyCommand.ExecuteAsync(null);
         Assert.That(contributor.ValidateBeforeSave(), Is.Null);
         channel.MonitoringEnabled = false;
@@ -679,6 +680,95 @@ public sealed class Stage3MultiChannelWpfTests
             Assert.That(capturedContext, Is.EqualTo("yt-bot-only"));
             Assert.That(catalogVm.VisibleChannels, Has.Count.EqualTo(1));
             Assert.That(catalogVm.VisibleChannels[0].ChannelId, Is.EqualTo("UC_FOREIGN"));
+        });
+    }
+
+    [Test]
+    public async Task Streamer_only_account_appears_in_bot_dropdown_and_can_be_upgraded_or_cleared()
+    {
+        var accounts = new AccountsStore(filePath: Path.Combine(_root, "accounts-cross.json"));
+        accounts.UpsertContext(PlatformAuthRole.Broadcaster, "tw-broadcaster-90", "streamer90",
+            new() { UserId = "90", Login = "streamer90", AccessToken = "tok-broadcaster", RefreshToken = "ref-broadcaster" });
+        var catalog = new ChannelCatalogStore(filePath: Path.Combine(_root, "channels-cross.json"));
+        catalog.Save(new()
+        {
+            Channels =
+            [
+                new()
+                {
+                    Platform = StreamingPlatform.Twitch,
+                    ChannelId = "10",
+                    DisplayName = "Канал 10",
+                    IsConfigured = true,
+                    BroadcasterAccountId = "90",
+                    BroadcasterContextId = "tw-broadcaster-90",
+                    BroadcasterVerifiedSubjectId = "90",
+                },
+            ],
+        });
+        var settings = new SettingsManager(NullLogger<SettingsManager>.Instance, Path.Combine(_root, "settings-cross.json"));
+        settings.Mutate(s =>
+        {
+            s.Twitch.ClientId = "test-client";
+            s.Twitch.ClientSecret = "test-secret";
+        });
+        var adapter = new NullResolveAdapter(StreamingPlatform.Twitch, (key, role, context) => new(true, "90"));
+        var editor = new ChannelCatalogSettingsSectionViewModel(catalog, [adapter], twitchAccountsStore: accounts,
+            twitchOAuth: DispatchProxy.Create<ITwitchOAuthService, InertProxy>(), settingsManager: settings,
+            shellLauncher: new NoOpLauncher(), embeddedTwitchAuth: new TestEmbeddedAuth());
+        editor.Load();
+
+        var channel = editor.VisibleChannels.Single();
+        var bot = channel.Roles.Single(r => r.Role == PlatformAuthRole.Bot);
+        var broadcaster = channel.Roles.Single(r => r.Role == PlatformAuthRole.Broadcaster);
+
+        var crossOption = bot.Accounts.Single(option => option.AccountId == "90");
+        Assert.Multiple(() =>
+        {
+            Assert.That(crossOption.HasRoleGrant, Is.False);
+            Assert.That(crossOption.DisplayName, Does.Contain("streamer90").And.Contain("нужны права бота"));
+            Assert.That(broadcaster.ClearAssignmentCommand.CanExecute(null), Is.True);
+        });
+
+        bot.SelectedAccount = crossOption;
+        Assert.Multiple(() =>
+        {
+            Assert.That(bot.NeedsRoleGrant, Is.True);
+            Assert.That(bot.AuthorizationLabel, Is.EqualTo("Выдать права бота"));
+            Assert.That(bot.VerifyCommand.CanExecute(null), Is.False);
+            Assert.That(editor.ValidateAssignments(), Does.Contain("Выдайте права роли"));
+        });
+
+        await bot.AuthorizeCommand.ExecuteAsync(null);
+        Assert.Multiple(() =>
+        {
+            Assert.That(bot.NeedsRoleGrant, Is.False);
+            Assert.That(bot.Status, Is.EqualTo("Доступ подтверждён"));
+            Assert.That(editor.ValidateAssignments(), Is.Null);
+        });
+
+        broadcaster.ClearAssignmentCommand.Execute(null);
+        Assert.Multiple(() =>
+        {
+            Assert.That(broadcaster.AccountId, Is.Null);
+            Assert.That(broadcaster.HasAssignedAccount, Is.False);
+            Assert.That(broadcaster.SelectedAccount?.IsUnassigned, Is.True);
+            Assert.That(editor.ValidateAssignments(), Is.Null);
+        });
+
+        bot.SelectedAccount = bot.Accounts.Single(option => option.IsUnassigned);
+        Assert.Multiple(() =>
+        {
+            Assert.That(bot.AccountId, Is.Null);
+            Assert.That(bot.HasAssignedAccount, Is.False);
+        });
+
+        var saved = catalog.Load();
+        editor.ApplyTo(saved);
+        Assert.Multiple(() =>
+        {
+            Assert.That(saved.Channels.Single().GetAccountAssignment(PlatformAuthRole.Broadcaster), Is.Null);
+            Assert.That(saved.Channels.Single().GetAccountAssignment(PlatformAuthRole.Bot), Is.Null);
         });
     }
 

@@ -44,13 +44,17 @@ public sealed class OAuthAccountWriter(
         string login,
         string userId,
         int expiresInSeconds = 0,
-        bool publishAuthorizationRefreshed = false)
+        bool publishAuthorizationRefreshed = false,
+        string? previousRefreshToken = null)
     {
         var normalized = AuthContextIds.Normalize(contextId);
         var scopesSnapshot = newScopes?.ToArray();
         var now = timeProvider.GetUtcNow();
+        DateTimeOffset? expiresAt = expiresInSeconds > 0
+            ? now.AddSeconds(expiresInSeconds)
+            : null;
 
-        accountsStore.Mutate(role, normalized, account =>
+        void ApplyFields(TwitchAccountSettings account)
         {
             account.AccessToken = accessToken;
             account.RefreshToken = refreshToken;
@@ -59,13 +63,27 @@ public sealed class OAuthAccountWriter(
 
             if (scopesSnapshot != null)
             {
-                account.StoredScopes = scopesSnapshot;
+                account.StoredScopes = [.. scopesSnapshot];
             }
 
-            account.AccessTokenExpiresAt = expiresInSeconds > 0
-                ? now.AddSeconds(expiresInSeconds)
-                : null;
-        });
+            account.AccessTokenExpiresAt = expiresAt;
+        }
+
+        IReadOnlyList<(PlatformAuthRole Role, string ContextId)> syncedSiblings;
+        if (!string.IsNullOrWhiteSpace(previousRefreshToken))
+        {
+            syncedSiblings = accountsStore.MutateAndSyncSharedRefreshToken(
+                role,
+                normalized,
+                previousRefreshToken,
+                ApplyFields,
+                ApplyFields);
+        }
+        else
+        {
+            accountsStore.Mutate(role, normalized, ApplyFields);
+            syncedSiblings = [];
+        }
 
         logger.LogInformation("Токены роли {Role} (контекст {ContextId}) обновлены в настройках (login={Login}, expiresIn={ExpiresIn}s, scopes={ScopeCount})",
             role,
@@ -77,6 +95,11 @@ public sealed class OAuthAccountWriter(
         if (publishAuthorizationRefreshed)
         {
             _ = eventBus.PublishAsync(new PlatformAuthorizationRefreshed(StreamingPlatform.Twitch, role, normalized));
+        }
+
+        foreach (var sibling in syncedSiblings)
+        {
+            _ = eventBus.PublishAsync(new PlatformAuthorizationRefreshed(StreamingPlatform.Twitch, sibling.Role, sibling.ContextId));
         }
     }
 

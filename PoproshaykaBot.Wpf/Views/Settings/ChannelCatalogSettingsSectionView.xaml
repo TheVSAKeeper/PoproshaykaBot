@@ -398,14 +398,9 @@
                                                                 <RowDefinition Height="Auto" />
                                                                 <RowDefinition Height="Auto" />
                                                             </Grid.RowDefinitions>
-                                                            <ComboBox ItemsSource="{Binding Accounts}"
-                                                                      SelectedItem="{Binding SelectedAccount, Mode=TwoWay}"
-                                                                      IsSynchronizedWithCurrentItem="False"
-                                                                      DisplayMemberPath="DisplayName"
-                                                                      AutomationProperties.Name="{Binding Title}"
-                                                                      IsEnabled="{Binding CanSelectAccount}">
-                                                                <ComboBox.Style>
-                                                                    <Style TargetType="ComboBox" BasedOn="{StaticResource ComboBox.Form}">
+                                                            <Grid>
+                                                                <Grid.Style>
+                                                                    <Style TargetType="Grid">
                                                                         <Setter Property="Grid.Row" Value="0" />
                                                                         <Setter Property="Grid.Column" Value="0" />
                                                                         <Setter Property="Grid.ColumnSpan" Value="1" />
@@ -415,8 +410,34 @@
                                                                             </DataTrigger>
                                                                         </Style.Triggers>
                                                                     </Style>
-                                                                </ComboBox.Style>
-                                                            </ComboBox>
+                                                                </Grid.Style>
+                                                                <Grid.ColumnDefinitions>
+                                                                    <ColumnDefinition Width="*" />
+                                                                    <ColumnDefinition Width="Auto" />
+                                                                </Grid.ColumnDefinitions>
+                                                                <ComboBox Grid.Column="0"
+                                                                          ItemsSource="{Binding Accounts}"
+                                                                          SelectedItem="{Binding SelectedAccount, Mode=TwoWay}"
+                                                                          IsSynchronizedWithCurrentItem="False"
+                                                                          DisplayMemberPath="DisplayName"
+                                                                          Style="{StaticResource ComboBox.Form}"
+                                                                          AutomationProperties.Name="{Binding Title}"
+                                                                          IsEnabled="{Binding CanSelectAccount}" />
+                                                                <Button Grid.Column="1"
+                                                                        Style="{StaticResource Button.Ghost}"
+                                                                        Command="{Binding ClearAssignmentCommand}"
+                                                                        ToolTip="Убрать назначенный аккаунт"
+                                                                        AutomationProperties.AutomationId="{Binding ClearAutomationId}"
+                                                                        AutomationProperties.Name="{Binding Title, StringFormat='Убрать аккаунт. {0}'}"
+                                                                        Padding="8,4"
+                                                                        Margin="4,0,0,0"
+                                                                        VerticalAlignment="Center"
+                                                                        Visibility="{Binding HasAssignedAccount, Converter={StaticResource BoolToVisibility}}">
+                                                                    <iconPacks:PackIconLucide Kind="{x:Static iconPacks:PackIconLucideKind.X}"
+                                                                                              Width="14"
+                                                                                              Height="14" />
+                                                                </Button>
+                                                            </Grid>
                                                             <Grid VerticalAlignment="Center">
                                                                 <Grid.Style>
                                                                     <Style TargetType="Grid">

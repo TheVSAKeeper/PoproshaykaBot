@@ -112,6 +112,8 @@ public sealed partial class ChannelCatalogSettingsSectionViewModel : ObservableO
 
     public event EventHandler? Edited;
 
+    public event EventHandler<StreamingPlatform>? AccountsChanged;
+
     internal void SetCredentialDrafts(OAuthSettingsViewModel? twitch, YouTubeSettingsSectionViewModel? youtube)
     {
         _twitchCredentials = twitch;
@@ -445,6 +447,11 @@ public sealed partial class ChannelCatalogSettingsSectionViewModel : ObservableO
             if (pending is not null)
             {
                 var platformName = _platformRegistry?.Find(channel.Platform)?.DisplayName ?? PlatformVisuals.GetDisplayName(channel.Platform);
+                if (pending.NeedsRoleGrant)
+                {
+                    return $"Выдайте права роли «{pending.Title}» для аккаунта «{pending.AccountDisplayName ?? pending.AccountId}» на канале «{channel.DisplayName}» ({platformName}) или выберите другой аккаунт.";
+                }
+
                 return $"Проверьте доступ аккаунта «{pending.Title}» на канале «{channel.DisplayName}» ({platformName}).";
             }
         }
@@ -502,7 +509,8 @@ public sealed partial class ChannelCatalogSettingsSectionViewModel : ObservableO
         var selectedContextId = role.ContextId;
         var account = await AuthorizeAccountAsync(item.Platform, role.Role, role.SetStatus);
         if (account is null || !_allChannels.Contains(item)
-            || selectedAccountId != role.AccountId || selectedContextId != role.ContextId)
+            || selectedAccountId != role.AccountId
+            || (!string.IsNullOrEmpty(selectedContextId) && selectedContextId != role.ContextId))
         {
             return;
         }
@@ -538,6 +546,7 @@ public sealed partial class ChannelCatalogSettingsSectionViewModel : ObservableO
             else
             {
                 RefreshAccountOptions(platform);
+                AccountsChanged?.Invoke(this, platform);
             }
             return account;
         }
@@ -954,7 +963,7 @@ public sealed partial class ChannelCatalogSettingsSectionViewModel : ObservableO
         return accounts?.Where(account => account.Key.Platform == platform).ToArray();
     }
 
-    private void RefreshAccountOptions(StreamingPlatform platform)
+    internal void RefreshAccountOptions(StreamingPlatform platform)
     {
         var accounts = ListAccounts(platform);
         var canAuthorize = CanAuthorizeAccount(platform);

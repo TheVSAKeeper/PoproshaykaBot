@@ -33,6 +33,13 @@ public static class TwitchScopes
         ChannelReadPolls,
     ];
 
+    public static readonly IReadOnlyList<string> CombinedDefault =
+    [
+        .. BotRequired,
+        .. BotOptional,
+        .. BroadcasterRequired,
+    ];
+
     public static bool IsGranted(TwitchAccountSettings account, string scope)
     {
         ArgumentNullException.ThrowIfNull(account);

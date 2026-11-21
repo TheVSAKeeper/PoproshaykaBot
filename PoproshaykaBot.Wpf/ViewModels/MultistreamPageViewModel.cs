@@ -10,7 +10,8 @@ namespace PoproshaykaBot.Wpf.ViewModels;
 public enum MultistreamPlatformTab
 {
     Channels = 0,
-    Parameters = 1,
+    Accounts = 1,
+    Parameters = 2,
 }
 
 public enum MultistreamAutomationTab
@@ -28,6 +29,7 @@ internal enum MultistreamSection
     Platforms = 3,
     BotAuthorization = 4,
     Parameters = 5,
+    Accounts = 6,
 }
 
 public sealed partial class MultistreamPlatformCard : ObservableObject
@@ -64,9 +66,11 @@ public sealed partial class MultistreamPageViewModel : ObservableObject, IPageHe
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(SelectedPlatform), nameof(HasSelectedPlatform), nameof(IsPlatformSelected),
         nameof(SelectedPlatformCard), nameof(PlatformSettings), nameof(HasPlatformSettings),
+        nameof(HasPlatformAccounts), nameof(HasPlatformTabs),
         nameof(PlatformSettingsTitle), nameof(EditorTitle), nameof(ShowParametersButtonInHeader),
         nameof(ShowBotAuthButtonInHeader), nameof(HeaderSetupActionLabel),
-        nameof(SelectedPlatformChannelCount), nameof(HasSelectedPlatformChannels))]
+        nameof(SelectedPlatformChannelCount), nameof(HasSelectedPlatformChannels),
+        nameof(SelectedPlatformAccountCount), nameof(HasSelectedPlatformAccounts))]
     private MultistreamPlatformCard? _selectedCard;
 
     [ObservableProperty]
@@ -74,7 +78,7 @@ public sealed partial class MultistreamPageViewModel : ObservableObject, IPageHe
     private bool _isAutomationSelected;
 
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(IsChannelsTabSelected), nameof(IsParametersTabSelected))]
+    [NotifyPropertyChangedFor(nameof(IsChannelsTabSelected), nameof(IsAccountsTabSelected), nameof(IsParametersTabSelected))]
     private MultistreamPlatformTab _selectedPlatformTab = MultistreamPlatformTab.Channels;
 
     [ObservableProperty]
@@ -84,13 +88,15 @@ public sealed partial class MultistreamPageViewModel : ObservableObject, IPageHe
     public MultistreamPageViewModel(
         SettingsPageViewModel settingsPage,
         MultistreamTileViewModel status,
-        IEnumerable<IMultistreamPlatformControls> platformControls)
+        IEnumerable<IMultistreamPlatformControls> platformControls,
+        PlatformAccountsSectionViewModel? accounts = null)
     {
         ArgumentNullException.ThrowIfNull(settingsPage);
         ArgumentNullException.ThrowIfNull(status);
         ArgumentNullException.ThrowIfNull(platformControls);
         Settings = settingsPage;
         Status = status;
+        Accounts = accounts;
 
         status.ApplyPlatformControls(platformControls);
         var controls = platformControls.ToDictionary(item => item.Platform);
@@ -99,6 +105,15 @@ public sealed partial class MultistreamPageViewModel : ObservableObject, IPageHe
         if (Catalog is not null)
         {
             Catalog.PropertyChanged += OnCatalogPropertyChanged;
+            Catalog.AccountsChanged += OnCatalogAccountsChanged;
+        }
+
+        if (Accounts is not null)
+        {
+            var (twitchDraft, youtubeDraft) = settingsPage.GetCredentialDrafts();
+            Accounts.SetCredentialDrafts(twitchDraft, youtubeDraft);
+            Accounts.PropertyChanged += OnAccountsPropertyChanged;
+            Accounts.AccountsChanged += OnAccountsSectionChanged;
         }
 
         var presentations = settingsPage.PlatformPresentations;
@@ -126,6 +141,8 @@ public sealed partial class MultistreamPageViewModel : ObservableObject, IPageHe
     public MultistreamTileViewModel Status { get; }
 
     public ChannelCatalogSettingsSectionViewModel? Catalog { get; }
+
+    public PlatformAccountsSectionViewModel? Accounts { get; }
 
     public IReadOnlyList<MultistreamPlatformCard> Cards { get; }
 
@@ -161,6 +178,18 @@ public sealed partial class MultistreamPageViewModel : ObservableObject, IPageHe
             if (value)
             {
                 SelectPlatformTab(MultistreamPlatformTab.Channels);
+            }
+        }
+    }
+
+    public bool IsAccountsTabSelected
+    {
+        get => SelectedPlatformTab == MultistreamPlatformTab.Accounts;
+        set
+        {
+            if (value)
+            {
+                SelectPlatformTab(MultistreamPlatformTab.Accounts);
             }
         }
     }
@@ -232,6 +261,10 @@ public sealed partial class MultistreamPageViewModel : ObservableObject, IPageHe
 
     public bool HasPlatformSettings => PlatformSettings.Count > 0;
 
+    public bool HasPlatformAccounts => Accounts?.SupportsAccountsFor(SelectedPlatform) == true;
+
+    public bool HasPlatformTabs => HasPlatformSettings || HasPlatformAccounts;
+
     public IReadOnlyList<SettingsSectionBlockDescriptor> AutomationSettings { get; }
 
     public IReadOnlyList<SettingsSectionBlockDescriptor> ProfilesBlocks { get; }
@@ -250,6 +283,10 @@ public sealed partial class MultistreamPageViewModel : ObservableObject, IPageHe
 
     public bool HasSelectedPlatformChannels => SelectedPlatformChannelCount > 0;
 
+    public int SelectedPlatformAccountCount => Accounts?.AccountCount ?? 0;
+
+    public bool HasSelectedPlatformAccounts => SelectedPlatformAccountCount > 0;
+
     public bool HasUnsavedChanges => Settings.HasUnsavedChanges;
 
     public string UnsavedChangesSubject => "На странице «Мультистрим» есть несохранённые изменения.";
@@ -266,6 +303,12 @@ public sealed partial class MultistreamPageViewModel : ObservableObject, IPageHe
             Catalog.SelectedPlatform = platform;
         }
 
+        if (Accounts is not null && SelectedPlatform is { } selectedPlatform)
+        {
+            Accounts.SelectedPlatform = selectedPlatform;
+            Accounts.Load();
+        }
+
         Settings.ReloadDraft();
     }
 
@@ -279,18 +322,22 @@ public sealed partial class MultistreamPageViewModel : ObservableObject, IPageHe
 
         IsAutomationSelected = false;
         SelectedCard = card;
-        if (!HasPlatformSettings && SelectedPlatformTab != MultistreamPlatformTab.Channels)
-        {
-            SelectedPlatformTab = MultistreamPlatformTab.Channels;
-        }
+        NormalizeSelectedPlatformTab();
     }
 
     [RelayCommand]
     public void SelectPlatformTab(MultistreamPlatformTab tab)
     {
-        SelectedPlatformTab = tab == MultistreamPlatformTab.Parameters && !HasPlatformSettings
-            ? MultistreamPlatformTab.Channels
-            : tab;
+        SelectedPlatformTab = tab switch
+        {
+            MultistreamPlatformTab.Parameters when !HasPlatformSettings => MultistreamPlatformTab.Channels,
+            MultistreamPlatformTab.Accounts when !HasPlatformAccounts => MultistreamPlatformTab.Channels,
+            _ => tab,
+        };
+        if (SelectedPlatformTab == MultistreamPlatformTab.Accounts)
+        {
+            Accounts?.Load();
+        }
     }
 
     [RelayCommand]
@@ -412,14 +459,41 @@ public sealed partial class MultistreamPageViewModel : ObservableObject, IPageHe
             {
                 Catalog.SelectedPlatform = newValue.Status.Platform;
             }
+
+            if (Accounts is not null)
+            {
+                Accounts.SelectedPlatform = newValue.Status.Platform;
+            }
         }
 
-        if (!HasPlatformSettings && SelectedPlatformTab != MultistreamPlatformTab.Channels)
+        NormalizeSelectedPlatformTab();
+        SyncCardSelection();
+    }
+
+    private void NormalizeSelectedPlatformTab()
+    {
+        if ((SelectedPlatformTab == MultistreamPlatformTab.Parameters && !HasPlatformSettings)
+            || (SelectedPlatformTab == MultistreamPlatformTab.Accounts && !HasPlatformAccounts))
         {
             SelectedPlatformTab = MultistreamPlatformTab.Channels;
         }
+    }
 
-        SyncCardSelection();
+    private void OnCatalogAccountsChanged(object? sender, StreamingPlatform platform) =>
+        Accounts?.RefreshIfPlatform(platform);
+
+    private void OnAccountsSectionChanged(object? sender, StreamingPlatform platform) =>
+        Catalog?.RefreshAccountOptions(platform);
+
+    private void OnAccountsPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (string.IsNullOrEmpty(e.PropertyName)
+            || e.PropertyName is nameof(PlatformAccountsSectionViewModel.AccountCount)
+                or nameof(PlatformAccountsSectionViewModel.HasAccounts))
+        {
+            OnPropertyChanged(nameof(SelectedPlatformAccountCount));
+            OnPropertyChanged(nameof(HasSelectedPlatformAccounts));
+        }
     }
 
     private void OnSelectedCardStatusChanged(object? sender, PropertyChangedEventArgs e)
@@ -456,7 +530,8 @@ public sealed partial class MultistreamPageViewModel : ObservableObject, IPageHe
 
     partial void OnSelectedPlatformTabChanged(MultistreamPlatformTab value)
     {
-        if (value == MultistreamPlatformTab.Parameters && !HasPlatformSettings)
+        if ((value == MultistreamPlatformTab.Parameters && !HasPlatformSettings)
+            || (value == MultistreamPlatformTab.Accounts && !HasPlatformAccounts))
         {
             SelectedPlatformTab = MultistreamPlatformTab.Channels;
         }

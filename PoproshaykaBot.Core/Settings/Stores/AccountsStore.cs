@@ -60,6 +60,12 @@ public sealed class AccountsStore : RoleAccountsStoreBase<AccountsStore.Accounts
         return false;
     }
 
+    public (bool Changed, bool Written) RemoveRoleContext(PlatformAuthRole role, string? contextId) =>
+        RemoveRoleContextCore(role, contextId, OAuthRoleHelpers.ClearAccountInPlace);
+
+    public (IReadOnlyList<(PlatformAuthRole Role, string ContextId)> Removed, bool Written) RemoveAccount(string userId) =>
+        RemoveAccountCore(userId, OAuthRoleHelpers.ClearAccountInPlace);
+
     protected override TwitchAccountSettings? GetAccount(AccountsFileDto state, PlatformAuthRole role)
     {
         return role == PlatformAuthRole.Bot ? state.BotAccount : state.BroadcasterAccount;

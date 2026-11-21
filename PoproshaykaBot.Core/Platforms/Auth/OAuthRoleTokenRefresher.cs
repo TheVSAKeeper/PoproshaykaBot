@@ -11,8 +11,9 @@ public sealed class OAuthRoleTokenRefresher<TAccount> : IDisposable
     private readonly Func<PlatformAuthRole, string?, TAccount> _loadAccount;
     private readonly IOAuthTokenRefreshStrategy<TAccount> _strategy;
     private readonly TimeProvider _timeProvider;
+    private readonly Func<TAccount, string?>? _getLockGroupKey;
     private readonly IDisposable _refreshEventSubscription;
-    private readonly ConcurrentDictionary<(PlatformAuthRole Role, string ContextId), SemaphoreSlim> _refreshLocks = new();
+    private readonly ConcurrentDictionary<string, SemaphoreSlim> _refreshLocks = new(StringComparer.Ordinal);
     private readonly Lock _stateSync = new();
     private readonly Dictionary<(PlatformAuthRole Role, string ContextId), RetryState> _retryStates = new();
     private bool _disposed;
@@ -35,7 +36,8 @@ public sealed class OAuthRoleTokenRefresher<TAccount> : IDisposable
         Func<PlatformAuthRole, string?, TAccount> loadAccount,
         IOAuthTokenRefreshStrategy<TAccount> strategy,
         IEventBus eventBus,
-        TimeProvider timeProvider)
+        TimeProvider timeProvider,
+        Func<TAccount, string?>? getLockGroupKey = null)
     {
         ArgumentNullException.ThrowIfNull(loadAccount);
         ArgumentNullException.ThrowIfNull(strategy);
@@ -45,6 +47,7 @@ public sealed class OAuthRoleTokenRefresher<TAccount> : IDisposable
         _loadAccount = loadAccount;
         _strategy = strategy;
         _timeProvider = timeProvider;
+        _getLockGroupKey = getLockGroupKey;
 
         _refreshEventSubscription = eventBus.Subscribe<PlatformAuthorizationRefreshed>(@event =>
         {
@@ -109,7 +112,7 @@ public sealed class OAuthRoleTokenRefresher<TAccount> : IDisposable
         }
 
         var preLockAccessToken = account.AccessToken;
-        var refreshLock = GetLockForKey(role, normalized);
+        var refreshLock = GetLockForKey(role, normalized, account);
         await refreshLock.WaitAsync(ct);
 
         try
@@ -194,7 +197,8 @@ public sealed class OAuthRoleTokenRefresher<TAccount> : IDisposable
         ArgumentException.ThrowIfNullOrWhiteSpace(refreshToken);
 
         var normalized = AuthContextIds.Normalize(contextId);
-        var refreshLock = GetLockForKey(role, normalized);
+        var initialAccount = _loadAccount(role, normalized);
+        var refreshLock = GetLockForKey(role, normalized, initialAccount);
         await refreshLock.WaitAsync(ct);
 
         try
@@ -371,9 +375,13 @@ public sealed class OAuthRoleTokenRefresher<TAccount> : IDisposable
         return TimeSpan.FromSeconds(clampedSeconds);
     }
 
-    private SemaphoreSlim GetLockForKey(PlatformAuthRole role, string contextId)
+    private SemaphoreSlim GetLockForKey(PlatformAuthRole role, string contextId, TAccount account)
     {
-        return _refreshLocks.GetOrAdd((role, contextId), static _ => new SemaphoreSlim(1, 1));
+        var groupKey = _getLockGroupKey?.Invoke(account);
+        var key = !string.IsNullOrWhiteSpace(groupKey)
+            ? $"subject:{groupKey.Trim()}"
+            : $"ctx:{(int)role}:{contextId}";
+        return _refreshLocks.GetOrAdd(key, static _ => new SemaphoreSlim(1, 1));
     }
 
     private static string ComputeCredentialFingerprint(

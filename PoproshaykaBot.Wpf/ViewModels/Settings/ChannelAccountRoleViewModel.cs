@@ -7,12 +7,24 @@ using PoproshaykaBot.Core.Settings;
 
 namespace PoproshaykaBot.Wpf.ViewModels.Settings;
 
-public sealed record ChannelAccountOption(string AccountId, string DisplayName, string ContextId);
+public sealed record ChannelAccountOption(
+    string? AccountId,
+    string DisplayName,
+    string ContextId,
+    bool HasRoleGrant = true)
+{
+    public bool IsUnassigned => string.IsNullOrWhiteSpace(AccountId);
+}
 
 public sealed partial class ChannelAccountRoleViewModel : ObservableObject
 {
     private const string ReauthorizationNotice = "Войдите в назначенный аккаунт заново.";
     private const string NeedsAuthSuffix = " · нужен вход";
+    private const string NeedsBotGrantSuffix = " · нужны права бота";
+    private const string NeedsBroadcasterGrantSuffix = " · нужны права стримера";
+
+    private static readonly ChannelAccountOption UnassignedOption =
+        new(null, "Не назначен", AuthContextIds.Default, HasRoleGrant: true);
 
     private readonly Action _onEdited;
     private readonly Func<ChannelAccountRoleViewModel, Task> _verify;
@@ -21,12 +33,13 @@ public sealed partial class ChannelAccountRoleViewModel : ObservableObject
     private string? _verifiedId;
     private bool _supportsAccounts;
     private bool _canVerify;
+    private bool _hasRoleGrant = true;
 
     [ObservableProperty]
     private IReadOnlyList<ChannelAccountOption> _accounts = [];
 
     [ObservableProperty]
-    [NotifyCanExecuteChangedFor(nameof(AuthorizeCommand), nameof(VerifyCommand))]
+    [NotifyCanExecuteChangedFor(nameof(AuthorizeCommand), nameof(VerifyCommand), nameof(ClearAssignmentCommand))]
     [NotifyPropertyChangedFor(nameof(CanSelectAccount))]
     private bool _isBusy;
 
@@ -52,21 +65,35 @@ public sealed partial class ChannelAccountRoleViewModel : ObservableObject
         AccountId = assignment?.Account.AccountId;
         _verifiedId = assignment?.IsVerified == true ? AccountId : null;
         AcceptEdits();
-        _status = _verifiedId is null ? "Требуется проверка" : "Доступ подтверждён";
-        _statusSeverity = _verifiedId is null ? StatusSeverity.Warning : StatusSeverity.Success;
+        _status = AccountId is null
+            ? DefaultUnassignedNotice()
+            : _verifiedId is null ? "Требуется проверка" : "Доступ подтверждён";
+        _statusSeverity = AccountId is null
+            ? (Role == PlatformAuthRole.Bot ? StatusSeverity.Warning : StatusSeverity.None)
+            : (_verifiedId is null ? StatusSeverity.Warning : StatusSeverity.Success);
     }
 
     public PlatformAuthRole Role { get; }
 
     public string Title => Role == PlatformAuthRole.Bot ? "Бот" : "Стример";
 
-    public string AuthorizationLabel => Role == PlatformAuthRole.Bot ? "Войти как бот" : "Войти как стример";
+    public string AuthorizationLabel => NeedsRoleGrant
+        ? (Role == PlatformAuthRole.Bot ? "Выдать права бота" : "Выдать права стримера")
+        : (Role == PlatformAuthRole.Bot ? "Войти как бот" : "Войти как стример");
 
     public string AuthorizationAutomationId => Role == PlatformAuthRole.Bot ? "ChannelBotAuthorization" : "ChannelBroadcasterAuthorization";
+
+    public string ClearAutomationId => Role == PlatformAuthRole.Bot ? "ChannelBotClearAssignment" : "ChannelBroadcasterClearAssignment";
 
     public string ContextId { get; private set; }
 
     public string? AccountId { get; private set; }
+
+    public bool HasAssignedAccount => !string.IsNullOrWhiteSpace(AccountId);
+
+    public bool HasRoleGrant => _hasRoleGrant;
+
+    public bool NeedsRoleGrant => HasAssignedAccount && !_hasRoleGrant;
 
     public bool CanAuthorize { get; private set; }
 
@@ -74,7 +101,7 @@ public sealed partial class ChannelAccountRoleViewModel : ObservableObject
 
     public bool CanSelectAccount => _canVerify && !IsBusy && Accounts.Count > 0;
 
-    public bool NeedsVerification => AccountId is not null && _verifiedId != AccountId;
+    public bool NeedsVerification => HasAssignedAccount && (_verifiedId != AccountId || !_hasRoleGrant);
 
     internal bool IsEdited => _saved != (AccountId, ContextId, _verifiedId);
 
@@ -99,21 +126,24 @@ public sealed partial class ChannelAccountRoleViewModel : ObservableObject
                 return AccountId;
             }
 
-            return display.EndsWith(NeedsAuthSuffix, StringComparison.Ordinal)
-                ? display[..^NeedsAuthSuffix.Length]
-                : display;
+            return StripDisplaySuffix(display);
         }
     }
 
     public ChannelAccountOption? SelectedAccount
     {
-        get => Accounts.FirstOrDefault(option => string.Equals(option.AccountId, AccountId, StringComparison.Ordinal));
+        get => string.IsNullOrWhiteSpace(AccountId)
+            ? Accounts.FirstOrDefault(static option => option.IsUnassigned)
+            : Accounts.FirstOrDefault(option => !option.IsUnassigned && string.Equals(option.AccountId, AccountId, StringComparison.Ordinal));
         set
         {
-            if (value is not null)
+            if (value is null || value.IsUnassigned)
             {
-                Assign(value.AccountId, value.ContextId);
+                ClearAssignment();
+                return;
             }
+
+            Assign(value.AccountId!, value.ContextId, value.HasRoleGrant);
         }
     }
 
@@ -125,12 +155,13 @@ public sealed partial class ChannelAccountRoleViewModel : ObservableObject
         if (accounts is null)
         {
             Accounts = [];
+            _hasRoleGrant = true;
             SetStatus(string.Empty, StatusSeverity.None);
             NotifyAccountOptionsChanged();
             return;
         }
 
-        var options = new List<ChannelAccountOption>();
+        var options = new List<ChannelAccountOption> { UnassignedOption };
         var hasAssignedAuthorization = false;
         foreach (var account in accounts)
         {
@@ -147,34 +178,69 @@ public sealed partial class ChannelAccountRoleViewModel : ObservableObject
                 }
 
                 var label = grant.HasToken ? account.DisplayName : $"{account.DisplayName}{NeedsAuthSuffix}";
-                options.Add(new(account.Key.AccountId, label, grant.ContextId));
+                options.Add(new(account.Key.AccountId, label, grant.ContextId, HasRoleGrant: grant.HasToken));
+                continue;
+            }
+
+            var otherGrant = account.Authorizations.FirstOrDefault(value => value.Role != Role && value.HasToken);
+            if (otherGrant is not null)
+            {
+                var suffix = Role == PlatformAuthRole.Bot ? NeedsBotGrantSuffix : NeedsBroadcasterGrantSuffix;
+                options.Add(new(account.Key.AccountId, $"{account.DisplayName}{suffix}", string.Empty, HasRoleGrant: false));
             }
         }
 
-        var selected = options.FirstOrDefault(option => option.AccountId == AccountId);
-        if (AccountId is { } assigned && (selected is null || selected.ContextId != ContextId))
+        var selected = string.IsNullOrWhiteSpace(AccountId)
+            ? null
+            : options.FirstOrDefault(option => !option.IsUnassigned && option.AccountId == AccountId);
+
+        if (AccountId is { } assigned)
         {
-            SetStatus(ReauthorizationNotice, StatusSeverity.Warning);
             if (selected is null)
             {
-                options.Add(new(assigned, $"{assigned}{NeedsAuthSuffix}", ContextId));
+                _hasRoleGrant = false;
+                SetStatus(ReauthorizationNotice, StatusSeverity.Warning);
+                options.Add(new(assigned, $"{assigned}{NeedsAuthSuffix}", ContextId, HasRoleGrant: false));
+            }
+            else if (!selected.HasRoleGrant)
+            {
+                _hasRoleGrant = false;
+                if (string.IsNullOrEmpty(selected.ContextId))
+                {
+                    SetStatus(MissingRoleGrantNotice(StripDisplaySuffix(selected.DisplayName)), StatusSeverity.Warning);
+                }
+                else
+                {
+                    SetStatus(ReauthorizationNotice, StatusSeverity.Warning);
+                }
+            }
+            else if (string.IsNullOrEmpty(ContextId))
+            {
+                ContextId = selected.ContextId;
+                _hasRoleGrant = true;
+                SetStatus(NeedsVerification ? "Требуется проверка" : "Доступ подтверждён",
+                    NeedsVerification ? StatusSeverity.Warning : StatusSeverity.Success);
+            }
+            else if (selected.ContextId != ContextId || !hasAssignedAuthorization)
+            {
+                _hasRoleGrant = false;
+                SetStatus(ReauthorizationNotice, StatusSeverity.Warning);
+            }
+            else
+            {
+                _hasRoleGrant = true;
+                if (Status == ReauthorizationNotice || Status.Contains("Нажмите «Выдать права", StringComparison.Ordinal))
+                {
+                    SetStatus(NeedsVerification ? "Требуется проверка" : "Доступ подтверждён",
+                        NeedsVerification ? StatusSeverity.Warning : StatusSeverity.Success);
+                }
             }
         }
-        else if (selected is null)
+        else
         {
-            SetStatus(Role == PlatformAuthRole.Bot
-                ? "Войдите как бот или выберите аккаунт бота и проверьте доступ."
-                : "При необходимости выберите аккаунт стримера и проверьте доступ.",
+            _hasRoleGrant = true;
+            SetStatus(DefaultUnassignedNotice(),
                 Role == PlatformAuthRole.Bot ? StatusSeverity.Warning : StatusSeverity.None);
-        }
-        else if (!hasAssignedAuthorization)
-        {
-            SetStatus(ReauthorizationNotice, StatusSeverity.Warning);
-        }
-        else if (Status == ReauthorizationNotice)
-        {
-            SetStatus(NeedsVerification ? "Требуется проверка" : "Доступ подтверждён",
-                NeedsVerification ? StatusSeverity.Warning : StatusSeverity.Success);
         }
 
         Accounts = options;
@@ -184,6 +250,10 @@ public sealed partial class ChannelAccountRoleViewModel : ObservableObject
     private void NotifyAccountOptionsChanged()
     {
         OnPropertyChanged(nameof(AccountId));
+        OnPropertyChanged(nameof(HasAssignedAccount));
+        OnPropertyChanged(nameof(HasRoleGrant));
+        OnPropertyChanged(nameof(NeedsRoleGrant));
+        OnPropertyChanged(nameof(AuthorizationLabel));
         OnPropertyChanged(nameof(AccountDisplayName));
         OnPropertyChanged(nameof(NeedsVerification));
         OnPropertyChanged(nameof(CanAuthorize));
@@ -192,11 +262,12 @@ public sealed partial class ChannelAccountRoleViewModel : ObservableObject
         OnPropertyChanged(nameof(SelectedAccount));
         AuthorizeCommand.NotifyCanExecuteChanged();
         VerifyCommand.NotifyCanExecuteChanged();
+        ClearAssignmentCommand.NotifyCanExecuteChanged();
     }
 
-    public void Assign(string accountId, string contextId)
+    public void Assign(string accountId, string contextId, bool hasRoleGrant = true)
     {
-        if (AccountId == accountId && ContextId == contextId)
+        if (AccountId == accountId && ContextId == contextId && _hasRoleGrant == hasRoleGrant)
         {
             return;
         }
@@ -204,12 +275,22 @@ public sealed partial class ChannelAccountRoleViewModel : ObservableObject
         AccountId = accountId;
         ContextId = contextId;
         _verifiedId = null;
-        SetStatus("Требуется проверка", StatusSeverity.Warning);
-        OnPropertyChanged(nameof(AccountId));
-        OnPropertyChanged(nameof(AccountDisplayName));
-        OnPropertyChanged(nameof(NeedsVerification));
-        OnPropertyChanged(nameof(SelectedAccount));
-        VerifyCommand.NotifyCanExecuteChanged();
+        _hasRoleGrant = hasRoleGrant;
+
+        if (!hasRoleGrant)
+        {
+            var name = AccountDisplayName ?? accountId;
+            SetStatus(string.IsNullOrEmpty(contextId)
+                ? MissingRoleGrantNotice(name)
+                : ReauthorizationNotice,
+                StatusSeverity.Warning);
+        }
+        else
+        {
+            SetStatus("Требуется проверка", StatusSeverity.Warning);
+        }
+
+        NotifyAccountOptionsChanged();
         _onEdited();
     }
 
@@ -239,23 +320,69 @@ public sealed partial class ChannelAccountRoleViewModel : ObservableObject
 
     public void ApplyTo(ChannelCatalogEntry entry)
     {
+        var normalizedContext = string.IsNullOrWhiteSpace(AccountId) || string.IsNullOrWhiteSpace(ContextId)
+            ? AuthContextIds.Default
+            : ContextId;
+
         if (Role == PlatformAuthRole.Bot)
         {
             entry.BotAccountId = AccountId;
-            entry.BotContextId = ContextId;
+            entry.BotContextId = normalizedContext;
             entry.BotVerifiedSubjectId = _verifiedId;
         }
         else
         {
             entry.BroadcasterAccountId = AccountId;
-            entry.BroadcasterContextId = ContextId;
+            entry.BroadcasterContextId = normalizedContext;
             entry.BroadcasterVerifiedSubjectId = _verifiedId;
         }
     }
 
+    private string DefaultUnassignedNotice() => Role == PlatformAuthRole.Bot
+        ? "Войдите как бот или выберите аккаунт бота и проверьте доступ."
+        : "При необходимости выберите аккаунт стримера и проверьте доступ.";
+
+    private string MissingRoleGrantNotice(string displayName) => Role == PlatformAuthRole.Bot
+        ? $"Аккаунт «{displayName}» вошёл только как стример. Нажмите «Выдать права бота», чтобы использовать его в этой роли."
+        : $"Аккаунт «{displayName}» вошёл только как бот. Нажмите «Выдать права стримера», чтобы использовать его в этой роли.";
+
+    private static string StripDisplaySuffix(string display)
+    {
+        string[] suffixes = [NeedsAuthSuffix, NeedsBotGrantSuffix, NeedsBroadcasterGrantSuffix];
+        foreach (var suffix in suffixes)
+        {
+            if (display.EndsWith(suffix, StringComparison.Ordinal))
+            {
+                return display[..^suffix.Length];
+            }
+        }
+
+        return display;
+    }
+
     private bool CanAuthorizeNow() => CanAuthorize && !IsBusy;
 
-    private bool CanVerifyNow() => _canVerify && !IsBusy && !string.IsNullOrWhiteSpace(AccountId);
+    private bool CanVerifyNow() => _canVerify && !IsBusy && HasAssignedAccount && _hasRoleGrant;
+
+    private bool CanClearAssignment() => _canVerify && !IsBusy && HasAssignedAccount;
+
+    [RelayCommand(CanExecute = nameof(CanClearAssignment))]
+    public void ClearAssignment()
+    {
+        if (AccountId is null && ContextId == AuthContextIds.Default && _verifiedId is null)
+        {
+            return;
+        }
+
+        AccountId = null;
+        ContextId = AuthContextIds.Default;
+        _verifiedId = null;
+        _hasRoleGrant = true;
+        SetStatus(DefaultUnassignedNotice(),
+            Role == PlatformAuthRole.Bot ? StatusSeverity.Warning : StatusSeverity.None);
+        NotifyAccountOptionsChanged();
+        _onEdited();
+    }
 
     [RelayCommand(CanExecute = nameof(CanAuthorizeNow))]
     private async Task AuthorizeAsync()
