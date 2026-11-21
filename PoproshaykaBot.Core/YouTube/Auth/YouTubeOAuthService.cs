@@ -52,6 +52,17 @@ public sealed class YouTubeOAuthService(
         return tokenRefresher.RefreshTokenAsync(role, clientId, clientSecret, refreshToken, ct);
     }
 
+    public Task<string> RefreshTokenAsync(
+        PlatformAuthRole role,
+        string? contextId,
+        string clientId,
+        string clientSecret,
+        string refreshToken,
+        CancellationToken ct = default)
+    {
+        return tokenRefresher.RefreshTokenAsync(role, contextId, clientId, clientSecret, refreshToken, ct);
+    }
+
     public async Task<string?> GetAccessTokenAsync(PlatformAuthRole role, CancellationToken ct = default)
     {
         return await tokenRefresher.GetAccessTokenAsync(role, forceRefresh: false, ct);

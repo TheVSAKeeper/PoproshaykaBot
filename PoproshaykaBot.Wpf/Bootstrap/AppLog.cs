@@ -220,6 +220,15 @@ internal static partial class AppLog
     [LoggerMessage(EventId = 1219, Level = LogLevel.Warning, Message = "Не удалось определить канал на площадке {Platform} ({ErrorType})")]
     public static partial void ChannelResolveFailed(this ILogger logger, Exception? exception, StreamingPlatform platform, string errorType);
 
+    [LoggerMessage(EventId = 1220, Level = LogLevel.Information, Message = "Запрошен объединённый вход (бот + стример) на площадку {Platform}")]
+    public static partial void CombinedAccountAuthorizationStarted(this ILogger logger, StreamingPlatform platform);
+
+    [LoggerMessage(EventId = 1221, Level = LogLevel.Information, Message = "Пользователь удалил аккаунт {AccountId} на площадке {Platform}")]
+    public static partial void PlatformAccountSignedOut(this ILogger logger, StreamingPlatform platform, string accountId);
+
+    [LoggerMessage(EventId = 1222, Level = LogLevel.Information, Message = "Пользователь удалил роль {Role} аккаунта {AccountId} на площадке {Platform}")]
+    public static partial void PlatformAccountRoleRemoved(this ILogger logger, StreamingPlatform platform, PlatformAuthRole role, string accountId);
+
     [LoggerMessage(EventId = 1202, Level = LogLevel.Information, Message = "Порт HTTP сервера обновлён с {OldPort} на {NewPort} в соответствии с RedirectUri")]
     public static partial void SettingsHttpPortUpdated(this ILogger logger, int oldPort, int newPort);
 

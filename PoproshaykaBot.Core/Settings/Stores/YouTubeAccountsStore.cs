@@ -79,6 +79,12 @@ public sealed class YouTubeAccountsStore : RoleAccountsStoreBase<YouTubeAccounts
         return written;
     }
 
+    public (bool Changed, bool Written) RemoveRoleContext(PlatformAuthRole role, string? contextId) =>
+        RemoveRoleContextCore(role, contextId, YouTubeOAuthRoleHelpers.ClearAccountInPlace);
+
+    public (IReadOnlyList<(PlatformAuthRole Role, string ContextId)> Removed, bool Written) RemoveAccount(string channelId) =>
+        RemoveAccountCore(channelId, YouTubeOAuthRoleHelpers.ClearAccountInPlace);
+
     protected override YouTubeAccountSettings? GetAccount(YouTubeAccountsFileDto state, PlatformAuthRole role)
     {
         return role == PlatformAuthRole.Bot ? state.BotAccount : state.BroadcasterAccount;

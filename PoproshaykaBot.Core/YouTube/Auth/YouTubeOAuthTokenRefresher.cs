@@ -42,7 +42,12 @@ public sealed class YouTubeOAuthTokenRefresher : IDisposable
             eventBus,
             logger);
 
-        _inner = new((role, contextId) => accountsStore.Load(role, contextId), strategy, eventBus, timeProvider);
+        _inner = new(
+            (role, contextId) => accountsStore.Load(role, contextId),
+            strategy,
+            eventBus,
+            timeProvider,
+            static account => account.ChannelId);
     }
 
     public bool HasUsableAccessToken(PlatformAuthRole role)
@@ -210,7 +215,8 @@ public sealed class YouTubeOAuthTokenRefresher : IDisposable
                 token.AccessToken,
                 token.RefreshToken,
                 token.Scopes,
-                token.ExpiresInSeconds);
+                token.ExpiresInSeconds,
+                previousRefreshToken: refreshToken);
 
             return token.AccessToken;
         }

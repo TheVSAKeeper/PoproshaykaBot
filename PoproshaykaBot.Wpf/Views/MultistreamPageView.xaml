@@ -742,8 +742,8 @@
                                         CornerRadius="{DynamicResource Radius.M}"
                                         Padding="2"
                                         Margin="0,0,12,0"
-                                        Visibility="{Binding HasPlatformSettings, Converter={StaticResource BoolToVisibility}}">
-                                    <StackPanel Orientation="Horizontal">
+                                        Visibility="{Binding HasPlatformTabs, Converter={StaticResource BoolToVisibility}}">
+                                    <WrapPanel>
                                         <RadioButton Style="{StaticResource RadioButton.Segment}"
                                                      GroupName="MultistreamPlatformTabs"
                                                      IsChecked="{Binding IsChannelsTabSelected, Mode=TwoWay}"
@@ -771,11 +771,38 @@
                                         <RadioButton Style="{StaticResource RadioButton.Segment}"
                                                      GroupName="MultistreamPlatformTabs"
                                                      Margin="2,0,0,0"
+                                                     IsChecked="{Binding IsAccountsTabSelected, Mode=TwoWay}"
+                                                     Command="{Binding SelectPlatformTabCommand}"
+                                                     CommandParameter="{x:Static localVm:MultistreamPlatformTab.Accounts}"
+                                                     AutomationProperties.AutomationId="MultistreamTabAccounts"
+                                                     AutomationProperties.Name="Аккаунты"
+                                                     Visibility="{Binding HasPlatformAccounts, Converter={StaticResource BoolToVisibility}}">
+                                            <StackPanel Orientation="Horizontal">
+                                                <iconPacks:PackIconLucide Kind="{x:Static iconPacks:PackIconLucideKind.KeyRound}"
+                                                                          Width="14"
+                                                                          Height="14"
+                                                                          VerticalAlignment="Center"
+                                                                          Margin="0,0,6,0" />
+                                                <TextBlock Text="Аккаунты" VerticalAlignment="Center" />
+                                                <Border Style="{StaticResource Badge.Count}"
+                                                        Padding="6,0"
+                                                        Margin="6,0,0,0"
+                                                        VerticalAlignment="Center"
+                                                        Visibility="{Binding HasSelectedPlatformAccounts, Converter={StaticResource BoolToVisibility}}">
+                                                    <TextBlock Text="{Binding SelectedPlatformAccountCount}"
+                                                               FontSize="{DynamicResource Font.Size.Caption}" />
+                                                </Border>
+                                            </StackPanel>
+                                        </RadioButton>
+                                        <RadioButton Style="{StaticResource RadioButton.Segment}"
+                                                     GroupName="MultistreamPlatformTabs"
+                                                     Margin="2,0,0,0"
                                                      IsChecked="{Binding IsParametersTabSelected, Mode=TwoWay}"
                                                      Command="{Binding SelectPlatformTabCommand}"
                                                      CommandParameter="{x:Static localVm:MultistreamPlatformTab.Parameters}"
                                                      AutomationProperties.AutomationId="MultistreamTabParameters"
-                                                     AutomationProperties.Name="Параметры и доступ">
+                                                     AutomationProperties.Name="Параметры и доступ"
+                                                     Visibility="{Binding HasPlatformSettings, Converter={StaticResource BoolToVisibility}}">
                                             <StackPanel Orientation="Horizontal">
                                                 <iconPacks:PackIconLucide Kind="{x:Static iconPacks:PackIconLucideKind.Settings2}"
                                                                           Width="14"
@@ -785,7 +812,7 @@
                                                 <TextBlock Text="Параметры и доступ" VerticalAlignment="Center" />
                                             </StackPanel>
                                         </RadioButton>
-                                    </StackPanel>
+                                    </WrapPanel>
                                 </Border>
 
                                 <ContentControl Content="{Binding SelectedCard}" Focusable="False">
@@ -846,6 +873,11 @@
                                             Content="{Binding Catalog}"
                                             Focusable="False"
                                             Visibility="{Binding IsChannelsTabSelected, Converter={StaticResource BoolToVisibility}}" />
+
+                            <ContentControl x:Name="PlatformAccountsHost"
+                                            Content="{Binding Accounts}"
+                                            Focusable="False"
+                                            Visibility="{Binding IsAccountsTabSelected, Converter={StaticResource BoolToVisibility}}" />
 
                             <ItemsControl x:Name="PlatformSettingsHost"
                                           ItemsSource="{Binding PlatformSettings}"

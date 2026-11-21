@@ -262,6 +262,17 @@ public sealed class MultistreamLayoutTests
         var ytTabsY = channelsTab.TransformToAncestor(view).Transform(default).Y;
         var ytDetailWidth = channelEditor.ActualWidth;
 
+        harness.Page.SelectPlatformTabCommand.Execute(MultistreamPlatformTab.Accounts);
+        ArrangeWithResponsivePass(host, view, viewport);
+        var accountsHost = (ContentControl)view.FindName("PlatformAccountsHost")!;
+        var ytAccountsWidth = accountsHost.ActualWidth;
+        var ytAccountsTabsY = channelsTab.TransformToAncestor(view).Transform(default).Y;
+
+        harness.Page.Accounts!.ToggleTechnicalModeCommand.Execute(null);
+        ArrangeWithResponsivePass(host, view, viewport);
+        var ytAccountsTechWidth = accountsHost.ActualWidth;
+        harness.Page.Accounts.ToggleTechnicalModeCommand.Execute(null);
+
         harness.Page.SelectPlatformTabCommand.Execute(MultistreamPlatformTab.Parameters);
         ArrangeWithResponsivePass(host, view, viewport);
         var ytParamsWidth = platformSettingsHost.ActualWidth;
@@ -275,10 +286,13 @@ public sealed class MultistreamLayoutTests
         Assert.Multiple(() =>
         {
             Assert.That(ytTabsY, Is.EqualTo(baseTabsY).Within(0.5), $"Вкладки прыгнули по Y при смене площадки ({width}x{height}): Twitch={baseTabsY:F1}, YouTube={ytTabsY:F1}");
+            Assert.That(ytAccountsTabsY, Is.EqualTo(baseTabsY).Within(0.5), $"Вкладки прыгнули по Y на «Аккаунты» ({width}x{height}): {ytAccountsTabsY:F1} vs {baseTabsY:F1}");
             Assert.That(ytParamsTabsY, Is.EqualTo(baseTabsY).Within(0.5), $"Вкладки прыгнули по Y на «Параметры и доступ» ({width}x{height}): {ytParamsTabsY:F1} vs {baseTabsY:F1}");
             Assert.That(autoTabsY, Is.EqualTo(baseTabsY).Within(0.5), $"Вкладки прыгнули по Y в «Профили и автоматика» ({width}x{height}): {autoTabsY:F1} vs {baseTabsY:F1}");
             Assert.That(profilesTab.ActualHeight, Is.EqualTo(baseTabsHeight).Within(0.5), $"Высота вкладок отличается в «Профили и автоматика» ({width}x{height}): {profilesTab.ActualHeight:F1} vs {baseTabsHeight:F1}");
             Assert.That(ytDetailWidth, Is.EqualTo(baseDetailWidth).Within(0.5), $"Ширина прыгнула при смене площадки ({width}x{height}): {ytDetailWidth:F1} vs {baseDetailWidth:F1}");
+            Assert.That(ytAccountsWidth, Is.EqualTo(baseDetailWidth).Within(0.5), $"Ширина прыгнула на вкладке аккаунтов ({width}x{height}): {ytAccountsWidth:F1} vs {baseDetailWidth:F1}");
+            Assert.That(ytAccountsTechWidth, Is.EqualTo(baseDetailWidth).Within(0.5), $"Ширина прыгнула в техническом виде аккаунтов ({width}x{height}): {ytAccountsTechWidth:F1} vs {baseDetailWidth:F1}");
             Assert.That(ytParamsWidth, Is.EqualTo(baseDetailWidth).Within(0.5), $"Ширина прыгнула на длинной вкладке параметров ({width}x{height}): {ytParamsWidth:F1} vs {baseDetailWidth:F1}");
             Assert.That(autoWidth, Is.EqualTo(baseDetailWidth).Within(0.5), $"Ширина прыгнула в «Профили и автоматика» ({width}x{height}): {autoWidth:F1} vs {baseDetailWidth:F1}");
             Assert.That(detailScroll.VerticalOffset, Is.EqualTo(0).Within(0.5), "Открытие «Профили и автоматика» не должно прокручивать заголовок за верх экрана");
@@ -435,7 +449,19 @@ public sealed class MultistreamLayoutTests
         var connection = new BotConnectionManager(new AppHost([], NullLogger<AppHost>.Instance), [], null, bus, NullLogger<BotConnectionManager>.Instance);
         var status = new MultistreamTileViewModel(registry, catalog, connection, new PlatformAuthRegistry([]), [], bus, dispatcher, ytSettingsStore);
         var ytControls = new YouTubeMultistreamPlatformControls(settings);
-        var page = new MultistreamPageViewModel(settings, status, [ytControls]);
+        var platformAccounts = new PlatformAccountsSectionViewModel(
+            catalog,
+            accounts,
+            ytAccountsStore,
+            twitchOAuth: DispatchProxy.Create<ITwitchOAuthService, InertProxy>(),
+            youtubeOAuth: DispatchProxy.Create<IYouTubeOAuthService, InertProxy>(),
+            settingsManager: manager,
+            youtubeSettingsStore: ytSettingsStore,
+            shellLauncher: DispatchProxy.Create<IShellLauncher, InertProxy>(),
+            dialogService: dialogs,
+            eventBus: bus,
+            platformRegistry: registry);
+        var page = new MultistreamPageViewModel(settings, status, [ytControls], platformAccounts);
         page.OnEnter();
 
         return new(page, editor, settings, status, connection);

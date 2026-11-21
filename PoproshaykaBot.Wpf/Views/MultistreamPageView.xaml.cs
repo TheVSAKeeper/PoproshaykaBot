@@ -184,7 +184,7 @@ public partial class MultistreamPageView : UserControl, IView<MultistreamPageVie
         }
 
         DetailScroll.UpdateLayout();
-        if (section is MultistreamSection.Automation or MultistreamSection.Channels or MultistreamSection.Parameters)
+        if (section is MultistreamSection.Automation or MultistreamSection.Channels or MultistreamSection.Parameters or MultistreamSection.Accounts)
         {
             var topTarget = section switch
             {
@@ -192,6 +192,7 @@ public partial class MultistreamPageView : UserControl, IView<MultistreamPageVie
                 MultistreamSection.Parameters => FindControl(PlatformSettingsHost, control =>
                         AutomationProperties.GetAutomationId(control) == "MultistreamEnableYouTube")
                     ?? FindControl(PlatformSettingsHost, control => control.IsTabStop),
+                MultistreamSection.Accounts => FindControl(PlatformAccountsHost, control => control.IsTabStop),
                 _ => FindChannelTarget(),
             };
 

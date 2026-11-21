@@ -26,6 +26,8 @@ public sealed partial class SettingsPageViewModel : ObservableObject, IPageHeade
     private readonly IDialogService _dialogService;
     private readonly ISettingsStore _uiSettings;
     private readonly ChannelCatalogSettingsSectionViewModel? _channelCatalog;
+    private readonly OAuthSettingsViewModel? _twitchCredentials;
+    private readonly YouTubeSettingsSectionViewModel? _youtubeCredentials;
 
     private readonly List<IDisposable> _dirtySubscriptions = [];
     private SettingsSessionState _session = new() { Settings = new() };
@@ -78,9 +80,9 @@ public sealed partial class SettingsPageViewModel : ObservableObject, IPageHeade
             new SettingsSectionPresentation(c.CreateSection(), c.GetBlocks(), c.IsFullWidth)).ToArray();
         var contents = presentations.SelectMany(page => page.Blocks).Select(block => block.Content).ToArray();
         _channelCatalog = contents.OfType<ChannelCatalogSettingsSectionViewModel>().FirstOrDefault();
-        _channelCatalog?.SetCredentialDrafts(
-            contents.OfType<OAuthSettingsViewModel>().FirstOrDefault(),
-            contents.OfType<YouTubeSettingsSectionViewModel>().FirstOrDefault());
+        _twitchCredentials = contents.OfType<OAuthSettingsViewModel>().FirstOrDefault();
+        _youtubeCredentials = contents.OfType<YouTubeSettingsSectionViewModel>().FirstOrDefault();
+        _channelCatalog?.SetCredentialDrafts(_twitchCredentials, _youtubeCredentials);
         var extracted = PlatformSettingsPages.Create(presentations, broadcastProfiles, platformRegistry);
         SectionPresentations = extracted.SettingsPresentations;
         PlatformPresentations = extracted.PlatformPresentations;
@@ -122,6 +124,9 @@ public sealed partial class SettingsPageViewModel : ObservableObject, IPageHeade
     public bool HasUnsavedChanges => HasChanges;
 
     public string UnsavedChangesSubject => "На странице настроек есть несохранённые изменения.";
+
+    internal (OAuthSettingsViewModel? Twitch, YouTubeSettingsSectionViewModel? YouTube) GetCredentialDrafts() =>
+        (_twitchCredentials, _youtubeCredentials);
 
     public T GetSectionContent<T>() where T : class
     {

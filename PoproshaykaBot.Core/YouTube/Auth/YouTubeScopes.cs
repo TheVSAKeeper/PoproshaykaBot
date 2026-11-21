@@ -17,6 +17,12 @@ public static class YouTubeScopes
         ReadOnly,
     ];
 
+    public static readonly IReadOnlyList<string> CombinedDefault =
+    [
+        .. BotRequired,
+        .. BroadcasterRequired,
+    ];
+
     public static IReadOnlyList<string> RequiredFor(PlatformAuthRole role)
     {
         return role switch

@@ -65,14 +65,16 @@ public sealed class YouTubeOAuthAccountWriter(
         string? refreshToken,
         IReadOnlyList<string> scopes,
         int expiresInSeconds,
-        bool publishAuthorizationRefreshed = true)
+        bool publishAuthorizationRefreshed = true,
+        string? previousRefreshToken = null)
     {
         ArgumentException.ThrowIfNullOrEmpty(accessToken);
 
         var normalized = AuthContextIds.Normalize(contextId);
         var now = timeProvider.GetUtcNow();
+        DateTimeOffset? expiresAt = expiresInSeconds > 0 ? now.AddSeconds(expiresInSeconds) : null;
 
-        accountsStore.Mutate(role, normalized, account =>
+        void ApplyFields(YouTubeAccountSettings account)
         {
             account.AccessToken = accessToken;
 
@@ -83,11 +85,27 @@ public sealed class YouTubeOAuthAccountWriter(
 
             if (scopes is { Count: > 0 })
             {
-                account.StoredScopes = [..scopes];
+                account.StoredScopes = [.. scopes];
             }
 
-            account.AccessTokenExpiresAt = expiresInSeconds > 0 ? now.AddSeconds(expiresInSeconds) : null;
-        });
+            account.AccessTokenExpiresAt = expiresAt;
+        }
+
+        IReadOnlyList<(PlatformAuthRole Role, string ContextId)> syncedSiblings;
+        if (!string.IsNullOrWhiteSpace(previousRefreshToken))
+        {
+            syncedSiblings = accountsStore.MutateAndSyncSharedRefreshToken(
+                role,
+                normalized,
+                previousRefreshToken,
+                ApplyFields,
+                ApplyFields);
+        }
+        else
+        {
+            accountsStore.Mutate(role, normalized, ApplyFields);
+            syncedSiblings = [];
+        }
 
         logger.LogDebug("Обновлён YouTube access-токен роли {Role} (контекст {ContextId}, refresh {RefreshAction})",
             role,
@@ -97,6 +115,11 @@ public sealed class YouTubeOAuthAccountWriter(
         if (publishAuthorizationRefreshed)
         {
             _ = eventBus.PublishAsync(new PlatformAuthorizationRefreshed(StreamingPlatform.YouTube, role, normalized));
+        }
+
+        foreach (var sibling in syncedSiblings)
+        {
+            _ = eventBus.PublishAsync(new PlatformAuthorizationRefreshed(StreamingPlatform.YouTube, sibling.Role, sibling.ContextId));
         }
     }
 

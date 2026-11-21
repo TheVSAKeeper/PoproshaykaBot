@@ -41,7 +41,12 @@ public sealed class OAuthTokenRefresher : IDisposable
             eventBus,
             logger);
 
-        _inner = new((role, contextId) => accountsStore.Load(role, contextId), strategy, eventBus, timeProvider);
+        _inner = new(
+            (role, contextId) => accountsStore.Load(role, contextId),
+            strategy,
+            eventBus,
+            timeProvider,
+            static account => account.UserId);
     }
 
     public bool HasUsableAccessToken(PlatformAuthRole role)
@@ -235,7 +240,8 @@ public sealed class OAuthTokenRefresher : IDisposable
                 tokenResponse.Scope,
                 validation.Login,
                 validation.UserId,
-                tokenResponse.ExpiresIn);
+                tokenResponse.ExpiresIn,
+                previousRefreshToken: refreshToken);
 
             logger.LogInformation("Refresh для роли {Role} (контекст {ContextId}) выполнен успешно (login={Login}, expiresIn={ExpiresIn}s, scopes={ScopeCount})",
                 role,
