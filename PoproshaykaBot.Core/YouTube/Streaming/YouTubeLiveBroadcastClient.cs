@@ -1,9 +1,11 @@
 ﻿using Microsoft.Extensions.Logging;
+using PoproshaykaBot.Core.Broadcast.Profiles;
 using PoproshaykaBot.Core.Platforms.Auth;
 using PoproshaykaBot.Core.YouTube.Client;
 using PoproshaykaBot.Core.YouTube.Quota;
 using System.Globalization;
 using System.Net;
+using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
@@ -15,7 +17,10 @@ internal sealed class YouTubeLiveBroadcastClient(
     ILogger<YouTubeLiveBroadcastClient> logger)
     : IYouTubeLiveBroadcastClient
 {
+    public const int YouTubeQuotaCost = 50;
+
     private const int MaxBroadcastPages = 10;
+    private const string UpdateOperationName = "liveBroadcasts.update";
 
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
@@ -142,6 +147,130 @@ internal sealed class YouTubeLiveBroadcastClient(
             HasLiveStreamingDetails: item.LiveStreamingDetails is not null);
     }
 
+    public async Task<YouTubeBroadcastUpdateResult> UpdateBroadcastMetadataAsync(
+        YouTubeBroadcastUpdateRequest request,
+        string? contextId,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        if (string.IsNullOrWhiteSpace(request.BroadcastId))
+        {
+            throw new ArgumentException("BroadcastId is required.", nameof(request));
+        }
+
+        if (string.IsNullOrWhiteSpace(request.Title))
+        {
+            throw new ArgumentException("Title is required.", nameof(request));
+        }
+
+        if (!quotaGovernor.TryReserve(PlatformAuthRole.Broadcaster, YouTubeQuotaPriority.CriticalReadAndMonitor, YouTubeQuotaCost, out var lease))
+        {
+            return YouTubeBroadcastUpdateResult.Failure(
+                YouTubeApiErrorKind.LocalQuotaBudgetReached,
+                "Исчерпан локальный бюджет квоты YouTube API");
+        }
+
+        using var _ = PlatformAuthRequestOptions.UseContext(contextId);
+        using (lease)
+        using (var client = httpClientFactory.CreateClient(YouTubeEndpoints.BroadcasterApiHttpClient))
+        {
+            var privacyStatus = YouTubeBroadcastPrivacyStatus.Normalize(request.PrivacyStatus);
+            var relativeUri = string.IsNullOrWhiteSpace(privacyStatus)
+                ? "youtube/v3/liveBroadcasts?part=snippet"
+                : "youtube/v3/liveBroadcasts?part=snippet,status";
+
+            var payload = new LiveBroadcastUpdateRequestDto(
+                request.BroadcastId.Trim(),
+                new(
+                    request.Title.Trim(),
+                    request.Description,
+                    request.ScheduledStartTimeUtc?.ToUniversalTime().ToString("O", CultureInfo.InvariantCulture)),
+                privacyStatus is null ? null : new LiveBroadcastUpdateStatusDto(privacyStatus));
+
+            var requestJson = JsonSerializer.Serialize(payload, JsonOptions);
+            using var httpRequest = new HttpRequestMessage(HttpMethod.Put, relativeUri)
+            {
+                Content = new StringContent(requestJson, Encoding.UTF8, "application/json"),
+            };
+            httpRequest.Options.Set(PlatformAuthRequestOptions.ContextIdKey, AuthContextIds.Normalize(contextId));
+
+            HttpResponseMessage response;
+
+            try
+            {
+                response = await client.SendAsync(httpRequest, cancellationToken).ConfigureAwait(false);
+            }
+            catch (YouTubeApiException ex)
+            {
+                return YouTubeBroadcastUpdateResult.Failure(ex.Kind, FormatUpdateErrorMessage(ex));
+            }
+            catch (HttpRequestException ex)
+            {
+                var apiEx = YouTubeErrorClassifier.FromTransportException(ex, UpdateOperationName);
+                return YouTubeBroadcastUpdateResult.Failure(apiEx.Kind, FormatUpdateErrorMessage(apiEx));
+            }
+            catch (OperationCanceledException ex) when (!cancellationToken.IsCancellationRequested)
+            {
+                var apiEx = YouTubeErrorClassifier.FromTransportException(ex, UpdateOperationName);
+                return YouTubeBroadcastUpdateResult.Failure(apiEx.Kind, FormatUpdateErrorMessage(apiEx));
+            }
+
+            using (response)
+            {
+                string body;
+
+                try
+                {
+                    body = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+                }
+                catch (HttpRequestException ex)
+                {
+                    var transportEx = YouTubeErrorClassifier.FromTransportException(ex, UpdateOperationName);
+                    return YouTubeBroadcastUpdateResult.Failure(transportEx.Kind, FormatUpdateErrorMessage(transportEx));
+                }
+                catch (OperationCanceledException ex) when (!cancellationToken.IsCancellationRequested)
+                {
+                    var transportEx = YouTubeErrorClassifier.FromTransportException(ex, UpdateOperationName);
+                    return YouTubeBroadcastUpdateResult.Failure(transportEx.Kind, FormatUpdateErrorMessage(transportEx));
+                }
+
+                if (response.IsSuccessStatusCode)
+                {
+                    lease.Commit();
+                    return YouTubeBroadcastUpdateResult.Success();
+                }
+
+                var apiEx = YouTubeErrorClassifier.FromHttpResponse(response.StatusCode, body, UpdateOperationName);
+                if (apiEx.Kind == YouTubeApiErrorKind.QuotaExceeded)
+                {
+                    lease.MarkExhaustedFromServer();
+                }
+                else if (response.StatusCode != HttpStatusCode.Unauthorized)
+                {
+                    lease.Commit();
+                }
+
+                return YouTubeBroadcastUpdateResult.Failure(apiEx.Kind, FormatUpdateErrorMessage(apiEx));
+            }
+        }
+    }
+
+    private static string FormatUpdateErrorMessage(YouTubeApiException exception)
+    {
+        return exception.Kind switch
+        {
+            YouTubeApiErrorKind.Unauthorized => "Нет авторизации владельца канала YouTube",
+            YouTubeApiErrorKind.Forbidden => "Недостаточно прав для изменения трансляции YouTube",
+            YouTubeApiErrorKind.NotFound => "Активная трансляция YouTube не найдена",
+            YouTubeApiErrorKind.QuotaExceeded => "Исчерпана квота YouTube API",
+            YouTubeApiErrorKind.LocalQuotaBudgetReached => "Исчерпан локальный бюджет квоты YouTube API",
+            YouTubeApiErrorKind.RateLimitExceeded => "Превышен лимит запросов к YouTube API",
+            YouTubeApiErrorKind.BadRequest => "YouTube отклонил параметры трансляции",
+            YouTubeApiErrorKind.Transient => "Сетевая ошибка при обновлении трансляции YouTube",
+            _ => "Не удалось обновить трансляцию YouTube",
+        };
+    }
+
     private async Task<string> SendAuthorizedGetAsync(
         PlatformAuthRole role,
         string relativeUri,
@@ -259,7 +388,10 @@ internal sealed class YouTubeLiveBroadcastClient(
             item.Snippet.ChannelTitle ?? string.Empty,
             item.Snippet.LiveChatId.Trim(),
             item.Snippet.Title ?? string.Empty,
-            startedAt.ToUniversalTime());
+            startedAt.ToUniversalTime(),
+            item.Snippet.Description,
+            YouTubeBroadcastPrivacyStatus.Normalize(item.Status?.PrivacyStatus),
+            item.Snippet.ScheduledStartTime?.ToUniversalTime());
 
         return true;
     }
@@ -315,6 +447,9 @@ internal sealed class YouTubeLiveBroadcastClient(
 
         [JsonPropertyName("snippet")]
         public LiveBroadcastSnippetDto? Snippet { get; set; }
+
+        [JsonPropertyName("status")]
+        public LiveBroadcastStatusDto? Status { get; set; }
     }
 
     private sealed class LiveBroadcastSnippetDto
@@ -328,11 +463,17 @@ internal sealed class YouTubeLiveBroadcastClient(
         [JsonPropertyName("title")]
         public string? Title { get; set; }
 
+        [JsonPropertyName("description")]
+        public string? Description { get; set; }
+
         [JsonPropertyName("liveChatId")]
         public string? LiveChatId { get; set; }
 
         [JsonPropertyName("publishedAt")]
         public DateTimeOffset? PublishedAt { get; set; }
+
+        [JsonPropertyName("scheduledStartTime")]
+        public DateTimeOffset? ScheduledStartTime { get; set; }
 
         [JsonPropertyName("actualStartTime")]
         public DateTimeOffset? ActualStartTime { get; set; }
@@ -340,6 +481,31 @@ internal sealed class YouTubeLiveBroadcastClient(
         [JsonPropertyName("actualEndTime")]
         public DateTimeOffset? ActualEndTime { get; set; }
     }
+
+    private sealed class LiveBroadcastStatusDto
+    {
+        [JsonPropertyName("privacyStatus")]
+        public string? PrivacyStatus { get; set; }
+    }
+
+    private sealed record LiveBroadcastUpdateRequestDto(
+        [property: JsonPropertyName("id")] string Id,
+        [property: JsonPropertyName("snippet")] LiveBroadcastUpdateSnippetDto Snippet,
+        [property: JsonPropertyName("status")]
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        LiveBroadcastUpdateStatusDto? Status);
+
+    private sealed record LiveBroadcastUpdateSnippetDto(
+        [property: JsonPropertyName("title")] string Title,
+        [property: JsonPropertyName("description")]
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        string? Description,
+        [property: JsonPropertyName("scheduledStartTime")]
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        string? ScheduledStartTime);
+
+    private sealed record LiveBroadcastUpdateStatusDto(
+        [property: JsonPropertyName("privacyStatus")] string PrivacyStatus);
 
     private sealed class VideosListResponseDto
     {

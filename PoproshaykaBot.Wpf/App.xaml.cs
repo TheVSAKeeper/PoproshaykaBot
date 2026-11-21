@@ -562,6 +562,8 @@ public partial class App : Application
         services.AddTransient<PollProfileEditDialogViewModel>();
         services.AddTransient<PollFromProfileDialogViewModel>();
         services.AddTransient<EmbeddedTwitchAuthDialogViewModel>();
+        services.AddTransient<MultistreamPlatformSetupDialogViewModel>();
+        services.AddTransient<MultistreamChannelWizardDialogViewModel>();
 
         services.AddTransient<BasicSettingsSectionViewModel>();
         services.AddTransient<RateLimitingSettingsViewModel>();

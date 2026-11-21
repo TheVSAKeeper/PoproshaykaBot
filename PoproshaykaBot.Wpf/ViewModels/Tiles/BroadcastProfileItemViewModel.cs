@@ -26,7 +26,8 @@ public sealed partial class BroadcastProfileItemViewModel : ObservableObject
         Func<BroadcastProfileItemViewModel, Task> editAsync,
         Action<BroadcastProfileItemViewModel> duplicate,
         Action<BroadcastProfileItemViewModel> delete,
-        IReadOnlyList<BroadcastProfileTarget> targetPlatforms)
+        IReadOnlyList<BroadcastProfileTarget> targetPlatforms,
+        BroadcastProfileYouTubeMetadata? youtubeMetadata = null)
     {
         Profile = profile;
         _isActive = isActive;
@@ -39,23 +40,50 @@ public sealed partial class BroadcastProfileItemViewModel : ObservableObject
 
         Name = profile.Name;
 
-        var hasNumber = MessageTemplate.For(profile.Title).Contains("n");
+        var hasNumber = MessageTemplate.For(profile.Title).Contains("n")
+            || MessageTemplate.For(youtubeMetadata?.TitleOverride ?? string.Empty).Contains("n")
+            || MessageTemplate.For(youtubeMetadata?.Description ?? string.Empty).Contains("n");
         HasNumberPlaceholder = hasNumber;
         NumberBadge = hasNumber ? $"#{profile.CurrentNumber}" : string.Empty;
 
-        TitleDisplay = string.IsNullOrWhiteSpace(profile.Title)
+        var displayTitle = !string.IsNullOrWhiteSpace(profile.Title)
+            ? profile.Title
+            : youtubeMetadata?.TitleOverride ?? string.Empty;
+        TitleDisplay = string.IsNullOrWhiteSpace(displayTitle)
             ? string.Empty
-            : $"«{profile.Title}»";
-        HasTitleDisplay = !string.IsNullOrWhiteSpace(profile.Title);
+            : $"«{displayTitle}»";
+        HasTitleDisplay = !string.IsNullOrWhiteSpace(displayTitle);
+
+        var isYouTubeOnly = targetPlatforms.Any(static t => t.Platform == StreamingPlatform.YouTube)
+            && !targetPlatforms.Any(static t => t.Platform == StreamingPlatform.Twitch);
 
         var parts = new List<string>();
         if (!string.IsNullOrWhiteSpace(profile.GameName))
+        {
             parts.Add(profile.GameName);
+        }
+        else if (isYouTubeOnly)
+        {
+            var privacy = YouTubeBroadcastPrivacyStatus.Normalize(youtubeMetadata?.PrivacyStatus);
+            if (!string.IsNullOrWhiteSpace(privacy))
+            {
+                parts.Add(YouTubeBroadcastPrivacyStatus.GetDisplayName(privacy));
+            }
+            else if (!string.IsNullOrWhiteSpace(youtubeMetadata?.Description))
+            {
+                parts.Add("Описание YouTube");
+            }
+            else
+            {
+                parts.Add("YouTube");
+            }
+        }
+
         if (profile.Tags.Count > 0)
             parts.Add(string.Join(" ", profile.Tags.Select(t => "#" + t)));
         if (!string.IsNullOrWhiteSpace(profile.ObsSceneName))
             parts.Add(profile.ObsSceneName);
-        if (!string.IsNullOrWhiteSpace(profile.BroadcasterLanguage))
+        if (!isYouTubeOnly && !string.IsNullOrWhiteSpace(profile.BroadcasterLanguage))
             parts.Add(profile.BroadcasterLanguage.ToUpperInvariant());
         MetaLine = string.Join("  •  ", parts);
         HasMetaLine = parts.Count > 0;

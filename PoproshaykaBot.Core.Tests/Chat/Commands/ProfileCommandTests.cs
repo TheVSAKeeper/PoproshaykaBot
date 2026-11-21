@@ -21,6 +21,8 @@ public class ProfileCommandTests
             Substitute.For<IEventBus>(),
             TimeProvider.System,
             NullLogger<BroadcastProfilesManager>.Instance,
+            null,
+            null,
             null);
 
         _command = new(_manager, NullLogger<ProfileCommand>.Instance);

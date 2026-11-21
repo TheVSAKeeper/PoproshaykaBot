@@ -61,6 +61,9 @@ public sealed partial class BroadcastProfilesTileViewModel : DashboardTileViewMo
     private bool _isStatusError;
 
     [ObservableProperty]
+    private bool _isStatusWarning;
+
+    [ObservableProperty]
     private string? _unsavedNotice;
 
     public bool HasProfiles => Items.Count > 0;
@@ -117,9 +120,9 @@ public sealed partial class BroadcastProfilesTileViewModel : DashboardTileViewMo
     {
         var profile = new BroadcastProfile { Name = $"Новый профиль {DateTime.Now:HH:mm:ss}" };
 
-        if (await EditInDialogAsync(profile, null) is { } selectedPlatforms)
+        if (await EditInDialogAsync(profile, null, null) is { } edited)
         {
-            Persist(profile, selectedPlatforms);
+            Persist(profile, edited.Platforms, edited.YouTubeMetadata);
         }
     }
 
@@ -201,7 +204,7 @@ public sealed partial class BroadcastProfilesTileViewModel : DashboardTileViewMo
 
         try
         {
-            ReportWrite(_manager.Upsert(saved, dialog.GetSelectedPlatforms()));
+            ReportWrite(_manager.Upsert(saved, dialog.GetSelectedPlatforms(), dialog.BuildYouTubeMetadata()));
         }
         catch (InvalidOperationException ex)
         {
@@ -218,9 +221,9 @@ public sealed partial class BroadcastProfilesTileViewModel : DashboardTileViewMo
     {
         var copy = CloneProfile(item.Profile);
 
-        if (await EditInDialogAsync(copy, _manager.GetPlatforms(item.Profile.Id)) is { } selectedPlatforms)
+        if (await EditInDialogAsync(copy, _manager.GetPlatforms(item.Profile.Id), _manager.GetYouTubeMetadata(item.Profile.Id)) is { } edited)
         {
-            Persist(copy, selectedPlatforms);
+            Persist(copy, edited.Platforms, edited.YouTubeMetadata);
         }
     }
 
@@ -236,7 +239,7 @@ public sealed partial class BroadcastProfilesTileViewModel : DashboardTileViewMo
             GameName = source.GameName,
             BroadcasterLanguage = source.BroadcasterLanguage,
             Tags = source.Tags.ToList(),
-        }, _manager.GetPlatforms(source.Id));
+        }, _manager.GetPlatforms(source.Id), _manager.GetYouTubeMetadata(source.Id));
     }
 
     private void DeleteProfile(BroadcastProfileItemViewModel item)
@@ -255,13 +258,14 @@ public sealed partial class BroadcastProfilesTileViewModel : DashboardTileViewMo
         ReportWrite(_manager.Remove(profile.Id));
     }
 
-    private async Task<IReadOnlyCollection<StreamingPlatform>?> EditInDialogAsync(
+    private async Task<(IReadOnlyCollection<StreamingPlatform> Platforms, BroadcastProfileYouTubeMetadata YouTubeMetadata)?> EditInDialogAsync(
         BroadcastProfile profile,
-        IReadOnlySet<StreamingPlatform>? platforms)
+        IReadOnlySet<StreamingPlatform>? platforms,
+        BroadcastProfileYouTubeMetadata? youtubeMetadata)
     {
         using var scope = _scopeFactory.CreateScope();
         var dialog = scope.ServiceProvider.GetRequiredService<BroadcastProfileEditDialogViewModel>();
-        dialog.LoadFrom(profile, platforms);
+        dialog.LoadFrom(profile, platforms, youtubeMetadata);
 
         if (!await _dialogService.ShowAsync(dialog))
         {
@@ -269,14 +273,17 @@ public sealed partial class BroadcastProfilesTileViewModel : DashboardTileViewMo
         }
 
         dialog.WriteTo(profile);
-        return dialog.GetSelectedPlatforms();
+        return (dialog.GetSelectedPlatforms(), dialog.BuildYouTubeMetadata());
     }
 
-    private void Persist(BroadcastProfile profile, IReadOnlyCollection<StreamingPlatform> platforms)
+    private void Persist(
+        BroadcastProfile profile,
+        IReadOnlyCollection<StreamingPlatform> platforms,
+        BroadcastProfileYouTubeMetadata? youtubeMetadata = null)
     {
         try
         {
-            ReportWrite(_manager.Upsert(profile, platforms));
+            ReportWrite(_manager.Upsert(profile, platforms, youtubeMetadata));
         }
         catch (InvalidOperationException ex)
         {
@@ -333,7 +340,8 @@ public sealed partial class BroadcastProfilesTileViewModel : DashboardTileViewMo
                     _manager.GetPlatforms(p.Id)
                         .Order()
                         .Select(platform => new BroadcastProfileTarget(platform, _platforms.GetDisplayName(platform)))
-                        .ToArray());
+                        .ToArray(),
+                    _manager.GetYouTubeMetadata(p.Id));
             }));
 
         if (_applyingProfileId.HasValue)
@@ -447,7 +455,19 @@ public sealed partial class BroadcastProfilesTileViewModel : DashboardTileViewMo
     private void OnProfileApplied(BroadcastProfileApplied @event)
     {
         _activeProfileId = @event.Profile.Id;
-        ClearInFlightStates($"✓ Применён профиль «{@event.Profile.Name}»", false);
+        if (BroadcastProfileApplySummary.IsPartial(@event.PlatformResults))
+        {
+            var message = BroadcastProfileApplySummary.FormatPartialStatus(
+                @event.Profile.Name,
+                @event.PlatformResults!,
+                _platforms.GetDisplayName);
+            ClearInFlightStates(message, isError: false, isWarning: true);
+        }
+        else
+        {
+            ClearInFlightStates($"✓ Применён профиль «{@event.Profile.Name}»", isError: false, isWarning: false);
+        }
+
         ReloadItems();
     }
 
@@ -479,7 +499,7 @@ public sealed partial class BroadcastProfilesTileViewModel : DashboardTileViewMo
         RefreshHeaderStatus();
     }
 
-    private void ClearInFlightStates(string message, bool isError)
+    private void ClearInFlightStates(string message, bool isError, bool isWarning = false)
     {
         _applyingProfileId = null;
 
@@ -490,13 +510,14 @@ public sealed partial class BroadcastProfilesTileViewModel : DashboardTileViewMo
 
         RefreshHeaderStatus();
 
-        ShowStatus(message, isError);
+        ShowStatus(message, isError, isWarning);
     }
 
-    private void ShowStatus(string message, bool isError)
+    private void ShowStatus(string message, bool isError, bool isWarning = false)
     {
         StatusMessage = message;
         IsStatusError = isError;
+        IsStatusWarning = !isError && isWarning;
         HasStatusMessage = !string.IsNullOrEmpty(message);
     }
 

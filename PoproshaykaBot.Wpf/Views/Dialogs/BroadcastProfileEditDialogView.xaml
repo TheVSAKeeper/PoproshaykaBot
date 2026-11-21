@@ -28,11 +28,14 @@
                       VerticalScrollBarVisibility="Auto"
                       HorizontalScrollBarVisibility="Disabled">
         <StackPanel Grid.IsSharedSizeScope="True">
+            <TextBlock Text="Общее"
+                       FontWeight="SemiBold"
+                       FontSize="{DynamicResource Font.Size.M}"
+                       Foreground="{DynamicResource Fg.Primary}"
+                       Margin="0,0,0,8" />
+
             <Grid Margin="0,0,0,8">
                 <Grid.RowDefinitions>
-                    <RowDefinition Height="Auto" />
-                    <RowDefinition Height="Auto" />
-                    <RowDefinition Height="Auto" />
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="Auto" />
@@ -44,11 +47,22 @@
                 </Grid.ColumnDefinitions>
 
                 <TextBlock Grid.Row="0" Grid.Column="0"
+                           Text="{Binding NameLabel}"
+                           TextWrapping="NoWrap"
+                           VerticalAlignment="Center"
+                           Margin="0,0,12,8" />
+                <TextBox Grid.Row="0" Grid.Column="1"
+                         Style="{StaticResource TextBox.Form}"
+                         Text="{Binding Name, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                         keepshell:PlaceholderBehavior.Placeholder="{Binding NamePlaceholder}"
+                         Margin="0,0,0,8" />
+
+                <TextBlock Grid.Row="1" Grid.Column="0"
                            Text="Заголовок:"
                            TextWrapping="NoWrap"
                            VerticalAlignment="Top"
                            Margin="0,4,12,8" />
-                <TextBox Grid.Row="0" Grid.Column="1"
+                <TextBox Grid.Row="1" Grid.Column="1"
                          Style="{StaticResource TextBox.Form}"
                          Text="{Binding ProfileTitle, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                          AcceptsReturn="True"
@@ -58,7 +72,7 @@
                          keepshell:PlaceholderBehavior.Placeholder="Заголовок трансляции, можно использовать {n}"
                          Margin="0,0,0,4" />
 
-                <TextBlock Grid.Row="1" Grid.Column="1"
+                <TextBlock Grid.Row="2" Grid.Column="1"
                            Foreground="{DynamicResource Fg.Muted}"
                            FontSize="{DynamicResource Font.Size.S}"
                            TextWrapping="Wrap"
@@ -76,60 +90,18 @@
                     </TextBlock.Style>
                 </TextBlock>
 
-                <TextBlock Grid.Row="2" Grid.Column="0"
+                <TextBlock Grid.Row="3" Grid.Column="0"
                            Text="Серия №:"
                            TextWrapping="NoWrap"
                            VerticalAlignment="Center"
                            Margin="0,0,12,8" />
-                <controls:NumericSettingField Grid.Row="2" Grid.Column="1"
+                <controls:NumericSettingField Grid.Row="3" Grid.Column="1"
                                               Value="{Binding CurrentNumber, Mode=TwoWay}"
                                               IncreaseCommand="{Binding IncreaseNumberCommand}"
                                               DecreaseCommand="{Binding DecreaseNumberCommand}"
                                               IncreaseAutomationName="Увеличить номер серии"
                                               DecreaseAutomationName="Уменьшить номер серии"
                                               Margin="0,0,0,8" />
-
-                <TextBlock Grid.Row="3" Grid.Column="0"
-                           Text="Игра:"
-                           TextWrapping="NoWrap"
-                           VerticalAlignment="Top"
-                           Margin="0,4,12,8" />
-                <ContentControl Grid.Row="3" Grid.Column="1"
-                                Content="{Binding Game}"
-                                Margin="0,0,0,8" />
-
-                <TextBlock Grid.Row="4" Grid.Column="0"
-                           Text="Теги:"
-                           TextWrapping="NoWrap"
-                           VerticalAlignment="Center"
-                           Margin="0,0,12,8" />
-                <TextBox Grid.Row="4" Grid.Column="1"
-                         Style="{StaticResource TextBox.Form}"
-                         Text="{Binding Tags, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                         keepshell:PlaceholderBehavior.Placeholder="через запятую"
-                         Margin="0,0,0,8" />
-
-                <TextBlock Grid.Row="5" Grid.Column="0"
-                           Text="Язык:"
-                           TextWrapping="NoWrap"
-                           VerticalAlignment="Center"
-                           Margin="0,0,12,8" />
-                <ComboBox Grid.Row="5" Grid.Column="1"
-                          Style="{StaticResource ComboBox.Form}"
-                          ItemsSource="{Binding LanguageOptions}"
-                          SelectedItem="{Binding Language, Mode=TwoWay}"
-                          Margin="0,0,0,8" />
-
-                <TextBlock Grid.Row="6" Grid.Column="0"
-                           Text="{Binding NameLabel}"
-                           TextWrapping="NoWrap"
-                           VerticalAlignment="Center"
-                           Margin="0,0,12,8" />
-                <TextBox Grid.Row="6" Grid.Column="1"
-                         Style="{StaticResource TextBox.Form}"
-                         Text="{Binding Name, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                         keepshell:PlaceholderBehavior.Placeholder="{Binding NamePlaceholder}"
-                         Margin="0,0,0,8" />
             </Grid>
 
             <Grid Margin="0,0,0,8"
@@ -178,6 +150,138 @@
                           ItemsSource="{Binding ObsScenes}"
                           Text="{Binding ObsSceneName, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
             </Grid>
+
+            <Border Style="{StaticResource Card.Inset}"
+                    Padding="12"
+                    Margin="0,4,0,8"
+                    Visibility="{Binding IsTwitchSelected, Converter={StaticResource BoolToVisibility}}">
+                <StackPanel>
+                    <TextBlock Text="Twitch"
+                               FontWeight="SemiBold"
+                               FontSize="{DynamicResource Font.Size.M}"
+                               Foreground="{DynamicResource Fg.Primary}"
+                               Margin="0,0,0,8" />
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" SharedSizeGroup="DialogLabel" />
+                            <ColumnDefinition Width="*" MinWidth="220" />
+                        </Grid.ColumnDefinitions>
+
+                        <TextBlock Grid.Row="0" Grid.Column="0"
+                                   Text="Игра:"
+                                   TextWrapping="NoWrap"
+                                   VerticalAlignment="Top"
+                                   Margin="0,4,12,8" />
+                        <ContentControl Grid.Row="0" Grid.Column="1"
+                                        Content="{Binding Game}"
+                                        Margin="0,0,0,8" />
+
+                        <TextBlock Grid.Row="1" Grid.Column="0"
+                                   Text="Теги:"
+                                   TextWrapping="NoWrap"
+                                   VerticalAlignment="Center"
+                                   Margin="0,0,12,8" />
+                        <TextBox Grid.Row="1" Grid.Column="1"
+                                 Style="{StaticResource TextBox.Form}"
+                                 Text="{Binding Tags, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                 keepshell:PlaceholderBehavior.Placeholder="через запятую"
+                                 Margin="0,0,0,8" />
+
+                        <TextBlock Grid.Row="2" Grid.Column="0"
+                                   Text="Язык:"
+                                   TextWrapping="NoWrap"
+                                   VerticalAlignment="Center"
+                                   Margin="0,0,12,0" />
+                        <ComboBox Grid.Row="2" Grid.Column="1"
+                                  Style="{StaticResource ComboBox.Form}"
+                                  ItemsSource="{Binding LanguageOptions}"
+                                  SelectedItem="{Binding Language, Mode=TwoWay}" />
+                    </Grid>
+                </StackPanel>
+            </Border>
+
+            <Border Style="{StaticResource Card.Inset}"
+                    Padding="12"
+                    Margin="0,4,0,8"
+                    Visibility="{Binding IsYouTubeSelected, Converter={StaticResource BoolToVisibility}}">
+                <StackPanel>
+                    <TextBlock Text="YouTube"
+                               FontWeight="SemiBold"
+                               FontSize="{DynamicResource Font.Size.M}"
+                               Foreground="{DynamicResource Fg.Primary}"
+                               Margin="0,0,0,8" />
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" SharedSizeGroup="DialogLabel" />
+                            <ColumnDefinition Width="*" MinWidth="220" />
+                        </Grid.ColumnDefinitions>
+
+                        <TextBlock Grid.Row="0" Grid.Column="0"
+                                   Text="Заголовок YT:"
+                                   TextWrapping="NoWrap"
+                                   VerticalAlignment="Center"
+                                   Margin="0,0,12,8" />
+                        <TextBox Grid.Row="0" Grid.Column="1"
+                                 Style="{StaticResource TextBox.Form}"
+                                 Text="{Binding YouTubeTitleOverride, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                 keepshell:PlaceholderBehavior.Placeholder="если пусто – используется общий заголовок"
+                                 Margin="0,0,0,8" />
+
+                        <TextBlock Grid.Row="1" Grid.Column="0"
+                                   Text="Описание:"
+                                   TextWrapping="NoWrap"
+                                   VerticalAlignment="Top"
+                                   Margin="0,4,12,8" />
+                        <TextBox Grid.Row="1" Grid.Column="1"
+                                 Style="{StaticResource TextBox.Form}"
+                                 Text="{Binding YouTubeDescription, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                 AcceptsReturn="True"
+                                 TextWrapping="Wrap"
+                                 MinHeight="56"
+                                 VerticalScrollBarVisibility="Auto"
+                                 keepshell:PlaceholderBehavior.Placeholder="Описание трансляции, можно использовать {n}"
+                                 Margin="0,0,0,8" />
+
+                        <TextBlock Grid.Row="2" Grid.Column="0"
+                                   Text="Доступ:"
+                                   TextWrapping="NoWrap"
+                                   VerticalAlignment="Center"
+                                   Margin="0,0,12,0" />
+                        <ComboBox Grid.Row="2" Grid.Column="1"
+                                  Style="{StaticResource ComboBox.Form}"
+                                  ItemsSource="{Binding YouTubePrivacyOptions}"
+                                  DisplayMemberPath="DisplayName"
+                                  SelectedValuePath="Value"
+                                  SelectedValue="{Binding YouTubePrivacyStatus, Mode=TwoWay}" />
+                    </Grid>
+
+                    <TextBlock Text="{Binding YouTubeWriteAccessHint}"
+                               FontSize="{DynamicResource Font.Size.S}"
+                               TextWrapping="Wrap"
+                               Margin="0,8,0,0">
+                        <TextBlock.Style>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="Foreground" Value="{DynamicResource State.SuccessText}" />
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding HasYouTubeWriteAccessWarning}" Value="True">
+                                        <Setter Property="Foreground" Value="{DynamicResource State.WarningText}" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </TextBlock.Style>
+                    </TextBlock>
+                </StackPanel>
+            </Border>
         </StackPanel>
         </ScrollViewer>
 

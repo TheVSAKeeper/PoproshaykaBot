@@ -2,4 +2,6 @@
 
 namespace PoproshaykaBot.Core.Infrastructure.Events.Broadcasting;
 
-public sealed record BroadcastProfileApplied(BroadcastProfile Profile) : EventBase;
+public sealed record BroadcastProfileApplied(
+    BroadcastProfile Profile,
+    IReadOnlyList<BroadcastProfilePlatformApplyResult>? PlatformResults = null) : EventBase;

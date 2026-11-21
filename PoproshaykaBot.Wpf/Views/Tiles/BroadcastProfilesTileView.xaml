@@ -282,6 +282,9 @@
                 <Style TargetType="TextBlock">
                     <Setter Property="Foreground" Value="{DynamicResource Fg.Secondary}" />
                     <Style.Triggers>
+                        <DataTrigger Binding="{Binding IsStatusWarning}" Value="True">
+                            <Setter Property="Foreground" Value="{DynamicResource State.WarningText}" />
+                        </DataTrigger>
                         <DataTrigger Binding="{Binding IsStatusError}" Value="True">
                             <Setter Property="Foreground" Value="{DynamicResource State.ErrorText}" />
                         </DataTrigger>

@@ -1,7 +1,9 @@
 ﻿using KeepShell.Services;
+using KeepShell.Services.Modal;
 using KeepShell.Services.Platform;
 using KeepShell.Testing;
 using KeepShell.ViewModels;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using PoproshaykaBot.Core.Chat;
 using PoproshaykaBot.Core.Dashboard;
@@ -25,6 +27,7 @@ using PoproshaykaBot.Wpf.Bootstrap;
 using PoproshaykaBot.Wpf.Infrastructure;
 using PoproshaykaBot.Wpf.Tests.Support;
 using PoproshaykaBot.Wpf.ViewModels;
+using PoproshaykaBot.Wpf.ViewModels.Dialogs;
 using PoproshaykaBot.Wpf.ViewModels.Settings;
 using PoproshaykaBot.Wpf.ViewModels.Settings.Contributors;
 using PoproshaykaBot.Wpf.ViewModels.Tiles;
@@ -565,6 +568,149 @@ public sealed class MultistreamPageTests
         Assert.That(
             PoproshaykaBot.Wpf.Views.Settings.ChannelCatalogSettingsSectionView.ResolveTwoColumnCards(currentTwoColumn, width, scale),
             Is.EqualTo(expectedTwoColumn));
+    }
+
+    [Test]
+    public async Task Guided_readiness_summary_and_wizard_commands_reflect_state_and_reload_cleanly()
+    {
+        var data = Directory.CreateTempSubdirectory("poproshayka-multistream-guided-");
+        try
+        {
+            var ytEnabled = false;
+            var registry = new ChatPlatformRegistry([new FakePlatform(StreamingPlatform.YouTube, "YouTube", () => ytEnabled)]);
+            var gate = new SettingsWriteGate();
+            var bus = new InMemoryEventBus(NullLogger<InMemoryEventBus>.Instance);
+            var catalog = new ChannelCatalogStore(filePath: Path.Combine(data.FullName, "channels.json"), gate: gate);
+            var accounts = new AccountsStore(filePath: Path.Combine(data.FullName, "accounts.json"), gate: gate);
+            var ytSettingsStore = new YouTubeSettingsStore(filePath: Path.Combine(data.FullName, "youtube.json"), gate: gate);
+            var ytAccountsStore = new YouTubeAccountsStore(filePath: Path.Combine(data.FullName, "youtube-accounts.json"), gate: gate);
+            var manager = new SettingsManager(NullLogger<SettingsManager>.Instance, Path.Combine(data.FullName, "settings.json"), gate);
+            var server = new KestrelHttpServer(null!, manager, [], NullLogger<KestrelHttpServer>.Instance, NullLoggerFactory.Instance);
+            var dispatcher = new ManualUiDispatcher();
+
+            ytAccountsStore.SaveAll(
+                "secret",
+                new YouTubeAccountSettings { ChannelId = "UC_BOT", ChannelTitle = "BotYT", AccessToken = "tok", RefreshToken = "ref", AccessTokenExpiresAt = DateTimeOffset.UtcNow.AddDays(30) },
+                new YouTubeAccountSettings());
+
+            var dialogSpy = new CapturingDialogService();
+            var adapter = new MultiChannelFakeAdapter(StreamingPlatform.YouTube, ytAccountsStore);
+            var services = new ServiceCollection();
+            services.AddSingleton(catalog);
+            services.AddSingleton<IPlatformChannelAdapter>(adapter);
+            services.AddSingleton(accounts);
+            services.AddSingleton(ytAccountsStore);
+            services.AddSingleton(ytSettingsStore);
+            services.AddSingleton<IChatPlatformRegistry>(registry);
+            services.AddTransient<MultistreamPlatformSetupDialogViewModel>();
+            services.AddTransient<MultistreamChannelWizardDialogViewModel>();
+            await using var provider = services.BuildServiceProvider();
+
+            var ytVm = new YouTubeSettingsSectionViewModel(
+                DispatchProxy.Create<IYouTubeOAuthService, InertProxy>(),
+                DispatchProxy.Create<IShellLauncher, InertProxy>(),
+                dialogSpy, dispatcher, TimeProvider.System, NullLoggerFactory.Instance);
+            var editor = new ChannelCatalogSettingsSectionViewModel(catalog, [adapter], accounts, ytAccountsStore, platformRegistry: registry);
+            var groups = new ChannelGroupsSettingsSectionViewModel(catalog, new UserStatisticsRepository(NullLogger<UserStatisticsRepository>.Instance));
+            var platformAccounts = new PlatformAccountsSectionViewModel(catalog, accounts, ytAccountsStore, platformRegistry: registry);
+
+            using var settings = new SettingsPageViewModel(
+                [
+                    new YouTubeConnectionSettingsContributor(ytVm, ytSettingsStore, ytAccountsStore),
+                    new ChannelsSettingsSectionContributor(editor, groups, catalog),
+                ],
+                manager, gate, server, bus, NullLogger<SettingsPageViewModel>.Instance, dialogSpy, new MemorySettings(),
+                platformRegistry: registry);
+            await using var connection = new BotConnectionManager(new AppHost([], NullLogger<AppHost>.Instance), [], null, bus, NullLogger<BotConnectionManager>.Instance);
+            using var status = new MultistreamTileViewModel(registry, catalog, connection, new PlatformAuthRegistry([]),
+                [], bus, dispatcher, ytSettingsStore);
+            var ytControls = new YouTubeMultistreamPlatformControls(settings);
+            var page = new MultistreamPageViewModel(
+                settings, status, [ytControls], platformAccounts,
+                dialogSpy, provider.GetRequiredService<IServiceScopeFactory>(), ytSettingsStore, catalog);
+            page.OnEnter();
+
+            Assert.Multiple(() =>
+            {
+                Assert.That(page.PlatformReadinessText, Is.EqualTo("Площадка: отключена"));
+                Assert.That(page.PlatformReadinessSeverity, Is.EqualTo(StatusSeverity.Warning));
+                Assert.That(page.GuidedPrimaryActionLabel, Is.EqualTo("Настроить площадку"));
+                Assert.That(page.IsGuidedActionPrimary, Is.True);
+                Assert.That(page.GuidedNextAction, Is.EqualTo(MultistreamGuidedNextAction.PlatformSetup));
+                Assert.That(page.OpenAssignAccountWizardCommand.CanExecute(null), Is.False);
+            });
+
+            dialogSpy.OnShowAsync = async vm =>
+            {
+                var wizard = (MultistreamPlatformSetupDialogViewModel)vm;
+                await wizard.EnableYouTubeAndContinueCommand.ExecuteAsync(null);
+                ytEnabled = true;
+                return true;
+            };
+
+            await page.ExecuteGuidedPrimaryActionCommand.ExecuteAsync(null);
+            Assert.Multiple(() =>
+            {
+                Assert.That(dialogSpy.LastDialog, Is.InstanceOf<MultistreamPlatformSetupDialogViewModel>());
+                Assert.That(ytSettingsStore.Load().Enabled, Is.True);
+                Assert.That(page.HasUnsavedChanges, Is.False);
+                Assert.That(page.PlatformReadinessText, Is.EqualTo("Площадка: включена"));
+                Assert.That(page.GuidedPrimaryActionLabel, Is.EqualTo("Добавить канал"));
+                Assert.That(page.GuidedNextAction, Is.EqualTo(MultistreamGuidedNextAction.AddChannel));
+            });
+
+            catalog.Save(new()
+            {
+                Channels =
+                [
+                    new()
+                    {
+                        Platform = StreamingPlatform.YouTube,
+                        ChannelId = "UC_MAIN",
+                        DisplayName = "@MainYT",
+                        IsConfigured = true,
+                        BotAccountId = "UC_BOT",
+                        BotContextId = AuthContextIds.Default,
+                        BotVerifiedSubjectId = "UC_BOT",
+                    },
+                ],
+                Platforms = [new() { Platform = StreamingPlatform.YouTube, ActiveChannelId = "UC_MAIN" }],
+            });
+            page.OnEnter();
+
+            Assert.Multiple(() =>
+            {
+                Assert.That(page.ChannelReadinessText, Does.Contain("@MainYT").And.Contain("доступ ОК"));
+                Assert.That(page.ChannelReadinessSeverity, Is.EqualTo(StatusSeverity.Success));
+                Assert.That(page.GuidedPrimaryActionLabel, Is.EqualTo("Мастер настройки"));
+                Assert.That(page.IsGuidedActionPrimary, Is.False);
+                Assert.That(page.OpenAssignAccountWizardCommand.CanExecute(null), Is.True);
+            });
+        }
+        finally
+        {
+            data.Delete(recursive: true);
+        }
+    }
+
+    public sealed class CapturingDialogService : IDialogService
+    {
+        public IDialogViewModel? LastDialog { get; private set; }
+
+        public Func<IDialogViewModel, Task<bool>>? OnShowAsync { get; set; }
+
+        public Task<bool> ShowAsync(IDialogViewModel viewModel)
+        {
+            LastDialog = viewModel;
+            return OnShowAsync is not null ? OnShowAsync(viewModel) : Task.FromResult(false);
+        }
+
+        public Task<bool> ReplaceAsync(IDialogViewModel viewModel) => ShowAsync(viewModel);
+        public bool Confirm(string title, string message, bool defaultYes = false) => defaultYes;
+        public bool ConfirmWarning(string title, string message, bool defaultYes = false) => defaultYes;
+        public void Info(string title, string message) { }
+        public void Warning(string title, string message) { }
+        public void Error(string title, string message) { }
     }
 
     public class NoDialog : DispatchProxy

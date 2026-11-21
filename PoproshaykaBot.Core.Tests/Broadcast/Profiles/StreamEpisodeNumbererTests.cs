@@ -26,6 +26,8 @@ public class StreamEpisodeNumbererTests
             Substitute.For<IEventBus>(),
             TimeProvider.System,
             NullLogger<BroadcastProfilesManager>.Instance,
+            null,
+            null,
             null);
 
         _profilesManager.AdvanceCurrentNumber(Arg.Any<Guid>(), Arg.Any<int>(), Arg.Any<int>(), Arg.Any<DateTimeOffset>())

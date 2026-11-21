@@ -21,6 +21,7 @@ public static class SettingsServiceCollectionExtensions
         services.AddSingleton<CommandSettingsStore>();
         services.AddSingleton<BroadcastProfilesStore>();
         services.AddSingleton<BroadcastProfilePlatformsStore>();
+        services.AddSingleton<BroadcastProfileYouTubeStore>();
         services.AddSingleton<PollsStore>();
         services.AddSingleton<RecentCategoriesStore>();
         services.AddSingleton<DashboardLayoutStore>();

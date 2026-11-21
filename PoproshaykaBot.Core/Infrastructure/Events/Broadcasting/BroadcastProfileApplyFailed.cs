@@ -2,4 +2,7 @@
 
 namespace PoproshaykaBot.Core.Infrastructure.Events.Broadcasting;
 
-public sealed record BroadcastProfileApplyFailed(BroadcastProfile Profile, string ErrorMessage) : EventBase;
+public sealed record BroadcastProfileApplyFailed(
+    BroadcastProfile Profile,
+    string ErrorMessage,
+    IReadOnlyList<BroadcastProfilePlatformApplyResult>? PlatformResults = null) : EventBase;

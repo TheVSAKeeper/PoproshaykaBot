@@ -1,6 +1,25 @@
 ﻿using PoproshaykaBot.Core.Platforms.Auth;
+using PoproshaykaBot.Core.YouTube.Client;
 
 namespace PoproshaykaBot.Core.YouTube.Streaming;
+
+public sealed record YouTubeBroadcastUpdateRequest(
+    string BroadcastId,
+    string Title,
+    string? Description,
+    DateTimeOffset? ScheduledStartTimeUtc,
+    string? PrivacyStatus);
+
+public sealed record YouTubeBroadcastUpdateResult(
+    bool IsSuccess,
+    YouTubeApiErrorKind ErrorKind = YouTubeApiErrorKind.None,
+    string? ErrorMessage = null)
+{
+    public static YouTubeBroadcastUpdateResult Success() => new(true);
+
+    public static YouTubeBroadcastUpdateResult Failure(YouTubeApiErrorKind errorKind, string errorMessage) =>
+        new(false, errorKind, errorMessage);
+}
 
 internal interface IYouTubeLiveBroadcastClient
 {
@@ -37,4 +56,9 @@ internal interface IYouTubeLiveBroadcastClient
     {
         return GetVideoLiveSampleAsync(videoId, contextId, cancellationToken);
     }
+
+    Task<YouTubeBroadcastUpdateResult> UpdateBroadcastMetadataAsync(
+        YouTubeBroadcastUpdateRequest request,
+        string? contextId,
+        CancellationToken cancellationToken);
 }

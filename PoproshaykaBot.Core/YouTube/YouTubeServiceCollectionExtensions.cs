@@ -2,6 +2,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging;
+using PoproshaykaBot.Core.Broadcast.Profiles;
 using PoproshaykaBot.Core.Chat;
 using PoproshaykaBot.Core.Debugging;
 using PoproshaykaBot.Core.Diagnostics;
@@ -89,6 +90,7 @@ public static class YouTubeServiceCollectionExtensions
             static provider => provider.GetRequiredService<YouTubeStreamMonitor>());
         services.AddSingleton<IYouTubeActiveBroadcastSource>(
             static provider => provider.GetRequiredService<YouTubeStreamMonitor>());
+        services.AddSingleton<IYouTubeBroadcastProfileApplier, YouTubeBroadcastProfileApplier>();
         services.AddSingleton<IPlatformChannelAdapter, YouTubeChannelAdapter>();
         services.AddKeyedSingleton<IStreamStatus>(
             StreamingPlatform.YouTube,

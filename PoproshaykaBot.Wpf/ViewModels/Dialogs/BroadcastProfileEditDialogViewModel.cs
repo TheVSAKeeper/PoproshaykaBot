@@ -6,17 +6,23 @@ using PoproshaykaBot.Core.Chat;
 using PoproshaykaBot.Core.Obs;
 using PoproshaykaBot.Core.Platforms;
 using PoproshaykaBot.Core.Settings.Stores;
-using PoproshaykaBot.Wpf.ViewModels.Controls;
 using PoproshaykaBot.Wpf.Bootstrap;
+using PoproshaykaBot.Wpf.ViewModels.Controls;
 using System.Collections.ObjectModel;
+using System.Globalization;
 
 namespace PoproshaykaBot.Wpf.ViewModels.Dialogs;
 
 public sealed partial class BroadcastProfileEditDialogViewModel : ObservableObject, IDialogViewModel, IAcceptableDialog, IDisposable
 {
+    private const string YouTubeWriteReadyHint = "Права записи YouTube активны – название и описание обновятся автоматически";
+    private const string YouTubeWriteMissingHint = "Нет прав записи владельца YouTube – при применении обновится только Twitch, а YouTube покажет частичный статус";
+
     private readonly ObsIntegrationService _obsIntegration;
     private readonly ObsIntegrationStore _obsIntegrationStore;
     private readonly IChatPlatformRegistry _platformRegistry;
+    private readonly ChannelCatalogStore? _catalogStore;
+    private readonly YouTubeAccountsStore? _youtubeAccountsStore;
     private readonly ILogger<BroadcastProfileEditDialogViewModel> _logger;
 
     private bool _nameRequired = true;
@@ -52,19 +58,39 @@ public sealed partial class BroadcastProfileEditDialogViewModel : ObservableObje
     [ObservableProperty]
     private ObservableCollection<string> _obsScenes = [];
 
+    [ObservableProperty]
+    private string _youTubeTitleOverride = string.Empty;
+
+    [ObservableProperty]
+    private string _youTubeDescription = string.Empty;
+
+    [ObservableProperty]
+    private string _youTubePrivacyStatus = YouTubeBroadcastPrivacyStatus.Unchanged;
+
+    [ObservableProperty]
+    private string _youTubeWriteAccessHint = YouTubeWriteMissingHint;
+
+    [ObservableProperty]
+    private bool _hasYouTubeWriteAccessWarning = true;
+
     public BroadcastProfileEditDialogViewModel(
         GameAutocompleteViewModel game,
         ObsIntegrationService obsIntegration,
         ObsIntegrationStore obsIntegrationStore,
         ILogger<BroadcastProfileEditDialogViewModel> logger,
-        IChatPlatformRegistry platformRegistry)
+        IChatPlatformRegistry platformRegistry,
+        ChannelCatalogStore? catalogStore = null,
+        YouTubeAccountsStore? youtubeAccountsStore = null)
     {
         Game = game;
         _obsIntegration = obsIntegration;
         _obsIntegrationStore = obsIntegrationStore;
         _logger = logger;
         _platformRegistry = platformRegistry;
+        _catalogStore = catalogStore;
+        _youtubeAccountsStore = youtubeAccountsStore;
         InitializeTargetPlatforms(null);
+        RefreshYouTubeWriteAccessState();
     }
 
     public event EventHandler<bool>? RequestClose;
@@ -79,11 +105,26 @@ public sealed partial class BroadcastProfileEditDialogViewModel : ObservableObje
 
     public bool IsPlatformsSelectionEnabled => !_isCurrentSettingsMode || NewProfileName.Length > 0;
 
+    public bool IsTwitchSelected =>
+        TargetPlatforms.Count == 0
+        || TargetPlatforms.Any(static option => option.Platform == StreamingPlatform.Twitch && option.IsSelected);
+
+    public bool IsYouTubeSelected =>
+        TargetPlatforms.Any(static option => option.Platform == StreamingPlatform.YouTube && option.IsSelected);
+
     public ObservableCollection<ProfilePlatformOptionViewModel> TargetPlatforms { get; } = [];
 
     public GameAutocompleteViewModel Game { get; }
 
     public IReadOnlyList<string> LanguageOptions { get; } = ["ru", "en"];
+
+    public IReadOnlyList<YouTubePrivacyStatusOption> YouTubePrivacyOptions { get; } =
+    [
+        new(YouTubeBroadcastPrivacyStatus.Unchanged, "Не менять"),
+        new(YouTubeBroadcastPrivacyStatus.Public, "Открытый"),
+        new(YouTubeBroadcastPrivacyStatus.Unlisted, "По ссылке"),
+        new(YouTubeBroadcastPrivacyStatus.Private, "Ограниченный"),
+    ];
 
     public string? Preview
     {
@@ -92,7 +133,7 @@ public sealed partial class BroadcastProfileEditDialogViewModel : ObservableObje
             var template = MessageTemplate.For(ProfileTitle);
             if (!template.Contains("n"))
                 return null;
-            return $"Текущая серия в эфире: {template.With("n", CurrentNumber.ToString()).Render()}";
+            return $"Текущая серия в эфире: {template.With("n", CurrentNumber.ToString(CultureInfo.InvariantCulture)).Render()}";
         }
     }
 
@@ -100,7 +141,10 @@ public sealed partial class BroadcastProfileEditDialogViewModel : ObservableObje
 
     public string NewProfileName => Name.Trim();
 
-    public void LoadFrom(BroadcastProfile profile, IReadOnlySet<StreamingPlatform>? platforms = null)
+    public void LoadFrom(
+        BroadcastProfile profile,
+        IReadOnlySet<StreamingPlatform>? platforms = null,
+        BroadcastProfileYouTubeMetadata? youtubeMetadata = null)
     {
         Name = profile.Name;
         ProfileTitle = profile.Title;
@@ -110,7 +154,12 @@ public sealed partial class BroadcastProfileEditDialogViewModel : ObservableObje
         ObsSceneName = profile.ObsSceneName;
         _originalLanguage = profile.BroadcasterLanguage ?? "ru";
         Language = _originalLanguage;
+        YouTubeTitleOverride = youtubeMetadata?.TitleOverride ?? string.Empty;
+        YouTubeDescription = youtubeMetadata?.Description ?? string.Empty;
+        YouTubePrivacyStatus = YouTubeBroadcastPrivacyStatus.Normalize(youtubeMetadata?.PrivacyStatus)
+            ?? YouTubeBroadcastPrivacyStatus.Unchanged;
         InitializeTargetPlatforms(platforms);
+        RefreshYouTubeWriteAccessState();
     }
 
     public IReadOnlyCollection<StreamingPlatform> GetSelectedPlatforms()
@@ -119,6 +168,23 @@ public sealed partial class BroadcastProfileEditDialogViewModel : ObservableObje
             .Where(static option => option.IsSelected)
             .Select(static option => option.Platform)
             .ToArray();
+    }
+
+    public BroadcastProfile BuildProfile()
+    {
+        var profile = new BroadcastProfile();
+        WriteTo(profile);
+        return profile;
+    }
+
+    public BroadcastProfileYouTubeMetadata BuildYouTubeMetadata()
+    {
+        return new BroadcastProfileYouTubeMetadata
+        {
+            TitleOverride = string.IsNullOrWhiteSpace(YouTubeTitleOverride) ? null : YouTubeTitleOverride.Trim(),
+            Description = string.IsNullOrWhiteSpace(YouTubeDescription) ? null : YouTubeDescription.Trim(),
+            PrivacyStatus = YouTubeBroadcastPrivacyStatus.Normalize(YouTubePrivacyStatus),
+        };
     }
 
     private void InitializeTargetPlatforms(IReadOnlySet<StreamingPlatform>? selected)
@@ -140,6 +206,8 @@ public sealed partial class BroadcastProfileEditDialogViewModel : ObservableObje
             TargetPlatforms.Add(option);
         }
 
+        OnPropertyChanged(nameof(IsTwitchSelected));
+        OnPropertyChanged(nameof(IsYouTubeSelected));
         ConfirmCommand.NotifyCanExecuteChanged();
     }
 
@@ -147,8 +215,18 @@ public sealed partial class BroadcastProfileEditDialogViewModel : ObservableObje
     {
         if (e.PropertyName == nameof(ProfilePlatformOptionViewModel.IsSelected))
         {
+            OnPropertyChanged(nameof(IsTwitchSelected));
+            OnPropertyChanged(nameof(IsYouTubeSelected));
+            RefreshYouTubeWriteAccessState();
             ConfirmCommand.NotifyCanExecuteChanged();
         }
+    }
+
+    private void RefreshYouTubeWriteAccessState()
+    {
+        var hasWriteAccess = YouTubeBroadcastWriteAccess.CanUpdateBroadcastMetadata(_catalogStore, _youtubeAccountsStore);
+        HasYouTubeWriteAccessWarning = !hasWriteAccess;
+        YouTubeWriteAccessHint = hasWriteAccess ? YouTubeWriteReadyHint : YouTubeWriteMissingHint;
     }
 
     public void ConfigureCurrentSettingsMode()
@@ -264,6 +342,8 @@ public sealed partial class BroadcastProfileEditDialogViewModel : ObservableObje
             CurrentNumber--;
     }
 }
+
+public sealed record YouTubePrivacyStatusOption(string Value, string DisplayName);
 
 public sealed partial class ProfilePlatformOptionViewModel : ObservableObject
 {

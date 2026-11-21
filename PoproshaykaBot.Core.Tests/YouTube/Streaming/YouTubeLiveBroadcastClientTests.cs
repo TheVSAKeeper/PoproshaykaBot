@@ -7,8 +7,10 @@ using PoproshaykaBot.Core.YouTube;
 using PoproshaykaBot.Core.YouTube.Client;
 using PoproshaykaBot.Core.YouTube.Quota;
 using PoproshaykaBot.Core.YouTube.Streaming;
+using System.Globalization;
 using System.Net;
 using System.Text;
+using System.Text.Json;
 
 namespace PoproshaykaBot.Core.Tests.YouTube.Streaming;
 
@@ -342,6 +344,195 @@ public class YouTubeLiveBroadcastClientTests
                 Assert.That(observedSampleContext, Is.EqualTo("yt-named-broadcaster"));
             });
         }
+    }
+
+    [Test]
+    public async Task ListActiveBroadcasts_Maps_Description_PrivacyStatus_And_ScheduledStartTime()
+    {
+        var client = CreateClient(_ => JsonResponse("""
+            {
+              "items": [
+                {
+                  "id": "vid-meta",
+                  "snippet": {
+                    "channelId": "UC0000000000000000000001",
+                    "channelTitle": "MainChannel",
+                    "title": "Stream Meta",
+                    "description": "Описание стрима",
+                    "liveChatId": "chat-meta",
+                    "scheduledStartTime": "2026-11-15T17:30:00Z",
+                    "actualStartTime": "2026-11-15T18:00:00Z"
+                  },
+                  "status": {
+                    "privacyStatus": "unlisted"
+                  }
+                }
+              ]
+            }
+            """));
+
+        var broadcasts = await client.ListActiveBroadcastsAsync(CancellationToken.None);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(broadcasts, Has.Count.EqualTo(1));
+            Assert.That(broadcasts[0].Description, Is.EqualTo("Описание стрима"));
+            Assert.That(broadcasts[0].PrivacyStatus, Is.EqualTo("unlisted"));
+            Assert.That(broadcasts[0].ScheduledStartTimeUtc, Is.EqualTo(new DateTimeOffset(2026, 11, 15, 17, 30, 0, TimeSpan.Zero)));
+        });
+    }
+
+    [Test]
+    public async Task UpdateBroadcastMetadata_Sends_SnippetOnly_And_SnippetWithStatus_And_Commits_50_Units()
+    {
+        var capturedBodies = new List<string>();
+        var capturedContexts = new List<string?>();
+
+        var client = CreateClient(req =>
+        {
+            capturedContexts.Add(PlatformAuthRequestOptions.ResolveContextId(req));
+            capturedBodies.Add(req.Content!.ReadAsStringAsync().GetAwaiter().GetResult());
+            return JsonResponse("""{"id":"vid-1"}""");
+        });
+
+        var scheduled = new DateTimeOffset(2026, 11, 15, 17, 30, 0, TimeSpan.Zero);
+
+        var snippetOnlyResult = await client.UpdateBroadcastMetadataAsync(
+            new("vid-1", "Новый заголовок", "Описание #1", scheduled, null),
+            "yt-main",
+            CancellationToken.None);
+
+        var withStatusResult = await client.UpdateBroadcastMetadataAsync(
+            new("vid-1", "Публичный заголовок", null, null, "public"),
+            "yt-main",
+            CancellationToken.None);
+
+        using var firstDoc = JsonDocument.Parse(capturedBodies[0]);
+        using var secondDoc = JsonDocument.Parse(capturedBodies[1]);
+        var quota = _governor.CaptureDiagnostics();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(snippetOnlyResult.IsSuccess, Is.True);
+            Assert.That(withStatusResult.IsSuccess, Is.True);
+            Assert.That(_broadcasterRequests, Has.Count.EqualTo(2));
+            Assert.That(_broadcasterRequests[0].Method, Is.EqualTo(HttpMethod.Put));
+            Assert.That(_broadcasterRequests[0].RequestUri!.Query, Is.EqualTo("?part=snippet"));
+            Assert.That(_broadcasterRequests[1].RequestUri!.Query, Is.EqualTo("?part=snippet,status"));
+            Assert.That(capturedContexts, Is.EqualTo(new[] { "yt-main", "yt-main" }));
+
+            Assert.That(firstDoc.RootElement.GetProperty("id").GetString(), Is.EqualTo("vid-1"));
+            Assert.That(firstDoc.RootElement.GetProperty("snippet").GetProperty("title").GetString(), Is.EqualTo("Новый заголовок"));
+            Assert.That(firstDoc.RootElement.GetProperty("snippet").GetProperty("description").GetString(), Is.EqualTo("Описание #1"));
+            Assert.That(firstDoc.RootElement.GetProperty("snippet").TryGetProperty("scheduledStartTime", out var scheduledProp), Is.True);
+            Assert.That(DateTimeOffset.Parse(scheduledProp.GetString()!, CultureInfo.InvariantCulture), Is.EqualTo(scheduled));
+            Assert.That(firstDoc.RootElement.TryGetProperty("status", out _), Is.False);
+
+            Assert.That(secondDoc.RootElement.GetProperty("snippet").TryGetProperty("description", out _), Is.False);
+            Assert.That(secondDoc.RootElement.GetProperty("snippet").TryGetProperty("scheduledStartTime", out _), Is.False);
+            Assert.That(secondDoc.RootElement.GetProperty("status").GetProperty("privacyStatus").GetString(), Is.EqualTo("public"));
+
+            Assert.That(quota.BroadcasterCommittedUnits, Is.EqualTo(YouTubeLiveBroadcastClient.YouTubeQuotaCost * 2));
+        });
+    }
+
+    [Test]
+    public async Task UpdateBroadcastMetadata_Unauthorized_Refunds_Quota_Lease()
+    {
+        var client = CreateClient(_ => new HttpResponseMessage(HttpStatusCode.Unauthorized)
+        {
+            Content = new StringContent("""{"error":{"code":401}}""", Encoding.UTF8, "application/json"),
+        });
+
+        var result = await client.UpdateBroadcastMetadataAsync(
+            new("vid-1", "Заголовок", null, null, null),
+            null,
+            CancellationToken.None);
+        var quota = _governor.CaptureDiagnostics();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(result.IsSuccess, Is.False);
+            Assert.That(result.ErrorKind, Is.EqualTo(YouTubeApiErrorKind.Unauthorized));
+            Assert.That(result.ErrorMessage, Does.Contain("авторизации"));
+            Assert.That(quota.CommittedUnits, Is.EqualTo(0));
+            Assert.That(quota.ReservedUnits, Is.EqualTo(0));
+        });
+    }
+
+    [Test]
+    public async Task UpdateBroadcastMetadata_Forbidden_NotFound_And_QuotaExceeded_Return_Russian_Errors()
+    {
+        var forbiddenClient = CreateClient(_ => new HttpResponseMessage(HttpStatusCode.Forbidden)
+        {
+            Content = new StringContent("""{"error":{"code":403,"errors":[{"reason":"insufficientPermissions"}]}}""", Encoding.UTF8, "application/json"),
+        });
+        var forbidden = await forbiddenClient.UpdateBroadcastMetadataAsync(
+            new("vid-1", "Заголовок", null, null, null),
+            null,
+            CancellationToken.None);
+
+        var notFoundClient = CreateClient(_ => new HttpResponseMessage(HttpStatusCode.NotFound)
+        {
+            Content = new StringContent("""{"error":{"code":404,"errors":[{"reason":"liveBroadcastNotFound"}]}}""", Encoding.UTF8, "application/json"),
+        });
+        var notFound = await notFoundClient.UpdateBroadcastMetadataAsync(
+            new("vid-1", "Заголовок", null, null, null),
+            null,
+            CancellationToken.None);
+
+        var quotaClient = CreateClient(_ => new HttpResponseMessage(HttpStatusCode.Forbidden)
+        {
+            Content = new StringContent("""{"error":{"code":403,"errors":[{"reason":"quotaExceeded"}]}}""", Encoding.UTF8, "application/json"),
+        });
+        var quotaExceeded = await quotaClient.UpdateBroadcastMetadataAsync(
+            new("vid-1", "Заголовок", null, null, null),
+            null,
+            CancellationToken.None);
+
+        var quota = _governor.CaptureDiagnostics();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(forbidden.IsSuccess, Is.False);
+            Assert.That(forbidden.ErrorKind, Is.EqualTo(YouTubeApiErrorKind.Forbidden));
+            Assert.That(forbidden.ErrorMessage, Is.EqualTo("Недостаточно прав для изменения трансляции YouTube"));
+
+            Assert.That(notFound.IsSuccess, Is.False);
+            Assert.That(notFound.ErrorKind, Is.EqualTo(YouTubeApiErrorKind.NotFound));
+            Assert.That(notFound.ErrorMessage, Is.EqualTo("Активная трансляция YouTube не найдена"));
+
+            Assert.That(quotaExceeded.IsSuccess, Is.False);
+            Assert.That(quotaExceeded.ErrorKind, Is.EqualTo(YouTubeApiErrorKind.QuotaExceeded));
+            Assert.That(quotaExceeded.ErrorMessage, Is.EqualTo("Исчерпана квота YouTube API"));
+            Assert.That(quota.ExhaustedByServer, Is.True);
+            Assert.That(quota.BroadcasterCommittedUnits, Is.EqualTo(YouTubeLiveBroadcastClient.YouTubeQuotaCost * 2));
+        });
+    }
+
+    [Test]
+    public async Task UpdateBroadcastMetadata_LocalBudgetExhausted_Returns_Failure_Without_Http()
+    {
+        _settingsStore.Mutate(s => s.DailyQuotaBudget = YouTubeQuotaPolicy.MinimumDailyBudget);
+        var remaining = _governor.CaptureDiagnostics().Tier1RemainingUnits;
+        Assert.That(
+            _governor.TryReserve(PlatformAuthRole.Bot, YouTubeQuotaPriority.CriticalReadAndMonitor, remaining, out var lease),
+            Is.True);
+        lease.Commit();
+
+        var client = CreateClient(_ => JsonResponse("""{"id":"vid-1"}"""));
+        var result = await client.UpdateBroadcastMetadataAsync(
+            new("vid-1", "Заголовок", null, null, null),
+            null,
+            CancellationToken.None);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(result.IsSuccess, Is.False);
+            Assert.That(result.ErrorKind, Is.EqualTo(YouTubeApiErrorKind.LocalQuotaBudgetReached));
+            Assert.That(result.ErrorMessage, Does.Contain("квоты"));
+            Assert.That(_requests, Is.Empty);
+        });
     }
 
     private YouTubeLiveBroadcastClient CreateClient(Func<HttpRequestMessage, HttpResponseMessage> handler)

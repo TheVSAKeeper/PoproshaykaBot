@@ -734,6 +734,139 @@
                                 </ContentControl.ContentTemplate>
                             </ContentControl>
 
+                            <Border x:Name="GuidedOverviewCard"
+                                    Style="{StaticResource Card.Inset}"
+                                    Padding="14,10"
+                                    Margin="0,0,0,12"
+                                    AutomationProperties.AutomationId="MultistreamGuidedOverviewCard">
+                                <StackPanel>
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="*" />
+                                        </Grid.ColumnDefinitions>
+
+                                        <DockPanel Grid.Column="0" Margin="0,0,10,0">
+                                            <Ellipse DockPanel.Dock="Left"
+                                                     Width="7"
+                                                     Height="7"
+                                                     VerticalAlignment="Center"
+                                                     Margin="0,0,6,0"
+                                                     keepshell:SeverityBrushBehavior.Fill="{Binding PlatformReadinessSeverity}" />
+                                            <TextBlock Text="{Binding PlatformReadinessText}"
+                                                       ToolTip="{Binding PlatformReadinessText}"
+                                                       TextTrimming="CharacterEllipsis"
+                                                       TextWrapping="NoWrap"
+                                                       FontSize="{DynamicResource Font.Size.S}"
+                                                       keepshell:SeverityBrushBehavior.Foreground="{Binding PlatformReadinessSeverity}"
+                                                       VerticalAlignment="Center" />
+                                        </DockPanel>
+
+                                        <DockPanel Grid.Column="1" Margin="0,0,10,0">
+                                            <Ellipse DockPanel.Dock="Left"
+                                                     Width="7"
+                                                     Height="7"
+                                                     VerticalAlignment="Center"
+                                                     Margin="0,0,6,0"
+                                                     keepshell:SeverityBrushBehavior.Fill="{Binding AccountReadinessSeverity}" />
+                                            <TextBlock Text="{Binding AccountReadinessText}"
+                                                       ToolTip="{Binding AccountReadinessText}"
+                                                       TextTrimming="CharacterEllipsis"
+                                                       TextWrapping="NoWrap"
+                                                       FontSize="{DynamicResource Font.Size.S}"
+                                                       keepshell:SeverityBrushBehavior.Foreground="{Binding AccountReadinessSeverity}"
+                                                       VerticalAlignment="Center" />
+                                        </DockPanel>
+
+                                        <DockPanel Grid.Column="2">
+                                            <Ellipse DockPanel.Dock="Left"
+                                                     Width="7"
+                                                     Height="7"
+                                                     VerticalAlignment="Center"
+                                                     Margin="0,0,6,0"
+                                                     keepshell:SeverityBrushBehavior.Fill="{Binding ChannelReadinessSeverity}" />
+                                            <TextBlock Text="{Binding ChannelReadinessText}"
+                                                       ToolTip="{Binding ChannelReadinessText}"
+                                                       TextTrimming="CharacterEllipsis"
+                                                       TextWrapping="NoWrap"
+                                                       FontSize="{DynamicResource Font.Size.S}"
+                                                       keepshell:SeverityBrushBehavior.Foreground="{Binding ChannelReadinessSeverity}"
+                                                       VerticalAlignment="Center" />
+                                        </DockPanel>
+                                    </Grid>
+
+                                    <WrapPanel Orientation="Horizontal"
+                                               VerticalAlignment="Center"
+                                               Margin="0,10,0,-4">
+                                        <Button Content="{Binding GuidedPrimaryActionLabel}"
+                                                Style="{StaticResource Button.Primary}"
+                                                Command="{Binding ExecuteGuidedPrimaryActionCommand}"
+                                                AutomationProperties.AutomationId="MultistreamWizardPrimaryAction"
+                                                MinHeight="28"
+                                                Padding="10,3"
+                                                Margin="0,0,8,4"
+                                                Visibility="{Binding IsGuidedActionPrimary, Converter={StaticResource BoolToVisibility}}" />
+                                        <Button Content="{Binding GuidedPrimaryActionLabel}"
+                                                Style="{StaticResource Button.Secondary}"
+                                                Command="{Binding ExecuteGuidedPrimaryActionCommand}"
+                                                AutomationProperties.AutomationId="MultistreamWizardPrimaryActionSecondary"
+                                                MinHeight="28"
+                                                Padding="10,3"
+                                                Margin="0,0,8,4"
+                                                Visibility="{Binding IsGuidedActionPrimary, Converter={StaticResource InverseBoolToVisibility}}" />
+                                        <Button Style="{StaticResource Button.Secondary}"
+                                                Command="{Binding OpenAddChannelWizardCommand}"
+                                                AutomationProperties.AutomationId="MultistreamWizardAddChannel"
+                                                Visibility="{Binding ShowQuickAddChannelButton, Converter={StaticResource BoolToVisibility}}"
+                                                MinHeight="28"
+                                                Padding="10,3"
+                                                Margin="0,0,8,4">
+                                            <StackPanel Orientation="Horizontal">
+                                                <iconPacks:PackIconLucide Kind="{x:Static iconPacks:PackIconLucideKind.Plus}"
+                                                                          Width="13"
+                                                                          Height="13"
+                                                                          VerticalAlignment="Center"
+                                                                          Margin="0,0,5,0" />
+                                                <TextBlock Text="Добавить канал" VerticalAlignment="Center" />
+                                            </StackPanel>
+                                        </Button>
+                                        <Button Style="{StaticResource Button.Secondary}"
+                                                Command="{Binding OpenAssignAccountWizardCommand}"
+                                                AutomationProperties.AutomationId="MultistreamWizardAssignAccount"
+                                                Visibility="{Binding ShowQuickAssignAccountButton, Converter={StaticResource BoolToVisibility}}"
+                                                MinHeight="28"
+                                                Padding="10,3"
+                                                Margin="0,0,8,4">
+                                            <StackPanel Orientation="Horizontal">
+                                                <iconPacks:PackIconLucide Kind="{x:Static iconPacks:PackIconLucideKind.KeyRound}"
+                                                                          Width="13"
+                                                                          Height="13"
+                                                                          VerticalAlignment="Center"
+                                                                          Margin="0,0,5,0" />
+                                                <TextBlock Text="Назначить аккаунт" VerticalAlignment="Center" />
+                                            </StackPanel>
+                                        </Button>
+                                        <Button Style="{StaticResource Button.Secondary}"
+                                                Command="{Binding OpenPlatformSetupWizardCommand}"
+                                                AutomationProperties.AutomationId="MultistreamWizardPlatformSetup"
+                                                Visibility="{Binding ShowQuickPlatformSetupButton, Converter={StaticResource BoolToVisibility}}"
+                                                MinHeight="28"
+                                                Padding="10,3"
+                                                Margin="0,0,0,4">
+                                            <StackPanel Orientation="Horizontal">
+                                                <iconPacks:PackIconLucide Kind="{x:Static iconPacks:PackIconLucideKind.Settings2}"
+                                                                          Width="13"
+                                                                          Height="13"
+                                                                          VerticalAlignment="Center"
+                                                                          Margin="0,0,5,0" />
+                                                <TextBlock Text="Мастер площадки" VerticalAlignment="Center" />
+                                            </StackPanel>
+                                        </Button>
+                                    </WrapPanel>
+                                </StackPanel>
+                            </Border>
+
                             <WrapPanel Margin="0,0,0,14"
                                        VerticalAlignment="Center">
                                 <Border Background="{DynamicResource Bg.SurfaceAlt}"

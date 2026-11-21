@@ -40,6 +40,7 @@ internal static class LegacyDataCatalog
     public const string ActiveBroadcastFileName = "active_broadcast.json";
     public const string StreamSessionsFileName = "stream_sessions.json";
     public const string BroadcastProfilePlatformsFileName = "broadcast-profile-platforms.json";
+    public const string BroadcastProfileYouTubeFileName = "broadcast-profile-youtube.json";
     public const string YouTubeQuotaFileName = "youtube/quota.json";
     public const string PollsHistoryFileName = "polls-history.json";
     public const string UiPreferencesFileName = "ui-preferences.toml";
