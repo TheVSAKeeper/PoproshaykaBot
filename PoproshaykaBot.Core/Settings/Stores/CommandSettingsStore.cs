@@ -9,12 +9,16 @@ public sealed class CommandSettingsStore
 {
     private readonly JsonStore<CommandSettings> _store;
 
-    public CommandSettingsStore(ILogger<CommandSettingsStore>? logger = null, string? filePath = null)
+    public CommandSettingsStore(
+        ILogger<CommandSettingsStore>? logger = null,
+        string? filePath = null,
+        SettingsWriteGate? gate = null)
     {
         _store = new(filePath ?? AppPaths.SettingsFile("commands.json"),
             logger,
             parser: json => Parse(json, logger),
-            describe: Describe);
+            describe: Describe,
+            gate: gate);
     }
 
     public static string Describe(CommandSettings settings)
@@ -35,9 +39,9 @@ public sealed class CommandSettingsStore
         return _store.Load();
     }
 
-    public void Mutate(Action<CommandSettings> mutator)
+    public bool Mutate(Action<CommandSettings> mutator)
     {
-        _store.Mutate(mutator);
+        return _store.Mutate(mutator);
     }
 
     private static CommandSettings? Parse(string json, ILogger? logger)

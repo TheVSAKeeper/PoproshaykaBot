@@ -11,7 +11,11 @@ namespace PoproshaykaBot.Core.Infrastructure.Runtime;
 
 public static class StartupReport
 {
-    public static void LogEnvironment(ILogger logger, IReadOnlyList<string> arguments, string? build = null)
+    public static void LogEnvironment(
+        ILogger logger,
+        IReadOnlyList<string> arguments,
+        string? build = null,
+        PreviousRunState? previousRun = null)
     {
         ArgumentNullException.ThrowIfNull(logger);
         ArgumentNullException.ThrowIfNull(arguments);
@@ -28,6 +32,26 @@ public static class StartupReport
             ResolveStorageMode(),
             AppPaths.BaseDirectory,
             SingleInstanceGate.BuildMutexName());
+
+        if (previousRun is { WasUnclean: true })
+        {
+            if (previousRun.Record is { } record)
+            {
+                logger.LogWarning(
+                    "Предыдущий запуск завершился нештатно: статус {Status}, PID {ProcessId}, старт {StartedAtUtc}, обновление {UpdatedAtUtc}, версия {Version}, коммит {Commit}, сбой {ExceptionType}",
+                    record.Status,
+                    record.ProcessId,
+                    record.StartedAtUtc.UtcDateTime.ToString("u"),
+                    record.UpdatedAtUtc.UtcDateTime.ToString("u"),
+                    record.Version,
+                    record.Commit ?? "–",
+                    record.ExceptionType ?? "–");
+            }
+            else
+            {
+                logger.LogWarning("Предыдущий запуск завершился нештатно: файл маркера запуска обнаружен, но не прочитан");
+            }
+        }
     }
 
     public static void LogConfiguration(ILogger logger, IServiceProvider services)

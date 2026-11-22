@@ -15,6 +15,13 @@ public sealed class RecentCategoriesStore
         _store = new(filePath ?? AppPaths.SettingsFile("recent-categories.json"), logger, gate: gate);
     }
 
+    public static string Describe(IReadOnlyList<GameCategoryCacheEntry> items)
+    {
+        ArgumentNullException.ThrowIfNull(items);
+
+        return $"категорий {items.Count}";
+    }
+
     public IReadOnlyList<GameCategoryCacheEntry> Load()
     {
         return _store.Load().Items;

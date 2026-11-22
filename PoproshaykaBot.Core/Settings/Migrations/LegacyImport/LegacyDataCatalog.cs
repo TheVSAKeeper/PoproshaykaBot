@@ -36,6 +36,8 @@ internal static class LegacyDataCatalog
     public const string UserStatisticsCatalogFileName = "user_statistics_catalog.json";
     public const string UserStatisticsFileName = "users_statistics.json";
     public const string BotStatisticsFileName = "bot_statistics.json";
+    public const string CommandSettingsFileName = "commands.json";
+    public const string CommandUsageFileName = StatisticsFileStore.CommandUsageFileName;
     public const string BroadcastsFileName = "broadcasts.json";
     public const string ActiveBroadcastFileName = "active_broadcast.json";
     public const string StreamSessionsFileName = "stream_sessions.json";
@@ -55,6 +57,7 @@ internal static class LegacyDataCatalog
             descriptor.RelativePath,
             LegacyDataCategory.UserStatistics)),
         new(BotStatisticsFileName, BotStatisticsFileName, LegacyDataCategory.BotStatistics),
+        new(CommandUsageFileName, CommandUsageFileName, LegacyDataCategory.BotStatistics),
         new("quota.json", YouTubeQuotaFileName, LegacyDataCategory.YouTubeQuota),
         new(BroadcastsFileName, BroadcastsFileName, LegacyDataCategory.StreamHistory),
         new(ActiveBroadcastFileName, ActiveBroadcastFileName, LegacyDataCategory.StreamHistory),
@@ -68,6 +71,8 @@ internal static class LegacyDataCatalog
         new(AccountsFileName, $"{SettingsFolderName}/{AccountsFileName}", LegacyDataCategory.Settings, true, CarriesTokens: true),
         new("broadcast-profiles.json", $"{SettingsFolderName}/broadcast-profiles.json", LegacyDataCategory.Settings, true),
         new(BroadcastProfilePlatformsFileName, $"{SettingsFolderName}/{BroadcastProfilePlatformsFileName}", LegacyDataCategory.Settings, true),
+        new(BroadcastProfileYouTubeFileName, $"{SettingsFolderName}/{BroadcastProfileYouTubeFileName}", LegacyDataCategory.Settings, true),
+        new(CommandSettingsFileName, $"{SettingsFolderName}/{CommandSettingsFileName}", LegacyDataCategory.Settings, true),
         new("dashboard-layout.json", $"{SettingsFolderName}/dashboard-layout.json", LegacyDataCategory.Settings, true),
         new("obs-chat.json", $"{SettingsFolderName}/obs-chat.json", LegacyDataCategory.Settings, true),
         new("obs-integration.json", $"{SettingsFolderName}/obs-integration.json", LegacyDataCategory.Settings, true),

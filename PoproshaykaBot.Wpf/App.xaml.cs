@@ -14,6 +14,7 @@ using PoproshaykaBot.Core.Infrastructure.Hosting;
 using PoproshaykaBot.Core.Infrastructure.Logging;
 using PoproshaykaBot.Core.Infrastructure.Runtime;
 using PoproshaykaBot.Core.Obs;
+using PoproshaykaBot.Core.Platforms;
 using PoproshaykaBot.Core.Polls;
 using PoproshaykaBot.Core.Server;
 using PoproshaykaBot.Core.Settings;
@@ -56,6 +57,8 @@ public partial class App : Application
 
     private static int _fatalErrorHandled;
     private static int _restartRequested;
+    private static RunStateStore? _runStateStore;
+    private static readonly UnobservedTaskExceptionTracker UnobservedTaskExceptions = new();
 
     private ServiceProvider? _services;
     private KeepShellLogging? _logging;
@@ -66,6 +69,7 @@ public partial class App : Application
     private MemoryWatchdog? _memoryWatchdog;
     private BindingErrorSink? _bindingErrors;
     private Mutex? _singleInstanceMutex;
+    private PreviousRunState _previousRunState = PreviousRunState.Clean;
 
     private bool _isFinalizeUpdate;
     private string[]? _galleryArgs;
@@ -195,7 +199,9 @@ public partial class App : Application
                 return;
             }
 
-            ReportEnvironment(e.Args);
+            _previousRunState = BeginRunStateSession(AppInfo.Version, AppBuildBadge.StartupLine);
+
+            ReportEnvironment(e.Args, _previousRunState);
 
             using var splashLoggerFactory = new SerilogLoggerFactory(Log.Logger);
             using var splash = IsHeadless ? null : new StartupSplash(
@@ -228,6 +234,14 @@ public partial class App : Application
                 ConfigureServices(services, coreUiLogSink, uiSettings);
                 services.AddSingleton(_logging!.Sink);
                 services.AddSingleton(_loggingOptions!);
+                services.AddSingleton(_previousRunState);
+                services.AddSingleton(UnobservedTaskExceptions);
+
+                if (_bindingErrors is not null)
+                {
+                    services.AddSingleton(_bindingErrors);
+                }
+
                 _services = services.BuildServiceProvider(new ServiceProviderOptions
                 {
                     ValidateOnBuild = true,
@@ -236,6 +250,7 @@ public partial class App : Application
 
                 _services.GetRequiredService<IBroadcastDraftCoordinator>().RecoverCompletedDraftOnStartup();
                 _services.ActivateEventSubscribers(typeof(InfrastructureServiceCollectionExtensions).Assembly);
+                _services.GetRequiredService<ChannelCatalogReconciler>().ReconcileStartup();
                 ReportConfiguration(_services);
                 _services.GetRequiredService<StatisticsPreload>().Start();
                 _appLifetime = _services.GetRequiredService<AppLifetime>();
@@ -255,7 +270,11 @@ public partial class App : Application
                 await StartHttpServerIfNeededAsync(settingsManager, _kestrelServer);
                 await StartStreamMonitoringAsync(_services.GetServices<StreamMonitoringHost>(), _startedStreamMonitoringHosts);
                 _memoryWatchdog = new(new SerilogLoggerFactory(Log.Logger).CreateLogger(nameof(MemoryWatchdog)),
-                    Log.CloseAndFlush,
+                    static () =>
+                    {
+                        _runStateStore?.MarkFailure(RunStateStatus.MemoryWatchdog);
+                        Log.CloseAndFlush();
+                    },
                     _services.GetRequiredService<MemoryUsageSink>());
             }
 
@@ -294,12 +313,18 @@ public partial class App : Application
 
             _services.GetRequiredService<PerformanceMonitor>().ReportStartup(ComputeStartupElapsed(startupTimestamp, interactiveWait));
 
+            if (_previousRunState.WasUnclean && !IsHeadless)
+            {
+                _services.GetRequiredService<ShellViewModel>().ReportUncleanPreviousRun();
+            }
+
             MaybeLaunchOnboardingWizard();
         }
         catch (Exception ex)
         {
             HostLog.Fatal(ex, "{App} не смог запуститься", AppInfo.Name);
             _exitReason = AppExitReason.Failed;
+            _runStateStore?.MarkFailure(RunStateStatus.StartupFailed, ex);
             Interlocked.Exchange(ref _fatalErrorHandled, 1);
 
             if (!IsHeadless)
@@ -327,9 +352,11 @@ public partial class App : Application
     {
         _memoryWatchdog?.Dispose();
 
+        var stoppedCleanly = true;
+
         if (_services is not null)
         {
-            var stoppedCleanly = false;
+            stoppedCleanly = false;
             try
             {
                 _services.GetService<ISettingsStore>()?.Close();
@@ -362,7 +389,18 @@ public partial class App : Application
                     LaunchReplacement();
                 }
             }
+            else if (!IsFatalShutdown)
+            {
+                _runStateStore?.MarkFailure(RunStateStatus.StopFailed);
+            }
         }
+
+        if (stoppedCleanly && !IsFatalShutdown && _exitReason is not (AppExitReason.AlreadyRunning or AppExitReason.Failed))
+        {
+            _runStateStore?.ClearCleanExit();
+        }
+
+        TaskScheduler.UnobservedTaskException -= OnUnobservedTaskException;
 
         if (_bindingErrors is { } bindingErrors)
         {
@@ -471,6 +509,9 @@ public partial class App : Application
             AppVersion = AppInfo.Version,
             DataDirectory = AppPaths.BaseDirectory,
             PortableStorage = AppPaths.IsPortable,
+            BundleLogFiles = 3,
+            BundleLogTailLines = 4000,
+            BundleHitchRows = 300,
         });
 
         services.AddSingleton(static provider => new DiagnosticsSnapshotPublisher(
@@ -627,7 +668,11 @@ public partial class App : Application
         using var shutdownWatchdog = IsHeadless
             ? null
             : new ShutdownWatchdog(loggerFactory.CreateLogger(nameof(ShutdownWatchdog)),
-                Log.CloseAndFlush,
+                static () =>
+                {
+                    _runStateStore?.MarkFailure(RunStateStatus.ShutdownWatchdog);
+                    Log.CloseAndFlush();
+                },
                 ShutdownDeadlines.HardDeadline);
 
         using var shutdownTimeout = IsHeadless ? null : new CancellationTokenSource(ShutdownDeadlines.SoftDeadline);
@@ -660,19 +705,52 @@ public partial class App : Application
         return elapsed > TimeSpan.Zero ? elapsed : TimeSpan.Zero;
     }
 
+    private static PreviousRunState BeginRunStateSession(string version, string? build)
+    {
+        var store = new RunStateStore();
+        _runStateStore = store;
+        return store.BeginSession(version, build);
+    }
+
     private void AttachFatalExceptionTrap()
     {
         DispatcherUnhandledException += OnDispatcherUnhandledException;
+        TaskScheduler.UnobservedTaskException += OnUnobservedTaskException;
 
         AppDomain.CurrentDomain.UnhandledException += (_, args) =>
         {
-            if (args.ExceptionObject is Exception exception)
+            var exception = args.ExceptionObject as Exception;
+            _runStateStore?.MarkFailure(RunStateStatus.FatalShutdown, exception);
+
+            if (exception is not null)
             {
                 HostLog.Fatal(exception, "Приложение завершило работу из-за непредвиденной ошибки");
             }
 
             Log.CloseAndFlush();
         };
+    }
+
+    private static void OnUnobservedTaskException(object? sender, UnobservedTaskExceptionEventArgs args)
+    {
+        args.SetObserved();
+
+        var recorded = UnobservedTaskExceptions.Record(args.Exception);
+        if (recorded.IsCancellationOnly)
+        {
+            HostLog.Debug(
+                "Отменённая фоновая задача завершилась без наблюдателя (вложенных: {InnerCount}, всего отмен: {CanceledCount})",
+                recorded.InnerCount,
+                recorded.TotalCount);
+            return;
+        }
+
+        HostLog.Error(
+            "Необработанное исключение фоновой задачи: {ExceptionType} @ {TopFrame} (вложенных: {InnerCount}, всего сбоев: {FailureCount})",
+            recorded.Entry?.ExceptionType ?? args.Exception.GetType().FullName,
+            recorded.Entry?.TopFrame ?? "–",
+            recorded.InnerCount,
+            recorded.TotalCount);
     }
 
     private void OnDispatcherUnhandledException(object sender, DispatcherUnhandledExceptionEventArgs args)
@@ -685,6 +763,7 @@ public partial class App : Application
         }
 
         _exitReason = AppExitReason.Failed;
+        _runStateStore?.MarkFailure(RunStateStatus.FatalShutdown, args.Exception);
         HostLog.Fatal(args.Exception, "Необработанное исключение в UI-потоке");
 
         // TODO: после фатальной ошибки хост только закрывается – передачу мьютекса новому процессу

@@ -76,6 +76,31 @@ public class ActiveBroadcastStore : IExternalWriteParticipant
         }
     }
 
+    public ActiveBroadcastDiagnosticsSummary CaptureDiagnosticsSummary()
+    {
+        lock (_syncLock)
+        {
+            if (_currentDraft is not { } draft)
+            {
+                return new(ReadState, _canWrite, false, null, null, null, null, []);
+            }
+
+            var platforms = draft.Platforms
+                .Select(static p => new ActiveBroadcastPlatformSummary(p.Platform, p.ChannelId, p.StreamId))
+                .ToArray();
+
+            return new(
+                ReadState,
+                _canWrite,
+                true,
+                draft.BroadcastId,
+                draft.StartedAt,
+                draft.UpdatedAt,
+                draft.EndedAt,
+                platforms);
+        }
+    }
+
     IReadOnlyCollection<string> IExternalWriteParticipant.OwnedRelativePaths { get; } =
     [
         LegacyDataCatalog.ActiveBroadcastFileName,

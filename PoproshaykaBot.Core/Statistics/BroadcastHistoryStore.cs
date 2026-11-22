@@ -92,6 +92,48 @@ public class BroadcastHistoryStore : IExternalWriteParticipant, IFlushableHistor
         }
     }
 
+    public BroadcastHistoryDiagnosticsSummary CaptureDiagnosticsSummary(int maxRecent = 8)
+    {
+        var limit = Math.Max(0, maxRecent);
+
+        lock (_syncLock)
+        {
+            var recent = limit == 0
+                ? Array.Empty<BroadcastHistoryRecentItemSummary>()
+                : _state.Broadcasts
+                    .OrderByDescending(static b => b.StartedAt)
+                    .Take(limit)
+                    .Select(static b =>
+                    {
+                        var primary = b.PrimaryPlatform;
+                        var segments = primary?.Segments ?? [];
+                        var segmentsTotal = segments.Aggregate(TimeSpan.Zero, static (sum, segment) => sum + segment.Duration);
+
+                        return new BroadcastHistoryRecentItemSummary(
+                            b.Id,
+                            [.. b.Platforms.Select(static p => p.Platform).Distinct()],
+                            primary?.ChannelId,
+                            b.StartedAt,
+                            b.EndedAt,
+                            segments.Count,
+                            segmentsTotal,
+                            b.TrackedDuration,
+                            b.IsHidden);
+                    })
+                    .ToArray();
+
+            return new(
+                SourceReadState,
+                ProjectionReadState,
+                _canWriteSource,
+                _canWriteProjection,
+                _state.ProjectionOutOfDate,
+                (_sourceDirty && _canWriteSource) || (_projectionDirty && _canWriteProjection),
+                _state.Broadcasts.Count,
+                recent);
+        }
+    }
+
     IReadOnlyCollection<string> IExternalWriteParticipant.OwnedRelativePaths { get; } =
     [
         LegacyDataCatalog.BroadcastsFileName,

@@ -43,6 +43,8 @@ public static class SettingsServiceCollectionExtensions
             new("DebugChannelSettings", DebugChannelStore.Describe(provider.GetRequiredService<DebugChannelStore>().Load())),
             new("BroadcastProfilesSettings", BroadcastProfilesStore.Describe(provider.GetRequiredService<BroadcastProfilesStore>().Load())),
             new("BroadcastProfilePlatformsSettings", BroadcastProfilePlatformsStore.Describe(provider.GetRequiredService<BroadcastProfilePlatformsStore>().Load())),
+            new("BroadcastProfileYouTubeSettings", BroadcastProfileYouTubeStore.Describe(provider.GetRequiredService<BroadcastProfileYouTubeStore>().Load())),
+            new("RecentCategoriesSettings", RecentCategoriesStore.Describe(provider.GetRequiredService<RecentCategoriesStore>().Load())),
             new("PollsSettings", PollsStore.Describe(provider.GetRequiredService<PollsStore>().Load())),
             new("CommandSettings", CommandSettingsStore.Describe(provider.GetRequiredService<CommandSettingsStore>().Load())),
             new("ChannelsSettings", ChannelCatalogStore.Describe(provider.GetRequiredService<ChannelCatalogStore>().Load())),

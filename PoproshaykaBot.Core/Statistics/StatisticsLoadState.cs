@@ -1,6 +1,6 @@
 ﻿namespace PoproshaykaBot.Core.Statistics;
 
-internal enum StatisticsLoadState
+public enum StatisticsLoadState
 {
     NotRead = 0,
     Loaded = 1,

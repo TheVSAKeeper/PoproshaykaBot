@@ -62,6 +62,14 @@ public sealed class PollHistoryStore(
         }
     }
 
+    public PollHistoryDiagnosticsSummary CaptureDiagnosticsSummary()
+    {
+        lock (_sync)
+        {
+            return new(_readState, _canPersist, _rewrittenExternally, _hasUnsavedChanges, _entries.Count);
+        }
+    }
+
     public static PollHistoryEntry BuildEntry(PollSnapshot snapshot, PollChoiceSnapshot? winner, bool winnerIsTie)
     {
         var ended = snapshot.EndedAtUtc ?? snapshot.EndsAtUtc;

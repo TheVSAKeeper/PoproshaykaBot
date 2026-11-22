@@ -1,9 +1,19 @@
-﻿using KeepShell.Diagnostics;
+﻿using KeepShell.Bootstrap;
+using KeepShell.Diagnostics;
 using Microsoft.Extensions.Logging;
+using Microsoft.Web.WebView2.Core;
 using PoproshaykaBot.Core.Diagnostics;
+using PoproshaykaBot.Core.Infrastructure;
 using PoproshaykaBot.Core.Infrastructure.Diagnostics;
+using PoproshaykaBot.Core.Infrastructure.Runtime;
+using PoproshaykaBot.Core.Polls;
+using PoproshaykaBot.Core.Settings.Stores;
+using PoproshaykaBot.Core.Statistics;
 using PoproshaykaBot.Core.Streaming;
+using PoproshaykaBot.Core.Update;
 using PoproshaykaBot.Core.YouTube.Quota;
+using PoproshaykaBot.Wpf.Bootstrap;
+using System.Globalization;
 using System.Text;
 
 namespace PoproshaykaBot.Wpf.Infrastructure.Diagnostics;
@@ -11,8 +21,27 @@ namespace PoproshaykaBot.Wpf.Infrastructure.Diagnostics;
 public sealed class BotDiagnosticsBundleSource(
     IEnumerable<ISettingsSnapshotContributor> snapshotContributors,
     DiagnosticsSnapshotSource snapshots,
-    ILogger<BotDiagnosticsBundleSource> logger) : IDiagnosticsBundleSource
+    ILogger<BotDiagnosticsBundleSource> logger,
+    PreviousRunState? previousRun = null,
+    UnobservedTaskExceptionTracker? unobservedExceptions = null,
+    BindingErrorSink? bindingErrors = null,
+    IUpdateEnvironment? updateEnvironment = null,
+    SettingsWriteGate? settingsWriteGate = null,
+    UserStatisticsLoader? userStatisticsLoader = null,
+    UserStatisticsRepository? userStatisticsRepository = null,
+    BroadcastHistoryStore? broadcastHistoryStore = null,
+    ActiveBroadcastStore? activeBroadcastStore = null,
+    PollHistoryStore? pollHistoryStore = null,
+    Func<string?>? webView2VersionProvider = null,
+    Func<IReadOnlyList<DisplayMonitorInfo>>? displayMonitorProvider = null) : IDiagnosticsBundleSource
 {
+    private const int MaxBindingErrorLines = 30;
+    private const int MaxBindingMessageLength = 240;
+    private const int MaxRecentBroadcastLines = 8;
+
+    private readonly Func<string?> _webView2VersionProvider = webView2VersionProvider ?? TryReadWebView2Version;
+    private readonly Func<IReadOnlyList<DisplayMonitorInfo>> _displayMonitorProvider = displayMonitorProvider ?? DisplayMonitorProbe.Capture;
+
     public IEnumerable<DiagnosticsEntry> Collect()
     {
         if (Build("settings.txt", BuildSettings) is { } settingsEntry)
@@ -36,6 +65,27 @@ public sealed class BotDiagnosticsBundleSource(
         return value is { } moment
             ? moment.ToLocalTime().ToString("dd.MM.yyyy HH:mm:ss", UiCulture.Russian)
             : DiagnosticsFormat.Unset;
+    }
+
+    private static string YesNo(bool value) => value ? "да" : "нет";
+
+    private static string Truncate(string value, int maxLength)
+    {
+        var singleLine = value.Replace('\r', ' ').Replace('\n', ' ').Trim();
+        return singleLine.Length <= maxLength ? singleLine : singleLine[..maxLength] + "…";
+    }
+
+    private static string? TryReadWebView2Version()
+    {
+        try
+        {
+            var version = CoreWebView2Environment.GetAvailableBrowserVersionString();
+            return string.IsNullOrWhiteSpace(version) ? null : version;
+        }
+        catch (Exception)
+        {
+            return null;
+        }
     }
 
     private DiagnosticsEntry? Build(string name, Func<string> build)
@@ -67,6 +117,170 @@ public sealed class BotDiagnosticsBundleSource(
         }
 
         return builder.ToString();
+    }
+
+    private void AppendRuntimeEnvironment(StringBuilder builder)
+    {
+        var stamp = AppBuildBadge.StartupLine ?? "нет build-stamp";
+        var updateKind = updateEnvironment?.Kind.ToString() ?? DiagnosticsFormat.Unset;
+        var storageMode = AppPaths.IsBaseDirectoryOverridden
+            ? "override"
+            : AppPaths.IsPortable ? "portable" : "AppData";
+
+        builder.AppendLine($"Сборка: версия {AppInfo.Version}, отметка {stamp}, обновления {updateKind}, хранение {storageMode}");
+
+        AppendPreviousRun(builder);
+
+        var webView2Version = _webView2VersionProvider();
+        builder.AppendLine($"WebView2 Runtime: {webView2Version ?? "недоступен"}");
+
+        var monitors = _displayMonitorProvider();
+        builder.AppendLine($"Мониторы: {monitors.Count}");
+
+        foreach (var monitor in monitors)
+        {
+            var primary = monitor.IsPrimary ? ", основной" : string.Empty;
+            var dpiText = monitor.DpiX is { } dpiX && monitor.DpiY is { } dpiY
+                ? $"DPI {dpiX}x{dpiY} ({(int)Math.Round(dpiX / 96.0 * 100.0)} %)"
+                : "DPI недоступен";
+            builder.AppendLine(
+                $"  монитор {monitor.Index}{primary}: {monitor.Left},{monitor.Top} {monitor.Width}x{monitor.Height}, {dpiText}");
+        }
+    }
+
+    private void AppendPreviousRun(StringBuilder builder)
+    {
+        if (previousRun is not { WasUnclean: true })
+        {
+            builder.AppendLine("Прошлый запуск: штатно");
+            return;
+        }
+
+        if (previousRun.Record is not { } record)
+        {
+            builder.AppendLine("Прошлый запуск: нештатно (файл маркера не прочитан)");
+            return;
+        }
+
+        builder.AppendLine(
+            $"Прошлый запуск: нештатно (статус {record.Status}, PID {record.ProcessId}, старт {Moment(record.StartedAtUtc)}, "
+            + $"обновление {Moment(record.UpdatedAtUtc)}, версия {record.Version}, коммит {record.Commit ?? DiagnosticsFormat.Unset}, "
+            + $"сбой {record.ExceptionType ?? DiagnosticsFormat.Unset})");
+    }
+
+    private void AppendErrorSensors(StringBuilder builder)
+    {
+        if (bindingErrors is not null)
+        {
+            var records = bindingErrors.Records;
+            builder.AppendLine($"Ошибки привязки WPF: всего {bindingErrors.Count}, в буфере {records.Count}");
+
+            foreach (var record in records.TakeLast(MaxBindingErrorLines))
+            {
+                var scope = string.IsNullOrWhiteSpace(record.Case) ? string.Empty : $"[{record.Case}/{record.Theme}] ";
+                builder.AppendLine($"  привязка: {scope}{Truncate(record.Message, MaxBindingMessageLength)}");
+            }
+        }
+
+        if (unobservedExceptions is not null)
+        {
+            var snapshot = unobservedExceptions.Capture();
+            builder.AppendLine($"Необработанные фоновые задачи: сбоев {snapshot.FailureCount}, отмен {snapshot.CanceledCount}");
+
+            foreach (var failure in snapshot.RecentFailures)
+            {
+                var frame = string.IsNullOrWhiteSpace(failure.TopFrame) ? string.Empty : $" @ {failure.TopFrame}";
+                builder.AppendLine($"  задача {Moment(failure.ObservedAtUtc)}: {failure.ExceptionType}{frame}");
+            }
+        }
+    }
+
+    private void AppendStorageHealth(StringBuilder builder)
+    {
+        if (settingsWriteGate is not null)
+        {
+            builder.AppendLine($"Гейт записи настроек: {(settingsWriteGate.HasRevoked ? "есть заблокированные файлы" : "свободен")}");
+        }
+
+        if (userStatisticsLoader is not null)
+        {
+            var state = userStatisticsLoader.LoadState;
+            if (state == StatisticsLoadState.Loaded && userStatisticsRepository is not null)
+            {
+                var (accounts, channelCounters, unattributedCounters, linkGroups) = userStatisticsRepository.GetCatalogCounts();
+                builder.AppendLine(
+                    $"Статистика пользователей: состояние {state}, аккаунтов {accounts}, канальных {channelCounters}, "
+                    + $"без канала {unattributedCounters}, связей {linkGroups}");
+            }
+            else
+            {
+                builder.AppendLine($"Статистика пользователей: состояние {state}");
+            }
+        }
+
+        if (broadcastHistoryStore is not null)
+        {
+            var summary = broadcastHistoryStore.CaptureDiagnosticsSummary(MaxRecentBroadcastLines);
+            builder.AppendLine(
+                $"История эфиров: источник {summary.SourceReadState}, проекция {summary.ProjectionReadState}, "
+                + $"запись {YesNo(summary.CanWriteSource)}/{YesNo(summary.CanWriteProjection)}, "
+                + $"проекция отстаёт {YesNo(summary.ProjectionOutOfDate)}, ожидает записи {YesNo(summary.HasPendingFlush)}, "
+                + $"всего {summary.TotalCount}");
+
+            foreach (var item in summary.Recent)
+            {
+                var platforms = item.Platforms.Count == 0
+                    ? DiagnosticsFormat.Unset
+                    : string.Join('+', item.Platforms);
+                var tracked = item.TrackedDuration is { } duration
+                    ? FormatDuration(duration)
+                    : DiagnosticsFormat.Unset;
+                var shortId = item.Id.ToString("N", CultureInfo.InvariantCulture)[..8];
+
+                builder.AppendLine(
+                    $"  эфир {shortId}: площадки {platforms}, канал {item.PrimaryChannelId ?? DiagnosticsFormat.Unset}, "
+                    + $"{Moment(item.StartedAt)}..{Moment(item.EndedAt)}, сегментов {item.SegmentCount} ({FormatDuration(item.SegmentsTotalDuration)}), "
+                    + $"учтено {tracked}, скрыт {YesNo(item.IsHidden)}");
+            }
+        }
+
+        if (activeBroadcastStore is not null)
+        {
+            var active = activeBroadcastStore.CaptureDiagnosticsSummary();
+            if (!active.HasDraft)
+            {
+                builder.AppendLine($"Активный черновик эфира: чтение {active.ReadState}, запись {YesNo(active.CanWrite)}, черновика нет");
+            }
+            else
+            {
+                var platforms = active.Platforms.Count == 0
+                    ? DiagnosticsFormat.Unset
+                    : string.Join(", ", active.Platforms.Select(static p =>
+                        $"{p.Platform}({p.ChannelId ?? DiagnosticsFormat.Unset}/{p.StreamId ?? DiagnosticsFormat.Unset})"));
+                var shortId = active.BroadcastId?.ToString("N", CultureInfo.InvariantCulture)[..8] ?? DiagnosticsFormat.Unset;
+
+                builder.AppendLine(
+                    $"Активный черновик эфира: чтение {active.ReadState}, запись {YesNo(active.CanWrite)}, "
+                    + $"id {shortId}, старт {Moment(active.StartedAt)}, обновлён {Moment(active.UpdatedAt)}, "
+                    + $"завершён {Moment(active.EndedAt)}, площадки {platforms}");
+            }
+        }
+
+        if (pollHistoryStore is not null)
+        {
+            var polls = pollHistoryStore.CaptureDiagnosticsSummary();
+            builder.AppendLine(
+                $"История голосований: чтение {polls.ReadState}, запись {YesNo(polls.CanPersist)}, "
+                + $"переписана снаружи {YesNo(polls.RewrittenExternally)}, несохранённых {YesNo(polls.HasUnsavedChanges)}, "
+                + $"записей {polls.EntryCount}");
+        }
+    }
+
+    private static string FormatDuration(TimeSpan duration)
+    {
+        return duration < TimeSpan.Zero
+            ? "00:00:00"
+            : string.Create(CultureInfo.InvariantCulture, $"{(int)duration.TotalHours:D2}:{duration.Minutes:D2}:{duration.Seconds:D2}");
     }
 
     private static void AppendMemory(StringBuilder builder, MemoryUsage? usage)
@@ -256,6 +470,9 @@ public sealed class BotDiagnosticsBundleSource(
 
         builder.Append("Снимок: ").AppendLine(Moment(snapshot.CapturedAt));
 
+        AppendRuntimeEnvironment(builder);
+        AppendErrorSensors(builder);
+        AppendStorageHealth(builder);
         AppendMemory(builder, snapshot.Memory);
         AppendConnections(builder, snapshot);
         AppendQueueAndJobs(builder, snapshot);

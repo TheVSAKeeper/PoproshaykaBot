@@ -17,6 +17,14 @@ public sealed class UserStatisticsRepository(
     private UserStatisticsMigrationState? _migration;
     private bool _hasChanges;
 
+    public (int Accounts, int ChannelCounters, int UnattributedCounters, int LinkGroups) GetCatalogCounts()
+    {
+        lock (_lock)
+        {
+            return (_accounts.Count, _channelCounters.Count, _unattributedCounters.Count, _linkGroups.Count);
+        }
+    }
+
     public bool HasChanges
     {
         get

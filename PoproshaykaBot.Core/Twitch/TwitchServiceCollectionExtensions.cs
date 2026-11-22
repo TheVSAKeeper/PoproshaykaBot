@@ -66,6 +66,7 @@ public static class TwitchServiceCollectionExtensions
             [
                 new("Account.Bot", AccountsStore.Describe(accounts.Load(PlatformAuthRole.Bot))),
                 new("Account.Broadcaster", AccountsStore.Describe(accounts.Load(PlatformAuthRole.Broadcaster))),
+                new("Account.Contexts", accounts.DescribeContextsSnapshot()),
             ];
         }));
 

@@ -130,6 +130,24 @@ public sealed class AccountsStore : RoleAccountsStoreBase<AccountsStore.Accounts
         }
     }
 
+    public string DescribeSnapshot()
+    {
+        return DescribeAccounts(LoadFile());
+    }
+
+    public string DescribeContextsSnapshot()
+    {
+        var contexts = LoadFile().Contexts;
+
+        if (contexts is null || contexts.Count == 0)
+        {
+            return "нет";
+        }
+
+        return string.Join("; ", contexts.Select(static entry =>
+            $"{SettingsDescriber.Value(entry.ContextId)}/{entry.Role}: {Describe(entry.Account ?? new())}"));
+    }
+
     public static string Describe(TwitchAccountSettings account)
     {
         ArgumentNullException.ThrowIfNull(account);

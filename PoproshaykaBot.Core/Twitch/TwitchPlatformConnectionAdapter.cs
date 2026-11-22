@@ -53,6 +53,8 @@ internal sealed class TwitchPlatformConnectionAdapter(
             throw new InvalidOperationException("Токен бота отсутствует или недействителен. Авторизуйте бота в настройках Twitch (вкладка «Бот»).");
         }
 
+        activeEntry = await TryBackfillLegacyBotIdentityAsync(activeEntry, botContextId, accessToken, cancellationToken).ConfigureAwait(false);
+
         VerifyBotIdentity(activeEntry, botContextId);
 
         if (activeEntry is not null && channelRegistry is not null)
@@ -111,7 +113,10 @@ internal sealed class TwitchPlatformConnectionAdapter(
             throw new InvalidOperationException("Токен бота Twitch для целевого канала отсутствует или недействителен.");
         }
 
-        VerifyBotIdentity(target.Channel, botContextId);
+        var effectiveChannel = await TryBackfillLegacyBotIdentityAsync(target.Channel, botContextId, accessToken, cancellationToken).ConfigureAwait(false)
+            ?? target.Channel;
+
+        VerifyBotIdentity(effectiveChannel, botContextId);
 
         var previousBotContextId = channelRegistry?.GetBinding(StreamingPlatform.Twitch)?.BotContextId;
         var label = ResolveChannelLabel(target.Channel);
@@ -140,6 +145,98 @@ internal sealed class TwitchPlatformConnectionAdapter(
 
         logger.LogInformation("Перенацеливание чата Twitch на канал {Channel} ({ChannelId})", label, target.Channel.ChannelId);
         return label;
+    }
+
+    private async Task<ChannelCatalogEntry?> TryBackfillLegacyBotIdentityAsync(
+        ChannelCatalogEntry? entry,
+        string botContextId,
+        string accessToken,
+        CancellationToken cancellationToken)
+    {
+        if (entry is null || accountsStore is null || !AuthContextIds.IsDefault(botContextId))
+        {
+            return entry;
+        }
+
+        var botAccount = accountsStore.Load(PlatformAuthRole.Bot, botContextId);
+        var needsBotUserId = string.IsNullOrWhiteSpace(botAccount.UserId);
+        var needsEntrySubject = AuthContextIds.IsDefault(entry.BotContextId)
+            && string.IsNullOrWhiteSpace(entry.BotVerifiedSubjectId);
+
+        if (!needsBotUserId && !needsEntrySubject)
+        {
+            return entry;
+        }
+
+        string? resolvedUserId = needsBotUserId ? null : botAccount.UserId.Trim();
+
+        if (needsBotUserId)
+        {
+            var validation = await tokenService.ValidateAsync(accessToken, cancellationToken).ConfigureAwait(false);
+            if (validation is null || string.IsNullOrWhiteSpace(validation.UserId))
+            {
+                logger.LogWarning("Не удалось дозаполнить UserId аккаунта бота Twitch из прежних настроек: токен не прошёл проверку");
+                return entry;
+            }
+
+            resolvedUserId = validation.UserId.Trim();
+            accountsStore.Mutate(PlatformAuthRole.Bot, botContextId, account =>
+            {
+                if (!string.Equals(account.AccessToken, accessToken, StringComparison.Ordinal))
+                {
+                    return;
+                }
+
+                if (string.IsNullOrWhiteSpace(account.UserId))
+                {
+                    account.UserId = resolvedUserId;
+                }
+
+                if (string.IsNullOrWhiteSpace(account.Login) && !string.IsNullOrWhiteSpace(validation.Login))
+                {
+                    account.Login = validation.Login.Trim();
+                }
+            });
+
+            var refreshed = accountsStore.Load(PlatformAuthRole.Bot, botContextId);
+            if (!string.Equals(refreshed.AccessToken, accessToken, StringComparison.Ordinal)
+                || !string.Equals(refreshed.UserId, resolvedUserId, StringComparison.Ordinal))
+            {
+                logger.LogWarning("Дозаполнение UserId аккаунта бота Twitch пропущено: учётная запись изменилась во время проверки токена");
+                return entry;
+            }
+
+            logger.LogInformation("Дозаполнен UserId аккаунта бота Twitch ({UserId}) из проверки действующего токена", resolvedUserId);
+        }
+
+        if (needsEntrySubject && !string.IsNullOrWhiteSpace(resolvedUserId) && channelCatalogStore is not null)
+        {
+            var currentAccount = accountsStore.Load(PlatformAuthRole.Bot, botContextId);
+            if (!string.Equals(currentAccount.AccessToken, accessToken, StringComparison.Ordinal)
+                || !string.Equals(currentAccount.UserId, resolvedUserId, StringComparison.Ordinal))
+            {
+                return entry;
+            }
+
+            channelCatalogStore.Mutate(catalog =>
+            {
+                var target = catalog.Channels.FirstOrDefault(c =>
+                    c.Platform == StreamingPlatform.Twitch
+                    && string.Equals(c.ChannelId, entry.ChannelId, StringComparison.Ordinal));
+
+                if (target is not null
+                    && AuthContextIds.IsDefault(target.BotContextId)
+                    && string.IsNullOrWhiteSpace(target.BotVerifiedSubjectId))
+                {
+                    target.BotVerifiedSubjectId = resolvedUserId;
+                }
+            });
+
+            logger.LogInformation("Подтверждён субъект бота Twitch ({UserId}) для перенесённого канала {ChannelId}", resolvedUserId, entry.ChannelId);
+            return channelCatalogStore.FindEntry(entry.Key) ?? entry;
+        }
+
+        return entry;
     }
 
     private void VerifyBotIdentity(ChannelCatalogEntry? entry, string botContextId)

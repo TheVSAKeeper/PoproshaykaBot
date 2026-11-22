@@ -29,7 +29,7 @@ public sealed class LegacyImportResult
     public bool CopiedYouTubeQuota => Copied(LegacyDataCatalog.YouTubeQuotaFileName);
 
     public bool CopiedStatistics => CopiedAny(LegacyDataCatalog.GetRelativePaths(LegacyDataCategory.UserStatistics))
-        || Copied(LegacyDataCatalog.BotStatisticsFileName);
+        || CopiedAny(LegacyDataCatalog.GetRelativePaths(LegacyDataCategory.BotStatistics));
 
     public bool CopiedStreamHistory => Copied(LegacyDataCatalog.BroadcastsFileName)
         || Copied(LegacyDataCatalog.StreamSessionsFileName)

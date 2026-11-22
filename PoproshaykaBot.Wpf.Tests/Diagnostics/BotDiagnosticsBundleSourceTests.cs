@@ -9,11 +9,13 @@ using PoproshaykaBot.Core.Infrastructure.Di;
 using PoproshaykaBot.Core.Infrastructure.Diagnostics;
 using PoproshaykaBot.Core.Infrastructure.Hosting;
 using PoproshaykaBot.Core.Infrastructure.Logging;
+using PoproshaykaBot.Core.Infrastructure.Runtime;
 using PoproshaykaBot.Core.Obs;
 using PoproshaykaBot.Core.Platforms.Auth;
 using PoproshaykaBot.Core.Polls;
 using PoproshaykaBot.Core.Server;
 using PoproshaykaBot.Core.Settings;
+using PoproshaykaBot.Core.Settings.Stores;
 using PoproshaykaBot.Core.Statistics;
 using PoproshaykaBot.Core.Streaming;
 using PoproshaykaBot.Core.Twitch;
@@ -105,6 +107,70 @@ public class BotDiagnosticsBundleSourceTests
         var snapshotEntry = source.Collect().Single(entry => entry.Name == "bot-snapshot.txt");
 
         Assert.That(snapshotEntry.Text, Does.Contain("состояние: доступ аккаунта не подтверждён"));
+    }
+
+    [Test]
+    public async Task Снимок_включает_прошлый_сбой_фоновые_исключения_мониторы_и_хранилища_без_ленивого_чтения()
+    {
+        await using var provider = BuildProvider(withYouTubeSources: false);
+        var previousRun = new PreviousRunState(
+            WasUnclean: true,
+            new RunStateRecord(
+                1234,
+                new DateTimeOffset(2026, 11, 22, 10, 0, 0, TimeSpan.Zero),
+                "3.1.0.15",
+                "коммит abc1234",
+                RunStateStatus.MemoryWatchdog,
+                null,
+                new DateTimeOffset(2026, 11, 22, 12, 0, 0, TimeSpan.Zero)));
+        var tracker = new UnobservedTaskExceptionTracker();
+        tracker.Record(new AggregateException(new InvalidOperationException("do-not-leak-message")));
+        tracker.Record(new AggregateException(new OperationCanceledException()));
+
+        var userLoader = provider.GetRequiredService<UserStatisticsLoader>();
+        var pollStore = provider.GetRequiredService<PollHistoryStore>();
+
+        var source = new BotDiagnosticsBundleSource(
+            provider.GetServices<ISettingsSnapshotContributor>(),
+            provider.GetRequiredService<DiagnosticsSnapshotSource>(),
+            NullLogger<BotDiagnosticsBundleSource>.Instance,
+            previousRun: previousRun,
+            unobservedExceptions: tracker,
+            updateEnvironment: provider.GetRequiredService<IUpdateEnvironment>(),
+            settingsWriteGate: provider.GetRequiredService<SettingsWriteGate>(),
+            userStatisticsLoader: userLoader,
+            userStatisticsRepository: provider.GetRequiredService<UserStatisticsRepository>(),
+            broadcastHistoryStore: provider.GetRequiredService<BroadcastHistoryStore>(),
+            activeBroadcastStore: provider.GetRequiredService<ActiveBroadcastStore>(),
+            pollHistoryStore: pollStore,
+            webView2VersionProvider: static () => "130.0.2849.80",
+            displayMonitorProvider: static () =>
+            [
+                new DisplayMonitorInfo(1, true, 0, 0, 2560, 1440, 144, 144),
+                new DisplayMonitorInfo(2, false, 2560, 0, 1920, 1080, null, null),
+            ]);
+
+        var entries = source.Collect().ToList();
+        var settingsEntry = entries.Single(entry => entry.Name == "settings.txt");
+        var snapshotEntry = entries.Single(entry => entry.Name == "bot-snapshot.txt");
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(settingsEntry.Text, Does.Contain("BroadcastProfileYouTubeSettings:"));
+            Assert.That(settingsEntry.Text, Does.Contain("RecentCategoriesSettings:"));
+            Assert.That(settingsEntry.Text, Does.Contain("Account.Contexts:"));
+            Assert.That(snapshotEntry.Text, Does.Contain("Прошлый запуск: нештатно (статус MemoryWatchdog, PID 1234"));
+            Assert.That(snapshotEntry.Text, Does.Contain("WebView2 Runtime: 130.0.2849.80"));
+            Assert.That(snapshotEntry.Text, Does.Contain("монитор 1, основной: 0,0 2560x1440, DPI 144x144 (150 %)"));
+            Assert.That(snapshotEntry.Text, Does.Contain("монитор 2: 2560,0 1920x1080, DPI недоступен"));
+            Assert.That(snapshotEntry.Text, Does.Contain("Необработанные фоновые задачи: сбоев 1, отмен 1"));
+            Assert.That(snapshotEntry.Text, Does.Contain("System.InvalidOperationException"));
+            Assert.That(snapshotEntry.Text, Does.Not.Contain("do-not-leak-message"));
+            Assert.That(snapshotEntry.Text, Does.Contain("Статистика пользователей: состояние NotRead"));
+            Assert.That(snapshotEntry.Text, Does.Contain("История голосований: чтение NotRead"));
+            Assert.That(userLoader.LoadState, Is.EqualTo(StatisticsLoadState.NotRead));
+            Assert.That(pollStore.IsLoaded, Is.False);
+        }
     }
 
     private static ServiceProvider BuildProvider(

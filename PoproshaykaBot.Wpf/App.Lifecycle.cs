@@ -75,6 +75,7 @@ public partial class App
             return false;
         }
 
+        _runStateStore?.ClearCleanExit();
         HostLog.Information("Завершение работы приложения ({Reason}), код выхода {ExitCode}", AppExitReason.ForcedRestart, -1);
         Log.CloseAndFlush();
         Process.GetCurrentProcess().Kill();
@@ -116,10 +117,10 @@ public partial class App
             (int)AppRestart.HandoffTimeout.TotalSeconds);
     }
 
-    private static void ReportEnvironment(IReadOnlyList<string> arguments)
+    private static void ReportEnvironment(IReadOnlyList<string> arguments, PreviousRunState previousRun)
     {
         using var loggerFactory = new SerilogLoggerFactory(Log.Logger);
-        StartupReport.LogEnvironment(loggerFactory.CreateLogger(nameof(StartupReport)), arguments, AppBuildBadge.StartupLine);
+        StartupReport.LogEnvironment(loggerFactory.CreateLogger(nameof(StartupReport)), arguments, AppBuildBadge.StartupLine, previousRun);
     }
 
     private static void ReportConfiguration(IServiceProvider serviceProvider)

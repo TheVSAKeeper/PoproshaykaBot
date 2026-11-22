@@ -980,6 +980,11 @@ public sealed partial class ShellViewModel : ShellViewModelBase, IDisposable
         SetStatus(text, severity);
     }
 
+    internal void ReportUncleanPreviousRun()
+    {
+        SetStatus("Прошлый запуск завершился нештатно – сохраните пакет в разделе «Диагностика»", StatusSeverity.Warning);
+    }
+
     private void SetStatus(string text, StatusSeverity severity)
     {
         StatusText = text;
