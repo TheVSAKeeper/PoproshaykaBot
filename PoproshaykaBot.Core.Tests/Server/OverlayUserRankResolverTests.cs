@@ -139,4 +139,60 @@ public sealed class OverlayUserRankResolverTests
 
         Assert.That(unknown, Is.EqualTo(_rankService.GetRank(0)));
     }
+
+    [Test]
+    public void Resolve_IncludesUnattributedLegacyStats_AndLinkedAccountsAcrossPlatforms()
+    {
+        var twitchChannel = new ChannelKey(StreamingPlatform.Twitch, "tw-1");
+        var youtubeChannel = new ChannelKey(StreamingPlatform.YouTube, "UC-yt-1");
+        var twitchUser = new PlatformUserKey(StreamingPlatform.Twitch, "u-tw");
+        var youtubeUser = new PlatformUserKey(StreamingPlatform.YouTube, "u-yt");
+
+        for (var i = 0; i < 150; i++)
+        {
+            _repo.TrackMessage(twitchUser, "legacy-user");
+        }
+
+        for (var i = 0; i < 30; i++)
+        {
+            _repo.TrackMessage(twitchChannel, twitchUser, "legacy-user");
+        }
+
+        for (var i = 0; i < 70; i++)
+        {
+            _repo.TrackMessage(youtubeChannel, youtubeUser, "yt-user");
+        }
+
+        var status = _repo.LinkAccounts(
+            [twitchUser, youtubeUser],
+            AccountLinkOrigin.StreamerManual,
+            new AccountLinkAuthor(AccountLinkAuthorKind.Streamer),
+            allowMergeExistingGroups: true,
+            out _);
+
+        Assert.That(status, Is.EqualTo(AccountLinkOperationStatus.Linked));
+
+        var resolvedFromTwitch = _resolver.Resolve(new()
+        {
+            Platform = StreamingPlatform.Twitch,
+            ChannelId = "tw-1",
+            UserId = "u-tw",
+            MessageType = ChatMessageType.UserMessage,
+        });
+
+        var resolvedFromYouTube = _resolver.Resolve(new()
+        {
+            Platform = StreamingPlatform.YouTube,
+            ChannelId = "UC-yt-1",
+            UserId = "u-yt",
+            MessageType = ChatMessageType.UserMessage,
+        });
+
+        var expected = _rankService.GetRank(250);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(resolvedFromTwitch, Is.EqualTo(expected));
+            Assert.That(resolvedFromYouTube, Is.EqualTo(expected));
+        }
+    }
 }

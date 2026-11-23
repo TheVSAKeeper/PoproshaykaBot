@@ -26,11 +26,7 @@ public sealed class OverlayUserRankResolver(
         }
 
         var userKey = new PlatformUserKey(chatMessage.Platform, chatMessage.UserId);
-        var slice = !string.IsNullOrWhiteSpace(chatMessage.ChannelId)
-            ? StatisticsSlice.ForChannel(new ChannelKey(chatMessage.Platform, chatMessage.ChannelId))
-            : StatisticsSlice.ForPlatform(chatMessage.Platform);
-
-        var viewer = statistics.FindViewerById(slice, userKey);
+        var viewer = statistics.FindViewerById(StatisticsSlice.All(), userKey);
         return rankService.GetRank(viewer?.Points ?? 0);
     }
 }
