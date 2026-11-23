@@ -416,6 +416,73 @@ public sealed class MultistreamWizardDialogsTests
         });
     }
 
+    [Test]
+    public async Task ChannelWizard_warns_when_write_gate_blocks_accounts_or_catalog_persistence()
+    {
+        var twitchPath = Path.Combine(_directory, "gw-accounts.json");
+        var youtubePath = Path.Combine(_directory, "gw-youtube-accounts.json");
+        var catalogPath = Path.Combine(_directory, "gw-channels.json");
+        var youtubeSettings = new YouTubeSettingsStore(filePath: Path.Combine(_directory, "gw-youtube.json"));
+        youtubeSettings.Save(new() { Enabled = true, ClientId = "yt-cid" });
+
+        var gate = new SettingsWriteGate();
+        var twitchAccounts = new AccountsStore(filePath: twitchPath, gate: gate);
+        var ytAccounts = new YouTubeAccountsStore(filePath: youtubePath, gate: gate);
+        ytAccounts.SaveClientSecret("yt-secret");
+        var catalog = new ChannelCatalogStore(filePath: catalogPath, gate: gate);
+
+        await gate.RunExternalWriteAsync(() => Task.FromResult(0), _ => [twitchPath, youtubePath, catalogPath]);
+
+        var launcher = DispatchProxy.Create<IShellLauncher, InertLauncher>();
+        var twitchOAuth = new StubTwitchOAuthService(new("tw-acc", "tw-ref", [.. TwitchScopes.BotRequired], "bot_user", "1001", 3600));
+        var twitchAdapter = new StubChannelAdapter(StreamingPlatform.Twitch, () => twitchAccounts.ListAccounts())
+        {
+            ResolveHandler = _ => new(new(StreamingPlatform.Twitch, "9001"), "Cool", "cool", "https://twitch.tv/cool"),
+            VerifyHandler = (_, _, _) => new(true, "1001"),
+        };
+
+        var twitchVm = new MultistreamChannelWizardDialogViewModel(
+            catalog, [twitchAdapter], twitchAccounts, ytAccounts, youtubeSettings,
+            twitchOAuth: twitchOAuth, shellLauncher: launcher);
+        twitchVm.InitializeForAdd(StreamingPlatform.Twitch);
+        twitchVm.ChannelInput = "cool";
+        await twitchVm.NextCommand.ExecuteAsync(null);
+        await twitchVm.AuthorizeNewAccountCommand.ExecuteAsync(null);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(twitchVm.StepNoticeSeverity, Is.EqualTo(StatusSeverity.Warning));
+            Assert.That(twitchVm.StepNotice, Does.Contain("до перезапуска"));
+            Assert.That(twitchVm.SelectedBotAccount?.AccountId, Is.EqualTo("1001"));
+            Assert.That(new AccountsStore(filePath: twitchPath).ListAccounts(), Is.Empty);
+        });
+
+        await twitchVm.NextCommand.ExecuteAsync(null);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(twitchVm.CurrentStep, Is.EqualTo(3));
+            Assert.That(twitchVm.HasVerificationFailure, Is.False);
+            Assert.That(twitchVm.VerificationSummarySeverity, Is.EqualTo(StatusSeverity.Warning));
+            Assert.That(twitchVm.VerificationSummaryHeading, Is.EqualTo("Применено до перезапуска"));
+            Assert.That(new ChannelCatalogStore(filePath: catalogPath).FindEntry(new(StreamingPlatform.Twitch, "9001")), Is.Null);
+        });
+
+        var ytOAuth = new StubYouTubeOAuthService(new("yt-acc", "yt-ref", [.. YouTubeScopes.CombinedDefault], "UC_BOT", "BotYT", 3600));
+        var ytVm = new MultistreamChannelWizardDialogViewModel(
+            catalog, [], twitchAccounts, ytAccounts, youtubeSettings,
+            youtubeOAuth: ytOAuth, shellLauncher: launcher);
+        ytVm.InitializeForAdd(StreamingPlatform.YouTube);
+        await ytVm.AuthorizeNewAccountCommand.ExecuteAsync(null);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(ytVm.StepNoticeSeverity, Is.EqualTo(StatusSeverity.Warning));
+            Assert.That(ytVm.StepNotice, Does.Contain("до перезапуска"));
+            Assert.That(new YouTubeAccountsStore(filePath: youtubePath).ListAccounts(), Is.Empty);
+        });
+    }
+
     private sealed class StubChannelAdapter(
         StreamingPlatform platform,
         Func<IReadOnlyList<PlatformAccount>> listAccounts) : IPlatformChannelAdapter
@@ -467,6 +534,31 @@ public sealed class MultistreamWizardDialogsTests
         public Task<string?> GetAccessTokenAsync(PlatformAuthRole role, CancellationToken ct = default) => Task.FromResult<string?>(flowResult.AccessToken);
         public void UpdateSettings(PlatformAuthRole role, string accessToken, string refreshToken, IEnumerable<string>? newScopes, string login, string userId, int expiresInSeconds = 0, bool publishAuthorizationRefreshed = false) { }
         public void ClearTokens(PlatformAuthRole role) { }
+    }
+
+    private sealed class StubYouTubeOAuthService(YouTubeOAuthFlowResult flowResult) : IYouTubeOAuthService
+    {
+        public event Action<PlatformAuthRole, string>? StatusChanged
+        {
+            add { }
+            remove { }
+        }
+
+        public Task<YouTubeOAuthFlowResult> StartOAuthFlowAsync(PlatformAuthRole role, string clientId, string clientSecret, string[]? scopes, Action<string> onAuthUrlReady, CancellationToken ct = default) =>
+            Task.FromResult(flowResult);
+
+        public Task<YouTubeOAuthFlowResult> StartOAuthFlowToDraftAsync(PlatformAuthRole role, string clientId, string clientSecret, string[]? scopes, Action<string> onAuthUrlReady, CancellationToken ct = default) =>
+            Task.FromResult(flowResult);
+
+        public Task<string> RefreshTokenAsync(PlatformAuthRole role, string clientId, string clientSecret, string refreshToken, CancellationToken ct = default) =>
+            Task.FromResult(flowResult.AccessToken);
+
+        public Task<string?> GetAccessTokenAsync(PlatformAuthRole role, CancellationToken ct = default) =>
+            Task.FromResult<string?>(flowResult.AccessToken);
+
+        public bool TryClearAccessToken(PlatformAuthRole role, string expectedToken) => false;
+
+        public void ClearAccount(PlatformAuthRole role, bool publishAuthorizationRefreshed = false) { }
     }
 
     public class InertLauncher : DispatchProxy

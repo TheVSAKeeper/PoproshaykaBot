@@ -70,6 +70,7 @@ public sealed partial class MultistreamChannelWizardDialogViewModel : Observable
 
     private string _targetChannelHandle = string.Empty;
     private string _targetChannelUrl = string.Empty;
+    private bool _catalogPersisted = true;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsStep1), nameof(IsStep2), nameof(IsStep3), nameof(StepProgressText),
@@ -397,11 +398,11 @@ public sealed partial class MultistreamChannelWizardDialogViewModel : Observable
         IsBusy = true;
         SetStepNotice("Ожидаем вход нового аккаунта на площадке…", StatusSeverity.Info);
         _logger?.CombinedAccountAuthorizationStarted(Platform);
-        string? signedInAccountId = null;
+        AuthorizationSaveOutcome? authOutcome = null;
 
         try
         {
-            signedInAccountId = Platform switch
+            authOutcome = Platform switch
             {
                 StreamingPlatform.Twitch => await AuthorizeTwitchCombinedAsync().ConfigureAwait(true),
                 StreamingPlatform.YouTube => await AuthorizeYouTubeCombinedAsync().ConfigureAwait(true),
@@ -422,7 +423,7 @@ public sealed partial class MultistreamChannelWizardDialogViewModel : Observable
             IsBusy = false;
         }
 
-        if (string.IsNullOrWhiteSpace(signedInAccountId))
+        if (authOutcome is not { } saved || string.IsNullOrWhiteSpace(saved.AccountId))
         {
             return;
         }
@@ -430,20 +431,27 @@ public sealed partial class MultistreamChannelWizardDialogViewModel : Observable
         HasSavedChanges = true;
         RefreshAccountOptions(selectDefaultBotIfEmpty: false);
         var botMatch = BotAccountOptions.FirstOrDefault(option =>
-            !option.IsUnassigned && string.Equals(option.AccountId, signedInAccountId, StringComparison.Ordinal));
+            !option.IsUnassigned && string.Equals(option.AccountId, saved.AccountId, StringComparison.Ordinal));
         if (botMatch is not null)
         {
             SelectedBotAccount = botMatch;
         }
 
         var broadcasterMatch = BroadcasterAccountOptions.FirstOrDefault(option =>
-            !option.IsUnassigned && string.Equals(option.AccountId, signedInAccountId, StringComparison.Ordinal));
+            !option.IsUnassigned && string.Equals(option.AccountId, saved.AccountId, StringComparison.Ordinal));
         if (broadcasterMatch is not null && (SelectedBroadcasterAccount is null || SelectedBroadcasterAccount.IsUnassigned))
         {
             SelectedBroadcasterAccount = broadcasterMatch;
         }
 
-        SetStepNotice("Аккаунт подключён и выбран для канала.", StatusSeverity.Success);
+        if (saved.Persisted)
+        {
+            SetStepNotice("Аккаунт подключён и выбран для канала.", StatusSeverity.Success);
+        }
+        else
+        {
+            SetStepNotice("Аккаунт действует до перезапуска, но не подтверждён на диске.", StatusSeverity.Warning);
+        }
     }
 
     private async Task ResolveChannelAndAdvanceAsync()
@@ -508,7 +516,7 @@ public sealed partial class MultistreamChannelWizardDialogViewModel : Observable
         var supportsBackgroundMonitoring = _adapters.TryGetValue(Platform, out var adapter)
             && adapter.Capabilities.HasFlag(PlatformCapabilities.BackgroundStreamMonitoring);
 
-        _catalogStore.Mutate(settings =>
+        var written = _catalogStore.Mutate(settings =>
         {
             var existing = settings.Channels.FirstOrDefault(c =>
                 c.Platform == Platform && string.Equals(c.ChannelId, TargetChannelId, StringComparison.Ordinal));
@@ -570,6 +578,7 @@ public sealed partial class MultistreamChannelWizardDialogViewModel : Observable
             }
         });
 
+        _catalogPersisted = written && _catalogStore.VerifyPersisted();
         HasSavedChanges = true;
     }
 
@@ -634,7 +643,7 @@ public sealed partial class MultistreamChannelWizardDialogViewModel : Observable
                 verifiedBroadcasterId = broadcasterItem.VerifiedSubjectId;
             }
 
-            _catalogStore.Mutate(settings =>
+            var written = _catalogStore.Mutate(settings =>
             {
                 var entry = settings.Channels.FirstOrDefault(c =>
                     c.Platform == Platform && string.Equals(c.ChannelId, TargetChannelId, StringComparison.Ordinal));
@@ -647,6 +656,7 @@ public sealed partial class MultistreamChannelWizardDialogViewModel : Observable
                 entry.BroadcasterVerifiedSubjectId = verifiedBroadcasterId;
             });
 
+            _catalogPersisted = _catalogPersisted && written && _catalogStore.VerifyPersisted();
             ApplyVerificationSummary();
         }
         finally
@@ -705,7 +715,15 @@ public sealed partial class MultistreamChannelWizardDialogViewModel : Observable
         {
             VerificationSummarySeverity = StatusSeverity.Error;
             VerificationSummaryHeading = "Часть проверок не пройдена";
-            VerificationSummaryMessage = "Изменения сохранены, но доступ подтверждён не полностью. Исправьте причину ниже и нажмите «Повторить проверку».";
+            VerificationSummaryMessage = _catalogPersisted
+                ? "Изменения сохранены, но доступ подтверждён не полностью. Исправьте причину ниже и нажмите «Повторить проверку»."
+                : "Изменения применены до перезапуска, но записать файл каталога не удалось и доступ подтверждён не полностью. Исправьте причину ниже и нажмите «Повторить проверку».";
+        }
+        else if (!_catalogPersisted)
+        {
+            VerificationSummarySeverity = StatusSeverity.Warning;
+            VerificationSummaryHeading = "Применено до перезапуска";
+            VerificationSummaryMessage = $"Доступ к каналу «{TargetChannelDisplayName}» подтверждён, но записать файл каталога на диск не удалось.";
         }
         else
         {
@@ -788,7 +806,7 @@ public sealed partial class MultistreamChannelWizardDialogViewModel : Observable
         return [.. accounts.Where(account => account.Key.Platform == platform)];
     }
 
-    private async Task<string?> AuthorizeTwitchCombinedAsync()
+    private async Task<AuthorizationSaveOutcome?> AuthorizeTwitchCombinedAsync()
     {
         if (_twitchOAuth is null || _shellLauncher is null)
         {
@@ -853,17 +871,19 @@ public sealed partial class MultistreamChannelWizardDialogViewModel : Observable
             return null;
         }
 
-        _twitchAccountsStore.UpsertContexts(entries);
+        var written = _twitchAccountsStore.UpsertContexts(entries);
         foreach (var saved in entries)
         {
             _twitchOAuth.ResetRetryState(saved.Role, saved.ContextId);
             PublishAuthorizationRefreshed(StreamingPlatform.Twitch, saved.Role, saved.ContextId);
         }
 
-        return userId;
+        var persisted = written && entries.All(entry =>
+            _twitchAccountsStore.VerifyPersistedAuthorization(entry.Role, entry.ContextId, userId));
+        return new(userId, persisted);
     }
 
-    private async Task<string?> AuthorizeYouTubeCombinedAsync()
+    private async Task<AuthorizationSaveOutcome?> AuthorizeYouTubeCombinedAsync()
     {
         if (_youtubeOAuth is null || _youtubeSettingsStore is null || _shellLauncher is null)
         {
@@ -910,15 +930,19 @@ public sealed partial class MultistreamChannelWizardDialogViewModel : Observable
             return null;
         }
 
-        _youtubeAccountsStore.UpsertContexts(entries);
+        var written = _youtubeAccountsStore.UpsertContexts(entries);
         foreach (var saved in entries)
         {
             _youtubeOAuth.ResetRetryState(saved.Role, saved.ContextId);
             PublishAuthorizationRefreshed(StreamingPlatform.YouTube, saved.Role, saved.ContextId);
         }
 
-        return channelId;
+        var persisted = written && entries.All(entry =>
+            _youtubeAccountsStore.VerifyPersistedAuthorization(entry.Role, entry.ContextId, channelId));
+        return new(channelId, persisted);
     }
+
+    private readonly record struct AuthorizationSaveOutcome(string AccountId, bool Persisted);
 
     private string ResolveContextForSave(StreamingPlatform platform, PlatformAuthRole role, string accountId)
     {
