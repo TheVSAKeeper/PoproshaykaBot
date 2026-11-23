@@ -33,7 +33,8 @@ public sealed class BotDiagnosticsBundleSource(
     ActiveBroadcastStore? activeBroadcastStore = null,
     PollHistoryStore? pollHistoryStore = null,
     Func<string?>? webView2VersionProvider = null,
-    Func<IReadOnlyList<DisplayMonitorInfo>>? displayMonitorProvider = null) : IDiagnosticsBundleSource
+    Func<IReadOnlyList<DisplayMonitorInfo>>? displayMonitorProvider = null,
+    UiSettingsWriteGuard? uiSettingsWriteGuard = null) : IDiagnosticsBundleSource
 {
     private const int MaxBindingErrorLines = 30;
     private const int MaxBindingMessageLength = 240;
@@ -200,6 +201,15 @@ public sealed class BotDiagnosticsBundleSource(
         if (settingsWriteGate is not null)
         {
             builder.AppendLine($"Гейт записи настроек: {(settingsWriteGate.HasRevoked ? "есть заблокированные файлы" : "свободен")}");
+        }
+
+        if (uiSettingsWriteGuard is not null)
+        {
+            var uiGuard = uiSettingsWriteGuard.CaptureStatus();
+            var state = uiGuard.IsRevoked
+                ? "заблокирован до перезапуска"
+                : uiGuard.IsSuspended ? "приостановлен" : "свободен";
+            builder.AppendLine($"Гейт записи настроек UI: {state}, удержано ключей {uiGuard.HeldKeyCount}");
         }
 
         if (userStatisticsLoader is not null)

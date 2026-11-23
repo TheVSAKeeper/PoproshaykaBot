@@ -10,20 +10,21 @@ public sealed class OnboardingWizardLauncher(
     IServiceProvider services,
     ILogger<OnboardingWizardLauncher> logger) : IOnboardingWizardLauncher
 {
-    private bool _isOpen;
+    private int _isOpen;
 
     public event EventHandler? Closed;
 
     public bool HasBeenShown { get; private set; }
 
+    public bool IsOpen => Volatile.Read(ref _isOpen) != 0;
+
     public void Show()
     {
-        if (_isOpen)
+        if (Interlocked.CompareExchange(ref _isOpen, 1, 0) != 0)
         {
             return;
         }
 
-        _isOpen = true;
         HasBeenShown = true;
 
         try
@@ -44,7 +45,7 @@ public sealed class OnboardingWizardLauncher(
         }
         finally
         {
-            _isOpen = false;
+            Interlocked.Exchange(ref _isOpen, 0);
             Closed?.Invoke(this, EventArgs.Empty);
         }
     }

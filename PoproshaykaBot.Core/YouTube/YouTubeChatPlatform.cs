@@ -100,6 +100,24 @@ public sealed class YouTubeChatPlatform : IChatPlatform
     {
         get
         {
+            if (_channelCatalogStore?.GetActiveChannel(Id) is { } activeEntry)
+            {
+                if (!string.IsNullOrWhiteSpace(activeEntry.Handle))
+                {
+                    return activeEntry.Handle.Trim();
+                }
+
+                if (!string.IsNullOrWhiteSpace(activeEntry.DisplayName))
+                {
+                    return activeEntry.DisplayName.Trim();
+                }
+
+                if (!string.IsNullOrWhiteSpace(activeEntry.ChannelId))
+                {
+                    return activeEntry.ChannelId.Trim();
+                }
+            }
+
             var channel = _settingsStore.Load().Channel;
             if (!string.IsNullOrWhiteSpace(channel))
             {

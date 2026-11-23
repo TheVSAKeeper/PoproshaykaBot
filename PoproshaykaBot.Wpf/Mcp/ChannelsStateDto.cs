@@ -7,7 +7,8 @@ namespace PoproshaykaBot.Wpf.Mcp;
 public sealed record ChannelsStateDto(
     IReadOnlyList<ChannelsStateDto.PlatformRoutingDto> Platforms,
     IReadOnlyList<ChannelsStateDto.ChannelEntryDto> Channels,
-    IReadOnlyList<ChannelsStateDto.ChannelGroupDto> Groups)
+    IReadOnlyList<ChannelsStateDto.ChannelGroupDto> Groups,
+    IReadOnlyList<ChannelsStateDto.AutoDiscoverPromptDto>? ActiveAutoDiscoverPrompts = null)
 {
     public sealed record PlatformRoutingDto(
         StreamingPlatform Platform,
@@ -50,4 +51,19 @@ public sealed record ChannelsStateDto(
         string Id,
         string Name,
         IReadOnlyList<ChannelGroupMemberDto> Channels);
+
+    public sealed record AutoDiscoverCandidateDto(
+        StreamingPlatform Platform,
+        string ChannelId,
+        string ChannelDisplayName,
+        string StreamKey,
+        string? StreamTitle,
+        DateTimeOffset StartedAtUtc,
+        DateTimeOffset DetectedAtUtc);
+
+    public sealed record AutoDiscoverPromptDto(
+        StreamingPlatform Platform,
+        string? CurrentActiveChannelId,
+        string? CurrentActiveDisplayName,
+        IReadOnlyList<AutoDiscoverCandidateDto> Candidates);
 }

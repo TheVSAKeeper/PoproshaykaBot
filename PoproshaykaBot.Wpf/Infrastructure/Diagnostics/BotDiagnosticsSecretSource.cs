@@ -9,7 +9,7 @@ public sealed class BotDiagnosticsSecretSource(
     ILogger<BotDiagnosticsSecretSource> logger) : IDiagnosticsSecretSource
 {
     private static readonly string[] BotKeyNames =
-        ["clientsecret", "client_secret", "accesstoken", "access_token", "refreshtoken", "refresh_token", "password"];
+        ["clientsecret", "client_secret", "accesstoken", "access_token", "refreshtoken", "refresh_token", "password", "wpf.mcp.token", "x-keepshell-token"];
 
     public DiagnosticsSecretRules Collect()
     {

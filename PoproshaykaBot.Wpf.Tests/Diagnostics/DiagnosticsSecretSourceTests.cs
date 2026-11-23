@@ -1,4 +1,6 @@
 ﻿using KeepShell.Diagnostics;
+using KeepShell.Mcp;
+using KeepShell.Testing;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using PoproshaykaBot.Core.Debugging;
@@ -132,6 +134,45 @@ public class DiagnosticsSecretSourceTests
             Assert.That(providerSources, Has.Some.EqualTo("настройки OBS"));
             Assert.That(providerSources, Has.Some.StartsWith("токены роли"));
             Assert.That(providerSources, Has.Some.StartsWith("токены YouTube роли"));
+        }
+    }
+
+    [Test]
+    public void McpPreferences_SecretProvider_RedactsBothPersistedAndRuntimeOverrideTokens()
+    {
+        const string persistedToken = "mcp-persisted-secret-0123456789ab";
+        const string runtimeToken = "mcp-runtime-override-fedcba987654";
+
+        var options = new McpServerOptions
+        {
+            ServerName = "poproshaykabot",
+            AppName = "PoproshaykaBot",
+            AppVersion = "3.1.0.15",
+            DefaultPort = 7656,
+            ShotsDirectory = _directory,
+        };
+        var settings = new MemorySettings();
+        var preferences = new McpPreferences(settings, options, isElevated: false)
+        {
+            Token = persistedToken,
+        };
+        preferences.ApplyRuntimeOverrides(token: runtimeToken);
+
+        ISecretValueProvider mcpProvider = new DelegateSecretValueProvider(
+            "настройки MCP",
+            () => [preferences.Token, preferences.EffectiveToken]);
+
+        var source = new BotDiagnosticsSecretSource([mcpProvider], NullLogger<BotDiagnosticsSecretSource>.Instance);
+        var secrets = new DiagnosticsSecrets(DiagnosticsSecretRules.Merge([DiagnosticsSecretRules.Common, source.Collect()]));
+
+        var redacted = secrets.Redact(
+            $"persisted={persistedToken}; runtime={runtimeToken}; note=сохранить-соседний-текст");
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(redacted, Does.Not.Contain(persistedToken));
+            Assert.That(redacted, Does.Not.Contain(runtimeToken));
+            Assert.That(redacted, Does.Contain("сохранить-соседний-текст"));
         }
     }
 

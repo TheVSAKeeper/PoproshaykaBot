@@ -150,6 +150,42 @@ public sealed class ChatDisplayStoreTests
             "Масштаб, отличный от подставленного по умолчанию, выбрал пользователь – запрет на него не распространяется.");
     }
 
+    [Test]
+    public void CaptureStatus_отражает_отказы_чтения_масштаба_и_блокираторов()
+    {
+        File.WriteAllText(_zoomPath, "1.250");
+        File.WriteAllText(_blockersPath, Selectors);
+        var store = Store();
+
+        var initial = store.CaptureStatus();
+
+        ChatDisplayStoreStatus afterZoomFailure;
+        using (Lock(_zoomPath))
+        {
+            store.LoadZoom();
+            afterZoomFailure = store.CaptureStatus();
+        }
+
+        ChatDisplayStoreStatus afterBothFailures;
+        using (Lock(_blockersPath))
+        {
+            store.TryLoadBlockersText(out _);
+            afterBothFailures = store.CaptureStatus();
+        }
+
+        store.LoadZoom();
+        store.TryLoadBlockersText(out _);
+        var recovered = store.CaptureStatus();
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(initial, Is.EqualTo(new ChatDisplayStoreStatus(false, false)));
+            Assert.That(afterZoomFailure, Is.EqualTo(new ChatDisplayStoreStatus(true, false)));
+            Assert.That(afterBothFailures, Is.EqualTo(new ChatDisplayStoreStatus(true, true)));
+            Assert.That(recovered, Is.EqualTo(new ChatDisplayStoreStatus(false, false)));
+        }
+    }
+
     private static FileStream Lock(string path)
     {
         return new(path, FileMode.Open, FileAccess.ReadWrite, FileShare.None);

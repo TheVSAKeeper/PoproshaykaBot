@@ -2,6 +2,11 @@
 
 namespace PoproshaykaBot.Core.Settings.Stores;
 
+public sealed record SettingsWriteGateStatus(
+    bool IsExternalWriteActive,
+    bool ExternalWriteAbandoned,
+    IReadOnlyList<string> RevokedFileNames);
+
 public sealed class SettingsWriteGate(ILogger<SettingsWriteGate>? logger = null)
 {
     private readonly HashSet<string> _revoked = new(StringComparer.OrdinalIgnoreCase);
@@ -18,6 +23,18 @@ public sealed class SettingsWriteGate(ILogger<SettingsWriteGate>? logger = null)
             {
                 return _externalWriteDepth > 0 || _externalWriteAbandoned || _revoked.Count > 0;
             }
+        }
+    }
+
+    public SettingsWriteGateStatus CaptureStatus()
+    {
+        lock (_syncLock)
+        {
+            string[] revoked = _revoked.Count == 0
+                ? []
+                : [.. _revoked.Order(StringComparer.OrdinalIgnoreCase)];
+
+            return new(_externalWriteDepth > 0, _externalWriteAbandoned, revoked);
         }
     }
 

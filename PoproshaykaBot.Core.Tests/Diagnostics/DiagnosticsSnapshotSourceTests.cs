@@ -66,20 +66,26 @@ public sealed class DiagnosticsSnapshotSourceTests
             TimeProvider.System,
             NullLogger<ChatIngestionService>.Instance);
 
-        var obs = new ObsIntegrationService(Substitute.For<IObsWebSocketClient>(),
+        _obsClient = Substitute.For<IObsWebSocketClient>();
+        var obs = new ObsIntegrationService(_obsClient,
             settingsManager,
             NullLogger<ObsIntegrationService>.Instance);
+
+        _obsIntegrationStore = new(bus,
+            NullLogger<ObsIntegrationStore>.Instance,
+            Path.Combine(_directory, "obs-integration.json"));
 
         var obsChatStore = new ObsChatStore(bus,
             NullLogger<ObsChatStore>.Instance,
             Path.Combine(_directory, "obs-chat.json"));
 
+        _sseDropMetrics = new();
         _sse = new(settingsManager,
             obsChatStore,
             NullLogger<SseService>.Instance,
             new(),
             new(),
-            new());
+            _sseDropMetrics);
 
         _broadcastScheduler = new(Substitute.For<IBroadcastMessenger>(),
             new DefaultBroadcastPlatformTargetsProvider(),
@@ -151,7 +157,8 @@ public sealed class DiagnosticsSnapshotSourceTests
             _activeBroadcastStore,
             youtubeMonitor,
             youtubeChat,
-            youtubeQuota);
+            youtubeQuota,
+            _obsIntegrationStore);
 
     [TearDown]
     public async Task TearDown()
@@ -161,6 +168,8 @@ public sealed class DiagnosticsSnapshotSourceTests
         await _broadcastScheduler.DisposeAsync();
         await _statisticsAutoSaver.DisposeAsync();
         await _sse.DisposeAsync();
+        await _obsClient.DisposeAsync();
+        _obs.Dispose();
 
         if (Directory.Exists(_directory))
         {
@@ -181,6 +190,9 @@ public sealed class DiagnosticsSnapshotSourceTests
     private IBotConnectionController _botConnection = null!;
     private ChatIngestionService _chatIngestion = null!;
     private ObsIntegrationService _obs = null!;
+    private IObsWebSocketClient _obsClient = null!;
+    private ObsIntegrationStore _obsIntegrationStore = null!;
+    private SseDropMetrics _sseDropMetrics = null!;
     private DiagnosticsSnapshotSource _source = null!;
     private ActiveBroadcastStore _activeBroadcastStore = null!;
 
@@ -197,8 +209,98 @@ public sealed class DiagnosticsSnapshotSourceTests
             BroadcastId = Guid.NewGuid(), StartedAt = now, UpdatedAt = now,
         }), Is.False);
 
-        var status = _source.Capture().Jobs.Single(job => job.Job == ScheduledJob.StatisticsAutoSave);
-        Assert.That(status.LastError, Does.Contain("предыдущий эфир"));
+        var snapshot = _source.Capture();
+        var autoSave = snapshot.Jobs.Single(job => job.Job == ScheduledJob.StatisticsAutoSave);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(snapshot.ActiveBroadcastSaveError, Does.Contain("предыдущий эфир"));
+            Assert.That(autoSave.LastError, Is.Null);
+        });
+    }
+
+    [Test]
+    public async Task Ошибка_черновика_не_затеняет_ошибку_автосохранения_статистики()
+    {
+        var failingUnit = Substitute.For<IPeriodicStatisticsUnit>();
+        failingUnit.PrepareSave(Arg.Any<bool>()).Returns(_ => throw new IOException("диск статистики занят"));
+
+        await using var failingAutoSaver = new StatisticsAutoSaver(
+            [failingUnit],
+            [],
+            [],
+            NullLogger<StatisticsAutoSaver>.Instance);
+
+        Assert.ThrowsAsync<InvalidOperationException>(() => failingAutoSaver.SaveNowAsync());
+
+        var now = DateTimeOffset.UtcNow;
+        Assert.That(_activeBroadcastStore.TrySave(new()
+        {
+            BroadcastId = Guid.NewGuid(), StartedAt = now, UpdatedAt = now, EndedAt = now,
+        }), Is.True);
+        Assert.That(_activeBroadcastStore.TrySave(new()
+        {
+            BroadcastId = Guid.NewGuid(), StartedAt = now, UpdatedAt = now,
+        }), Is.False);
+
+        var source = new DiagnosticsSnapshotSource(
+            _memoryUsageSink,
+            _metrics,
+            _eventSubBot,
+            _eventSubBroadcaster,
+            _botConnection,
+            _targetChannelProvider,
+            _chatIngestion,
+            _chatSender,
+            _obs,
+            _sse,
+            new(),
+            _broadcastScheduler,
+            failingAutoSaver,
+            NullLogger<DiagnosticsSnapshotSource>.Instance,
+            _activeBroadcastStore,
+            obsIntegrationStore: _obsIntegrationStore);
+
+        var snapshot = source.Capture();
+        var autoSave = snapshot.Jobs.Single(job => job.Job == ScheduledJob.StatisticsAutoSave);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(autoSave.LastError, Does.Contain("диск статистики занят"));
+            Assert.That(snapshot.ActiveBroadcastSaveError, Does.Contain("предыдущий эфир"));
+        });
+    }
+
+    [Test]
+    public async Task Снимок_передаёт_потери_клиентов_SSE_активность_рассылки_и_детали_OBS()
+    {
+        _sseDropMetrics.IncrementClientDrops();
+        _sseDropMetrics.IncrementClientDrops();
+
+        _obsIntegrationStore.Save(new()
+        {
+            Enabled = true,
+            Password = "super-secret-password",
+        });
+
+        _obsClient.ConnectAsync(Arg.Any<ObsConnectionOptions>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromException<ObsConnectionSnapshot>(new InvalidOperationException("неверный пароль OBS")));
+
+        await _obs.ConnectAsync(_obsIntegrationStore.Load(), CancellationToken.None);
+
+        var snapshot = _source.Capture();
+        var broadcastJob = snapshot.Jobs.Single(job => job.Job == ScheduledJob.Broadcast);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(snapshot.Sse!.ClientDroppedMessageCount, Is.EqualTo(2));
+            Assert.That(broadcastJob.IsActive, Is.False);
+            Assert.That(broadcastJob.SentCount, Is.Zero);
+            Assert.That(snapshot.Obs!.State, Is.EqualTo(ConnectionState.Failed));
+            Assert.That(snapshot.Obs.IsEnabled, Is.True);
+            Assert.That(snapshot.Obs.ErrorMessage, Is.EqualTo("неверный пароль OBS"));
+            Assert.That(snapshot.Obs.ErrorMessage, Does.Not.Contain("super-secret-password"));
+        });
     }
 
     [Test]

@@ -12,4 +12,5 @@ public sealed record DiagnosticsSnapshot(
     EventBusStatistics? Bus,
     YouTubeMonitoringStatus? YouTubeMonitoring = null,
     YouTubeChatStatus? YouTubeChat = null,
-    YouTubeQuotaStatus? YouTubeQuota = null);
+    YouTubeQuotaStatus? YouTubeQuota = null,
+    string? ActiveBroadcastSaveError = null);

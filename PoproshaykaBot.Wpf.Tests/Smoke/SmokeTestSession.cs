@@ -21,6 +21,9 @@ internal sealed class SmokeTestSession : IDisposable
     private const string AppProjectName = "PoproshaykaBot.Wpf";
     private const string TestProjectName = "PoproshaykaBot.Wpf.Tests";
     private const string LogsDirectoryName = "logs";
+    private const string LogFileSearchPattern = "bot_log_*.log";
+    private const string BindingErrorLogMarker = "Ошибка привязки данных";
+    private const string UnobservedTaskExceptionLogMarker = "Необработанное исключение фоновой задачи";
     private const string MainWindowCaptureFileName = "main-window.png";
     private const uint PrintWindowFullContent = 2;
     private const uint OwnerWindowRelation = 4;
@@ -29,14 +32,23 @@ internal sealed class SmokeTestSession : IDisposable
     private static readonly TimeSpan DefaultWindowAppearTimeout = TimeSpan.FromSeconds(30);
 
     private readonly UiSmokeLock _uiLock;
+    private readonly bool _assertLogHygiene;
+    private bool _disposed;
 
-    private SmokeTestSession(string baseDirectory, FlaUIApplication app, UIA3Automation automation, Window mainWindow, UiSmokeLock uiLock)
+    private SmokeTestSession(
+        string baseDirectory,
+        FlaUIApplication app,
+        UIA3Automation automation,
+        Window mainWindow,
+        UiSmokeLock uiLock,
+        bool assertLogHygiene)
     {
         BaseDirectory = baseDirectory;
         App = app;
         Automation = automation;
         MainWindow = mainWindow;
         _uiLock = uiLock;
+        _assertLogHygiene = assertLogHygiene;
     }
 
     public FlaUIApplication App { get; }
@@ -76,12 +88,29 @@ internal sealed class SmokeTestSession : IDisposable
             var processStartInfo = new ProcessStartInfo
             {
                 FileName = appPath,
-                Arguments = "--ui-smoke",
                 WorkingDirectory = Path.GetDirectoryName(appPath)!,
                 UseShellExecute = false,
             };
 
+            processStartInfo.ArgumentList.Add("--ui-smoke");
+
+            if (options.ExtraArguments is not null)
+            {
+                foreach (var argument in options.ExtraArguments)
+                {
+                    processStartInfo.ArgumentList.Add(argument);
+                }
+            }
+
             processStartInfo.EnvironmentVariables[BaseDirectoryEnvVar] = baseDirectory;
+
+            if (options.EnvironmentOverrides is not null)
+            {
+                foreach (var (key, value) in options.EnvironmentOverrides)
+                {
+                    processStartInfo.EnvironmentVariables[key] = value;
+                }
+            }
 
             automation = new();
             app = FlaUIApplication.Launch(processStartInfo);
@@ -90,7 +119,7 @@ internal sealed class SmokeTestSession : IDisposable
             var mainWindow = WaitForFirstTopLevelWindow(app, automation, timeout)
                              ?? throw new InvalidOperationException($"Не удалось обнаружить ни одного top-level окна процесса в течение {timeout}");
 
-            return new(baseDirectory, app, automation, mainWindow, uiLock);
+            return new(baseDirectory, app, automation, mainWindow, uiLock, options.AssertLogHygiene);
         }
         catch
         {
@@ -137,60 +166,143 @@ internal sealed class SmokeTestSession : IDisposable
         return null;
     }
 
+    public void AssertCleanLogs()
+    {
+        var violations = ScanLogHygieneViolations(BaseDirectory);
+
+        if (violations.Count > 0)
+        {
+            Assert.Fail(FormatLogHygieneFailure(violations));
+        }
+    }
+
     public void Dispose()
     {
-        var diagnosticsDirectory = TestContext.CurrentContext.Result.Outcome.Status == TestStatus.Failed
-            ? TryCreateDiagnosticsDirectory()
-            : null;
-
-        if (diagnosticsDirectory is not null)
+        if (_disposed)
         {
-            TryCaptureMainWindow(diagnosticsDirectory);
+            return;
         }
 
-        try
-        {
-            CloseProcessWindowsGracefully(TimeSpan.FromSeconds(3));
-        }
-        catch
-        {
-            // best-effort, force-kill below regardless
-        }
+        _disposed = true;
+        List<string>? hygieneViolations = null;
 
         try
         {
-            App.Kill();
+            var diagnosticsDirectory = TestContext.CurrentContext.Result.Outcome.Status == TestStatus.Failed
+                ? TryCreateDiagnosticsDirectory()
+                : null;
+
+            if (diagnosticsDirectory is not null)
+            {
+                TryCaptureMainWindow(diagnosticsDirectory);
+            }
+
+            try
+            {
+                CloseProcessWindowsGracefully(TimeSpan.FromSeconds(3));
+            }
+            catch
+            {
+                // best-effort, force-kill below regardless
+            }
+
+            try
+            {
+                if (!TryGetHasExited())
+                {
+                    App.Kill();
+                }
+            }
+            catch
+            {
+                // best-effort cleanup
+            }
+
+            try
+            {
+                App.Dispose();
+            }
+            catch
+            {
+                // best-effort cleanup
+            }
+
+            try
+            {
+                Automation.Dispose();
+            }
+            catch
+            {
+                // best-effort cleanup
+            }
+
+            if (_assertLogHygiene && TestContext.CurrentContext.Result.Outcome.Status == TestStatus.Passed)
+            {
+                hygieneViolations = ScanLogHygieneViolations(BaseDirectory);
+
+                if (hygieneViolations.Count > 0)
+                {
+                    diagnosticsDirectory ??= TryCreateDiagnosticsDirectory();
+                }
+            }
+
+            if (diagnosticsDirectory is not null)
+            {
+                TryCopyLogs(BaseDirectory, diagnosticsDirectory);
+            }
         }
-        catch
+        finally
         {
-            // best-effort cleanup
+            CleanupBaseDirectory(BaseDirectory);
+            _uiLock.Dispose();
         }
 
-        try
+        if (hygieneViolations is { Count: > 0 })
         {
-            App.Dispose();
+            Assert.Fail(FormatLogHygieneFailure(hygieneViolations));
         }
-        catch
+    }
+
+    private static List<string> ScanLogHygieneViolations(string baseDirectory)
+    {
+        var violations = new List<string>();
+
+        if (string.IsNullOrEmpty(baseDirectory))
         {
-            // best-effort cleanup
+            return violations;
         }
 
-        try
+        var logsDirectory = Path.Combine(baseDirectory, LogsDirectoryName);
+
+        if (!Directory.Exists(logsDirectory))
         {
-            Automation.Dispose();
-        }
-        catch
-        {
-            // best-effort cleanup
+            return violations;
         }
 
-        if (diagnosticsDirectory is not null)
+        foreach (var file in Directory.EnumerateFiles(logsDirectory, LogFileSearchPattern).OrderBy(static path => path, StringComparer.OrdinalIgnoreCase))
         {
-            TryCopyLogs(BaseDirectory, diagnosticsDirectory);
+            using var stream = new FileStream(file, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+            using var reader = new StreamReader(stream, Encoding.UTF8);
+            var lineNumber = 0;
+
+            while (reader.ReadLine() is { } line)
+            {
+                lineNumber++;
+
+                if (line.Contains(BindingErrorLogMarker, StringComparison.Ordinal)
+                    || line.Contains(UnobservedTaskExceptionLogMarker, StringComparison.Ordinal))
+                {
+                    violations.Add($"{Path.GetFileName(file)}:{lineNumber}: {line}");
+                }
+            }
         }
 
-        CleanupBaseDirectory(BaseDirectory);
-        _uiLock.Dispose();
+        return violations;
+    }
+
+    private static string FormatLogHygieneFailure(IReadOnlyList<string> violations)
+    {
+        return $"В журнале smoke-сессии обнаружены ошибки привязок или необработанные исключения фоновых задач ({violations.Count}):{Environment.NewLine}{string.Join(Environment.NewLine, violations)}";
     }
 
     private static Window? WaitForFirstTopLevelWindow(FlaUIApplication app, UIA3Automation automation, TimeSpan timeout)
@@ -611,4 +723,10 @@ internal sealed class SmokeTestSessionOptions
     public bool SeedConfiguredSettings { get; init; } = true;
 
     public TimeSpan? WindowAppearTimeout { get; init; }
+
+    public IReadOnlyList<string>? ExtraArguments { get; init; }
+
+    public IReadOnlyDictionary<string, string>? EnvironmentOverrides { get; init; }
+
+    public bool AssertLogHygiene { get; init; } = true;
 }

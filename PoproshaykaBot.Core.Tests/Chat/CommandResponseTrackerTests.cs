@@ -93,4 +93,25 @@ public sealed class CommandResponseTrackerTests
 
         Assert.That(_tracker.TryConsume("msg-1"), Is.Null);
     }
+
+    [Test]
+    public void PendingCount_учитывает_активные_записи_и_сбрасывает_просроченные()
+    {
+        Assert.That(_tracker.PendingCount, Is.Zero);
+
+        _tracker.Expect("msg-1", new("ранг", CommandResponseTarget.Chat));
+        _time.UtcNow += TimeSpan.FromSeconds(30);
+        _tracker.Expect("msg-2", new("донат", CommandResponseTarget.Chat));
+
+        Assert.That(_tracker.PendingCount, Is.EqualTo(2));
+
+        _time.UtcNow += TimeSpan.FromSeconds(35);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(_tracker.PendingCount, Is.EqualTo(1));
+            Assert.That(_tracker.TryConsume("msg-2"), Is.Not.Null);
+            Assert.That(_tracker.PendingCount, Is.Zero);
+        });
+    }
 }

@@ -9,6 +9,7 @@ using PoproshaykaBot.Core.Debugging;
 using PoproshaykaBot.Core.Diagnostics;
 using PoproshaykaBot.Core.Infrastructure;
 using PoproshaykaBot.Core.Infrastructure.Di;
+using PoproshaykaBot.Core.Infrastructure.Diagnostics;
 using PoproshaykaBot.Core.Infrastructure.Events;
 using PoproshaykaBot.Core.Infrastructure.Hosting;
 using PoproshaykaBot.Core.Infrastructure.Logging;
@@ -44,6 +45,7 @@ using Serilog.Debugging;
 using Serilog.Events;
 using Serilog.Extensions.Logging;
 using System.Diagnostics;
+using System.Globalization;
 using System.Windows;
 using System.Windows.Markup;
 using System.Windows.Threading;
@@ -75,6 +77,8 @@ public partial class App : Application
     private string[]? _galleryArgs;
     private GalleryWorkspace? _galleryWorkspace;
     private GalleryArguments? _galleryArguments;
+    private McpStartupOptions _mcpStartupOptions = McpStartupOptions.Empty;
+    private volatile bool _mcpStopFailed;
     private AppExitReason _exitReason = AppExitReason.None;
     private string? _startupErrorDetails;
 
@@ -111,6 +115,17 @@ public partial class App : Application
         IsHeadless = e.Args.Any(arg => string.Equals(arg, "--ui-smoke", StringComparison.OrdinalIgnoreCase));
         DebugChannel = DebugChannelOverride.Parse(e.Args);
         _isFinalizeUpdate = e.Args.Any(arg => string.Equals(arg, UpdateApplier.FinalizeArgument, StringComparison.OrdinalIgnoreCase));
+
+        string? mcpArgumentError = null;
+        try
+        {
+            _mcpStartupOptions = ParseMcpStartupOptions(e.Args);
+        }
+        catch (ArgumentException exception)
+        {
+            mcpArgumentError = exception.Message;
+            _mcpStartupOptions = McpStartupOptions.Empty;
+        }
 
         var galleryIndex = Array.FindIndex(e.Args, static arg => string.Equals(arg, GalleryHost.ArgumentName, StringComparison.OrdinalIgnoreCase));
 
@@ -165,6 +180,21 @@ public partial class App : Application
 
         try
         {
+            if (mcpArgumentError is not null)
+            {
+                HostLog.Error("Некорректные параметры запуска MCP: {Error}", mcpArgumentError);
+                _startupErrorDetails = $"Некорректные параметры запуска MCP: {mcpArgumentError}";
+                _exitReason = AppExitReason.Failed;
+
+                if (!IsHeadless)
+                {
+                    ShowFatalErrorNotice();
+                }
+
+                Shutdown(1);
+                return;
+            }
+
             var uiSettingsPath = AppPaths.SettingsFile("ui-preferences.toml");
             ISettingsStore uiSettings = new SettingsStore(uiSettingsPath);
 
@@ -231,16 +261,17 @@ public partial class App : Application
             using (await BeginStartupPhaseAsync(splash, "Подготовка приложения…"))
             {
                 var services = new ServiceCollection();
-                ConfigureServices(services, coreUiLogSink, uiSettings);
+                ConfigureServices(
+                    services,
+                    coreUiLogSink,
+                    uiSettings,
+                    _loggingOptions!,
+                    _bindingErrors,
+                    IsGallery ? null : _mcpStartupOptions.DiscoveryFilePath);
                 services.AddSingleton(_logging!.Sink);
                 services.AddSingleton(_loggingOptions!);
                 services.AddSingleton(_previousRunState);
                 services.AddSingleton(UnobservedTaskExceptions);
-
-                if (_bindingErrors is not null)
-                {
-                    services.AddSingleton(_bindingErrors);
-                }
 
                 _services = services.BuildServiceProvider(new ServiceProviderOptions
                 {
@@ -304,8 +335,19 @@ public partial class App : Application
 
             splash?.Dispose();
 
-            if (!IsHeadless)
+            if ((!IsHeadless || _mcpStartupOptions.ForceEnable) && !IsGallery)
             {
+                var mcpPreferences = _services.GetRequiredService<McpPreferences>();
+
+                if (_mcpStartupOptions.HasOverrides)
+                {
+                    mcpPreferences.ApplyRuntimeOverrides(
+                        enabled: _mcpStartupOptions.ForceEnable ? true : null,
+                        port: _mcpStartupOptions.Port,
+                        token: _mcpStartupOptions.Token,
+                        allowMutations: _mcpStartupOptions.AllowMutations);
+                }
+
                 _services.GetRequiredService<McpServerHost>().Apply();
             }
 
@@ -359,9 +401,7 @@ public partial class App : Application
             stoppedCleanly = false;
             try
             {
-                _services.GetService<ISettingsStore>()?.Close();
-                Task.Run(StopAllComponents).GetAwaiter().GetResult();
-                stoppedCleanly = true;
+                stoppedCleanly = Task.Run(StopAllComponentsAsync).GetAwaiter().GetResult();
             }
             catch (Exception exception)
             {
@@ -474,11 +514,22 @@ public partial class App : Application
         }
     }
 
-    private static void ConfigureServices(IServiceCollection services, UiLogSink uiLogSink, ISettingsStore uiSettings)
+    private static void ConfigureServices(
+        IServiceCollection services,
+        UiLogSink uiLogSink,
+        ISettingsStore uiSettings,
+        KeepShellLoggingOptions loggingOptions,
+        BindingErrorSink? bindingErrors,
+        string? mcpDiscoveryFile)
     {
         var uiSettingsGuard = new UiSettingsWriteGuard(uiSettings);
         services.AddSingleton(uiSettingsGuard);
         services.AddSingleton<ISettingsStore>(uiSettingsGuard);
+
+        if (bindingErrors is not null)
+        {
+            services.AddSingleton(bindingErrors);
+        }
 
         services
             .AddCoreInfrastructure(uiLogSink, disposeSerilog: false)
@@ -520,6 +571,12 @@ public partial class App : Application
             provider.GetRequiredService<ILogger<DiagnosticsSnapshotPublisher>>()));
 
         services.AddSingleton<IDiagnosticsBundleSource, BotDiagnosticsBundleSource>();
+        services.AddSingleton<ISecretValueProvider>(static provider =>
+            new DelegateSecretValueProvider("настройки MCP", () =>
+            {
+                var preferences = provider.GetRequiredService<McpPreferences>();
+                return [preferences.Token, preferences.EffectiveToken];
+            }));
         services.AddSingleton<IDiagnosticsSecretSource, BotDiagnosticsSecretSource>();
 
         services.AddSingleton<IDiagnosticsCard, MemoryDiagnosticsCardViewModel>();
@@ -530,6 +587,8 @@ public partial class App : Application
         services.AddSingleton<IDiagnosticsCard, QueueDiagnosticsCardViewModel>();
         services.AddSingleton<IDiagnosticsCard, EventBusDiagnosticsCardViewModel>();
 
+        services.AddSingleton<McpConnectNotificationGate>();
+        services.AddSingleton<IMcpConnectNotificationGate>(static provider => provider.GetRequiredService<McpConnectNotificationGate>());
         services.AddSingleton<BotAutomation>();
         services.AddKeepShellMcp<ShellViewModel>(new McpServerOptions
         {
@@ -538,6 +597,9 @@ public partial class App : Application
             AppVersion = AppInfo.Version,
             DefaultPort = 7656,
             ShotsDirectory = AppPaths.Combine("shots"),
+            DiskLogDirectory = loggingOptions.LogsDirectory,
+            DiskLogGlobs = [AppInfo.LogFileGlob],
+            DiscoveryFilePath = mcpDiscoveryFile,
             ToolTypes = [typeof(PoproshaykaBotTools)],
             ConfigureTools = static (provider, tools) => tools.AddSingleton(provider.GetRequiredService<BotAutomation>()),
         });
@@ -662,21 +724,61 @@ public partial class App : Application
         services.AddTransient<OnboardingWizardWindow>();
     }
 
-    private void StopAllComponents()
+    internal async Task StopMcpBeforeExitAsync()
+    {
+        if (IsGallery || _services is null)
+        {
+            return;
+        }
+
+        if (_services.GetService<McpServerHost>() is not { } mcpHost)
+        {
+            return;
+        }
+
+        using var timeout = new CancellationTokenSource(ShutdownDeadlines.SoftDeadline);
+
+        try
+        {
+            await mcpHost.StopAsync(timeout.Token);
+        }
+        catch (OperationCanceledException exception)
+        {
+            HostLog.Warning(exception, "Остановка MCP-сервера перед выходом прервана по таймауту");
+        }
+        catch (Exception exception)
+        {
+            HostLog.Error(exception, "Ошибка остановки MCP-сервера перед выходом");
+        }
+    }
+
+    private async Task<bool> StopAllComponentsAsync()
     {
         using var loggerFactory = new SerilogLoggerFactory(Log.Logger);
-        using var shutdownWatchdog = IsHeadless
-            ? null
-            : new ShutdownWatchdog(loggerFactory.CreateLogger(nameof(ShutdownWatchdog)),
+        var enforceShutdownBounds = !IsHeadless || IsGallery;
+        using var shutdownWatchdog = enforceShutdownBounds
+            ? new ShutdownWatchdog(loggerFactory.CreateLogger(nameof(ShutdownWatchdog)),
                 static () =>
                 {
                     _runStateStore?.MarkFailure(RunStateStatus.ShutdownWatchdog);
                     Log.CloseAndFlush();
                 },
-                ShutdownDeadlines.HardDeadline);
+                ShutdownDeadlines.HardDeadline)
+            : null;
 
-        using var shutdownTimeout = IsHeadless ? null : new CancellationTokenSource(ShutdownDeadlines.SoftDeadline);
+        using var shutdownTimeout = enforceShutdownBounds
+            ? new CancellationTokenSource(ShutdownDeadlines.SoftDeadline)
+            : null;
         var shutdownToken = shutdownTimeout?.Token ?? CancellationToken.None;
+
+        var mcpStoppedCleanly = true;
+
+        if (!IsGallery)
+        {
+            mcpStoppedCleanly = await StopMcpServerAsync(shutdownToken);
+        }
+
+        _services!.GetService<ISettingsStore>()?.Close();
 
         if (_kestrelServer is not null)
         {
@@ -691,12 +793,212 @@ public partial class App : Application
 
         if (_appLifetime is not null)
         {
-            StopAppLifetimeAsync(_appLifetime, shutdownToken).GetAwaiter().GetResult();
+            await StopAppLifetimeAsync(_appLifetime, shutdownToken);
         }
 
         _services!.GetService<StatisticsPreload>()?.Stop(shutdownToken);
 
-        _services!.DisposeAsync().AsTask().GetAwaiter().GetResult();
+        await _services!.DisposeAsync();
+
+        return mcpStoppedCleanly && !_mcpStopFailed;
+    }
+
+    private async Task<bool> StopMcpServerAsync(CancellationToken cancellationToken)
+    {
+        if (_services?.GetService<McpServerHost>() is not { } mcpHost)
+        {
+            return true;
+        }
+
+        try
+        {
+            await mcpHost.StopAsync(cancellationToken);
+            return true;
+        }
+        catch (OperationCanceledException exception)
+        {
+            _mcpStopFailed = true;
+            HostLog.Warning(exception, "Остановка MCP-сервера прервана по таймауту завершения");
+            return false;
+        }
+        catch (Exception exception)
+        {
+            _mcpStopFailed = true;
+            HostLog.Error(exception, "Ошибка остановки MCP-сервера");
+            return false;
+        }
+    }
+
+    internal sealed record McpStartupOptions(
+        bool ForceEnable,
+        int? Port,
+        string? Token,
+        bool? AllowMutations,
+        string? DiscoveryFilePath)
+    {
+        public static readonly McpStartupOptions Empty = new(false, null, null, null, null);
+
+        public bool HasOverrides => ForceEnable || Port.HasValue || Token is not null || AllowMutations.HasValue;
+    }
+
+    internal static McpStartupOptions ParseMcpStartupOptions(
+        IReadOnlyList<string> args,
+        Func<string, string?>? readEnvironment = null)
+    {
+        readEnvironment ??= Environment.GetEnvironmentVariable;
+
+        var forceEnable = ParseEnvFlag(readEnvironment("POPROSHAYKA_MCP_ENABLE")) == true;
+        var port = ParseMcpPort(readEnvironment("POPROSHAYKA_MCP_PORT"));
+        var token = NormalizeOptionValue(readEnvironment("POPROSHAYKA_MCP_TOKEN"));
+        var allowMutations = ParseEnvFlag(readEnvironment("POPROSHAYKA_MCP_ALLOW_MUTATIONS"));
+        var discoveryFile = NormalizeOptionValue(readEnvironment("POPROSHAYKA_MCP_DISCOVERY_FILE"));
+
+        var index = 0;
+
+        while (index < args.Count)
+        {
+            var arg = args[index];
+
+            if (string.Equals(arg, "--enable-mcp", StringComparison.OrdinalIgnoreCase))
+            {
+                forceEnable = true;
+                index++;
+                continue;
+            }
+
+            if (string.Equals(arg, "--mcp-allow-mutations", StringComparison.OrdinalIgnoreCase))
+            {
+                allowMutations = true;
+                index++;
+                continue;
+            }
+
+            if (TryReadInlineOption(arg, "--mcp-allow-mutations=", out var allowMutationsValue))
+            {
+                allowMutations = ParseEnvFlag(allowMutationsValue)
+                    ?? throw new ArgumentException(
+                        $"Недопустимое значение параметра --mcp-allow-mutations: «{allowMutationsValue}». Ожидается true/false или 1/0.");
+
+                index++;
+                continue;
+            }
+
+            if (TryReadOptionValue(args, ref index, "--mcp-port", out var portValue))
+            {
+                port = ParseMcpPort(portValue)
+                    ?? throw new ArgumentException(
+                        $"Недопустимое значение параметра --mcp-port: «{portValue}». Ожидается 0 или целое число от {McpPreferences.PortMin} до {McpPreferences.PortMax}.");
+
+                index++;
+                continue;
+            }
+
+            if (TryReadOptionValue(args, ref index, "--mcp-token", out var tokenValue))
+            {
+                token = NormalizeOptionValue(tokenValue)
+                    ?? throw new ArgumentException("Параметр --mcp-token требует непустое значение.");
+
+                index++;
+                continue;
+            }
+
+            if (TryReadOptionValue(args, ref index, "--mcp-discovery-file", out var discoveryValue))
+            {
+                discoveryFile = NormalizeOptionValue(discoveryValue)
+                    ?? throw new ArgumentException("Параметр --mcp-discovery-file требует путь к файлу.");
+
+                index++;
+                continue;
+            }
+
+            index++;
+        }
+
+        return new(forceEnable, port, token, allowMutations, discoveryFile);
+    }
+
+    private static bool? ParseEnvFlag(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return null;
+        }
+
+        var trimmed = value.Trim();
+
+        if (string.Equals(trimmed, "1", StringComparison.Ordinal)
+            || string.Equals(trimmed, "true", StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        if (string.Equals(trimmed, "0", StringComparison.Ordinal)
+            || string.Equals(trimmed, "false", StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        return null;
+    }
+
+    private static int? ParseMcpPort(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return null;
+        }
+
+        if (int.TryParse(value.Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsed)
+            && (parsed == 0 || (parsed >= McpPreferences.PortMin && parsed <= McpPreferences.PortMax)))
+        {
+            return parsed;
+        }
+
+        return null;
+    }
+
+    private static string? NormalizeOptionValue(string? value)
+    {
+        return string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+    }
+
+    private static bool TryReadInlineOption(string arg, string prefix, out string? value)
+    {
+        if (arg.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+        {
+            value = arg[prefix.Length..];
+            return true;
+        }
+
+        value = null;
+        return false;
+    }
+
+    private static bool TryReadOptionValue(IReadOnlyList<string> args, ref int index, string name, out string? value)
+    {
+        var arg = args[index];
+
+        if (string.Equals(arg, name, StringComparison.OrdinalIgnoreCase))
+        {
+            if (index + 1 >= args.Count || args[index + 1].StartsWith("--", StringComparison.Ordinal))
+            {
+                throw new ArgumentException($"Параметр {name} требует значение.");
+            }
+
+            value = args[++index];
+            return true;
+        }
+
+        var prefix = name + "=";
+
+        if (arg.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+        {
+            value = arg[prefix.Length..];
+            return true;
+        }
+
+        value = null;
+        return false;
     }
 
     public static TimeSpan ComputeStartupElapsed(long startTimestamp, TimeSpan excludedWait)

@@ -7,6 +7,7 @@ using PoproshaykaBot.Core.Infrastructure.Hosting;
 using PoproshaykaBot.Core.Obs;
 using PoproshaykaBot.Core.Platforms;
 using PoproshaykaBot.Core.Server;
+using PoproshaykaBot.Core.Settings.Stores;
 using PoproshaykaBot.Core.Statistics;
 using PoproshaykaBot.Core.Streaming;
 using PoproshaykaBot.Core.Twitch;
@@ -36,7 +37,8 @@ public sealed class DiagnosticsSnapshotSource(
     ActiveBroadcastStore? activeBroadcastStore = null,
     IYouTubeMonitorDiagnostics? youtubeMonitor = null,
     IYouTubeChatDiagnostics? youtubeChat = null,
-    IYouTubeQuotaGovernor? youtubeQuota = null)
+    IYouTubeQuotaGovernor? youtubeQuota = null,
+    ObsIntegrationStore? obsIntegrationStore = null)
 {
     public DiagnosticsSnapshot Capture()
     {
@@ -67,7 +69,8 @@ public sealed class DiagnosticsSnapshotSource(
             Read(nameof(EventBusStatistics), eventBusMetrics.Snapshot),
             youtubeMonitor is null ? null : Read(nameof(YouTubeMonitoringStatus), youtubeMonitor.CaptureDiagnostics),
             youtubeChat is null ? null : Read(nameof(YouTubeChatStatus), youtubeChat.CaptureDiagnostics),
-            youtubeQuota is null ? null : Read(nameof(YouTubeQuotaStatus), youtubeQuota.CaptureDiagnostics));
+            youtubeQuota is null ? null : Read(nameof(YouTubeQuotaStatus), youtubeQuota.CaptureDiagnostics),
+            activeBroadcastStore is null ? null : Read(nameof(ActiveBroadcastStore), () => activeBroadcastStore.LastSaveError));
     }
 
     private static ConnectionState ToConnectionState(StreamMonitoringStatus? status)
@@ -97,7 +100,7 @@ public sealed class DiagnosticsSnapshotSource(
         return Read($"EventSub ({host.Role})", () => CaptureEventSub(host));
     }
 
-    private T? Read<T>(string source, Func<T> capture)
+    private T? Read<T>(string source, Func<T?> capture)
         where T : class
     {
         try
@@ -121,17 +124,24 @@ public sealed class DiagnosticsSnapshotSource(
 
     private ObsConnectionStatus CaptureObs()
     {
-        return new(ResolveObsState(), obs.LastExchangeAt);
+        var current = obs.CurrentStatus;
+        var isEnabled = obsIntegrationStore?.Load().Enabled;
+        return new(
+            ResolveObsState(current),
+            obs.LastExchangeAt,
+            isEnabled,
+            current.ObsWebSocketVersion,
+            current.ErrorMessage);
     }
 
-    private ConnectionState ResolveObsState()
+    private ConnectionState ResolveObsState(ObsConnectionSnapshot current)
     {
         if (obs.IsConnected)
         {
             return ConnectionState.Connected;
         }
 
-        if (obs.CurrentStatus.ErrorMessage is not null)
+        if (current.ErrorMessage is not null)
         {
             return ConnectionState.Failed;
         }
@@ -141,7 +151,7 @@ public sealed class DiagnosticsSnapshotSource(
 
     private SseStatus CaptureSse()
     {
-        return new(sse.IsRunning, sseClients.Count, sse.DroppedMessageCount);
+        return new(sse.IsRunning, sseClients.Count, sse.DroppedMessageCount, sse.ClientDroppedMessageCount);
     }
 
     private ChatQueueStatus CaptureChatQueue()
@@ -163,7 +173,9 @@ public sealed class DiagnosticsSnapshotSource(
             broadcastScheduler.Interval,
             nextRunAt,
             broadcastScheduler.LastBroadcastAt,
-            broadcastScheduler.LastError);
+            broadcastScheduler.LastError,
+            broadcastScheduler.IsActive,
+            broadcastScheduler.SentMessagesCount);
     }
 
     private ScheduledJobStatus CaptureAutoSaveJob()
@@ -172,6 +184,6 @@ public sealed class DiagnosticsSnapshotSource(
             statisticsAutoSaver.Interval,
             statisticsAutoSaver.NextRunAt,
             statisticsAutoSaver.LastRunAt,
-            activeBroadcastStore?.LastSaveError ?? statisticsAutoSaver.LastError);
+            statisticsAutoSaver.LastError);
     }
 }

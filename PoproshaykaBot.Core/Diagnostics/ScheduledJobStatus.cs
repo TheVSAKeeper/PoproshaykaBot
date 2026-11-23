@@ -5,4 +5,6 @@ public sealed record ScheduledJobStatus(
     TimeSpan? Interval,
     DateTimeOffset? NextRunAt,
     DateTimeOffset? LastRunAt,
-    string? LastError);
+    string? LastError,
+    bool? IsActive = null,
+    int? SentCount = null);

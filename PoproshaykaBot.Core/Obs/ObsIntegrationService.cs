@@ -44,9 +44,9 @@ public sealed class ObsIntegrationService(
 
     private bool _summaryFailureLogged;
 
-    private ObsConnectionSnapshot _currentStatus = ObsConnectionSnapshot.Disconnected();
+    private volatile ObsConnectionSnapshot _currentStatus = ObsConnectionSnapshot.Disconnected();
 
-    private bool _statusObserved;
+    private volatile bool _statusObserved;
 
     public ObsConnectionSnapshot CurrentStatus
     {

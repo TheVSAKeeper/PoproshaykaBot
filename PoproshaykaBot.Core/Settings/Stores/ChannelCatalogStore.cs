@@ -23,7 +23,7 @@ public sealed class ChannelCatalogStore
 
     public ChannelsSettings Load()
     {
-        return _store.Load();
+        return Normalize(_store.Load());
     }
 
     public bool VerifyPersisted() => _store.VerifyPersisted(static (current, persisted) =>

@@ -467,6 +467,49 @@ public sealed class SettingsWriteGateTests
         }
     }
 
+    [Test]
+    public async Task CaptureStatus_отражает_активную_запись_снятые_файлы_и_обрыв()
+    {
+        var gate = new SettingsWriteGate();
+        var initial = gate.CaptureStatus();
+
+        SettingsWriteGateStatus? duringWrite = null;
+        await gate.RunExternalWriteAsync(
+            () =>
+            {
+                duringWrite = gate.CaptureStatus();
+                return Task.FromResult(0);
+            },
+            static _ => ["zeta.json", Path.Combine("dir", "alpha.json")]);
+
+        var afterRestore = gate.CaptureStatus();
+
+        Assert.ThrowsAsync<IOException>(() => gate.RunExternalWriteAsync<int>(
+            static () => throw new IOException("обрыв"),
+            static _ => []));
+
+        var afterAbandon = gate.CaptureStatus();
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(initial.IsExternalWriteActive, Is.False);
+            Assert.That(initial.ExternalWriteAbandoned, Is.False);
+            Assert.That(initial.RevokedFileNames, Is.Empty);
+
+            Assert.That(duringWrite, Is.Not.Null);
+            Assert.That(duringWrite!.IsExternalWriteActive, Is.True);
+            Assert.That(duringWrite.ExternalWriteAbandoned, Is.False);
+
+            Assert.That(afterRestore.IsExternalWriteActive, Is.False);
+            Assert.That(afterRestore.ExternalWriteAbandoned, Is.False);
+            Assert.That(afterRestore.RevokedFileNames, Is.EqualTo(new[] { "alpha.json", "zeta.json" }));
+
+            Assert.That(afterAbandon.IsExternalWriteActive, Is.False);
+            Assert.That(afterAbandon.ExternalWriteAbandoned, Is.True);
+            Assert.That(afterAbandon.RevokedFileNames, Is.EqualTo(new[] { "alpha.json", "zeta.json" }));
+        }
+    }
+
     private static Task ImportAsync(SettingsWriteGate gate, string path, string rewrittenFileName)
     {
         return gate.RunExternalWriteAsync(

@@ -726,6 +726,41 @@ public class YouTubeChatIngestionServiceTests
     }
 
     [Test]
+    public void YouTubeChatPlatform_ConfiguredChannel_Prefers_Active_Catalog_Entry_Over_Legacy_Settings()
+    {
+        var catalog = new ChannelCatalogStore(filePath: Path.Combine(_directory, "channels-configured.json"));
+        var platform = new YouTubeChatPlatform(
+            _streamMonitor, _sessionContext, _streamMonitor, Substitute.For<IPlatformMessenger>(),
+            _settingsStore, _accountsStore, Substitute.For<ITargetChannelProvider>(), channelCatalogStore: catalog);
+
+        Assert.That(platform.ConfiguredChannel, Is.EqualTo(_settingsStore.Load().Channel.Trim()));
+
+        catalog.Save(new()
+        {
+            Channels =
+            [
+                new()
+                {
+                    Platform = StreamingPlatform.YouTube,
+                    ChannelId = "UC_CATALOG_1",
+                    DisplayName = "Catalog Display",
+                    Handle = "@catalogHandle",
+                    IsConfigured = true,
+                },
+            ],
+            Platforms = [new() { Platform = StreamingPlatform.YouTube, ActiveChannelId = "UC_CATALOG_1" }],
+        });
+
+        Assert.That(platform.ConfiguredChannel, Is.EqualTo("@catalogHandle"));
+
+        catalog.Mutate(s => s.Channels[0].Handle = string.Empty);
+        Assert.That(platform.ConfiguredChannel, Is.EqualTo("Catalog Display"));
+
+        catalog.Mutate(s => s.Channels[0].DisplayName = string.Empty);
+        Assert.That(platform.ConfiguredChannel, Is.EqualTo("UC_CATALOG_1"));
+    }
+
+    [Test]
     public async Task Broadcast_Removal_And_Switch_Cancel_Open_Grpc_Stream_And_Block_Stale_Batches()
     {
         var received = new List<RawChatMessageReceived>();

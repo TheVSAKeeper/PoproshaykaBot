@@ -83,30 +83,87 @@ public sealed class ChatCommandProcessor
             .ToList();
     }
 
+    public CommandDryRunResult DryRunInspect(
+        string text,
+        StreamingPlatform platform,
+        bool isBroadcaster = false,
+        bool isModerator = false)
+    {
+        if (!TryParseCommandText(text, out var token, out var args))
+        {
+            return new(
+                CommandDryRunOutcome.NotACommand,
+                false,
+                null,
+                [],
+                null,
+                [],
+                null,
+                null,
+                PlatformCapabilities.None,
+                false,
+                false,
+                false,
+                false,
+                "Сообщение не начинается с префикса команды или не содержит имени команды.");
+        }
+
+        if (!_tokenToCommand.TryGetValue(token, out var command))
+        {
+            return new(
+                CommandDryRunOutcome.UnknownCommand,
+                false,
+                token,
+                args,
+                null,
+                [],
+                null,
+                null,
+                PlatformCapabilities.None,
+                false,
+                false,
+                false,
+                false,
+                $"Команда «{token}» не найдена.");
+        }
+
+        var settings = _commandSettingsStore.Load();
+        var responseTarget = settings.ResolveResponseTarget(command.Canonical);
+
+        var probeContext = new CommandContext
+        {
+            Platform = platform,
+            Arguments = args,
+            IsBroadcaster = isBroadcaster,
+            IsModerator = isModerator,
+            RecordsUserData = false,
+        };
+
+        var eligibility = EvaluateEligibility(command, settings, probeContext);
+
+        return new(
+            eligibility.Outcome,
+            eligibility.Outcome == CommandDryRunOutcome.WouldExecute,
+            token,
+            args,
+            command.Canonical,
+            command.Aliases.ToArray(),
+            responseTarget,
+            eligibility.RequiredLevel,
+            command.RequiredCapabilities,
+            eligibility.IsEnabled,
+            eligibility.HasCapabilities,
+            eligibility.AccessAllowed,
+            eligibility.CanExecute,
+            eligibility.Reason);
+    }
+
     public async Task<ChatCommandResult> TryProcessAsync(string messageText, CommandContext context, CancellationToken cancellationToken)
     {
-        if (string.IsNullOrWhiteSpace(messageText))
+        if (!TryParseCommandText(messageText, out var token, out var args))
         {
             return ChatCommandResult.NotHandled;
         }
-
-        var trimmed = messageText.Trim();
-
-        if (!trimmed.StartsWith(Prefix, StringComparison.Ordinal))
-        {
-            return ChatCommandResult.NotHandled;
-        }
-
-        var afterPrefix = trimmed[Prefix.Length..].Trim();
-
-        if (string.IsNullOrEmpty(afterPrefix))
-        {
-            return ChatCommandResult.NotHandled;
-        }
-
-        var spaceIdx = afterPrefix.IndexOf(' ');
-        var token = spaceIdx >= 0 ? afterPrefix[..spaceIdx] : afterPrefix;
-        var argsString = spaceIdx >= 0 ? afterPrefix[(spaceIdx + 1)..] : string.Empty;
 
         if (!_tokenToCommand.TryGetValue(token, out var command))
         {
@@ -115,29 +172,6 @@ public sealed class ChatCommandProcessor
         }
 
         var settings = _commandSettingsStore.Load();
-
-        if (!settings.IsEnabled(command.Canonical, context.Platform))
-        {
-            _logger.LogDebug("Команда {Canonical} выключена в настройках, сообщение от {Username} пропущено",
-                command.Canonical,
-                context.Username);
-
-            return ChatCommandResult.NotHandled;
-        }
-
-        if (!HasRequiredCapabilities(context.Platform, command))
-        {
-            _logger.LogDebug("Команда {Canonical} недоступна на площадке {Platform}: требуются возможности {Capabilities}",
-                command.Canonical,
-                context.Platform,
-                command.RequiredCapabilities);
-
-            return ChatCommandResult.NotHandled;
-        }
-
-        var args = string.IsNullOrWhiteSpace(argsString)
-            ? []
-            : argsString.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
 
         var enrichedContext = new CommandContext
         {
@@ -152,25 +186,38 @@ public sealed class ChatCommandProcessor
             Arguments = args,
             IsBroadcaster = context.IsBroadcaster,
             IsModerator = context.IsModerator,
+            RecordsUserData = context.RecordsUserData,
         };
 
-        var requiredLevel = settings.ResolveAccessLevel(command.Canonical);
+        var eligibility = EvaluateEligibility(command, settings, enrichedContext);
 
-        if (!requiredLevel.Allows(enrichedContext))
+        if (eligibility.Outcome != CommandDryRunOutcome.WouldExecute)
         {
-            _logger.LogDebug("Команда {Canonical} отклонена для {Username}: настройка прав требует {Level}",
-                command.Canonical,
-                enrichedContext.Username,
-                requiredLevel);
-
-            return ChatCommandResult.NotHandled;
-        }
-
-        if (!command.CanExecute(enrichedContext))
-        {
-            _logger.LogDebug("Команда {Canonical} отклонена для {Username}: условия выполнения не соблюдены",
-                command.Canonical,
-                enrichedContext.Username);
+            switch (eligibility.Outcome)
+            {
+                case CommandDryRunOutcome.Disabled:
+                    _logger.LogDebug("Команда {Canonical} выключена в настройках, сообщение от {Username} пропущено",
+                        command.Canonical,
+                        enrichedContext.Username);
+                    break;
+                case CommandDryRunOutcome.MissingCapabilities:
+                    _logger.LogDebug("Команда {Canonical} недоступна на площадке {Platform}: требуются возможности {Capabilities}",
+                        command.Canonical,
+                        enrichedContext.Platform,
+                        command.RequiredCapabilities);
+                    break;
+                case CommandDryRunOutcome.AccessDenied:
+                    _logger.LogDebug("Команда {Canonical} отклонена для {Username}: настройка прав требует {Level}",
+                        command.Canonical,
+                        enrichedContext.Username,
+                        eligibility.RequiredLevel);
+                    break;
+                case CommandDryRunOutcome.CanExecuteDenied:
+                    _logger.LogDebug("Команда {Canonical} отклонена для {Username}: условия выполнения не соблюдены",
+                        command.Canonical,
+                        enrichedContext.Username);
+                    break;
+            }
 
             return ChatCommandResult.NotHandled;
         }
@@ -202,6 +249,114 @@ public sealed class ChatCommandProcessor
             return ChatCommandResult.Failed(command.Canonical);
         }
     }
+
+    private bool TryParseCommandText(string? messageText, out string token, out string[] args)
+    {
+        if (string.IsNullOrWhiteSpace(messageText))
+        {
+            token = string.Empty;
+            args = [];
+            return false;
+        }
+
+        var trimmed = messageText.Trim();
+
+        if (!trimmed.StartsWith(Prefix, StringComparison.Ordinal))
+        {
+            token = string.Empty;
+            args = [];
+            return false;
+        }
+
+        var afterPrefix = trimmed[Prefix.Length..].Trim();
+
+        if (string.IsNullOrEmpty(afterPrefix))
+        {
+            token = string.Empty;
+            args = [];
+            return false;
+        }
+
+        var spaceIdx = afterPrefix.IndexOf(' ');
+        token = spaceIdx >= 0 ? afterPrefix[..spaceIdx] : afterPrefix;
+        var argsString = spaceIdx >= 0 ? afterPrefix[(spaceIdx + 1)..] : string.Empty;
+        args = string.IsNullOrWhiteSpace(argsString)
+            ? []
+            : argsString.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+
+        return true;
+    }
+
+    private CommandEligibility EvaluateEligibility(IChatCommand command, CommandSettings settings, CommandContext context)
+    {
+        var requiredLevel = settings.ResolveAccessLevel(command.Canonical);
+        var isEnabled = settings.IsEnabled(command.Canonical, context.Platform);
+
+        if (!isEnabled)
+        {
+            return new(
+                CommandDryRunOutcome.Disabled,
+                requiredLevel,
+                false,
+                false,
+                false,
+                false,
+                $"Команда «{command.Canonical}» выключена для площадки {context.Platform}.");
+        }
+
+        var hasCapabilities = HasRequiredCapabilities(context.Platform, command);
+
+        if (!hasCapabilities)
+        {
+            return new(
+                CommandDryRunOutcome.MissingCapabilities,
+                requiredLevel,
+                true,
+                false,
+                false,
+                false,
+                $"Площадка {context.Platform} не поддерживает требуемые возможности: {command.RequiredCapabilities}.");
+        }
+
+        var accessAllowed = requiredLevel.Allows(context);
+
+        if (!accessAllowed)
+        {
+            return new(
+                CommandDryRunOutcome.AccessDenied,
+                requiredLevel,
+                true,
+                true,
+                false,
+                false,
+                $"Недостаточно прав: требуется уровень {requiredLevel}.");
+        }
+
+        var canExecute = command.CanExecute(context);
+
+        if (!canExecute)
+        {
+            return new(
+                CommandDryRunOutcome.CanExecuteDenied,
+                requiredLevel,
+                true,
+                true,
+                true,
+                false,
+                $"Условия выполнения команды «{command.Canonical}» не соблюдены.");
+        }
+
+        return new(CommandDryRunOutcome.WouldExecute, requiredLevel, true, true, true, true, null);
+    }
+
+    private readonly record struct CommandEligibility(
+        CommandDryRunOutcome Outcome,
+        CommandAccessLevel RequiredLevel,
+        bool IsEnabled,
+        bool HasCapabilities,
+        bool AccessAllowed,
+        bool CanExecute,
+        string? Reason);
 
     private bool HasRequiredCapabilities(StreamingPlatform platform, IChatCommand command)
     {

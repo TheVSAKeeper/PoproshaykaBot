@@ -15,6 +15,7 @@ using System.Diagnostics.CodeAnalysis;
 using System.IO;
 using System.Net;
 using System.Net.Sockets;
+using System.Text;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
@@ -26,6 +27,7 @@ namespace PoproshaykaBot.Wpf.Tests.Tiles;
 
 [TestFixture]
 [Apartment(ApartmentState.STA)]
+[NonParallelizable]
 public class StreamPreviewTileTests
 {
     private static readonly string[] Dictionaries =
@@ -293,7 +295,7 @@ public class StreamPreviewTileTests
         using var server = new FrameServer();
         using var tile = CreateOnlineTile(server.Template);
 
-        PumpUntil(() => tile.Thumbnail is not null);
+        PumpUntil(() => tile.Thumbnail is not null && !tile.IsLoading);
 
         var first = tile.Thumbnail;
 
@@ -330,7 +332,7 @@ public class StreamPreviewTileTests
         using var tile = new StreamPreviewTileViewModel(new FakePlatformRegistry(stream), bus, NullLogger<StreamPreviewTileViewModel>.Instance, dispatcher);
         var timer = dispatcher.Timers.Single();
 
-        PumpUntil(() => tile.Thumbnail is not null);
+        PumpUntil(() => tile.Thumbnail is not null && !tile.IsLoading);
 
         Assert.Multiple(() =>
         {
@@ -683,9 +685,18 @@ public class StreamPreviewTileTests
 
     private sealed class FrameServer : IDisposable
     {
-        private readonly HttpListener _listener = new();
+        private const int MaxRequestHeaderBytes = 16 * 1024;
+        private static readonly byte[] HeaderTerminator = "\r\n\r\n"u8.ToArray();
+        private static readonly byte[] NotFoundResponse =
+            "HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"u8.ToArray();
+
+        private readonly TcpListener _listener;
+        private readonly CancellationTokenSource _cts = new();
+        private readonly ManualResetEventSlim _stopped = new(false);
         private readonly byte[] _frame;
+        private readonly byte[] _okResponseHeader;
         private readonly List<string> _queries = [];
+        private volatile bool _fail;
 
         public FrameServer()
         {
@@ -699,20 +710,24 @@ public class StreamPreviewTileTests
                 _frame = buffer.ToArray();
             }
 
-            var probe = new TcpListener(IPAddress.Loopback, 0);
-            probe.Start();
-            var port = ((IPEndPoint)probe.LocalEndpoint).Port;
-            probe.Stop();
+            _okResponseHeader = Encoding.ASCII.GetBytes(
+                $"HTTP/1.1 200 OK\r\nContent-Type: image/png\r\nCache-Control: max-age=300\r\nContent-Length: {_frame.Length}\r\nConnection: close\r\n\r\n");
 
-            Template = $"http://localhost:{port}/preview-{{width}}x{{height}}.png";
-            _listener.Prefixes.Add($"http://localhost:{port}/");
+            _listener = new(IPAddress.Loopback, 0);
             _listener.Start();
-            _ = Task.Run(ServeAsync);
+            var port = ((IPEndPoint)_listener.LocalEndpoint).Port;
+
+            Template = $"http://127.0.0.1:{port}/preview-{{width}}x{{height}}.png";
+            _ = Task.Run(() => ServeAsync(_cts.Token));
         }
 
         public string Template { get; }
 
-        public bool Fail { get; set; }
+        public bool Fail
+        {
+            get => _fail;
+            set => _fail = value;
+        }
 
         public IReadOnlyList<string> Queries
         {
@@ -727,41 +742,147 @@ public class StreamPreviewTileTests
 
         public void Dispose()
         {
-            _listener.Close();
+            _cts.Cancel();
+            _listener.Stop();
+            _ = _stopped.Wait(TimeSpan.FromSeconds(5));
+            _listener.Dispose();
+            _stopped.Dispose();
+            _cts.Dispose();
         }
 
-        private async Task ServeAsync()
+        private async Task ServeAsync(CancellationToken cancellationToken)
         {
-            while (_listener.IsListening)
+            try
             {
-                HttpListenerContext context;
-
-                try
+                while (!cancellationToken.IsCancellationRequested)
                 {
-                    context = await _listener.GetContextAsync();
+                    TcpClient client;
+
+                    try
+                    {
+                        client = await _listener.AcceptTcpClientAsync(cancellationToken).ConfigureAwait(false);
+                    }
+                    catch (OperationCanceledException)
+                    {
+                        return;
+                    }
+                    catch (SocketException)
+                    {
+                        return;
+                    }
+                    catch (ObjectDisposedException)
+                    {
+                        return;
+                    }
+
+                    try
+                    {
+                        await HandleClientAsync(client, cancellationToken).ConfigureAwait(false);
+                    }
+                    catch (OperationCanceledException)
+                    {
+                        return;
+                    }
+                    catch (IOException)
+                    {
+                        // client disconnected early
+                    }
+                    catch (SocketException)
+                    {
+                        // client disconnected early
+                    }
+                    catch (ObjectDisposedException)
+                    {
+                        return;
+                    }
                 }
-                catch (Exception ex) when (ex is HttpListenerException or ObjectDisposedException or InvalidOperationException)
+            }
+            finally
+            {
+                _stopped.Set();
+            }
+        }
+
+        private async Task HandleClientAsync(TcpClient client, CancellationToken cancellationToken)
+        {
+            using (client)
+            {
+                await using var stream = client.GetStream();
+                var query = await ReadRequestQueryAsync(stream, cancellationToken).ConfigureAwait(false);
+
+                if (query is null)
                 {
                     return;
                 }
 
                 lock (_queries)
                 {
-                    _queries.Add(context.Request.Url?.Query ?? string.Empty);
+                    _queries.Add(query);
                 }
 
                 if (Fail)
                 {
-                    context.Response.StatusCode = 404;
-                    context.Response.Close();
-                    continue;
+                    await stream.WriteAsync(NotFoundResponse.AsMemory(), cancellationToken).ConfigureAwait(false);
+                }
+                else
+                {
+                    await stream.WriteAsync(_okResponseHeader.AsMemory(), cancellationToken).ConfigureAwait(false);
+                    await stream.WriteAsync(_frame.AsMemory(), cancellationToken).ConfigureAwait(false);
                 }
 
-                context.Response.ContentType = "image/png";
-                context.Response.Headers["Cache-Control"] = "max-age=300";
-                await context.Response.OutputStream.WriteAsync(_frame);
-                context.Response.Close();
+                await stream.FlushAsync(cancellationToken).ConfigureAwait(false);
+
+                try
+                {
+                    client.Client.Shutdown(SocketShutdown.Send);
+                }
+                catch (SocketException)
+                {
+                    // best-effort graceful socket half-close
+                }
             }
+        }
+
+        private static async Task<string?> ReadRequestQueryAsync(NetworkStream stream, CancellationToken cancellationToken)
+        {
+            var buffer = new byte[MaxRequestHeaderBytes];
+            var totalRead = 0;
+
+            while (totalRead < buffer.Length)
+            {
+                var read = await stream.ReadAsync(buffer.AsMemory(totalRead, buffer.Length - totalRead), cancellationToken).ConfigureAwait(false);
+
+                if (read == 0)
+                {
+                    break;
+                }
+
+                totalRead += read;
+
+                if (buffer.AsSpan(0, totalRead).IndexOf(HeaderTerminator) >= 0)
+                {
+                    break;
+                }
+            }
+
+            if (totalRead == 0)
+            {
+                return null;
+            }
+
+            var text = Encoding.ASCII.GetString(buffer, 0, totalRead);
+            var lineEnd = text.IndexOf("\r\n", StringComparison.Ordinal);
+            var requestLine = lineEnd >= 0 ? text[..lineEnd] : text;
+            var parts = requestLine.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+
+            if (parts.Length < 2)
+            {
+                return string.Empty;
+            }
+
+            var target = parts[1];
+            var queryIndex = target.IndexOf('?', StringComparison.Ordinal);
+            return queryIndex >= 0 ? target[queryIndex..] : string.Empty;
         }
     }
 }

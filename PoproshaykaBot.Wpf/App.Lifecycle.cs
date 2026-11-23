@@ -1,4 +1,5 @@
-﻿using PoproshaykaBot.Core.Infrastructure.Hosting;
+﻿using KeepShell.Diagnostics;
+using PoproshaykaBot.Core.Infrastructure.Hosting;
 using PoproshaykaBot.Core.Infrastructure.Runtime;
 using PoproshaykaBot.Core.Server;
 using PoproshaykaBot.Core.Settings;
@@ -120,7 +121,43 @@ public partial class App
     private static void ReportEnvironment(IReadOnlyList<string> arguments, PreviousRunState previousRun)
     {
         using var loggerFactory = new SerilogLoggerFactory(Log.Logger);
-        StartupReport.LogEnvironment(loggerFactory.CreateLogger(nameof(StartupReport)), arguments, AppBuildBadge.StartupLine, previousRun);
+        StartupReport.LogEnvironment(
+            loggerFactory.CreateLogger(nameof(StartupReport)),
+            RedactSensitiveArguments(arguments),
+            AppBuildBadge.StartupLine,
+            previousRun);
+    }
+
+    private static string[] RedactSensitiveArguments(IReadOnlyList<string> arguments)
+    {
+        var result = new string[arguments.Count];
+        var index = 0;
+
+        while (index < arguments.Count)
+        {
+            var arg = arguments[index];
+
+            if (string.Equals(arg, "--mcp-token", StringComparison.OrdinalIgnoreCase))
+            {
+                result[index] = arg;
+                index++;
+
+                if (index < arguments.Count)
+                {
+                    result[index] = DiagnosticsSecrets.Mask;
+                    index++;
+                }
+
+                continue;
+            }
+
+            result[index] = arg.StartsWith("--mcp-token=", StringComparison.OrdinalIgnoreCase)
+                ? "--mcp-token=" + DiagnosticsSecrets.Mask
+                : arg;
+            index++;
+        }
+
+        return result;
     }
 
     private static void ReportConfiguration(IServiceProvider serviceProvider)

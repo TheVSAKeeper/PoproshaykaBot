@@ -2,6 +2,8 @@
 
 namespace PoproshaykaBot.Wpf.Infrastructure;
 
+public sealed record UiSettingsWriteGuardStatus(bool IsSuspended, bool IsRevoked, int HeldKeyCount);
+
 public sealed class UiSettingsWriteGuard(ISettingsStore inner) : ISettingsStore
 {
     private readonly Lock _lock = new();
@@ -28,6 +30,14 @@ public sealed class UiSettingsWriteGuard(ISettingsStore inner) : ISettingsStore
             {
                 return _revoked;
             }
+        }
+    }
+
+    public UiSettingsWriteGuardStatus CaptureStatus()
+    {
+        lock (_lock)
+        {
+            return new(_suspended, _revoked, _held.Count);
         }
     }
 

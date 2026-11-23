@@ -12,6 +12,20 @@ public sealed class CommandResponseTracker(TimeProvider timeProvider)
     private readonly Dictionary<MessageKey, LinkedListNode<Entry>> _byMessageId = [];
     private readonly LinkedList<Entry> _order = new();
 
+    public int PendingCount
+    {
+        get
+        {
+            var now = timeProvider.GetUtcNow();
+
+            lock (_lock)
+            {
+                DropExpired(now);
+                return _byMessageId.Count;
+            }
+        }
+    }
+
     public void Expect(string messageId, CommandResponseMark mark)
     {
         Expect(StreamingPlatform.Twitch, messageId, mark);

@@ -222,4 +222,39 @@ public sealed class MultiChannelCatalogAndAuthTests
             Is.EquivalentTo(new[] { "tw-a", "tw-b" }));
         Assert.That(twitchAccounts.Load(PlatformAuthRole.Broadcaster).Login, Is.EqualTo("originA"));
     }
+
+    [Test]
+    public void ChannelCatalogStore_Load_normalizes_duplicate_platforms_and_channels_from_disk()
+    {
+        var channelsPath = Path.Combine(_root, "channels-dup.json");
+        File.WriteAllText(channelsPath, """
+            {
+              "channels": [
+                { "platform": "Twitch", "channelId": " tw-1 ", "displayName": "OldName", "isConfigured": true },
+                { "platform": "Twitch", "channelId": "tw-1", "displayName": "NewName", "monitoringEnabled": true }
+              ],
+              "platforms": [
+                { "platform": "Twitch", "activeChannelId": "tw-old", "switchMode": "Manual" },
+                { "platform": "Twitch", "activeChannelId": "tw-1", "switchMode": "AutoDiscover" }
+              ]
+            }
+            """);
+
+        var catalog = new ChannelCatalogStore(NullLogger<ChannelCatalogStore>.Instance, channelsPath);
+        var loaded = catalog.Load();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(loaded.Platforms, Has.Count.EqualTo(1));
+            Assert.That(loaded.Platforms[0].ActiveChannelId, Is.EqualTo("tw-1"));
+            Assert.That(loaded.Platforms[0].SwitchMode, Is.EqualTo(ChannelSwitchMode.AutoDiscover));
+            Assert.That(() => loaded.Platforms.ToDictionary(static p => p.Platform), Throws.Nothing);
+
+            Assert.That(loaded.Channels, Has.Count.EqualTo(1));
+            Assert.That(loaded.Channels[0].ChannelId, Is.EqualTo("tw-1"));
+            Assert.That(loaded.Channels[0].DisplayName, Is.EqualTo("NewName"));
+            Assert.That(loaded.Channels[0].IsConfigured, Is.True);
+            Assert.That(loaded.Channels[0].MonitoringEnabled, Is.True);
+        });
+    }
 }

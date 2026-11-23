@@ -21,6 +21,52 @@ using System.Windows;
 
 namespace PoproshaykaBot.Wpf.ViewModels;
 
+public interface IMcpConnectNotificationGate
+{
+    void SuppressNextErrorDialog();
+
+    bool TryConsumeErrorDialogSuppression();
+
+    void ResetErrorDialogSuppression();
+}
+
+public sealed class McpConnectNotificationGate : IMcpConnectNotificationGate
+{
+    private int _pendingSuppressions;
+
+    public void SuppressNextErrorDialog()
+    {
+        Interlocked.Increment(ref _pendingSuppressions);
+    }
+
+    public bool TryConsumeErrorDialogSuppression()
+    {
+        return TryDecrement();
+    }
+
+    public void ResetErrorDialogSuppression()
+    {
+        TryDecrement();
+    }
+
+    private bool TryDecrement()
+    {
+        while (true)
+        {
+            var current = Volatile.Read(ref _pendingSuppressions);
+            if (current <= 0)
+            {
+                return false;
+            }
+
+            if (Interlocked.CompareExchange(ref _pendingSuppressions, current - 1, current) == current)
+            {
+                return true;
+            }
+        }
+    }
+}
+
 public sealed partial class ShellViewModel : ShellViewModelBase, IDisposable
 {
     private readonly IBotConnectionController _connectionManager;
@@ -45,6 +91,7 @@ public sealed partial class ShellViewModel : ShellViewModelBase, IDisposable
     private readonly IUnsavedChangesPrompt _unsavedChangesPrompt;
     private readonly IMainWindowController _mainWindow;
     private readonly UpdateSettingsSectionViewModel? _updateSettings;
+    private readonly IMcpConnectNotificationGate _mcpConnectNotificationGate;
     private NavigationItem? _current;
     private bool _returningToPage;
     private bool _leavingPage;
@@ -85,12 +132,14 @@ public sealed partial class ShellViewModel : ShellViewModelBase, IDisposable
         IChatPlatformRegistry? platformRegistry = null,
         ChannelSwitchPromptBannerViewModel? channelSwitchBanner = null,
         UpdateSettingsSectionViewModel? updateSettings = null,
-        MultistreamPageViewModel? multistreamPage = null)
+        MultistreamPageViewModel? multistreamPage = null,
+        IMcpConnectNotificationGate? mcpConnectNotificationGate = null)
         : base(modal)
     {
         _unsavedChangesPrompt = unsavedChangesPrompt;
         _mainWindow = mainWindow;
         _updateSettings = updateSettings;
+        _mcpConnectNotificationGate = mcpConnectNotificationGate ?? new McpConnectNotificationGate();
         _connectionManager = connectionManager;
         _platformRegistry = platformRegistry;
         _logger = logger;
@@ -300,6 +349,11 @@ public sealed partial class ShellViewModel : ShellViewModelBase, IDisposable
         }
 
         _subscriptions.Clear();
+    }
+
+    protected override IEnumerable<NavigationItem> GetExtraNavigationItems()
+    {
+        yield return _settingsSection;
     }
 
     protected override void NavigateToSettings()
@@ -692,6 +746,7 @@ public sealed partial class ShellViewModel : ShellViewModelBase, IDisposable
                 break;
 
             default:
+                _mcpConnectNotificationGate.ResetErrorDialogSuppression();
                 _logger.BotConnectRequested();
 
                 try
@@ -750,6 +805,7 @@ public sealed partial class ShellViewModel : ShellViewModelBase, IDisposable
                     return;
                 }
 
+                _mcpConnectNotificationGate.ResetErrorDialogSuppression();
                 _logger.PlatformConnectRequested(platformName);
 
                 try
@@ -838,6 +894,11 @@ public sealed partial class ShellViewModel : ShellViewModelBase, IDisposable
         OnPropertyChanged(nameof(ConnectButtonTooltip));
     }
 
+    public void SuppressNextConnectErrorDialog()
+    {
+        _mcpConnectNotificationGate.SuppressNextErrorDialog();
+    }
+
     private void OnLifecyclePhaseChanged(BotLifecyclePhaseChanged phaseEvent)
     {
         ApplyPhase(phaseEvent.Phase);
@@ -848,7 +909,14 @@ public sealed partial class ShellViewModel : ShellViewModelBase, IDisposable
         {
             _logger.BotConnectFailed(phaseEvent.Exception);
 
-            _dialogService.Error("Ошибка", $"Ошибка подключения бота: {FormatConnectionError(phaseEvent.Exception)}");
+            if (!_mcpConnectNotificationGate.TryConsumeErrorDialogSuppression())
+            {
+                _dialogService.Error("Ошибка", $"Ошибка подключения бота: {FormatConnectionError(phaseEvent.Exception)}");
+            }
+        }
+        else if (phaseEvent.Phase is BotLifecyclePhase.Connected or BotLifecyclePhase.Cancelled)
+        {
+            _mcpConnectNotificationGate.ResetErrorDialogSuppression();
         }
     }
 

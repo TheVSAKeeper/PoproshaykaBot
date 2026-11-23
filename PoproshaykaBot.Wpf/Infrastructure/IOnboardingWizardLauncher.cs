@@ -6,5 +6,7 @@ public interface IOnboardingWizardLauncher
 
     bool HasBeenShown { get; }
 
+    bool IsOpen => false;
+
     void Show();
 }

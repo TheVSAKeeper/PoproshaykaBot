@@ -16,6 +16,7 @@ public partial class MainWindow : Window
     private readonly ShellViewModel _viewModel;
     private readonly ISettingsStore _settings;
     private bool _closeConfirmed;
+    private bool _closingInProgress;
 
     public MainWindow(ShellViewModel viewModel, ISettingsStore settings, DashboardLayoutStore layoutStore)
     {
@@ -66,28 +67,40 @@ public partial class MainWindow : Window
 
     private async void OnClosing(object? sender, CancelEventArgs e)
     {
-        if (_closeConfirmed)
-        {
-            return;
-        }
-
-        if (App.IsFatalShutdown)
+        if (_closeConfirmed || App.IsFatalShutdown || App.IsGallery)
         {
             return;
         }
 
         e.Cancel = true;
 
-        if (await _viewModel.RequestCloseAsync())
+        if (_closingInProgress)
         {
-            _closeConfirmed = true;
+            return;
+        }
 
-            if (!App.IsHeadless)
+        _closingInProgress = true;
+        try
+        {
+            if (await _viewModel.RequestCloseAsync())
             {
-                WindowPlacement.Save(this, _settings, WindowKeys);
-            }
+                if (!App.IsHeadless)
+                {
+                    WindowPlacement.Save(this, _settings, WindowKeys);
+                }
 
-            _ = Dispatcher.BeginInvoke(() => Close());
+                if (Application.Current is App app)
+                {
+                    await app.StopMcpBeforeExitAsync();
+                }
+
+                _closeConfirmed = true;
+                _ = Dispatcher.BeginInvoke(() => Close());
+            }
+        }
+        finally
+        {
+            _closingInProgress = false;
         }
     }
 }

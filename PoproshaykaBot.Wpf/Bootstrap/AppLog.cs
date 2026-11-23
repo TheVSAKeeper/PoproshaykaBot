@@ -67,6 +67,27 @@ internal static partial class AppLog
     [LoggerMessage(EventId = 1019, Level = LogLevel.Warning, Message = "Частичное подключение бота: работают {ConnectedPlatforms}, сбой {FailedPlatforms}")]
     public static partial void BotPartialConnectionFailure(this ILogger logger, string connectedPlatforms, string failedPlatforms);
 
+    [LoggerMessage(EventId = 1020, Level = LogLevel.Information, Message = "По MCP запрошено подключение площадки {Platform}")]
+    public static partial void McpPlatformConnectRequested(this ILogger logger, StreamingPlatform platform);
+
+    [LoggerMessage(EventId = 1021, Level = LogLevel.Information, Message = "По MCP запрошено отключение площадки {Platform}")]
+    public static partial void McpPlatformDisconnectRequested(this ILogger logger, StreamingPlatform platform);
+
+    [LoggerMessage(EventId = 1022, Level = LogLevel.Information, Message = "По MCP запрошено обновление мониторинга (площадка: {Platform}, канал: {ChannelId})")]
+    public static partial void McpMonitoringRefreshRequested(this ILogger logger, StreamingPlatform? platform, string? channelId);
+
+    [LoggerMessage(EventId = 1023, Level = LogLevel.Information, Message = "По MCP запрошено переключение активного канала {Platform} на {ChannelId}")]
+    public static partial void McpActiveChannelSwitchRequested(this ILogger logger, StreamingPlatform platform, string channelId);
+
+    [LoggerMessage(EventId = 1024, Level = LogLevel.Information, Message = "По MCP запрошено обновление состояния OBS (connectIfNeeded={ConnectIfNeeded})")]
+    public static partial void McpObsRefreshRequested(this ILogger logger, bool connectIfNeeded);
+
+    [LoggerMessage(EventId = 1025, Level = LogLevel.Information, Message = "По MCP запрошено сохранение статистики на диск")]
+    public static partial void McpStatisticsFlushRequested(this ILogger logger);
+
+    [LoggerMessage(EventId = 1026, Level = LogLevel.Information, Message = "По MCP экспортирован пакет диагностики: {Path} (редакция полная: {RedactionComplete})")]
+    public static partial void McpDiagnosticsBundleExported(this ILogger logger, string path, bool redactionComplete);
+
     [LoggerMessage(EventId = 1100, Level = LogLevel.Error, Message = "OAuth-поток мастера упал для роли {Role}")]
     public static partial void OAuthFlowFailed(this ILogger logger, Exception? exception, PlatformAuthRole role);
 

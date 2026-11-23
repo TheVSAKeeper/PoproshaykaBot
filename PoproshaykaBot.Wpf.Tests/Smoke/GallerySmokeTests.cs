@@ -11,9 +11,11 @@ namespace PoproshaykaBot.Wpf.Tests.Smoke;
 
 [TestFixture]
 [NonParallelizable]
+[Category("Smoke")]
 public class GallerySmokeTests
 {
     private static readonly TimeSpan RunTimeout = TimeSpan.FromMinutes(3);
+    private static readonly TimeSpan FailedRunTimeout = TimeSpan.FromSeconds(30);
 
     private string _baseDirectory = string.Empty;
     private string _outputDirectory = string.Empty;
@@ -56,6 +58,40 @@ public class GallerySmokeTests
         Assert.That(ReadFrame("settings-light.png"), Is.Not.Empty);
         Assert.That(ReadFrame("settings-dark.png"), Is.Not.Empty);
         AssertNoBindingErrors();
+    }
+
+    [Test]
+    public void Gallery_ShouldRenderMcpSettingsSection()
+    {
+        File.WriteAllText(
+            Path.Combine(_baseDirectory, "settings", "ui-preferences.toml"),
+            "[ui.settings]\nsection = \"mcp\"\n");
+
+        var (exitCode, output) = RunGallery(SectionKeys.Settings, $"{AppThemes.LightKey},{AppThemes.DarkKey}");
+
+        Assert.That(exitCode, Is.Zero, $"Раздел mcp должен открыться в WPF в обеих темах.{Environment.NewLine}{output}");
+        Assert.That(ReadFrame("settings-light.png"), Is.Not.Empty);
+        Assert.That(ReadFrame("settings-dark.png"), Is.Not.Empty);
+        AssertNoBindingErrors();
+    }
+
+    [Test]
+    public void Gallery_FailedRun_ExitsPromptlyWithNonZeroCodeWithoutHanging()
+    {
+        var watch = Stopwatch.StartNew();
+        var (exitCode, output) = RunGallery(
+            SectionKeys.Overview,
+            AppThemes.LightKey,
+            [GalleryArguments.ElementKey, "__nonexistent_gallery_element__"],
+            FailedRunTimeout);
+        watch.Stop();
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(exitCode, Is.Not.Zero, $"Прогон галереи с несуществующим --element должен завершиться ненулевым кодом.{Environment.NewLine}{output}");
+            Assert.That(watch.Elapsed, Is.LessThan(FailedRunTimeout),
+                $"Упавший прогон галереи должен завершаться быстро без зависания окна, фактически: {watch.Elapsed}.");
+        }
     }
 
     [Test]
@@ -205,7 +241,11 @@ public class GallerySmokeTests
         return File.ReadAllBytes(path);
     }
 
-    private (int ExitCode, string Output) RunGallery(string pages, string themes)
+    private (int ExitCode, string Output) RunGallery(
+        string pages,
+        string themes,
+        IReadOnlyList<string>? extraArguments = null,
+        TimeSpan? timeout = null)
     {
         var appPath = SmokeTestSession.ResolveAppExePath();
 
@@ -230,9 +270,18 @@ public class GallerySmokeTests
         startInfo.ArgumentList.Add(GalleryArguments.ThemesKey);
         startInfo.ArgumentList.Add(themes);
 
+        if (extraArguments is not null)
+        {
+            foreach (var argument in extraArguments)
+            {
+                startInfo.ArgumentList.Add(argument);
+            }
+        }
+
         startInfo.EnvironmentVariables[SmokeTestSession.BaseDirectoryEnvVar] = _baseDirectory;
 
         var output = new StringBuilder();
+        var effectiveTimeout = timeout ?? RunTimeout;
 
         using var process = Process.Start(startInfo)
                             ?? throw new InvalidOperationException($"Не удалось запустить процесс галереи: {appPath}");
@@ -242,10 +291,10 @@ public class GallerySmokeTests
         process.BeginOutputReadLine();
         process.BeginErrorReadLine();
 
-        if (!process.WaitForExit((int)RunTimeout.TotalMilliseconds))
+        if (!process.WaitForExit((int)effectiveTimeout.TotalMilliseconds))
         {
             process.Kill(entireProcessTree: true);
-            Assert.Fail($"Прогон галереи не завершился за {RunTimeout}. Вывод процесса:{Environment.NewLine}{output}");
+            Assert.Fail($"Прогон галереи не завершился за {effectiveTimeout}. Вывод процесса:{Environment.NewLine}{output}");
         }
 
         process.WaitForExit();

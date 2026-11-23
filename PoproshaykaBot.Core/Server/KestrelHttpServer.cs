@@ -15,13 +15,18 @@ public sealed class KestrelHttpServer(
     ILoggerFactory loggerFactory)
     : IAsyncDisposable, IHttpServerStatus
 {
+    private static readonly HttpServerRuntimeSnapshot StoppedSnapshot = new(false, null);
+
     private readonly IReadOnlyList<IEndpointMapper> _endpointMappers = endpointMappers.ToArray();
 
     private WebApplication? _app;
+    private volatile HttpServerRuntimeSnapshot _runtimeSnapshot = StoppedSnapshot;
 
-    public bool IsRunning { get; private set; }
+    public bool IsRunning => _runtimeSnapshot.IsRunning;
 
-    public int? Port { get; private set; }
+    public int? Port => _runtimeSnapshot.Port;
+
+    public HttpServerRuntimeSnapshot CaptureSnapshot() => _runtimeSnapshot;
 
     public async Task StartAsync()
     {
@@ -74,8 +79,7 @@ public sealed class KestrelHttpServer(
 
             await _app.StartAsync();
 
-            Port = port;
-            IsRunning = true;
+            _runtimeSnapshot = new(true, port);
 
             logger.LogInformation("HTTP сервер запущен на порту {Port}", port);
         }
@@ -103,8 +107,7 @@ public sealed class KestrelHttpServer(
 
         try
         {
-            IsRunning = false;
-            Port = null;
+            _runtimeSnapshot = StoppedSnapshot;
             await sseService.StopAsync();
 
             if (_app != null)

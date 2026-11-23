@@ -6,6 +6,8 @@ using System.Text.Json;
 
 namespace PoproshaykaBot.Core.Chat.Display;
 
+public sealed record ChatDisplayStoreStatus(bool ZoomReadFailed, bool BlockersReadFailed);
+
 public sealed class ChatDisplayStore(ILogger<ChatDisplayStore> logger, string? directory = null)
 {
     public const double DefaultZoom = 0.75;
@@ -74,6 +76,11 @@ public sealed class ChatDisplayStore(ILogger<ChatDisplayStore> logger, string? d
 
     private volatile bool _zoomReadFailed;
     private volatile bool _blockersReadFailed;
+
+    public ChatDisplayStoreStatus CaptureStatus()
+    {
+        return new(_zoomReadFailed, _blockersReadFailed);
+    }
 
     public double LoadZoom()
     {

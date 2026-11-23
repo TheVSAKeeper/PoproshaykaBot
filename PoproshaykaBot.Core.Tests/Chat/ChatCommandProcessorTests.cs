@@ -9,6 +9,7 @@ using PoproshaykaBot.Core.Infrastructure;
 using PoproshaykaBot.Core.Settings;
 using PoproshaykaBot.Core.Settings.Stores;
 using PoproshaykaBot.Core.Statistics;
+using PoproshaykaBot.Core.Statistics.Linking;
 using PoproshaykaBot.Core.Tests.Polls;
 using PoproshaykaBot.Core.Tests.Server;
 
@@ -446,6 +447,192 @@ public sealed class ChatCommandProcessorTests
         });
     }
 
+    [Test]
+    public async Task TryProcessAsync_сохраняет_RecordsUserData_false_и_блокирует_команды_привязки()
+    {
+        var linking = Substitute.For<IAccountLinkingService>();
+        var stats = Substitute.For<IUserStatisticsRepository>();
+        var linkCommand = new LinkAccountCommand(linking, stats);
+        var unlinkCommand = new UnlinkAccountCommand(linking, stats);
+        var processor = CreateProcessor(linkCommand, unlinkCommand);
+
+        var blockedContext = new CommandContext
+        {
+            Platform = StreamingPlatform.Twitch,
+            Channel = "test-channel",
+            MessageId = "msg-1",
+            UserId = "u1",
+            Username = "alice",
+            DisplayName = "Алиса",
+            RecordsUserData = false,
+        };
+
+        var linkBlocked = await processor.TryProcessAsync("!привязать", blockedContext, CancellationToken.None);
+        var unlinkBlocked = await processor.TryProcessAsync("!отвязать", blockedContext, CancellationToken.None);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(linkBlocked.IsCommand, Is.False);
+            Assert.That(unlinkBlocked.IsCommand, Is.False);
+            Assert.That(_usage.GetSnapshot(), Is.Empty);
+        });
+
+        linking.DidNotReceiveWithAnyArgs().InitiateViewerChallenge(default, default!);
+        await linking.DidNotReceiveWithAnyArgs().UnlinkSelfAsync(default, default!, default);
+
+        linking.InitiateViewerChallenge(Arg.Any<PlatformUserKey>(), Arg.Any<string>())
+            .Returns(new AccountLinkActionResult(AccountLinkOperationStatus.ChallengeIssued, "R-1234"));
+
+        var allowed = await processor.TryProcessAsync("!привязать", CreateContext(), CancellationToken.None);
+        Assert.Multiple(() =>
+        {
+            Assert.That(allowed.IsCommand, Is.True);
+            Assert.That(allowed.Executed, Is.True);
+            Assert.That(allowed.Response?.Text, Does.Contain("R-1234"));
+        });
+    }
+
+    [Test]
+    public void DryRunInspect_проверяет_команду_без_побочных_эффектов()
+    {
+        var linking = Substitute.For<IAccountLinkingService>();
+        var stats = Substitute.For<IUserStatisticsRepository>();
+        var normalCommand = new FakeCommand("ранг", "rank", "lvl");
+        var capabilityCommand = new FakeCommand("опрос")
+        {
+            RequiredCapabilities = PlatformCapabilities.NativePolls,
+        };
+        var linkCommand = new LinkAccountCommand(linking, stats);
+
+        var registry = Substitute.For<IChatPlatformRegistry>();
+        var twitchPlatform = Substitute.For<IChatPlatform>();
+        twitchPlatform.Capabilities.Returns(PlatformCapabilities.NativePolls);
+        var youtubePlatform = Substitute.For<IChatPlatform>();
+        youtubePlatform.Capabilities.Returns(PlatformCapabilities.ServerChatHistory);
+        registry.Find(StreamingPlatform.Twitch).Returns(twitchPlatform);
+        registry.Find(StreamingPlatform.YouTube).Returns(youtubePlatform);
+
+        var processor = new ChatCommandProcessor(
+            [normalCommand, capabilityCommand, linkCommand],
+            _settingsStore,
+            _usage,
+            NullLogger<ChatCommandProcessor>.Instance,
+            platformRegistry: registry);
+
+        _settingsStore.Mutate(settings =>
+        {
+            settings.Commands["ранг"] = new()
+            {
+                ResponseTarget = CommandSettings.CallerOnly,
+                Access = CommandAccessLevel.Moderators,
+            };
+        });
+
+        var unknownFile = AppPaths.Combine("unknown_commands.txt");
+        var sizeBefore = File.Exists(unknownFile) ? new FileInfo(unknownFile).Length : 0;
+
+        var notCommand = processor.DryRunInspect("обычный текст", StreamingPlatform.Twitch);
+        var unknown = processor.DryRunInspect("!несуществующая", StreamingPlatform.Twitch);
+        var deniedAccess = processor.DryRunInspect("!rank один два", StreamingPlatform.Twitch, isBroadcaster: false, isModerator: false);
+        var allowed = processor.DryRunInspect("!rank один два", StreamingPlatform.Twitch, isBroadcaster: false, isModerator: true);
+        var missingCaps = processor.DryRunInspect("!опрос", StreamingPlatform.YouTube);
+        var blockedByRecordsUserData = processor.DryRunInspect("!привязать", StreamingPlatform.Twitch, isBroadcaster: true);
+
+        _settingsStore.Mutate(settings => settings.Commands["ранг"].Enabled = false);
+        var disabled = processor.DryRunInspect("!ранг", StreamingPlatform.Twitch, isBroadcaster: true);
+
+        var sizeAfter = File.Exists(unknownFile) ? new FileInfo(unknownFile).Length : 0;
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(notCommand.Outcome, Is.EqualTo(CommandDryRunOutcome.NotACommand));
+            Assert.That(notCommand.WouldExecute, Is.False);
+
+            Assert.That(unknown.Outcome, Is.EqualTo(CommandDryRunOutcome.UnknownCommand));
+            Assert.That(unknown.Token, Is.EqualTo("несуществующая"));
+            Assert.That(unknown.WouldExecute, Is.False);
+
+            Assert.That(deniedAccess.Outcome, Is.EqualTo(CommandDryRunOutcome.AccessDenied));
+            Assert.That(deniedAccess.Canonical, Is.EqualTo("ранг"));
+            Assert.That(deniedAccess.Aliases, Is.EqualTo(new[] { "rank", "lvl" }));
+            Assert.That(deniedAccess.ResponseTarget, Is.EqualTo(CommandSettings.CallerOnly));
+            Assert.That(deniedAccess.RequiredAccessLevel, Is.EqualTo(CommandAccessLevel.Moderators));
+            Assert.That(deniedAccess.AccessAllowed, Is.False);
+            Assert.That(deniedAccess.Arguments, Is.EqualTo(new[] { "один", "два" }));
+
+            Assert.That(allowed.Outcome, Is.EqualTo(CommandDryRunOutcome.WouldExecute));
+            Assert.That(allowed.WouldExecute, Is.True);
+            Assert.That(allowed.Canonical, Is.EqualTo("ранг"));
+            Assert.That(allowed.Reason, Is.Null);
+
+            Assert.That(missingCaps.Outcome, Is.EqualTo(CommandDryRunOutcome.MissingCapabilities));
+            Assert.That(missingCaps.HasRequiredCapabilities, Is.False);
+            Assert.That(missingCaps.RequiredCapabilities, Is.EqualTo(PlatformCapabilities.NativePolls));
+
+            Assert.That(blockedByRecordsUserData.Outcome, Is.EqualTo(CommandDryRunOutcome.CanExecuteDenied));
+            Assert.That(blockedByRecordsUserData.CanExecuteResult, Is.False);
+
+            Assert.That(disabled.Outcome, Is.EqualTo(CommandDryRunOutcome.Disabled));
+            Assert.That(disabled.IsEnabled, Is.False);
+
+            Assert.That(normalCommand.Calls, Is.Zero);
+            Assert.That(capabilityCommand.Calls, Is.Zero);
+            Assert.That(_usage.GetSnapshot(), Is.Empty);
+            Assert.That(sizeAfter, Is.EqualTo(sizeBefore));
+        });
+    }
+
+    [Test]
+    public void DryRunInspect_не_вызывает_CanExecute_для_отключённой_или_недоступной_команды()
+    {
+        var canExecuteCalls = 0;
+        var guarded = new DelegateCanExecuteCommand("тест", _ =>
+        {
+            canExecuteCalls++;
+            return true;
+        });
+
+        var processor = new ChatCommandProcessor(
+            [guarded],
+            _settingsStore,
+            _usage,
+            NullLogger<ChatCommandProcessor>.Instance);
+
+        _settingsStore.Mutate(settings => settings.Commands["тест"] = new()
+        {
+            Enabled = false,
+            Access = CommandAccessLevel.Moderators,
+        });
+
+        var disabled = processor.DryRunInspect("!тест", StreamingPlatform.Twitch, isBroadcaster: false);
+
+        _settingsStore.Mutate(settings => settings.Commands["тест"].Enabled = true);
+        var denied = processor.DryRunInspect("!тест", StreamingPlatform.Twitch, isBroadcaster: false);
+        var allowed = processor.DryRunInspect("!тест", StreamingPlatform.Twitch, isBroadcaster: true);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(disabled.Outcome, Is.EqualTo(CommandDryRunOutcome.Disabled));
+            Assert.That(denied.Outcome, Is.EqualTo(CommandDryRunOutcome.AccessDenied));
+            Assert.That(allowed.Outcome, Is.EqualTo(CommandDryRunOutcome.WouldExecute));
+            Assert.That(canExecuteCalls, Is.EqualTo(1), "CanExecute должен вызываться только после прохождения проверок включённости, возможностей и прав.");
+        });
+    }
+
+    private sealed class DelegateCanExecuteCommand(string canonical, Func<CommandContext, bool> canExecute) : IChatCommand
+    {
+        public string Canonical => canonical;
+
+        public IReadOnlyCollection<string> Aliases => [];
+
+        public string Description => "тестовая команда";
+
+        public bool CanExecute(CommandContext context) => canExecute(context);
+
+        public Task<OutgoingMessage?> ExecuteAsync(CommandContext context, CancellationToken cancellationToken)
+            => Task.FromResult<OutgoingMessage?>(null);
+    }
+
     private static CommandContext CreateContext(bool isBroadcaster = false, bool isModerator = false,
         StreamingPlatform platform = StreamingPlatform.Twitch)
     {
@@ -480,6 +667,8 @@ public sealed class ChatCommandProcessorTests
         public bool BroadcasterOnly { get; init; }
 
         public bool ModeratorsOnly { get; init; }
+
+        public PlatformCapabilities RequiredCapabilities { get; init; } = PlatformCapabilities.None;
 
         public OutgoingMessage? Response { get; init; } = OutgoingMessage.Normal("ответ");
 
