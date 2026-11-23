@@ -1,8 +1,10 @@
-﻿using PoproshaykaBot.Core.Chat.History;
+﻿using PoproshaykaBot.Core.Broadcast;
+using PoproshaykaBot.Core.Chat.History;
 using PoproshaykaBot.Core.Infrastructure.Events;
 using PoproshaykaBot.Core.Infrastructure.Events.Chat;
 using PoproshaykaBot.Core.Platforms;
 using PoproshaykaBot.Core.Settings.Stores;
+using PoproshaykaBot.Core.Streaming;
 
 namespace PoproshaykaBot.Core.Chat.Handlers;
 
@@ -13,6 +15,7 @@ public sealed class ChatHistoryBatchHandler : IEventHandler<RawChatHistoryReceiv
     private readonly ChatHistoryManager _historyManager;
     private readonly IEventBus _eventBus;
     private readonly CommandResponseTracker? _commandResponseTracker;
+    private readonly IBroadcastState? _broadcastState;
     private readonly IDisposable _subscription;
 
     public ChatHistoryBatchHandler(
@@ -20,7 +23,8 @@ public sealed class ChatHistoryBatchHandler : IEventHandler<RawChatHistoryReceiv
         ObsChatStore obsChatStore,
         ChatHistoryManager historyManager,
         IEventBus eventBus,
-        CommandResponseTracker? commandResponseTracker = null)
+        CommandResponseTracker? commandResponseTracker = null,
+        IBroadcastState? broadcastState = null)
     {
         ArgumentNullException.ThrowIfNull(platformRegistry);
         ArgumentNullException.ThrowIfNull(obsChatStore);
@@ -32,25 +36,47 @@ public sealed class ChatHistoryBatchHandler : IEventHandler<RawChatHistoryReceiv
         _historyManager = historyManager;
         _eventBus = eventBus;
         _commandResponseTracker = commandResponseTracker;
+        _broadcastState = broadcastState;
         _subscription = eventBus.Subscribe(this);
     }
 
     public async Task HandleAsync(RawChatHistoryReceived @event, CancellationToken cancellationToken)
     {
         if (!_platformRegistry.TryGet(@event.Platform, out var platform)
-            || (platform.Capabilities & PlatformCapabilities.ServerChatHistory) == PlatformCapabilities.None)
+            || (!@event.AllowExternalHistory
+                && (platform.Capabilities & PlatformCapabilities.ServerChatHistory) == PlatformCapabilities.None))
         {
             return;
         }
 
         var obsChat = _obsChatStore.Load();
+        var liveStream = platform.StreamStatus is { CurrentStatus: StreamStatus.Online } streamStatus
+            ? streamStatus.CurrentStream
+            : null;
+        var currentBroadcastId = liveStream is not null ? _broadcastState?.CurrentBroadcastId : null;
+        var liveStartUtc = liveStream is { StartedAt: var startedAt } && startedAt != default
+            ? DateTime.SpecifyKind(startedAt, DateTimeKind.Utc)
+            : (DateTime?)null;
+        var scopeChannelKey = !string.IsNullOrWhiteSpace(@event.Scope.ChannelId)
+            ? new ChannelKey(@event.Platform, @event.Scope.ChannelId)
+            : (ChannelKey?)null;
         var entries = new List<ChatMessageData>(@event.Messages.Count);
 
         foreach (var (message, timestamp) in @event.Messages)
         {
+            var messageChannelKey = scopeChannelKey
+                ?? (!string.IsNullOrWhiteSpace(message.ChannelId)
+                    ? new ChannelKey(message.Platform, message.ChannelId)
+                    : (ChannelKey?)null);
             var commandResponse = message.IsBot
-                ? _commandResponseTracker?.TryConsume(message.Platform, message.Id)
+                ? (_commandResponseTracker?.TryConsume(message.Platform, message.Id, messageChannelKey, message.ChatSessionId)
+                    ?? (messageChannelKey is not null
+                        ? _commandResponseTracker?.TryConsume(message.Platform, message.Id, null, message.ChatSessionId)
+                        : null))
                 : null;
+
+            var matchesCurrentStream = liveStream is not null
+                && (liveStartUtc is null || timestamp.UtcDateTime >= liveStartUtc.Value);
 
             entries.Add(ChatMessageDataFactory.Create(
                 message,
@@ -59,7 +85,11 @@ public sealed class ChatHistoryBatchHandler : IEventHandler<RawChatHistoryReceiv
                 timestamp.UtcDateTime,
                 isFirstTime: false,
                 isHistorical: true,
-                commandResponse));
+                commandResponse,
+                matchesCurrentStream ? currentBroadcastId : null,
+                matchesCurrentStream ? liveStream?.Id : null,
+                matchesCurrentStream ? liveStream?.StartedAt : null,
+                matchesCurrentStream ? liveStream?.Title : null));
         }
 
         var outcome = _historyManager.ImportHistory(@event.Scope, entries, @event.Moderations);

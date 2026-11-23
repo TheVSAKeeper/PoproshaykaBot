@@ -22,6 +22,12 @@ public static class ChatServiceCollectionExtensions
     public static IServiceCollection AddChatPipeline(this IServiceCollection services)
     {
         services.AddSingleton<ChatIngestionService>();
+        services.AddHttpClient(TwitchRecentMessagesClient.HttpClientName, client =>
+        {
+            client.Timeout = TwitchRecentMessagesClient.RequestTimeout;
+            client.DefaultRequestHeaders.UserAgent.ParseAdd("PoproshaykaBot");
+        });
+        services.AddSingleton<ITwitchRecentMessagesClient, TwitchRecentMessagesClient>();
         services.AddKeyedSingleton<IHostedComponent>(
             StreamingPlatform.Twitch,
             (sp, _) => sp.GetRequiredService<ChatIngestionService>());

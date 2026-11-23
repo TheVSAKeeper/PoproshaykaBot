@@ -54,6 +54,18 @@ public sealed class PersistedChatMessage
 
     public string? ChatSessionId { get; set; }
 
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public Guid? BroadcastId { get; set; }
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? StreamId { get; set; }
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public DateTime? StreamStartedAtUtc { get; set; }
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? StreamTitle { get; set; }
+
     public string MessageId { get; set; } = string.Empty;
 
     public DateTime Timestamp { get; set; }

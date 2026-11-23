@@ -13,7 +13,11 @@ internal static class ChatMessageDataFactory
         DateTime timestampUtc,
         bool isFirstTime,
         bool isHistorical,
-        CommandResponseMark? commandResponse = null)
+        CommandResponseMark? commandResponse = null,
+        Guid? broadcastId = null,
+        string? streamId = null,
+        DateTime? streamStartedAtUtc = null,
+        string? streamTitle = null)
     {
         ArgumentNullException.ThrowIfNull(chatMessage);
         ArgumentNullException.ThrowIfNull(platform);
@@ -29,6 +33,10 @@ internal static class ChatMessageDataFactory
             Channel = chatMessage.Channel,
             ChannelId = chatMessage.ChannelId,
             ChatSessionId = chatMessage.ChatSessionId,
+            BroadcastId = broadcastId,
+            StreamId = string.IsNullOrWhiteSpace(streamId) ? null : streamId.Trim(),
+            StreamStartedAtUtc = streamStartedAtUtc is { } started && started != default ? EnsureUtc(started) : null,
+            StreamTitle = string.IsNullOrWhiteSpace(streamTitle) ? null : streamTitle.Trim(),
             MessageId = chatMessage.Id,
             Timestamp = EnsureUtc(timestampUtc),
             UserId = chatMessage.UserId,

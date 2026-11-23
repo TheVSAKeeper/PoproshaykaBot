@@ -68,6 +68,8 @@
     const seenMessageIdsLimit = 1000;
 
     let eventSource = null;
+    let historyLoadGeneration = 0;
+    let historyFetchController = null;
     let lastEventTime = Date.now();
     let staleThresholdMs = 70000;
     let reconnecting = false;
@@ -875,7 +877,7 @@
             }
         }
 
-        const es = new EventSource('/events');
+        const es = new EventSource('/events?reload=1');
         eventSource = es;
 
         es.onopen = function () {
@@ -905,6 +907,10 @@
                 }
             }
             clearChat(payload);
+            if (payload && payload.reloadHistory === true) {
+                loadHistoryAndBackfill()
+                    .catch(error => console.error('Ошибка обновления истории оверлея:', error));
+            }
         });
 
         es.addEventListener('delete', function (event) {
@@ -1236,6 +1242,14 @@
     }
 
     function clearChat(payload) {
+        historyLoadGeneration++;
+        if (historyFetchController) {
+            try {
+                historyFetchController.abort();
+            } catch { /* noop */ }
+            historyFetchController = null;
+        }
+
         const cutoffMs = payload && payload.clearedAtUtc ? new Date(payload.clearedAtUtc).getTime() : NaN;
         if (!Number.isNaN(cutoffMs)) {
             chatContainer.querySelectorAll('.message').forEach(el => {
@@ -1674,14 +1688,43 @@
     }
 
     function loadHistoryAndBackfill() {
-        return fetch('/api/history')
+        const generation = ++historyLoadGeneration;
+        if (historyFetchController) {
+            try {
+                historyFetchController.abort();
+            } catch { /* noop */ }
+            historyFetchController = null;
+        }
+
+        const controller = typeof AbortController === 'function' ? new AbortController() : null;
+        historyFetchController = controller;
+        const historyUrl = isPreview ? '/api/history?preview=true' : '/api/history';
+        const fetchOptions = controller ? { signal: controller.signal } : undefined;
+
+        return fetch(historyUrl, fetchOptions)
             .then(response => {
                 if (!response.ok) {
                     throw new Error('HTTP ' + response.status);
                 }
                 return response.json();
             })
-            .then(messages => messages.forEach(message => addMessage(message, true)));
+            .then(messages => {
+                if (generation !== historyLoadGeneration) {
+                    return;
+                }
+                messages.forEach(message => addMessage(message, true));
+            })
+            .catch(error => {
+                if (error && error.name === 'AbortError') {
+                    return;
+                }
+                throw error;
+            })
+            .finally(() => {
+                if (historyFetchController === controller) {
+                    historyFetchController = null;
+                }
+            });
     }
 
     function scheduleReconnect() {

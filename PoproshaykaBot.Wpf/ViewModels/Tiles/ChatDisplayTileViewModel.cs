@@ -30,6 +30,8 @@ public sealed partial class ChatDisplayTileViewModel : DashboardTileViewModel, I
     private readonly IChatPlatformRegistry? _platformRegistry;
     private readonly IReadOnlyDictionary<StreamingPlatform, IPlatformAccountDirectory> _accountDirectories;
     private readonly YouTubeSettingsStore? _youtubeSettingsStore;
+    private readonly YouTubeAccountsStore? _youtubeAccountsStore;
+    private readonly IEmbeddedYouTubeChatLoginDialog? _youtubeChatLogin;
     private readonly IUiDispatcher? _uiDispatcher;
     private readonly List<IDisposable> _subscriptions = [];
 
@@ -60,7 +62,9 @@ public sealed partial class ChatDisplayTileViewModel : DashboardTileViewModel, I
         YouTubeSettingsStore? youtubeSettingsStore = null,
         IUiDispatcher? uiDispatcher = null,
         ISettingsStore? uiSettings = null,
-        IEnumerable<IPlatformAccountDirectory>? accountDirectories = null)
+        IEnumerable<IPlatformAccountDirectory>? accountDirectories = null,
+        IEmbeddedYouTubeChatLoginDialog? youtubeChatLogin = null,
+        YouTubeAccountsStore? youtubeAccountsStore = null)
         : base("twitch-chat", "Чат трансляции", minWidth: 280, minHeight: 234)
     {
         _targetChannelProvider = targetChannelProvider;
@@ -74,8 +78,17 @@ public sealed partial class ChatDisplayTileViewModel : DashboardTileViewModel, I
         _platformRegistry = platformRegistry;
         _accountDirectories = (accountDirectories ?? []).ToDictionary(static directory => directory.Platform);
         _youtubeSettingsStore = youtubeSettingsStore;
+        _youtubeAccountsStore = youtubeAccountsStore;
+        _youtubeChatLogin = youtubeChatLogin;
         _uiDispatcher = uiDispatcher;
         Logger = logger;
+
+        if (_youtubeChatLogin is not null && _youtubeAccountsStore is not null)
+        {
+            PlatformChat.SetBrowserSessionHandlers(
+                SignInYouTubeBrowserAsync,
+                (accountId, accountLabel) => ResetPlatformSessionRequested?.Invoke(accountId, accountLabel));
+        }
 
         var twitch = settings.Current.Twitch;
         _chatDisplayAccount = twitch.ChatDisplayAccount;
@@ -142,6 +155,8 @@ public sealed partial class ChatDisplayTileViewModel : DashboardTileViewModel, I
     public event Action<ChatDisplayPaneViewModel, bool>? OpenRequested;
 
     public event Action? ResetSessionRequested;
+
+    public event Action<string, string>? ResetPlatformSessionRequested;
 
     public event Action? ClutterScriptChanged;
 
@@ -305,6 +320,58 @@ public sealed partial class ChatDisplayTileViewModel : DashboardTileViewModel, I
     private void ResetSession()
     {
         ResetSessionRequested?.Invoke();
+    }
+
+    private async Task SignInYouTubeBrowserAsync(string accountId, string accountLabel)
+    {
+        if (_youtubeChatLogin is null || _youtubeAccountsStore is null)
+        {
+            return;
+        }
+
+        var result = await _youtubeChatLogin.SignInAsync(new(accountId, accountLabel));
+        if (result.Outcome != EmbeddedYouTubeChatLoginOutcome.Completed
+            || string.IsNullOrWhiteSpace(result.BrowserProfileName))
+        {
+            if (!string.IsNullOrWhiteSpace(result.Message))
+            {
+                PlatformChat.MessageStatus = result.Message;
+            }
+
+            return;
+        }
+
+        var written = _youtubeAccountsStore.SetBrowserProfile(accountId, result.BrowserProfileName);
+        if (!written)
+        {
+            Logger.LogWarning("Не удалось сохранить веб-профиль чата YouTube для {AccountId} на диск", accountId);
+            _dialogService.Error(
+                "Ошибка сохранения",
+                "Вход выполнен, но не удалось записать веб-профиль YouTube на диск. После перезапуска привязка может сброситься. Подробности – в логах.");
+            PlatformChat.MessageStatus = "Не удалось сохранить веб-профиль YouTube на диск";
+        }
+
+        RefreshChat();
+        OpenRequested?.Invoke(PlatformChat, true);
+    }
+
+    internal void CompletePlatformSessionReset(string accountId)
+    {
+        if (_youtubeAccountsStore is not null && !string.IsNullOrWhiteSpace(accountId))
+        {
+            var written = _youtubeAccountsStore.SetBrowserProfile(accountId, null);
+            if (!written)
+            {
+                Logger.LogWarning("Не удалось сохранить сброс веб-профиля чата YouTube для {AccountId} на диск", accountId);
+                _dialogService.Error(
+                    "Ошибка сохранения",
+                    "Куки очищены, но не удалось сохранить сброс привязки профиля YouTube на диск. После перезапуска профиль может вернуться. Подробности – в логах.");
+                PlatformChat.MessageStatus = "Не удалось сохранить сброс веб-профиля YouTube на диск";
+            }
+        }
+
+        RefreshChat();
+        OpenRequested?.Invoke(PlatformChat, true);
     }
 
     [RelayCommand]

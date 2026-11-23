@@ -162,7 +162,9 @@ public sealed class SseService : IAsyncDisposable
         _logger.LogInformation("SSE клиент {ClientId} удалён по завершению соединения. Активных: {Count}", pipeline.ClientId, _registry.Count);
     }
 
-    public bool AddClient(HttpResponse response)
+    public bool HasLegacyClients => _registry.Snapshot().Any(static pipeline => !pipeline.SupportsReloadOnClear);
+
+    public bool AddClient(HttpResponse response, bool supportsReloadOnClear = false)
     {
         _logger.LogDebug("Попытка регистрации нового SSE клиента");
 
@@ -181,7 +183,7 @@ public sealed class SseService : IAsyncDisposable
 
         try
         {
-            var pipeline = new SseClientPipeline(response, _options.ClientChannelCapacity);
+            var pipeline = new SseClientPipeline(response, _options.ClientChannelCapacity, supportsReloadOnClear);
             var clientCount = _registry.Add(response, pipeline);
             pipeline.WriterTask = Task.Run(() => ClientWriterLoopAsync(pipeline, token), CancellationToken.None);
 
@@ -195,7 +197,7 @@ public sealed class SseService : IAsyncDisposable
         }
     }
 
-    public void AddChatMessage(ChatMessageData chatMessage)
+    public void AddChatMessage(ChatMessageData chatMessage, bool legacyClientsOnly = false)
     {
         _logger.LogDebug("Подготовка нового сообщения чата для отправки в SSE");
 
@@ -204,7 +206,7 @@ public sealed class SseService : IAsyncDisposable
             var settings = _chatSettings ??= _obsChatStore.Load();
             var rank = _rankResolver?.Resolve(chatMessage);
             var json = JsonSerializer.Serialize(DtoMapper.ToServerMessage(chatMessage, settings, rank), ServerJsonOptions.Default);
-            Enqueue(new("message", json));
+            Enqueue(new("message", json, legacyClientsOnly));
         }
         catch (Exception ex)
         {
@@ -212,15 +214,30 @@ public sealed class SseService : IAsyncDisposable
         }
     }
 
-    public void ClearChat(DateTimeOffset? clearedAtUtc = null)
+    public void ClearChat(DateTimeOffset? clearedAtUtc = null, bool reloadHistory = false)
     {
         _logger.LogInformation("Инициация события очистки чата для всех SSE клиентов");
 
         try
         {
-            var json = clearedAtUtc is { } cutoff
-                ? JsonSerializer.Serialize(new { clearedAtUtc = cutoff }, ServerJsonOptions.Default)
-                : "{}";
+            string json;
+            if (clearedAtUtc is { } cutoff && reloadHistory)
+            {
+                json = JsonSerializer.Serialize(new { clearedAtUtc = cutoff, reloadHistory = true }, ServerJsonOptions.Default);
+            }
+            else if (clearedAtUtc is { } cutoffOnly)
+            {
+                json = JsonSerializer.Serialize(new { clearedAtUtc = cutoffOnly }, ServerJsonOptions.Default);
+            }
+            else if (reloadHistory)
+            {
+                json = JsonSerializer.Serialize(new { reloadHistory = true }, ServerJsonOptions.Default);
+            }
+            else
+            {
+                json = "{}";
+            }
+
             Enqueue(new("clear", json));
         }
         catch (Exception ex)
@@ -383,7 +400,7 @@ public sealed class SseService : IAsyncDisposable
                 }
 
                 var buffer = Encoding.UTF8.GetBytes(SseFormatter.Format(envelope));
-                BroadcastBuffer(buffer);
+                BroadcastBuffer(buffer, envelope.LegacyClientsOnly);
             }
         }
         catch (OperationCanceledException ex)
@@ -396,7 +413,7 @@ public sealed class SseService : IAsyncDisposable
         }
     }
 
-    private void BroadcastBuffer(byte[] buffer)
+    private void BroadcastBuffer(byte[] buffer, bool legacyClientsOnly = false)
     {
         var snapshot = _registry.Snapshot();
 
@@ -405,8 +422,14 @@ public sealed class SseService : IAsyncDisposable
             return;
         }
 
-        foreach (var channel in snapshot.Select(pipeline => pipeline.Channel))
+        foreach (var pipeline in snapshot)
         {
+            if (legacyClientsOnly && pipeline.SupportsReloadOnClear)
+            {
+                continue;
+            }
+
+            var channel = pipeline.Channel;
             var willDrop = channel.Reader.Count >= _options.ClientChannelCapacity;
 
             if (!channel.Writer.TryWrite(buffer))

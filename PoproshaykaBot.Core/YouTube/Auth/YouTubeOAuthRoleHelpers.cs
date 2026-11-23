@@ -12,5 +12,6 @@ internal static class YouTubeOAuthRoleHelpers
         account.ChannelTitle = string.Empty;
         account.StoredScopes = [];
         account.AccessTokenExpiresAt = null;
+        account.BrowserProfileName = null;
     }
 }

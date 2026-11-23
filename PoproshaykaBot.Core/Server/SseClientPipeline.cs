@@ -7,10 +7,11 @@ public sealed class SseClientPipeline
 {
     private static int _lastClientId;
 
-    public SseClientPipeline(HttpResponse response, int capacity)
+    public SseClientPipeline(HttpResponse response, int capacity, bool supportsReloadOnClear = false)
     {
         ClientId = Interlocked.Increment(ref _lastClientId);
         Response = response;
+        SupportsReloadOnClear = supportsReloadOnClear;
         Channel = System.Threading.Channels.Channel.CreateBounded<byte[]>(new BoundedChannelOptions(capacity)
         {
             FullMode = BoundedChannelFullMode.DropOldest,
@@ -22,6 +23,8 @@ public sealed class SseClientPipeline
     public int ClientId { get; }
 
     public HttpResponse Response { get; }
+
+    public bool SupportsReloadOnClear { get; }
 
     public Channel<byte[]> Channel { get; }
 

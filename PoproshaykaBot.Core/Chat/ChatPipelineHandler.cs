@@ -1,4 +1,5 @@
 ﻿using Microsoft.Extensions.Logging;
+using PoproshaykaBot.Core.Broadcast;
 using PoproshaykaBot.Core.Chat.Commands;
 using PoproshaykaBot.Core.Debugging;
 using PoproshaykaBot.Core.Infrastructure;
@@ -9,6 +10,7 @@ using PoproshaykaBot.Core.Platforms;
 using PoproshaykaBot.Core.Settings;
 using PoproshaykaBot.Core.Settings.Stores;
 using PoproshaykaBot.Core.Statistics;
+using PoproshaykaBot.Core.Streaming;
 using PoproshaykaBot.Core.Users;
 
 namespace PoproshaykaBot.Core.Chat;
@@ -34,6 +36,7 @@ public sealed class ChatPipelineHandler :
     private readonly IEventBus _eventBus;
     private readonly ILogger<ChatPipelineHandler> _logger;
     private readonly ITargetChannelProvider? _targetChannelProvider;
+    private readonly IBroadcastState? _broadcastState;
     private readonly List<IDisposable> _subscriptions;
 
     public ChatPipelineHandler(
@@ -47,7 +50,8 @@ public sealed class ChatPipelineHandler :
         CommandResponseTracker commandResponseTracker,
         IEventBus eventBus,
         ILogger<ChatPipelineHandler> logger,
-        ITargetChannelProvider? targetChannelProvider = null)
+        ITargetChannelProvider? targetChannelProvider = null,
+        IBroadcastState? broadcastState = null)
     {
         _platformRegistry = platformRegistry;
         _channels = channels;
@@ -60,6 +64,7 @@ public sealed class ChatPipelineHandler :
         _eventBus = eventBus;
         _logger = logger;
         _targetChannelProvider = targetChannelProvider;
+        _broadcastState = broadcastState;
 
         _subscriptions =
         [
@@ -140,6 +145,11 @@ public sealed class ChatPipelineHandler :
             ? _commandResponseTracker.TryConsume(chatMessage.Platform, chatMessage.Id, @event.ChannelKey, chatMessage.ChatSessionId)
             : null;
 
+        var liveStream = platform.StreamStatus is { CurrentStatus: StreamStatus.Online } streamStatus
+            ? streamStatus.CurrentStream
+            : null;
+        var broadcastId = liveStream is not null ? _broadcastState?.CurrentBroadcastId : null;
+
         var historyEntry = ChatMessageDataFactory.Create(
             chatMessage,
             platform,
@@ -147,7 +157,11 @@ public sealed class ChatPipelineHandler :
             @event.Timestamp.UtcDateTime,
             isFirstSeen,
             isHistorical: false,
-            commandResponse);
+            commandResponse,
+            broadcastId,
+            liveStream?.Id,
+            liveStream?.StartedAt,
+            liveStream?.Title);
 
         var status = historyEntry.Status;
 
@@ -300,12 +314,23 @@ public sealed class ChatPipelineHandler :
             : botIdentity.DisplayName;
         var messageId = $"{LocalMessageIdPrefix}{Guid.NewGuid():N}";
 
+        var liveStream = platform.StreamStatus is { CurrentStatus: StreamStatus.Online } streamStatus
+            ? streamStatus.CurrentStream
+            : null;
+        var broadcastId = liveStream is not null ? _broadcastState?.CurrentBroadcastId : null;
+
         var historyEntry = new ChatMessageData
         {
             Platform = source.Platform,
             Channel = source.Channel,
             ChannelId = source.ChannelId,
             ChatSessionId = source.ChatSessionId,
+            BroadcastId = broadcastId,
+            StreamId = string.IsNullOrWhiteSpace(liveStream?.Id) ? null : liveStream.Id.Trim(),
+            StreamStartedAtUtc = liveStream is { StartedAt: var startedAt } && startedAt != default
+                ? ChatMessageDataFactory.EnsureUtc(startedAt)
+                : null,
+            StreamTitle = string.IsNullOrWhiteSpace(liveStream?.Title) ? null : liveStream.Title.Trim(),
             MessageId = messageId,
             Timestamp = DateTime.UtcNow,
             UserId = userId,

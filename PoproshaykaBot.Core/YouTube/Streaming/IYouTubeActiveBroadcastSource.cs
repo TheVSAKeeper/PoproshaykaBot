@@ -2,7 +2,7 @@
 
 namespace PoproshaykaBot.Core.YouTube.Streaming;
 
-internal interface IYouTubeActiveBroadcastSource
+public interface IYouTubeActiveBroadcastSource
 {
     YouTubeBroadcastSummary? CurrentBroadcast { get; }
 

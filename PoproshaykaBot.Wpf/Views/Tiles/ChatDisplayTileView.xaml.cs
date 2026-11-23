@@ -3,6 +3,7 @@ using Microsoft.Web.WebView2.Core;
 using Microsoft.Web.WebView2.Wpf;
 using PoproshaykaBot.Core.Infrastructure;
 using PoproshaykaBot.Core.Platforms;
+using PoproshaykaBot.Core.Platforms.Auth;
 using PoproshaykaBot.Wpf.Bootstrap;
 using PoproshaykaBot.Wpf.Infrastructure;
 using PoproshaykaBot.Wpf.ViewModels.Tiles;
@@ -74,6 +75,7 @@ public partial class ChatDisplayTileView : UserControl, IView<ChatDisplayTileVie
         _viewModel = viewModel;
         _viewModel.OpenRequested += OnOpenRequested;
         _viewModel.ResetSessionRequested += OnResetSessionRequested;
+        _viewModel.ResetPlatformSessionRequested += OnResetPlatformSessionRequested;
         _viewModel.ClutterScriptChanged += OnClutterScriptChanged;
 
         await Task.WhenAll(OpenChatAsync(WebView), OpenChatAsync(PlatformWebView));
@@ -128,6 +130,7 @@ public partial class ChatDisplayTileView : UserControl, IView<ChatDisplayTileVie
         {
             _viewModel.OpenRequested -= OnOpenRequested;
             _viewModel.ResetSessionRequested -= OnResetSessionRequested;
+            _viewModel.ResetPlatformSessionRequested -= OnResetPlatformSessionRequested;
             _viewModel.ClutterScriptChanged -= OnClutterScriptChanged;
         }
 
@@ -143,6 +146,7 @@ public partial class ChatDisplayTileView : UserControl, IView<ChatDisplayTileVie
             core.ProcessFailed -= OnProcessFailed;
             core.NavigationStarting -= OnNavigationStarting;
             core.NavigationCompleted -= OnNavigationCompleted;
+            core.NewWindowRequested -= OnNewWindowRequested;
         }
 
         browser.Dispose();
@@ -342,6 +346,25 @@ public partial class ChatDisplayTileView : UserControl, IView<ChatDisplayTileVie
         {
             await RegisterClutterScriptAsync(viewModel);
         }
+        else
+        {
+            core.NewWindowRequested += OnNewWindowRequested;
+        }
+    }
+
+    private static void OnNewWindowRequested(object? sender, CoreWebView2NewWindowRequestedEventArgs e)
+    {
+        if (sender is not CoreWebView2 core)
+        {
+            return;
+        }
+
+        e.Handled = true;
+        if (Uri.TryCreate(e.Uri, UriKind.Absolute, out var uri)
+            && (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps))
+        {
+            core.Navigate(uri.AbsoluteUri);
+        }
     }
 
     private async Task<bool> RegisterClutterScriptAsync(ChatDisplayTileViewModel viewModel)
@@ -439,6 +462,83 @@ public partial class ChatDisplayTileView : UserControl, IView<ChatDisplayTileVie
         _ = UiAsync.RunGuardedAsync(
             () => ClearSessionAsync(browser, profile),
             exception => viewModel.Logger.LogError(exception, "Не удалось очистить данные сессии WebView2"));
+    }
+
+    private void OnResetPlatformSessionRequested(string accountId, string accountLabel)
+    {
+        var browser = PlatformWebView;
+        if (_viewModel is not { PlatformChat.IsShown: true } viewModel)
+        {
+            return;
+        }
+
+        var confirmed = StyledMessageBox.Show(
+            $"Это завершит браузерный вход YouTube и очистит куки профиля «{accountLabel}». Отправка через API останется доступной. Продолжить?",
+            "Сброс веб-сессии YouTube",
+            MessageBoxButton.YesNo,
+            MessageBoxImage.Warning) == MessageBoxResult.Yes;
+
+        if (!confirmed || !IsCurrentBrowser(browser))
+        {
+            return;
+        }
+
+        var profile = browser.CoreWebView2?.Profile;
+        var browserProfile = viewModel.PlatformChat.SelectedAccount?.BrowserProfile;
+        _ = UiAsync.RunGuardedAsync(
+            () => ClearPlatformSessionAsync(browser, profile, browserProfile, viewModel, accountId),
+            exception =>
+            {
+                viewModel.Logger.LogError(exception, "Не удалось очистить веб-сессию YouTube WebView2");
+                viewModel.PlatformChat.MessageStatus = "Не удалось очистить куки веб-сессии YouTube. Попробуйте позже.";
+            });
+    }
+
+    private async Task ClearPlatformSessionAsync(
+        WebView2 browser,
+        CoreWebView2Profile? profile,
+        PlatformChatBrowserProfile? browserProfile,
+        ChatDisplayTileViewModel viewModel,
+        string accountId)
+    {
+        if (profile is null && browserProfile is not null && IsCurrentBrowser(browser))
+        {
+            var state = StateFor(browser);
+            var targetSession = (DataFolder: browserProfile.UserDataFolder, ProfileName: (string?)browserProfile.ProfileName);
+            if (state.Session is { } active && active != targetSession)
+            {
+                browser = ReplaceBrowser(browser);
+                state = StateFor(browser);
+            }
+
+            state.Session = targetSession;
+            var init = state.Initialization ??= InitializeBrowserAsync(browser, targetSession, viewModel);
+            await init;
+
+            if (!IsCurrentBrowser(browser))
+            {
+                return;
+            }
+
+            profile = browser.CoreWebView2?.Profile;
+        }
+
+        if (profile is null)
+        {
+            viewModel.Logger.LogWarning("Профиль WebView2 для аккаунта YouTube {AccountId} недоступен для очистки", accountId);
+            viewModel.PlatformChat.MessageStatus = "Не удалось очистить веб-сессию YouTube: браузер недоступен.";
+            return;
+        }
+
+        await profile.ClearBrowsingDataAsync(CoreWebView2BrowsingDataKinds.AllSite);
+        profile.Delete();
+
+        if (_disposed)
+        {
+            return;
+        }
+
+        viewModel.CompletePlatformSessionReset(accountId);
     }
 
     private async Task ClearSessionAsync(WebView2 browser, CoreWebView2Profile profile)

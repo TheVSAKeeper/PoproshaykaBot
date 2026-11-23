@@ -10,6 +10,8 @@ public sealed class ChatSettings
 
     public bool ShowHistoryInObs { get; set; }
 
+    public bool FetchTwitchRecentMessages { get; set; }
+
     public int HistoryMaxItems { get; set; } = DefaultHistoryMaxItems;
 
     public static int ClampHistoryMaxItems(int value)

@@ -32,7 +32,8 @@ internal sealed class SseEndpoint(SseService sseService) : IEndpointMapper
             await ctx.Response.Body.WriteAsync("retry: 3000\n\n"u8.ToArray());
             await ctx.Response.Body.FlushAsync();
 
-            if (!sseService.AddClient(ctx.Response))
+            var supportsReloadOnClear = string.Equals(ctx.Request.Query["reload"], "1", StringComparison.Ordinal);
+            if (!sseService.AddClient(ctx.Response, supportsReloadOnClear))
             {
                 return;
             }

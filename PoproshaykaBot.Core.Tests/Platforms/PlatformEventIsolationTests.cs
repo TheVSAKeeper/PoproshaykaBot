@@ -37,6 +37,8 @@ public sealed class PlatformEventIsolationTests
         (typeof(SseChatBridgeHandler), typeof(ChatHistoryCleared)),
         (typeof(SseChatBridgeHandler), typeof(ChatHistoryLoaded)),
         (typeof(SseChatBridgeHandler), typeof(ChatMessagesDeleted)),
+        (typeof(SseChatBridgeHandler), typeof(StreamWentOnline)),
+        (typeof(SseChatBridgeHandler), typeof(StreamWentOffline)),
         (typeof(ChatHistoryBatchHandler), typeof(RawChatHistoryReceived)),
         (typeof(ChatModerationHandler), typeof(RawChatModerationReceived)),
         (typeof(BotLifecycleAutomationHandler), typeof(StreamWentOnline)),

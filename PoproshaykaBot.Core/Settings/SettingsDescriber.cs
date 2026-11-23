@@ -12,6 +12,7 @@ public static class SettingsDescriber
 
         return $"история в окне бота {OnOff(settings.ShowHistoryInApp)}, "
             + $"история в OBS {OnOff(settings.ShowHistoryInObs)}, "
+            + $"недавняя история Twitch {OnOff(settings.FetchTwitchRecentMessages)}, "
             + $"лимит кэша {settings.HistoryMaxItems}";
     }
 

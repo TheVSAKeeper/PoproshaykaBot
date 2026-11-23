@@ -129,6 +129,41 @@
             </Border>
         </DataTemplate>
 
+        <DataTemplate DataType="{x:Type chat:ChatFeedStreamDividerItemViewModel}">
+            <Border Padding="{Binding DataContext.FeedItemPadding, RelativeSource={RelativeSource AncestorType=UserControl}}">
+                <Grid Margin="0,5,0,3">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <Border Grid.Column="0"
+                            Height="1"
+                            VerticalAlignment="Center"
+                            Background="{DynamicResource Border.Strong}" />
+                    <Border Grid.Column="1"
+                            Background="{DynamicResource Bg.SurfaceAlt}"
+                            BorderBrush="{DynamicResource Border.Subtle}"
+                            BorderThickness="1"
+                            CornerRadius="10"
+                            Padding="8,1"
+                            Margin="6,0">
+                        <TextBlock Text="{Binding Label, Mode=OneWay}"
+                                   FontWeight="SemiBold"
+                                   TextTrimming="CharacterEllipsis"
+                                   MaxWidth="260"
+                                   ToolTip="{Binding Label, Mode=OneWay}"
+                                   FontSize="{Binding DataContext.FeedMetaFontSize, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                   Foreground="{DynamicResource Fg.Secondary}" />
+                    </Border>
+                    <Border Grid.Column="2"
+                            Height="1"
+                            VerticalAlignment="Center"
+                            Background="{DynamicResource Border.Strong}" />
+                </Grid>
+            </Border>
+        </DataTemplate>
+
         <DataTemplate DataType="{x:Type chat:ChatFeedGapItemViewModel}">
             <Border Margin="0,0,4,0"
                     Padding="{Binding DataContext.FeedItemPadding, RelativeSource={RelativeSource AncestorType=UserControl}}">

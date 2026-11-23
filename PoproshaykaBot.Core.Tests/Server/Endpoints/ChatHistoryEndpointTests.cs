@@ -54,7 +54,10 @@ public sealed class ChatHistoryEndpointTests
 
     private Task<EndpointTestServer> CreateServerAsync(
         ChatSettingsStore? chatSettingsStore = null,
-        OverlayUserRankResolver? rankResolver = null)
+        OverlayUserRankResolver? rankResolver = null,
+        IChatPlatformRegistry? platformRegistry = null,
+        PoproshaykaBot.Core.YouTube.Streaming.IYouTubeActiveBroadcastSource? youtubeBroadcastSource = null,
+        PoproshaykaBot.Core.Broadcast.IBroadcastState? broadcastState = null)
     {
         return EndpointTestServer.CreateAsync(services =>
             {
@@ -66,7 +69,10 @@ public sealed class ChatHistoryEndpointTests
                 sp.GetRequiredService<ChatHistoryManager>(),
                 sp.GetRequiredService<ObsChatStore>(),
                 chatSettingsStore,
-                rankResolver: rankResolver));
+                rankResolver: rankResolver,
+                platformRegistry: platformRegistry,
+                youtubeBroadcastSource: youtubeBroadcastSource,
+                broadcastState: broadcastState));
     }
 
     private static ChatMessageData NewMessage(string id, DateTime timestamp, string text = "msg")
@@ -335,6 +341,141 @@ public sealed class ChatHistoryEndpointTests
             Assert.That(rankEl.GetProperty("emoji").GetString(), Is.EqualTo(expectedRank.Emoji));
             Assert.That(rankEl.GetProperty("name").GetString(), Is.EqualTo(expectedRank.Name));
             Assert.That(rankEl.GetProperty("tier").GetInt32(), Is.EqualTo(expectedRank.Tier));
+        }
+    }
+
+    [Test]
+    public async Task GetHistory_PreviewQuery_DoesNotFilterLiveMessagesByFadeOut()
+    {
+        _obsChatStore.Save(new()
+        {
+            MaxMessages = 100,
+            EnableMessageFadeOut = true,
+            MessageLifetimeSeconds = 45,
+        });
+
+        var now = DateTime.UtcNow;
+        _historyManager.AddMessage(NewMessage("old-live", now.AddMinutes(-15), "older live"));
+        _historyManager.AddMessage(NewMessage("fresh-live", now.AddSeconds(-5), "fresh live"));
+
+        using var server = await CreateServerAsync();
+        using var client = server.CreateClient();
+
+        var obsJson = await client.GetStringAsync("/api/history");
+        var obsDoc = JsonDocument.Parse(obsJson).RootElement;
+
+        var previewJson = await client.GetStringAsync("/api/history?preview=true");
+        var previewDoc = JsonDocument.Parse(previewJson).RootElement;
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(obsDoc.GetArrayLength(), Is.EqualTo(1));
+            Assert.That(obsDoc[0].GetProperty("messageId").GetString(), Is.EqualTo("fresh-live"));
+
+            Assert.That(previewDoc.GetArrayLength(), Is.EqualTo(2));
+            Assert.That(previewDoc[0].GetProperty("messageId").GetString(), Is.EqualTo("old-live"));
+            Assert.That(previewDoc[1].GetProperty("messageId").GetString(), Is.EqualTo("fresh-live"));
+        }
+    }
+
+    [Test]
+    public async Task GetHistory_FiltersOutPreviousStreamMessages_WhenPlatformIsLive()
+    {
+        var chatSettingsStore = new ChatSettingsStore(null, null, Path.Combine(_tempDir, "chat-cur-stream.json"));
+        chatSettingsStore.Save(new() { ShowHistoryInObs = true });
+        _obsChatStore.Save(new() { MaxMessages = 100, EnableMessageFadeOut = false });
+
+        var now = DateTime.UtcNow;
+        var streamStart = now.AddMinutes(-30);
+
+        var twitchStatus = Substitute.For<PoproshaykaBot.Core.Streaming.IStreamStatus>();
+        twitchStatus.CurrentStatus.Returns(PoproshaykaBot.Core.Streaming.StreamStatus.Online);
+        twitchStatus.CurrentStream.Returns(new PoproshaykaBot.Core.Streaming.StreamInfo
+        {
+            Id = "stream-2",
+            StartedAt = streamStart,
+        });
+
+        var twitchPlatform = Substitute.For<IChatPlatform>();
+        twitchPlatform.Id.Returns(StreamingPlatform.Twitch);
+        twitchPlatform.StreamStatus.Returns(twitchStatus);
+
+        var ytStatus = Substitute.For<PoproshaykaBot.Core.Streaming.IStreamStatus>();
+        ytStatus.CurrentStatus.Returns(PoproshaykaBot.Core.Streaming.StreamStatus.Online);
+        ytStatus.CurrentStream.Returns(new PoproshaykaBot.Core.Streaming.StreamInfo
+        {
+            Id = "yt-video-today",
+            StartedAt = streamStart,
+        });
+
+        var ytPlatform = Substitute.For<IChatPlatform>();
+        ytPlatform.Id.Returns(StreamingPlatform.YouTube);
+        ytPlatform.StreamStatus.Returns(ytStatus);
+
+        var registry = new ChatPlatformRegistry([twitchPlatform, ytPlatform]);
+        var ytSource = Substitute.For<PoproshaykaBot.Core.YouTube.Streaming.IYouTubeActiveBroadcastSource>();
+        ytSource.CurrentBroadcast.Returns(new PoproshaykaBot.Core.YouTube.Streaming.YouTubeBroadcastSummary(
+            "yt-video-today",
+            "UC-1",
+            "Chan",
+            "live-today",
+            "Today",
+            new DateTimeOffset(streamStart, TimeSpan.Zero)));
+
+        var twitchScope = Core.Chat.History.ChatHistoryScope.ForTwitch("1", "chan");
+        _historyManager.ImportHistory(twitchScope,
+        [
+            new()
+            {
+                Platform = StreamingPlatform.Twitch,
+                Channel = "chan",
+                ChannelId = "1",
+                MessageId = "tw-yesterday",
+                Timestamp = now.AddDays(-1),
+                UserId = "u1",
+                DisplayName = "user1",
+                Message = "yesterday",
+            },
+            new()
+            {
+                Platform = StreamingPlatform.Twitch,
+                Channel = "chan",
+                ChannelId = "1",
+                MessageId = "tw-today-cached",
+                Timestamp = now.AddMinutes(-10),
+                UserId = "u2",
+                DisplayName = "user2",
+                Message = "today cached",
+            },
+        ]);
+
+        var ytOldScope = Core.Chat.History.ChatHistoryScope.ForYouTube("UC-1", "live-yesterday", "Chan");
+        _historyManager.ImportHistory(ytOldScope,
+        [
+            new()
+            {
+                Platform = StreamingPlatform.YouTube,
+                Channel = "Chan",
+                ChannelId = "UC-1",
+                ChatSessionId = "live-yesterday",
+                MessageId = "yt-yesterday",
+                Timestamp = now.AddDays(-1),
+                UserId = "u3",
+                DisplayName = "ytuser",
+                Message = "yt yesterday",
+            },
+        ]);
+
+        using var server = await CreateServerAsync(chatSettingsStore, platformRegistry: registry, youtubeBroadcastSource: ytSource);
+        using var client = server.CreateClient();
+
+        var json = await client.GetStringAsync("/api/history?preview=true");
+        var doc = JsonDocument.Parse(json).RootElement;
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(doc.GetArrayLength(), Is.EqualTo(1));
+            Assert.That(doc[0].GetProperty("messageId").GetString(), Is.EqualTo("tw-today-cached"));
         }
     }
 }

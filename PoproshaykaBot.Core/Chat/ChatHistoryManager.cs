@@ -6,6 +6,7 @@ using PoproshaykaBot.Core.Infrastructure.Events.Streaming;
 using PoproshaykaBot.Core.Platforms;
 using PoproshaykaBot.Core.Settings;
 using PoproshaykaBot.Core.Settings.Stores;
+using PoproshaykaBot.Core.YouTube.Streaming;
 
 namespace PoproshaykaBot.Core.Chat;
 
@@ -21,13 +22,17 @@ public sealed class ChatHistoryManager : IDisposable
     private readonly ChannelCatalogStore? _channelCatalogStore;
     private readonly PlatformChannelRegistry? _channelRegistry;
     private readonly ITargetChannelProvider? _targetChannelProvider;
+    private readonly IYouTubeActiveBroadcastSource? _youtubeBroadcastSource;
     private readonly IDisposable _activeChannelSubscription;
+    private readonly IDisposable _youtubeBroadcastSubscription;
     private readonly Lock _sync = new();
     private readonly Dictionary<ChatHistoryScope, ChatHistoryBuffer> _buffers = [];
     private readonly Dictionary<StreamingPlatform, ChatHistoryScope> _activeScopesByPlatform = [];
     private readonly Dictionary<StreamingPlatform, string> _activeChannelIdsByPlatform = [];
 
     private DateTimeOffset? _globalClearedAtUtc;
+    private string? _pinnedYouTubeChannelId;
+    private string? _pinnedYouTubeLiveChatId;
     private bool _disposed;
 
     public ChatHistoryManager(
@@ -38,7 +43,8 @@ public sealed class ChatHistoryManager : IDisposable
         TimeProvider? timeProvider = null,
         ChannelCatalogStore? channelCatalogStore = null,
         PlatformChannelRegistry? channelRegistry = null,
-        ITargetChannelProvider? targetChannelProvider = null)
+        ITargetChannelProvider? targetChannelProvider = null,
+        IYouTubeActiveBroadcastSource? youtubeBroadcastSource = null)
     {
         ArgumentNullException.ThrowIfNull(settingsManager);
         ArgumentNullException.ThrowIfNull(eventBus);
@@ -51,8 +57,10 @@ public sealed class ChatHistoryManager : IDisposable
         _channelCatalogStore = channelCatalogStore;
         _channelRegistry = channelRegistry;
         _targetChannelProvider = targetChannelProvider;
+        _youtubeBroadcastSource = youtubeBroadcastSource;
 
         _activeChannelSubscription = _eventBus.Subscribe<ActiveChannelChanged>(OnActiveChannelChanged);
+        _youtubeBroadcastSubscription = _eventBus.Subscribe<YouTubeActiveBroadcastChanged>(OnYouTubeActiveBroadcastChanged);
 
         if (_historySettingsProvider is not null)
         {
@@ -181,6 +189,40 @@ public sealed class ChatHistoryManager : IDisposable
             foreach (var buffer in _buffers.Values)
             {
                 if (IsActiveScopeUnderLock(buffer.Scope))
+                {
+                    all.AddRange(buffer.GetSnapshot());
+                }
+            }
+        }
+
+        all.Sort(static (left, right) => ChatMessageDataFactory.ToUtcTicks(left.Timestamp).CompareTo(ChatMessageDataFactory.ToUtcTicks(right.Timestamp)));
+        return all;
+    }
+
+    public IReadOnlyList<ChatMessageData> GetActiveChannelHistory()
+    {
+        List<ChatMessageData> all = [];
+
+        lock (_sync)
+        {
+            foreach (var buffer in _buffers.Values)
+            {
+                var activeChannelId = ResolveAuthoritativeChannelIdUnderLock(buffer.Scope.Platform);
+                if (activeChannelId is null
+                    && _activeScopesByPlatform.TryGetValue(buffer.Scope.Platform, out var activeScope)
+                    && !string.IsNullOrWhiteSpace(activeScope.ChannelId))
+                {
+                    activeChannelId = activeScope.ChannelId;
+                }
+
+                if (activeChannelId is not null)
+                {
+                    if (string.Equals(buffer.Scope.ChannelId, activeChannelId, StringComparison.Ordinal))
+                    {
+                        all.AddRange(buffer.GetSnapshot());
+                    }
+                }
+                else if (IsActiveScopeUnderLock(buffer.Scope))
                 {
                     all.AddRange(buffer.GetSnapshot());
                 }
@@ -434,6 +476,7 @@ public sealed class ChatHistoryManager : IDisposable
 
         _disposed = true;
         _activeChannelSubscription.Dispose();
+        _youtubeBroadcastSubscription.Dispose();
 
         if (_historySettingsProvider is not null)
         {
@@ -453,7 +496,64 @@ public sealed class ChatHistoryManager : IDisposable
         lock (_sync)
         {
             _activeChannelIdsByPlatform[@event.Platform] = normalizedId;
+            if (@event.Platform == StreamingPlatform.YouTube)
+            {
+                if (_youtubeBroadcastSource?.CurrentBroadcast is { } broadcast
+                    && !string.IsNullOrWhiteSpace(broadcast.LiveChatId)
+                    && string.Equals(broadcast.ChannelId?.Trim(), normalizedId, StringComparison.Ordinal))
+                {
+                    _pinnedYouTubeChannelId = normalizedId;
+                    _pinnedYouTubeLiveChatId = broadcast.LiveChatId.Trim();
+                    _activeScopesByPlatform[StreamingPlatform.YouTube] =
+                        ChatHistoryScope.ForYouTube(normalizedId, broadcast.LiveChatId, broadcast.ChannelTitle);
+                    return;
+                }
+
+                if (!string.Equals(_pinnedYouTubeChannelId, normalizedId, StringComparison.Ordinal))
+                {
+                    _pinnedYouTubeChannelId = null;
+                    _pinnedYouTubeLiveChatId = null;
+                }
+            }
+
             SelectNewestBufferForChannelUnderLock(@event.Platform, normalizedId);
+        }
+    }
+
+    private void OnYouTubeActiveBroadcastChanged(YouTubeActiveBroadcastChanged @event)
+    {
+        var broadcast = @event.ActiveBroadcast;
+        if (broadcast is null)
+        {
+            lock (_sync)
+            {
+                _pinnedYouTubeChannelId = null;
+                _pinnedYouTubeLiveChatId = null;
+            }
+
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(broadcast.ChannelId)
+            || string.IsNullOrWhiteSpace(broadcast.LiveChatId))
+        {
+            return;
+        }
+
+        var scope = ChatHistoryScope.ForYouTube(broadcast.ChannelId, broadcast.LiveChatId, broadcast.ChannelTitle);
+
+        lock (_sync)
+        {
+            var activeChannelId = ResolveAuthoritativeChannelIdUnderLock(StreamingPlatform.YouTube);
+            if (activeChannelId is not null
+                && !string.Equals(scope.ChannelId, activeChannelId, StringComparison.Ordinal))
+            {
+                return;
+            }
+
+            _pinnedYouTubeChannelId = scope.ChannelId;
+            _pinnedYouTubeLiveChatId = scope.SessionScopeId;
+            _activeScopesByPlatform[StreamingPlatform.YouTube] = scope;
         }
     }
 
@@ -504,6 +604,11 @@ public sealed class ChatHistoryManager : IDisposable
             return;
         }
 
+        if (IsSupersededByPinnedYouTubeScopeUnderLock(scope))
+        {
+            return;
+        }
+
         _activeScopesByPlatform[scope.Platform] = scope;
     }
 
@@ -518,6 +623,11 @@ public sealed class ChatHistoryManager : IDisposable
         var activeChannelId = ResolveAuthoritativeChannelIdUnderLock(scope.Platform);
         if (activeChannelId is not null
             && !string.Equals(scope.ChannelId, activeChannelId, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        if (IsSupersededByPinnedYouTubeScopeUnderLock(scope))
         {
             return;
         }
@@ -544,6 +654,36 @@ public sealed class ChatHistoryManager : IDisposable
         {
             _activeScopesByPlatform[scope.Platform] = scope;
         }
+    }
+
+    private bool IsSupersededByPinnedYouTubeScopeUnderLock(ChatHistoryScope scope)
+    {
+        if (scope.Platform != StreamingPlatform.YouTube)
+        {
+            return false;
+        }
+
+        var authoritativeLiveChatId = ResolveAuthoritativeYouTubeLiveChatIdUnderLock(scope.ChannelId);
+        return !string.IsNullOrWhiteSpace(authoritativeLiveChatId)
+            && !string.Equals(scope.SessionScopeId, authoritativeLiveChatId, StringComparison.Ordinal);
+    }
+
+    private string? ResolveAuthoritativeYouTubeLiveChatIdUnderLock(string channelId)
+    {
+        if (_youtubeBroadcastSource?.CurrentBroadcast is { } broadcast
+            && !string.IsNullOrWhiteSpace(broadcast.LiveChatId)
+            && string.Equals(broadcast.ChannelId?.Trim(), channelId, StringComparison.Ordinal))
+        {
+            return broadcast.LiveChatId.Trim();
+        }
+
+        if (!string.IsNullOrWhiteSpace(_pinnedYouTubeLiveChatId)
+            && string.Equals(_pinnedYouTubeChannelId, channelId, StringComparison.Ordinal))
+        {
+            return _pinnedYouTubeLiveChatId;
+        }
+
+        return null;
     }
 
     private bool IsActiveScopeUnderLock(ChatHistoryScope scope)

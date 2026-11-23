@@ -34,6 +34,13 @@
                   Style="{StaticResource CheckBox.Default}" />
         <TextBlock Style="{StaticResource Form.CheckHint}"
                    Text="Передавать прошлые сообщения в браузерный чат-оверлей при запуске и обновлении источника."
+                   Margin="24,2,0,10" />
+
+        <CheckBox Content="Недавняя история Twitch (recent-messages.robotty.de)"
+                  IsChecked="{Binding FetchTwitchRecentMessages, Mode=TwoWay}"
+                  Style="{StaticResource CheckBox.Default}" />
+        <TextBlock Style="{StaticResource Form.CheckHint}"
+                   Text="При подключении к Twitch запрашивать последние сообщения через сторонний архив recent-messages.robotty.de. Работает только для публично логируемых каналов."
                    Margin="24,2,0,14" />
 
         <TextBlock Text="Хранение кэша"

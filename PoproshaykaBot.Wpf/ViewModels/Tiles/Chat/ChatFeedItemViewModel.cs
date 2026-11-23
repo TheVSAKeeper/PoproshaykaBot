@@ -38,7 +38,12 @@ public sealed partial class ChatFeedMessageItemViewModel : ChatFeedItemViewModel
         bool isFirstTime,
         string authorColorHex,
         Action<PlatformUserKey>? openUser,
-        string platformDisplayName)
+        string platformDisplayName,
+        string? chatSessionId = null,
+        Guid? broadcastId = null,
+        string? streamId = null,
+        DateTime? streamStartedAtUtc = null,
+        string? streamTitle = null)
     {
         Key = key;
         Channel = channel;
@@ -49,6 +54,11 @@ public sealed partial class ChatFeedMessageItemViewModel : ChatFeedItemViewModel
         UserId = userId;
         UserKey = new PlatformUserKey(key.Platform, userId);
         PlatformDisplayName = platformDisplayName;
+        ChatSessionId = chatSessionId;
+        BroadcastId = broadcastId;
+        StreamId = streamId;
+        StreamStartedAtUtc = streamStartedAtUtc;
+        StreamTitle = streamTitle;
         IsHistorical = isHistorical;
         IsBot = isBot;
         IsFirstTime = isFirstTime;
@@ -64,6 +74,16 @@ public sealed partial class ChatFeedMessageItemViewModel : ChatFeedItemViewModel
     public StreamingPlatform Platform => Key.Platform;
 
     public string PlatformDisplayName { get; }
+
+    public string? ChatSessionId { get; }
+
+    public Guid? BroadcastId { get; }
+
+    public string? StreamId { get; }
+
+    public DateTime? StreamStartedAtUtc { get; }
+
+    public string? StreamTitle { get; }
 
     public override StreamingPlatform? PlatformFilterKey => Platform;
 
@@ -168,6 +188,15 @@ public sealed partial class ChatFeedMessageItemViewModel : ChatFeedItemViewModel
 public sealed class ChatFeedHistoryBoundaryItemViewModel : ChatFeedItemViewModel
 {
     public string Label => "Загружена предыдущая история";
+}
+
+public sealed class ChatFeedStreamDividerItemViewModel(string key, string label, bool isStreamBoundary) : ChatFeedItemViewModel
+{
+    public string Key { get; } = key;
+
+    public string Label { get; } = label;
+
+    public bool IsStreamBoundary { get; } = isStreamBoundary;
 }
 
 public sealed class ChatFeedGapItemViewModel : ChatFeedItemViewModel

@@ -23,6 +23,11 @@ public static class WebView2UserDataFolders
         return AppPaths.Combine(RootFolderName, "twitch-accounts");
     }
 
+    public static string ResolveYouTubeAccounts()
+    {
+        return AppPaths.Combine(RootFolderName, "youtube-accounts");
+    }
+
     private static string RoleSegment(PlatformAuthRole role)
     {
         return role switch

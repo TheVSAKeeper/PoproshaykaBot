@@ -61,6 +61,24 @@
                         </DockPanel.Style>
                         <TextBlock DockPanel.Dock="Left" Text="{Binding DisplayName}" Style="{StaticResource ChatPaneTitle}"
                                    VerticalAlignment="Center" />
+                        <Button DockPanel.Dock="Right"
+                                Content="Войти в браузере"
+                                Command="{Binding SignInBrowserCommand}"
+                                Style="{StaticResource Button.Ghost}"
+                                Padding="6,1" MinHeight="22" Margin="6,0,0,0"
+                                FontSize="{DynamicResource Font.Size.S}"
+                                AutomationProperties.Name="Войти в браузерный чат YouTube"
+                                ToolTip="Войти в аккаунт Google внутри плитки для полного контроля и модерации чата YouTube"
+                                Visibility="{Binding CanSignInBrowser, Converter={StaticResource BoolToVisibility}}" />
+                        <Button DockPanel.Dock="Right"
+                                Content="Выйти"
+                                Command="{Binding ResetBrowserSessionCommand}"
+                                Style="{StaticResource Button.Ghost}"
+                                Padding="6,1" MinHeight="22" Margin="6,0,0,0"
+                                FontSize="{DynamicResource Font.Size.S}"
+                                AutomationProperties.Name="Сбросить веб-сессию YouTube"
+                                ToolTip="Сбросить браузерную сессию YouTube и вернуться к отправке через API"
+                                Visibility="{Binding CanResetBrowserSession, Converter={StaticResource BoolToVisibility}}" />
                         <ComboBox ItemsSource="{Binding AccountChoices}"
                                   SelectedItem="{Binding SelectedAccount, Mode=TwoWay}"
                                   DisplayMemberPath="Label"

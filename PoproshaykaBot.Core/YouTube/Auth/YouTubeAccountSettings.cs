@@ -17,4 +17,6 @@ public sealed class YouTubeAccountSettings : IRoleAccountSettings
     public string[] StoredScopes { get; set; } = [];
 
     public DateTimeOffset? AccessTokenExpiresAt { get; set; }
+
+    public string? BrowserProfileName { get; set; }
 }

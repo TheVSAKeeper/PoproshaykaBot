@@ -15,6 +15,8 @@ public sealed partial class ChatDisplayPaneViewModel(
     IShellLauncher shellLauncher, IChatPlatformRegistry? platformRegistry, ISettingsStore? uiSettings = null) : ObservableObject
 {
     private IChatAccountMessenger? _accountMessenger;
+    private Func<string, string, Task>? _signInBrowserAsync;
+    private Action<string, string>? _resetBrowserSession;
     private string? _streamId;
     private bool _updatingAccounts;
     private StreamingPlatform? _accountsPlatform;
@@ -25,8 +27,8 @@ public sealed partial class ChatDisplayPaneViewModel(
     private IReadOnlyList<ChatDisplayAccountOption> _accountChoices = [];
 
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(ShowMessageInput))]
-    [NotifyCanExecuteChangedFor(nameof(SendMessageCommand))]
+    [NotifyPropertyChangedFor(nameof(ShowMessageInput), nameof(CanSignInBrowser), nameof(CanResetBrowserSession))]
+    [NotifyCanExecuteChangedFor(nameof(SendMessageCommand), nameof(SignInBrowserCommand), nameof(ResetBrowserSessionCommand))]
     private ChatDisplayAccountOption? _selectedAccount;
 
     [ObservableProperty]
@@ -57,7 +59,8 @@ public sealed partial class ChatDisplayPaneViewModel(
     private string _fallbackDescription = string.Empty;
 
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(DisplayName))]
+    [NotifyPropertyChangedFor(nameof(DisplayName), nameof(CanSignInBrowser), nameof(CanResetBrowserSession))]
+    [NotifyCanExecuteChangedFor(nameof(SignInBrowserCommand), nameof(ResetBrowserSessionCommand))]
     private StreamingPlatform _platform;
 
     public string DisplayName => PlatformVisuals.GetDisplayName(Platform, platformRegistry);
@@ -68,7 +71,51 @@ public sealed partial class ChatDisplayPaneViewModel(
     public bool ShowMessageInput => _streamId is not null && SelectedAccount?.Sender is not null
         && SelectedAccount.BrowserProfile is null;
 
+    public bool CanSignInBrowser => Platform == StreamingPlatform.YouTube
+        && !string.IsNullOrWhiteSpace(SelectedAccount?.Id)
+        && SelectedAccount.BrowserProfile is null
+        && _signInBrowserAsync is not null;
+
+    public bool CanResetBrowserSession => Platform == StreamingPlatform.YouTube
+        && !string.IsNullOrWhiteSpace(SelectedAccount?.Id)
+        && SelectedAccount.BrowserProfile is not null
+        && _resetBrowserSession is not null;
+
     internal event Action? ChatAccountChanged;
+
+    internal void SetBrowserSessionHandlers(
+        Func<string, string, Task>? signInBrowserAsync,
+        Action<string, string>? resetBrowserSession)
+    {
+        _signInBrowserAsync = signInBrowserAsync;
+        _resetBrowserSession = resetBrowserSession;
+        OnPropertyChanged(nameof(CanSignInBrowser));
+        OnPropertyChanged(nameof(CanResetBrowserSession));
+        SignInBrowserCommand.NotifyCanExecuteChanged();
+        ResetBrowserSessionCommand.NotifyCanExecuteChanged();
+    }
+
+    [RelayCommand(CanExecute = nameof(CanSignInBrowser))]
+    private async Task SignInBrowserAsync()
+    {
+        if (!CanSignInBrowser || SelectedAccount is not { } account || _signInBrowserAsync is null)
+        {
+            return;
+        }
+
+        await _signInBrowserAsync(account.Id, account.Label);
+    }
+
+    [RelayCommand(CanExecute = nameof(CanResetBrowserSession))]
+    private void ResetBrowserSession()
+    {
+        if (!CanResetBrowserSession || SelectedAccount is not { } account || _resetBrowserSession is null)
+        {
+            return;
+        }
+
+        _resetBrowserSession(account.Id, account.Label);
+    }
 
     internal void SetAccounts(IPlatformAccountDirectory? directory, string? streamId, string defaultLabel)
     {
@@ -88,12 +135,17 @@ public sealed partial class ChatDisplayPaneViewModel(
         foreach (var account in directory?.ListAccounts() ?? [])
         {
             var authorizations = account.Authorizations.Where(static grant => grant.HasToken).ToArray();
+            if (authorizations.Length == 0)
+            {
+                continue;
+            }
+
             var browserProfile = authorizations.Select(grant => grant.ChatBrowserProfile).FirstOrDefault(profile => profile is not null);
             var sender = _accountMessenger is { } messenger
                 ? authorizations.Select(grant => new ChatSenderAccount(account.Key.AccountId, grant.Role, grant.ContextId))
                     .FirstOrDefault(messenger.CanSendAs)
                 : null;
-            if (browserProfile is null && sender is null)
+            if (browserProfile is null && sender is null && Platform != StreamingPlatform.YouTube)
             {
                 continue;
             }

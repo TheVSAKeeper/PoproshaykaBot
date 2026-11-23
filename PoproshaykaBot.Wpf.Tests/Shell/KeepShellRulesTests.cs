@@ -41,7 +41,9 @@ internal sealed class KeepShellRulesTests
     {
         var violations = ViewPairRule.MissingViews(
             typeof(ShellViewModel).Assembly,
-            type => ViewPairRule.IsDialogViewModel(type) && type != typeof(EmbeddedTwitchAuthDialogViewModel));
+            type => ViewPairRule.IsDialogViewModel(type)
+                && type != typeof(EmbeddedTwitchAuthDialogViewModel)
+                && type != typeof(EmbeddedYouTubeChatLoginDialogViewModel));
 
         Assert.That(violations, Is.Empty, () => RuleViolation.Report(violations));
     }

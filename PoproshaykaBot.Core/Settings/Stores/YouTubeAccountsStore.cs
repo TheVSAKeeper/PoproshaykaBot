@@ -4,6 +4,7 @@ using PoproshaykaBot.Core.Infrastructure;
 using PoproshaykaBot.Core.Platforms;
 using PoproshaykaBot.Core.Platforms.Auth;
 using PoproshaykaBot.Core.Settings.Migrations.LegacyImport;
+using PoproshaykaBot.Core.Twitch.Auth;
 using PoproshaykaBot.Core.YouTube.Auth;
 
 namespace PoproshaykaBot.Core.Settings.Stores;
@@ -102,6 +103,47 @@ public sealed class YouTubeAccountsStore : RoleAccountsStoreBase<YouTubeAccounts
     public override (IReadOnlyList<(PlatformAuthRole Role, string ContextId)> Removed, bool Written) RemoveAccount(string accountId) =>
         RemoveAccountCore(accountId, YouTubeOAuthRoleHelpers.ClearAccountInPlace);
 
+    public bool SetBrowserProfile(string accountId, string? profileName)
+    {
+        if (string.IsNullOrWhiteSpace(accountId))
+        {
+            return false;
+        }
+
+        var normalizedId = accountId.Trim();
+        var normalizedProfile = string.IsNullOrWhiteSpace(profileName) ? null : profileName.Trim();
+        if (normalizedProfile is not null && !Guid.TryParseExact(normalizedProfile, "N", out _))
+        {
+            throw new ArgumentException("Имя профиля браузера должно быть 32-символьным идентификатором.", nameof(profileName));
+        }
+
+        var updated = false;
+        var written = MutateFile(state =>
+        {
+            foreach (var role in PlatformAuthRoles.Active)
+            {
+                if (GetAccount(state, role) is { } defaultAccount
+                    && string.Equals(defaultAccount.ChannelId, normalizedId, StringComparison.Ordinal))
+                {
+                    defaultAccount.BrowserProfileName = normalizedProfile;
+                    updated = true;
+                }
+            }
+
+            foreach (var context in GetContexts(state))
+            {
+                if (context.Account is not null
+                    && string.Equals(context.Account.ChannelId, normalizedId, StringComparison.Ordinal))
+                {
+                    context.Account.BrowserProfileName = normalizedProfile;
+                    updated = true;
+                }
+            }
+        });
+
+        return updated && written;
+    }
+
     protected override YouTubeAccountSettings? GetAccount(YouTubeAccountsFileDto state, PlatformAuthRole role)
     {
         return role == PlatformAuthRole.Bot ? state.BotAccount : state.BroadcasterAccount;
@@ -137,11 +179,56 @@ public sealed class YouTubeAccountsStore : RoleAccountsStoreBase<YouTubeAccounts
 
     protected override string? GetDisplayLabel(YouTubeAccountSettings account) => account.ChannelTitle;
 
+    protected override PlatformChatBrowserProfile? GetChatBrowserProfile(YouTubeAccountSettings account) =>
+        Guid.TryParseExact(account.BrowserProfileName, "N", out var profileId)
+            ? new(WebView2UserDataFolders.ResolveYouTubeAccounts(), profileId.ToString("N"))
+            : null;
+
     protected override void CopyAccountFields(YouTubeAccountSettings source, YouTubeAccountSettings target)
     {
+        var previousChannelId = target.ChannelId;
         base.CopyAccountFields(source, target);
         target.ChannelId = source.ChannelId;
         target.ChannelTitle = source.ChannelTitle;
+        target.BrowserProfileName = source.BrowserProfileName
+            ?? (string.Equals(source.ChannelId, previousChannelId, StringComparison.Ordinal) ? target.BrowserProfileName : null);
+    }
+
+    protected override void OnContextsUpserted(
+        YouTubeAccountsFileDto state,
+        IReadOnlyList<(PlatformAuthRole Role, string ContextId, string Label, YouTubeAccountSettings Account)> entries)
+    {
+        foreach (var entry in entries)
+        {
+            if (string.IsNullOrWhiteSpace(entry.Account.ChannelId)
+                || string.IsNullOrWhiteSpace(entry.Account.BrowserProfileName))
+            {
+                continue;
+            }
+
+            SyncBrowserProfileForChannel(state, entry.Account.ChannelId, entry.Account.BrowserProfileName);
+        }
+    }
+
+    private void SyncBrowserProfileForChannel(YouTubeAccountsFileDto state, string channelId, string profileName)
+    {
+        foreach (var role in PlatformAuthRoles.Active)
+        {
+            if (GetAccount(state, role) is { } defaultAccount
+                && string.Equals(defaultAccount.ChannelId, channelId, StringComparison.Ordinal))
+            {
+                defaultAccount.BrowserProfileName = profileName;
+            }
+        }
+
+        foreach (var context in GetContexts(state))
+        {
+            if (context.Account is not null
+                && string.Equals(context.Account.ChannelId, channelId, StringComparison.Ordinal))
+            {
+                context.Account.BrowserProfileName = profileName;
+            }
+        }
     }
 
     protected override void OnRoleMutated(PlatformAuthRole role, bool written)

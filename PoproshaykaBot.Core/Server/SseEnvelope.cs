@@ -1,6 +1,6 @@
 ﻿namespace PoproshaykaBot.Core.Server;
 
-public readonly record struct SseEnvelope(string? EventType, string Payload)
+public readonly record struct SseEnvelope(string? EventType, string Payload, bool LegacyClientsOnly = false)
 {
     public bool IsComment => EventType is null;
 

@@ -654,6 +654,7 @@ public partial class App : Application
         services.AddSingleton<IUnsavedChangesPrompt, UnsavedChangesPrompt>();
         services.AddSingleton<IOnboardingWizardLauncher, OnboardingWizardLauncher>();
         services.AddSingleton<IEmbeddedTwitchAuthDialog, EmbeddedTwitchAuthDialog>();
+        services.AddSingleton<IEmbeddedYouTubeChatLoginDialog, EmbeddedYouTubeChatLoginDialog>();
         services.AddSingleton<ILegacyImportDialog, LegacyImportDialog>();
         services.AddSingleton<StreamMonitoringViewModel>();
         services.AddSingleton<IMainWindowController, MainWindowController>();
@@ -665,6 +666,7 @@ public partial class App : Application
         services.AddTransient<PollProfileEditDialogViewModel>();
         services.AddTransient<PollFromProfileDialogViewModel>();
         services.AddTransient<EmbeddedTwitchAuthDialogViewModel>();
+        services.AddTransient<EmbeddedYouTubeChatLoginDialogViewModel>();
         services.AddTransient<MultistreamPlatformSetupDialogViewModel>();
         services.AddTransient<MultistreamChannelWizardDialogViewModel>();
 

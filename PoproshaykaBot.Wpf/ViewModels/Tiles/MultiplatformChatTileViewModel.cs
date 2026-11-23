@@ -8,6 +8,7 @@ using PoproshaykaBot.Core.Infrastructure.Events;
 using PoproshaykaBot.Core.Infrastructure.Events.Chat;
 using PoproshaykaBot.Core.Infrastructure.Events.Streaming;
 using PoproshaykaBot.Core.Platforms;
+using PoproshaykaBot.Core.Statistics;
 using PoproshaykaBot.Wpf.Bootstrap;
 using PoproshaykaBot.Wpf.Infrastructure;
 using PoproshaykaBot.Wpf.Infrastructure.Platforms;
@@ -32,9 +33,12 @@ public sealed partial class MultiplatformChatTileViewModel : DashboardTileViewMo
     private readonly IChatPlatformRegistry? _platformRegistry;
     private readonly IUiDispatcher? _uiDispatcher;
     private readonly ISettingsStore? _uiSettings;
+    private readonly BroadcastHistoryStore? _broadcastHistoryStore;
     private readonly List<IDisposable> _subscriptions = [];
     private readonly List<ChatFeedItemViewModel> _allItems = [];
     private readonly ChatFeedHistoryBoundaryItemViewModel _historyBoundaryItem = new();
+    private readonly Dictionary<string, ChatFeedStreamDividerItemViewModel> _streamDividers = new(StringComparer.Ordinal);
+    private IReadOnlyList<BroadcastRecord> _knownBroadcasts = [];
 
     private double _feedFontSize;
     private bool _suppressPersist;
@@ -72,7 +76,8 @@ public sealed partial class MultiplatformChatTileViewModel : DashboardTileViewMo
         IChatHistorySettingsProvider? chatSettingsProvider = null,
         IUiDispatcher? uiDispatcher = null,
         IChatPlatformRegistry? platformRegistry = null,
-        ISettingsStore? uiSettings = null)
+        ISettingsStore? uiSettings = null,
+        BroadcastHistoryStore? broadcastHistoryStore = null)
         : base(TileTypeId, "Общий чат", minWidth: 280, minHeight: 220)
     {
         ArgumentNullException.ThrowIfNull(chatHistory);
@@ -83,6 +88,7 @@ public sealed partial class MultiplatformChatTileViewModel : DashboardTileViewMo
         _platformRegistry = platformRegistry;
         _uiDispatcher = uiDispatcher;
         _uiSettings = uiSettings;
+        _broadcastHistoryStore = broadcastHistoryStore;
         PlatformOptions = platformRegistry is null
             ? PlatformFilterOption.AllOptions
             : [PlatformFilterOption.All, .. platformRegistry.All.Select(static platform => new PlatformFilterOption(platform.Id, platform.DisplayName))];
@@ -104,6 +110,8 @@ public sealed partial class MultiplatformChatTileViewModel : DashboardTileViewMo
         _subscriptions.Add(eventBus.SubscribeOnUi<ChatHistoryCleared>(OnChatHistoryCleared));
         _subscriptions.Add(eventBus.SubscribeOnUi<ChatReadingGapDetected>(OnChatReadingGapDetected));
         _subscriptions.Add(eventBus.SubscribeOnUi<ActiveChannelChanged>(OnActiveChannelChanged));
+        _subscriptions.Add(eventBus.SubscribeOnUi<YouTubeActiveBroadcastChanged>(_ => OnStreamContextChanged()));
+        _subscriptions.Add(eventBus.SubscribeOnUi<StreamWentOnline>(_ => OnStreamContextChanged()));
 
         if (_chatSettingsProvider is not null)
         {
@@ -347,9 +355,10 @@ public sealed partial class MultiplatformChatTileViewModel : DashboardTileViewMo
     private void LoadInitialHistory()
     {
         _allItems.Clear();
+        RefreshKnownStreamSessions();
 
         var showHistory = _chatSettingsProvider?.GetCurrent().ShowHistoryInApp ?? false;
-        var history = _chatHistory.GetActiveHistory();
+        var history = showHistory ? _chatHistory.GetActiveChannelHistory() : _chatHistory.GetActiveHistory();
 
         foreach (var entry in history)
         {
@@ -366,14 +375,45 @@ public sealed partial class MultiplatformChatTileViewModel : DashboardTileViewMo
         UnreadCount = 0;
     }
 
+    private void OnStreamContextChanged()
+    {
+        RefreshKnownStreamSessions();
+        RebuildVisibleItems();
+    }
+
+    private void RefreshKnownStreamSessions()
+    {
+        if (_broadcastHistoryStore is null)
+        {
+            _knownBroadcasts = [];
+            return;
+        }
+
+        try
+        {
+            _knownBroadcasts = _broadcastHistoryStore.LoadVisible().Broadcasts
+                .Where(static broadcast => !broadcast.IsHidden)
+                .OrderBy(static broadcast => broadcast.StartedAt)
+                .ToArray();
+        }
+        catch
+        {
+            _knownBroadcasts = [];
+        }
+    }
+
     private void OnChatHistoryLoaded(ChatHistoryLoaded historyEvent)
     {
-        if (!_chatHistory.IsActiveScope(historyEvent.Scope))
+        var showHistory = _chatSettingsProvider?.GetCurrent().ShowHistoryInApp ?? false;
+        var scopeMatches = showHistory
+            ? _chatHistory.IsActiveChannel(historyEvent.Scope.Platform, historyEvent.Scope.ChannelId)
+            : _chatHistory.IsActiveScope(historyEvent.Scope);
+
+        if (!scopeMatches)
         {
             return;
         }
 
-        var showHistory = _chatSettingsProvider?.GetCurrent().ShowHistoryInApp ?? false;
         var addedAny = false;
 
         foreach (var entry in historyEvent.AddedEntries)
@@ -570,7 +610,12 @@ public sealed partial class MultiplatformChatTileViewModel : DashboardTileViewMo
             entry.IsFirstTime,
             entry.Color,
             key => UserRequested?.Invoke(this, key),
-            PlatformVisuals.GetDisplayName(entry.Platform, _platformRegistry));
+            PlatformVisuals.GetDisplayName(entry.Platform, _platformRegistry),
+            entry.ChatSessionId,
+            entry.BroadcastId,
+            entry.StreamId,
+            entry.StreamStartedAtUtc,
+            entry.StreamTitle);
     }
 
     private bool ShouldDisplayEntry(ChatMessageData entry, CommandResponseMark? responseOverride = null)
@@ -679,7 +724,7 @@ public sealed partial class MultiplatformChatTileViewModel : DashboardTileViewMo
     {
         var filter = SelectedPlatformFilter?.Platform;
         var hasHistoricalVisible = false;
-        var target = new List<ChatFeedItemViewModel>(_allItems.Count);
+        var filtered = new List<ChatFeedItemViewModel>(_allItems.Count);
 
         foreach (var item in _allItems)
         {
@@ -687,7 +732,7 @@ public sealed partial class MultiplatformChatTileViewModel : DashboardTileViewMo
             {
                 if (hasHistoricalVisible)
                 {
-                    target.Add(item);
+                    filtered.Add(item);
                 }
 
                 continue;
@@ -703,11 +748,213 @@ public sealed partial class MultiplatformChatTileViewModel : DashboardTileViewMo
                 hasHistoricalVisible = true;
             }
 
+            filtered.Add(item);
+        }
+
+        var target = BuildItemsWithStreamDividers(filtered);
+        SyncVisibleItems(target);
+        OnPropertyChanged(nameof(IsEmpty));
+    }
+
+    private List<ChatFeedItemViewModel> BuildItemsWithStreamDividers(List<ChatFeedItemViewModel> filtered)
+    {
+        var messageCount = 0;
+        var distinctPartitions = new HashSet<string>(StringComparer.Ordinal);
+        var hasExplicitStreamOrPastDate = false;
+        var todayLocal = DateTime.Now.Date;
+        var partitions = new Dictionary<ChatFeedMessageItemViewModel, (string Key, string Label, bool IsStream)>(ReferenceEqualityComparer.Instance);
+
+        foreach (var item in filtered)
+        {
+            if (item is not ChatFeedMessageItemViewModel msg)
+            {
+                continue;
+            }
+
+            messageCount++;
+            var partition = ResolveMessagePartition(msg);
+            partitions[msg] = partition;
+            distinctPartitions.Add(partition.Key);
+
+            if (partition.IsStream || msg.TimestampUtc.ToLocalTime().Date != todayLocal)
+            {
+                hasExplicitStreamOrPastDate = true;
+            }
+        }
+
+        if (messageCount == 0 || (distinctPartitions.Count <= 1 && !hasExplicitStreamOrPastDate))
+        {
+            return filtered;
+        }
+
+        var target = new List<ChatFeedItemViewModel>(filtered.Count + distinctPartitions.Count);
+        var occurrenceByKey = new Dictionary<string, int>(StringComparer.Ordinal);
+        string? currentPartitionKey = null;
+
+        foreach (var item in filtered)
+        {
+            if (item is ChatFeedMessageItemViewModel msg
+                && partitions.TryGetValue(msg, out var partition)
+                && !string.Equals(currentPartitionKey, partition.Key, StringComparison.Ordinal))
+            {
+                currentPartitionKey = partition.Key;
+                var occurrence = occurrenceByKey.TryGetValue(partition.Key, out var count) ? count : 0;
+                occurrenceByKey[partition.Key] = occurrence + 1;
+                target.Add(GetOrCreateDivider($"{partition.Key}#{occurrence}", partition.Label, partition.IsStream));
+            }
+
             target.Add(item);
         }
 
-        SyncVisibleItems(target);
-        OnPropertyChanged(nameof(IsEmpty));
+        while (target.Count > MaxFeedItems)
+        {
+            target.RemoveAt(0);
+        }
+
+        while (target.Count > 0 && target[0] is ChatFeedHistoryBoundaryItemViewModel)
+        {
+            target.RemoveAt(0);
+        }
+
+        while (target.Count > 0
+            && target[0] is ChatFeedStreamDividerItemViewModel
+            && (target.Count == 1 || target[1] is not ChatFeedMessageItemViewModel))
+        {
+            target.RemoveAt(0);
+        }
+
+        if (target.Count > 0 && target[0] is ChatFeedMessageItemViewModel)
+        {
+            if (target.Count >= MaxFeedItems)
+            {
+                target.RemoveAt(0);
+            }
+
+            while (target.Count > 0 && target[0] is ChatFeedHistoryBoundaryItemViewModel)
+            {
+                target.RemoveAt(0);
+            }
+
+            if (target.Count > 0
+                && target[0] is ChatFeedMessageItemViewModel headMsg
+                && partitions.TryGetValue(headMsg, out var headPartition))
+            {
+                target.Insert(0, GetOrCreateDivider($"{headPartition.Key}#head", headPartition.Label, headPartition.IsStream));
+            }
+        }
+
+        return target;
+    }
+
+    private ChatFeedStreamDividerItemViewModel GetOrCreateDivider(string key, string label, bool isStream)
+    {
+        if (_streamDividers.TryGetValue(key, out var existing)
+            && string.Equals(existing.Label, label, StringComparison.Ordinal))
+        {
+            return existing;
+        }
+
+        var created = new ChatFeedStreamDividerItemViewModel(key, label, isStream);
+        _streamDividers[key] = created;
+        return created;
+    }
+
+    private (string Key, string Label, bool IsStream) ResolveMessagePartition(ChatFeedMessageItemViewModel msg)
+    {
+        if (msg.BroadcastId is { } broadcastId)
+        {
+            var startLocal = (msg.StreamStartedAtUtc ?? msg.TimestampUtc).ToLocalTime();
+            return ($"broadcast:{broadcastId:N}", FormatStreamLabel(startLocal, msg.StreamTitle), true);
+        }
+
+        if (!string.IsNullOrWhiteSpace(msg.StreamId))
+        {
+            var startLocal = (msg.StreamStartedAtUtc ?? msg.TimestampUtc).ToLocalTime();
+            return ($"stream:{msg.Platform}:{msg.StreamId}", FormatStreamLabel(startLocal, msg.StreamTitle), true);
+        }
+
+        if (TryMatchKnownBroadcast(msg, out var matchedBroadcast, out var matchedPlatform))
+        {
+            var startedAt = matchedPlatform.StartedAt != default ? matchedPlatform.StartedAt : matchedBroadcast.StartedAt;
+            var title = !string.IsNullOrWhiteSpace(matchedPlatform.Title) ? matchedPlatform.Title : matchedBroadcast.Title;
+            var label = FormatStreamLabel(startedAt.ToLocalTime().DateTime, title);
+            return ($"broadcast:{matchedBroadcast.Id:N}", label, true);
+        }
+
+        if (!string.IsNullOrWhiteSpace(msg.ChatSessionId))
+        {
+            var local = msg.TimestampUtc.ToLocalTime();
+            return ($"session:{msg.Platform}:{msg.ChatSessionId}", $"Эфир {local.ToString("dd.MM", UiCulture.Russian)}", true);
+        }
+
+        var localDate = msg.TimestampUtc.ToLocalTime().Date;
+        return ($"date:{localDate:yyyy-MM-dd}", localDate.ToString("d MMMM yyyy", UiCulture.Russian), false);
+    }
+
+    private bool TryMatchKnownBroadcast(
+        ChatFeedMessageItemViewModel msg,
+        out BroadcastRecord matchedBroadcast,
+        out BroadcastPlatformRecord matchedPlatform)
+    {
+        matchedBroadcast = null!;
+        matchedPlatform = null!;
+
+        if (_knownBroadcasts.Count == 0)
+        {
+            return false;
+        }
+
+        var msgOffset = new DateTimeOffset(DateTime.SpecifyKind(msg.TimestampUtc, DateTimeKind.Utc));
+        var grace = TimeSpan.FromMinutes(5);
+
+        foreach (var broadcast in _knownBroadcasts)
+        {
+            foreach (var platform in broadcast.Platforms)
+            {
+                if (platform.Platform != msg.Platform || !ChannelMatchesPlatformRecord(msg, platform))
+                {
+                    continue;
+                }
+
+                var start = (platform.StartedAt != default ? platform.StartedAt : broadcast.StartedAt) - grace;
+                var rawEnd = platform.EndedAt > platform.StartedAt
+                    ? platform.EndedAt
+                    : (broadcast.EndedAt > broadcast.StartedAt ? broadcast.EndedAt : platform.StartedAt);
+                var end = rawEnd + grace;
+                if (msgOffset >= start && msgOffset <= end)
+                {
+                    matchedBroadcast = broadcast;
+                    matchedPlatform = platform;
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    private static bool ChannelMatchesPlatformRecord(ChatFeedMessageItemViewModel msg, BroadcastPlatformRecord platform)
+    {
+        if (!string.IsNullOrWhiteSpace(platform.ChannelId) && !string.IsNullOrWhiteSpace(msg.Key.ChannelId))
+        {
+            return string.Equals(platform.ChannelId, msg.Key.ChannelId, StringComparison.OrdinalIgnoreCase);
+        }
+
+        if (!string.IsNullOrWhiteSpace(platform.Channel) && !string.IsNullOrWhiteSpace(msg.Channel))
+        {
+            return string.Equals(platform.Channel, msg.Channel, StringComparison.OrdinalIgnoreCase);
+        }
+
+        return false;
+    }
+
+    private static string FormatStreamLabel(DateTime startLocal, string? title)
+    {
+        var stamp = startLocal.ToString("dd.MM · HH:mm", UiCulture.Russian);
+        var trimmedTitle = title?.Trim();
+        return string.IsNullOrEmpty(trimmedTitle)
+            ? $"Стрим {stamp}"
+            : $"Стрим {stamp} – {trimmedTitle}";
     }
 
     private void SyncVisibleItems(List<ChatFeedItemViewModel> target)
@@ -751,6 +998,11 @@ public sealed partial class MultiplatformChatTileViewModel : DashboardTileViewMo
                 Items.Insert(i, expected);
             }
         }
+
+        while (Items.Count > target.Count)
+        {
+            Items.RemoveAt(Items.Count - 1);
+        }
     }
 
     private bool MatchesFilter(ChatFeedItemViewModel item)
@@ -782,6 +1034,13 @@ public sealed partial class MultiplatformChatTileViewModel : DashboardTileViewMo
     private static bool ScopeMatchesMessage(ChatHistoryScope scope, ChatFeedMessageItemViewModel message)
     {
         if (message.Platform != scope.Platform)
+        {
+            return false;
+        }
+
+        if (!string.IsNullOrWhiteSpace(scope.SessionScopeId)
+            && !string.IsNullOrWhiteSpace(message.ChatSessionId)
+            && !string.Equals(message.ChatSessionId, scope.SessionScopeId, StringComparison.Ordinal))
         {
             return false;
         }
