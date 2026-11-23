@@ -120,6 +120,75 @@ public class CompactLayoutTests
     }
 
     [Test]
+    public void Модальные_диалоги_не_прыгают_по_ширине_и_ограничивают_высоту_при_изменении_содержимого()
+    {
+        static Size MeasureConverged(FrameworkElement view, Size ceiling)
+        {
+            for (var pass = 0; pass < 3; pass++)
+            {
+                view.InvalidateMeasure();
+                view.Measure(ceiling);
+                view.Arrange(new(view.DesiredSize));
+                view.UpdateLayout();
+            }
+
+            return view.DesiredSize;
+        }
+
+        var modalCeiling = new Size(1100, 760);
+        var compactCeiling = new Size(976, 572);
+
+        // PointTermDialogView: длинные формы не должны растягивать ширину
+        var termVm = new PointTermDialogViewModel();
+        var termView = new PointTermDialogView { DataContext = termVm };
+        var termBefore = MeasureConverged(termView, modalCeiling);
+        termVm.Singular = "очень длинное название валюты канала";
+        termVm.Few = "очень длинных названия валюты канала";
+        termVm.Many = "очень длинных названий валюты канала";
+        var termAfter = MeasureConverged(termView, modalCeiling);
+
+        // PollProfileEditDialogView: включение опций и текст ошибки не прыгают по ширине и укладываются в компактный потолок
+        var pollVm = new PollProfileEditDialogViewModel(null!);
+        var pollView = new PollProfileEditDialogView { DataContext = pollVm };
+        var pollScroll = ((Grid)pollView.Content).Children.OfType<ScrollViewer>().First();
+        var pollBefore = MeasureConverged(pollView, modalCeiling);
+        var pollExtentBefore = pollScroll.ExtentHeight;
+
+        pollVm.ChannelPointsEnabled = true;
+        pollVm.SelectedTriggerItem = pollVm.TriggerItems[2];
+        pollVm.ErrorMessage = PollProfileEditDialogViewModel.NotWrittenNotice;
+        pollVm.HasError = true;
+        var pollAfter = MeasureConverged(pollView, modalCeiling);
+        var pollExtentAfter = pollScroll.ExtentHeight;
+        var pollCompact = MeasureConverged(pollView, compactCeiling);
+
+        // ChatBlockersDialogView: длинная строка CSS-селектора не должна растягивать диалог
+        var blockersVm = new ChatBlockersDialogViewModel(string.Empty);
+        var blockersView = new ChatBlockersDialogView { DataContext = blockersVm };
+        var blockersBefore = MeasureConverged(blockersView, modalCeiling);
+        blockersVm.Selectors = "div.very-long-selector-class-name > section.banner-container > article.promo-card[data-test='long-banner-value']";
+        var blockersAfter = MeasureConverged(blockersView, modalCeiling);
+
+        // ColorPickerDialogView: длинный ввод в HexText не должен менять ширину
+        var colorVm = new ColorPickerDialogViewModel(System.Drawing.Color.CornflowerBlue, "Цвет текста");
+        var colorView = new ColorPickerDialogView { DataContext = colorVm };
+        var colorBefore = MeasureConverged(colorView, modalCeiling);
+        colorVm.HexText = "#FF6495ED-extra-long-input-text-value";
+        var colorAfter = MeasureConverged(colorView, modalCeiling);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(termAfter.Width, Is.EqualTo(termBefore.Width).Within(0.5), "PointTermDialogView прыгнул по ширине");
+            Assert.That(pollExtentAfter - pollExtentBefore, Is.GreaterThan(80), "Скрытые поля PollProfileEditDialogView должны участвовать в расчёте ScrollViewer");
+            Assert.That(pollAfter.Width, Is.EqualTo(pollBefore.Width).Within(0.5), "PollProfileEditDialogView прыгнул по ширине");
+            Assert.That(pollAfter.Height, Is.LessThan(modalCeiling.Height - 20), "PollProfileEditDialogView не должен раздуваться до потолка ModalHost");
+            Assert.That(pollCompact.Height, Is.LessThanOrEqualTo(compactCeiling.Height + 0.5), "PollProfileEditDialogView вышел за высоту 1024x640");
+            Assert.That(blockersAfter.Width, Is.EqualTo(blockersBefore.Width).Within(0.5), "ChatBlockersDialogView прыгнул по ширине");
+            Assert.That(colorAfter.Width, Is.EqualTo(colorBefore.Width).Within(0.5), "ColorPickerDialogView прыгнул по ширине");
+        });
+    }
+
+    [Test]
     public void Баннер_онбординга_переносит_текст_и_не_подрезает_кнопку()
     {
         ApplyScale(1.6);

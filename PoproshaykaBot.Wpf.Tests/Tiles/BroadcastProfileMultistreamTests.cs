@@ -252,6 +252,86 @@ public sealed class BroadcastProfileMultistreamTests
         });
     }
 
+    [Test]
+    [Apartment(ApartmentState.STA)]
+    [NonParallelizable]
+    public void BroadcastProfileEditDialogView_Toggling_YouTube_Keeps_Dialog_Size_Stable()
+    {
+        TestResources.Ensure(Dictionaries);
+
+        static System.Windows.Size MeasureConverged(BroadcastProfileEditDialogView view, System.Windows.Size ceiling)
+        {
+            for (var pass = 0; pass < 3; pass++)
+            {
+                view.InvalidateMeasure();
+                view.Measure(ceiling);
+                view.Arrange(new(view.DesiredSize));
+                view.UpdateLayout();
+            }
+
+            return view.DesiredSize;
+        }
+
+        var registry = CreateRegistry();
+        using var game = new GameAutocompleteViewModel(new StubGameResolver(), new ManualUiDispatcher());
+        using var vm = new BroadcastProfileEditDialogViewModel(
+            game,
+            null!,
+            null!,
+            NullLogger<BroadcastProfileEditDialogViewModel>.Instance,
+            registry);
+
+        vm.LoadFrom(
+            new BroadcastProfile
+            {
+                Name = ".net помойка",
+                Title = ".net помойка / готовимся к собесам",
+                CurrentNumber = 10,
+                GameId = "1",
+                GameName = "Software and Game Development",
+            },
+            new HashSet<StreamingPlatform> { StreamingPlatform.Twitch });
+
+        var view = new BroadcastProfileEditDialogView { DataContext = vm };
+        var scrollViewer = ((System.Windows.Controls.Grid)view.Content).Children
+            .OfType<System.Windows.Controls.ScrollViewer>()
+            .First();
+        var modalCeiling = new System.Windows.Size(1100, 760);
+
+        var twitchOnlySize = MeasureConverged(view, modalCeiling);
+        var twitchOnlyExtent = scrollViewer.ExtentHeight;
+
+        var youtubeOption = vm.TargetPlatforms.Single(o => o.Platform == StreamingPlatform.YouTube);
+        youtubeOption.IsSelected = true;
+
+        var withYouTubeSize = MeasureConverged(view, modalCeiling);
+        var withYouTubeExtent = scrollViewer.ExtentHeight;
+
+        // Negative case: long {n} title preview without YouTube must also keep dialog width fixed
+        youtubeOption.IsSelected = false;
+        vm.ProfileTitle = "Очень длинный заголовок трансляции с шаблоном номера серии #{n} для проверки ширины диалога";
+        var withLongPreviewSize = MeasureConverged(view, modalCeiling);
+
+        // Negative case: compact 1024x640 ModalHost ceiling must never clip footer buttons
+        youtubeOption.IsSelected = true;
+        var compactCeiling = new System.Windows.Size(976, 572);
+        var compactSize = MeasureConverged(view, compactCeiling);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(withYouTubeExtent - twitchOnlyExtent, Is.GreaterThan(150),
+                "Секция YouTube должна реально участвовать в расчёте ScrollViewer");
+            Assert.That(withYouTubeSize.Width, Is.EqualTo(twitchOnlySize.Width).Within(0.5),
+                $"Ширина диалога прыгнула: {twitchOnlySize.Width:F1} -> {withYouTubeSize.Width:F1}");
+            Assert.That(withLongPreviewSize.Width, Is.EqualTo(twitchOnlySize.Width).Within(0.5),
+                $"Ширина диалога прыгнула на длинном превью: {twitchOnlySize.Width:F1} -> {withLongPreviewSize.Width:F1}");
+            Assert.That(withYouTubeSize.Height - twitchOnlySize.Height, Is.LessThanOrEqualTo(55),
+                $"Высота диалога резко выросла: {twitchOnlySize.Height:F1} -> {withYouTubeSize.Height:F1}");
+            Assert.That(compactSize.Height, Is.LessThanOrEqualTo(compactCeiling.Height + 0.5),
+                "При компактном окне 1024x640 диалог не должен выходить за доступную высоту ModalHost");
+        });
+    }
+
     private static StubPlatformRegistry CreateRegistry()
     {
         return new(

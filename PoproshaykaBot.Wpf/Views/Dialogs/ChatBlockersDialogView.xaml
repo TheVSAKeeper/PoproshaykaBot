@@ -7,7 +7,8 @@
              mc:Ignorable="d"
              d:DataContext="{d:DesignInstance vm:ChatBlockersDialogViewModel}"
              MinWidth="480"
-             MaxWidth="620">
+             MaxWidth="620"
+             Width="540">
     <StackPanel Margin="24">
         <TextBlock Text="{Binding Title}"
                    Style="{StaticResource TextBlock.Heading}"

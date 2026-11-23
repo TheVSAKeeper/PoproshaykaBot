@@ -8,7 +8,8 @@
              mc:Ignorable="d"
              d:DataContext="{d:DesignInstance vm:PollProfileEditDialogViewModel}"
              MinWidth="460"
-             MaxWidth="560">
+             MaxWidth="560"
+             Width="540">
 
     <Grid Margin="24">
         <Grid.RowDefinitions>
@@ -24,7 +25,8 @@
 
         <ScrollViewer Grid.Row="1"
                       VerticalScrollBarVisibility="Auto"
-                      HorizontalScrollBarVisibility="Disabled">
+                      HorizontalScrollBarVisibility="Disabled"
+                      MaxHeight="480">
         <StackPanel>
 
             <TextBlock Text="Вопрос голосования"

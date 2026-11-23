@@ -9,7 +9,8 @@
              mc:Ignorable="d"
              d:DataContext="{d:DesignInstance vm:BroadcastProfileEditDialogViewModel}"
              MinWidth="500"
-             MaxWidth="780"
+             MaxWidth="640"
+             Width="560"
              Loaded="OnLoaded">
     <Grid Margin="24">
         <Grid.RowDefinitions>
@@ -26,7 +27,8 @@
 
         <ScrollViewer Grid.Row="1"
                       VerticalScrollBarVisibility="Auto"
-                      HorizontalScrollBarVisibility="Disabled">
+                      HorizontalScrollBarVisibility="Disabled"
+                      MaxHeight="500">
         <StackPanel Grid.IsSharedSizeScope="True">
             <TextBlock Text="Общее"
                        FontWeight="SemiBold"

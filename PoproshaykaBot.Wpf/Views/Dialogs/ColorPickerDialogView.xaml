@@ -7,7 +7,8 @@
              mc:Ignorable="d"
              d:DataContext="{d:DesignInstance vm:ColorPickerDialogViewModel}"
              MinWidth="420"
-             MaxWidth="520">
+             MaxWidth="520"
+             Width="460">
     <StackPanel Margin="24">
         <TextBlock Text="{Binding Title}"
                    Style="{StaticResource TextBlock.Heading}"
