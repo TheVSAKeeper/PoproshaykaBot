@@ -23,6 +23,8 @@ public sealed class TwitchSettings
 
     public PlatformAuthRole ChatDisplayAccount { get; set; } = PlatformAuthRole.Bot;
 
+    public bool FetchRecentMessages { get; set; }
+
     public MessageSettings Messages { get; set; } = new();
 
     public AutoBroadcastSettings AutoBroadcast { get; set; } = new();

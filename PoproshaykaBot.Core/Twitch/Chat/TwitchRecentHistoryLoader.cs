@@ -6,13 +6,15 @@ using PoproshaykaBot.Core.Infrastructure.Events;
 using PoproshaykaBot.Core.Infrastructure.Events.Chat;
 using PoproshaykaBot.Core.Platforms;
 using PoproshaykaBot.Core.Platforms.Auth;
+using PoproshaykaBot.Core.Settings;
 
 namespace PoproshaykaBot.Core.Twitch.Chat;
 
 public sealed class TwitchRecentHistoryLoader : IEventHandler<ChatIngestionStarted>, IEventSubscriber, IDisposable
 {
     private readonly ITwitchRecentMessagesClient _client;
-    private readonly IChatHistorySettingsProvider _settingsProvider;
+    private readonly SettingsManager _settingsManager;
+    private readonly IChatHistorySettingsProvider _historySettingsProvider;
     private readonly PlatformChannelRegistry _channelRegistry;
     private readonly ITargetChannelProvider _targetChannelProvider;
     private readonly IBotUserIdProvider _botUserIdProvider;
@@ -24,7 +26,8 @@ public sealed class TwitchRecentHistoryLoader : IEventHandler<ChatIngestionStart
 
     public TwitchRecentHistoryLoader(
         ITwitchRecentMessagesClient client,
-        IChatHistorySettingsProvider settingsProvider,
+        SettingsManager settingsManager,
+        IChatHistorySettingsProvider historySettingsProvider,
         PlatformChannelRegistry channelRegistry,
         ITargetChannelProvider targetChannelProvider,
         IBotUserIdProvider botUserIdProvider,
@@ -32,7 +35,8 @@ public sealed class TwitchRecentHistoryLoader : IEventHandler<ChatIngestionStart
         ILogger<TwitchRecentHistoryLoader> logger)
     {
         _client = client;
-        _settingsProvider = settingsProvider;
+        _settingsManager = settingsManager;
+        _historySettingsProvider = historySettingsProvider;
         _channelRegistry = channelRegistry;
         _targetChannelProvider = targetChannelProvider;
         _botUserIdProvider = botUserIdProvider;
@@ -48,8 +52,7 @@ public sealed class TwitchRecentHistoryLoader : IEventHandler<ChatIngestionStart
             return Task.CompletedTask;
         }
 
-        var settings = _settingsProvider.GetCurrent();
-        if (!settings.FetchTwitchRecentMessages)
+        if (!_settingsManager.Current.Twitch.FetchRecentMessages)
         {
             return Task.CompletedTask;
         }
@@ -59,7 +62,8 @@ public sealed class TwitchRecentHistoryLoader : IEventHandler<ChatIngestionStart
             return Task.CompletedTask;
         }
 
-        var limit = Math.Min(TwitchRecentMessagesClient.DefaultLimit, Math.Max(1, settings.HistoryMaxItems));
+        var historySettings = _historySettingsProvider.GetCurrent();
+        var limit = Math.Min(TwitchRecentMessagesClient.DefaultLimit, Math.Max(1, historySettings.HistoryMaxItems));
 
         _eventBus.ContinueAfterPublish(() => LoadAndPublishAsync(channelLogin, channelId, botContextId, limit));
         return Task.CompletedTask;

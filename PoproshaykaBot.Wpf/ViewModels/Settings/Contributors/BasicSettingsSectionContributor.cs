@@ -61,7 +61,7 @@ public sealed class BasicSettingsSectionContributor : ISettingsSectionContributo
         [
             new(
                 "basic/channel",
-                "Отображение чата Twitch",
+                "Чат Twitch",
                 null,
                 _basic) { Platform = PoproshaykaBot.Core.Platforms.StreamingPlatform.Twitch },
             new(

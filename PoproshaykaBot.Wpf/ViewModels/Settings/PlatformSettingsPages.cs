@@ -18,7 +18,7 @@ internal static class PlatformSettingsPages
     public const string ChannelCatalogKey = "channels/catalog";
 
     internal const string MultistreamKey = "multistream";
-    private const string TwitchSearch = "twitch твич helix eventsub чат отображение";
+    private const string TwitchSearch = "twitch твич helix eventsub чат отображение история недавняя recent-messages";
     private const string YouTubeSearch = "youtube ютуб google cloud квота testing production desktop";
     private const string MultistreamSearch = "мультистрим профиль профили вещание трансляция автозапуск группы рейтинг рассылка остановка";
 

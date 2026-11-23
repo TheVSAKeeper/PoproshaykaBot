@@ -170,24 +170,22 @@ internal sealed class ChatImprovementsWpfTests
     }
 
     [Test]
-    public void ChatSettingsSectionViewModel_LoadsAndSavesFetchTwitchRecentMessages()
+    public void BasicSettingsSectionViewModel_LoadsAndSavesTwitchFetchRecentMessages()
     {
-        var vm = new ChatSettingsSectionViewModel();
-        var loaded = new ChatSettings
+        var vm = new BasicSettingsSectionViewModel();
+        var loaded = new TwitchSettings
         {
-            ShowHistoryInApp = true,
-            ShowHistoryInObs = false,
-            FetchTwitchRecentMessages = true,
-            HistoryMaxItems = 500,
+            Channel = "bobito217",
+            FetchRecentMessages = true,
         };
 
         vm.LoadSettings(loaded);
-        Assert.That(vm.FetchTwitchRecentMessages, Is.True);
+        Assert.That(vm.FetchRecentMessages, Is.True);
 
-        vm.FetchTwitchRecentMessages = false;
-        var saved = new ChatSettings();
+        vm.FetchRecentMessages = false;
+        var saved = new TwitchSettings();
         vm.SaveSettings(saved);
-        Assert.That(saved.FetchTwitchRecentMessages, Is.False);
+        Assert.That(saved.FetchRecentMessages, Is.False);
     }
 
     [Test]

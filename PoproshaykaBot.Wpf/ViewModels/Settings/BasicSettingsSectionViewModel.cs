@@ -18,6 +18,9 @@ public sealed partial class BasicSettingsSectionViewModel : ObservableValidator,
     [ObservableProperty]
     private PlatformAuthRole _chatDisplayAccount;
 
+    [ObservableProperty]
+    private bool _fetchRecentMessages;
+
     public BasicSettingsSectionViewModel()
     {
         ChatAccountOptions =
@@ -35,12 +38,14 @@ public sealed partial class BasicSettingsSectionViewModel : ObservableValidator,
     {
         Channel = settings.Channel;
         ChatDisplayAccount = settings.ChatDisplayAccount;
+        FetchRecentMessages = settings.FetchRecentMessages;
     }
 
     public void SaveSettings(TwitchSettings settings)
     {
         settings.Channel = Channel.Trim();
         settings.ChatDisplayAccount = ChatDisplayAccount;
+        settings.FetchRecentMessages = FetchRecentMessages;
     }
 
     public string GetChannel()

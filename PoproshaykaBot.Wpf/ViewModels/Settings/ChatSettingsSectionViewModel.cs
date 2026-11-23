@@ -15,9 +15,6 @@ public sealed partial class ChatSettingsSectionViewModel : ObservableObject, IDi
     private bool _showHistoryInObs;
 
     [ObservableProperty]
-    private bool _fetchTwitchRecentMessages;
-
-    [ObservableProperty]
     private int _historyMaxItems = ChatSettings.DefaultHistoryMaxItems;
 
     public void LoadSettings(ChatSettings settings)
@@ -26,7 +23,6 @@ public sealed partial class ChatSettingsSectionViewModel : ObservableObject, IDi
 
         ShowHistoryInApp = settings.ShowHistoryInApp;
         ShowHistoryInObs = settings.ShowHistoryInObs;
-        FetchTwitchRecentMessages = settings.FetchTwitchRecentMessages;
         HistoryMaxItems = ChatSettings.ClampHistoryMaxItems(settings.HistoryMaxItems);
     }
 
@@ -36,7 +32,6 @@ public sealed partial class ChatSettingsSectionViewModel : ObservableObject, IDi
 
         settings.ShowHistoryInApp = ShowHistoryInApp;
         settings.ShowHistoryInObs = ShowHistoryInObs;
-        settings.FetchTwitchRecentMessages = FetchTwitchRecentMessages;
         settings.HistoryMaxItems = ChatSettings.ClampHistoryMaxItems(HistoryMaxItems);
         HistoryMaxItems = settings.HistoryMaxItems;
     }

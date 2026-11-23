@@ -12,7 +12,6 @@ public static class SettingsDescriber
 
         return $"история в окне бота {OnOff(settings.ShowHistoryInApp)}, "
             + $"история в OBS {OnOff(settings.ShowHistoryInObs)}, "
-            + $"недавняя история Twitch {OnOff(settings.FetchTwitchRecentMessages)}, "
             + $"лимит кэша {settings.HistoryMaxItems}";
     }
 
@@ -27,6 +26,7 @@ public static class SettingsDescriber
 
         return $"канал {Value(twitch.Channel)}, clientId {Present(twitch.ClientId)}, clientSecret {Present(twitch.ClientSecret)}, "
             + $"redirectUri {Value(twitch.RedirectUri)}, порт {twitch.HttpServerPort}, аккаунт чата {twitch.ChatDisplayAccount}, "
+            + $"недавняя история Twitch {OnOff(twitch.FetchRecentMessages)}, "
             + $"лимит {twitch.MessagesAllowedInPeriod} сообщений за {twitch.ThrottlingPeriodSeconds} с, "
             + $"приветствие {OnOff(messages.WelcomeEnabled)}, прощание {OnOff(messages.FarewellEnabled)}, "
             + $"подключение {OnOff(messages.ConnectionEnabled)}, отключение {OnOff(messages.DisconnectionEnabled)}, "

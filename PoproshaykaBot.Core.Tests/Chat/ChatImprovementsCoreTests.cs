@@ -137,6 +137,7 @@ public sealed class ChatImprovementsCoreTests
 
         using var loader = new TwitchRecentHistoryLoader(
             recentClient,
+            settingsManager,
             chatSettings,
             channels,
             targetProvider,
@@ -147,7 +148,8 @@ public sealed class ChatImprovementsCoreTests
         await bus.PublishAsync(new ChatIngestionStarted(StreamingPlatform.Twitch, DateTimeOffset.UtcNow, "177128531"));
         await recentClient.DidNotReceiveWithAnyArgs().FetchAsync(default!, default!, default, default, default);
 
-        chatSettings.Save(new() { FetchTwitchRecentMessages = true, ShowHistoryInApp = true });
+        settingsManager.Mutate(static s => s.Twitch.FetchRecentMessages = true);
+        chatSettings.Save(new() { ShowHistoryInApp = true });
         await bus.PublishAsync(new ChatIngestionStarted(StreamingPlatform.Twitch, DateTimeOffset.UtcNow, "177128531"));
 
         var loaded = await loadedTcs.Task.WaitAsync(TimeSpan.FromSeconds(5));
