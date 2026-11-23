@@ -21,6 +21,8 @@ public interface IChatPlatform
 
     IPlatformMessenger Messenger { get; }
 
+    IChatAccountMessenger? AccountMessenger => null;
+
     IChatDecorations Decorations => NullChatDecorations.Instance;
 
     PlatformBotIdentity? BotIdentity => null;

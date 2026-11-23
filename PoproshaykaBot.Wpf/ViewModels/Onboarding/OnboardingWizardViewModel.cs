@@ -170,7 +170,8 @@ public sealed partial class OnboardingWizardViewModel : ObservableObject
         return string.Equals(left.AccessToken, right.AccessToken, StringComparison.Ordinal)
                && string.Equals(left.RefreshToken, right.RefreshToken, StringComparison.Ordinal)
                && string.Equals(left.Login, right.Login, StringComparison.Ordinal)
-               && string.Equals(left.UserId, right.UserId, StringComparison.Ordinal);
+               && string.Equals(left.UserId, right.UserId, StringComparison.Ordinal)
+               && string.Equals(left.BrowserProfileName, right.BrowserProfileName, StringComparison.Ordinal);
     }
 
     private static T DeepClone<T>(T source) where T : class, new()

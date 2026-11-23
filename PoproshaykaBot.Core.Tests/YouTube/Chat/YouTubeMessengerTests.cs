@@ -10,6 +10,7 @@ using PoproshaykaBot.Core.Settings.Stores;
 using PoproshaykaBot.Core.Tests.Polls;
 using PoproshaykaBot.Core.Twitch.Chat;
 using PoproshaykaBot.Core.YouTube;
+using PoproshaykaBot.Core.YouTube.Auth;
 using PoproshaykaBot.Core.YouTube.Chat;
 using PoproshaykaBot.Core.YouTube.Chat.Transport;
 using PoproshaykaBot.Core.YouTube.Client;
@@ -83,6 +84,87 @@ public class YouTubeMessengerTests
             Assert.That(char.IsHighSurrogate(chunks[0][^1]), Is.False);
             Assert.That(char.IsLowSurrogate(chunks[1][0]), Is.False);
         });
+    }
+
+    [Test]
+    public async Task Manual_send_uses_selected_account_and_rejects_stale_stream_or_account()
+    {
+        var accounts = new YouTubeAccountsStore(filePath: Path.Combine(_directory, "youtube-accounts.json"));
+        accounts.UpsertContext(PlatformAuthRole.Bot, "selected", "Selected", new()
+        {
+            ChannelId = "UCselected", AccessToken = "fixture-token", StoredScopes = [YouTubeScopes.ForceSsl],
+        });
+        var requested = new TaskCompletionSource<(string? ContextId, string? AccountId)>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var response = new TaskCompletionSource<YouTubeInsertMessageResult>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var client = new StubSendClient((_, _, _, ct) =>
+        {
+            requested.TrySetResult((PlatformAuthRequestOptions.CurrentContextId, PlatformAuthRequestOptions.ExpectedAccountId));
+            return response.Task.WaitAsync(ct);
+        });
+        using var messenger = CreateMessenger(client, accounts);
+        await messenger.StartAsync(new Progress<string>(), CancellationToken.None);
+        var sender = new ChatSenderAccount("UCselected", PlatformAuthRole.Bot, "selected");
+        Assert.That(await messenger.SendAsAsync(sender, "old-video", "fixture"),
+            Is.EqualTo(new ChatAccountSendResult(ChatEnqueueResult.NotConnected)));
+        Assert.That(await messenger.SendAsAsync(sender with { AccountId = "UCanother" }, "vid-1", "fixture"),
+            Is.EqualTo(new ChatAccountSendResult(ChatEnqueueResult.AuthorizationRequired)));
+
+        var send = messenger.SendAsAsync(sender, "vid-1", "fixture");
+        Assert.That(await requested.Task.WaitAsync(TimeSpan.FromSeconds(5)), Is.EqualTo(("selected", "UCselected")));
+        Assert.That(send.IsCompleted, Is.False);
+        response.SetResult(new YouTubeInsertMessageResult("sent-id", null));
+        Assert.That(await send.WaitAsync(TimeSpan.FromSeconds(5)),
+            Is.EqualTo(new ChatAccountSendResult(ChatEnqueueResult.Queued, ChatDeliveryStatus.Sent, 1)));
+        await messenger.StopAsync(new Progress<string>(), CancellationToken.None);
+    }
+
+    [TestCase(YouTubeApiErrorKind.Unauthorized, ChatDeliveryStatus.AuthorizationRequired)]
+    [TestCase(YouTubeApiErrorKind.Forbidden, ChatDeliveryStatus.Rejected)]
+    [TestCase(YouTubeApiErrorKind.Transient, ChatDeliveryStatus.Unconfirmed)]
+    public async Task Manual_send_reports_actual_api_failure(YouTubeApiErrorKind apiError, ChatDeliveryStatus expected)
+    {
+        var accounts = new YouTubeAccountsStore(filePath: Path.Combine(_directory, "youtube-accounts.json"));
+        accounts.UpsertContext(PlatformAuthRole.Bot, "selected", "Selected", new()
+        {
+            ChannelId = "UCselected", AccessToken = "fixture-token", StoredScopes = [YouTubeScopes.ForceSsl],
+        });
+        using var messenger = CreateMessenger(new StubSendClient((_, _, _, _) => throw new YouTubeApiException(apiError, "fixture")), accounts);
+        await messenger.StartAsync(new Progress<string>(), CancellationToken.None);
+
+        var send = messenger.SendAsAsync(new("UCselected", PlatformAuthRole.Bot, "selected"), "vid-1", "fixture");
+        await WaitAndAdvanceUntilAsync(() => send.IsCompleted);
+
+        Assert.That(await send, Is.EqualTo(new ChatAccountSendResult(ChatEnqueueResult.Queued, expected)));
+        await messenger.StopAsync(new Progress<string>(), CancellationToken.None);
+    }
+
+    [Test]
+    public async Task Closing_queue_resolves_manual_sends_waiting_for_delivery()
+    {
+        var accounts = new YouTubeAccountsStore(filePath: Path.Combine(_directory, "youtube-accounts.json"));
+        accounts.UpsertContext(PlatformAuthRole.Bot, "selected", "Selected", new()
+        {
+            ChannelId = "UCselected", AccessToken = "fixture-token", StoredScopes = [YouTubeScopes.ForceSsl],
+        });
+        var requested = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var response = new TaskCompletionSource<YouTubeInsertMessageResult>(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var messenger = CreateMessenger(new StubSendClient((_, _, _, ct) =>
+        {
+            requested.TrySetResult();
+            return response.Task.WaitAsync(ct);
+        }), accounts);
+        await messenger.StartAsync(new Progress<string>(), CancellationToken.None);
+
+        var account = new ChatSenderAccount("UCselected", PlatformAuthRole.Bot, "selected");
+        var first = messenger.SendAsAsync(account, "vid-1", "in flight");
+        await requested.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        var second = messenger.SendAsAsync(account, "vid-1", "queued");
+        messenger.Dispose();
+
+        Assert.That(await first.WaitAsync(TimeSpan.FromSeconds(5)),
+            Is.EqualTo(new ChatAccountSendResult(ChatEnqueueResult.Queued, ChatDeliveryStatus.Unconfirmed)));
+        Assert.That(await second.WaitAsync(TimeSpan.FromSeconds(5)),
+            Is.EqualTo(new ChatAccountSendResult(ChatEnqueueResult.Queued, ChatDeliveryStatus.QueueClosed)));
     }
 
     [Test]
@@ -372,6 +454,126 @@ public class YouTubeMessengerTests
         Assert.That(sentTexts, Is.EqualTo(new[] { "second", "after-restart" }));
     }
 
+    [Test]
+    public async Task SendAsAsync_CancelledDuringRateLimitDelay_ReturnsQueueClosed()
+    {
+        var accounts = new YouTubeAccountsStore(filePath: Path.Combine(_directory, "yt-delay-cancel.json"));
+        accounts.UpsertContext(PlatformAuthRole.Bot, "selected", "Alpha", new YouTubeAccountSettings
+        {
+            ChannelId = "UC-1",
+            ChannelTitle = "Alpha",
+            AccessToken = "token-1",
+            RefreshToken = "refresh-1",
+            StoredScopes = [YouTubeScopes.ForceSsl],
+        });
+
+        var sendAttempts = 0;
+        var client = new StubSendClient((_, _, _, _) =>
+        {
+            sendAttempts++;
+            return Task.FromResult(new YouTubeInsertMessageResult($"msg-{sendAttempts}", _clock.GetUtcNow()));
+        });
+
+        using var messenger = CreateMessenger(client, accounts);
+        await messenger.StartAsync(new Progress<string>(), CancellationToken.None);
+
+        var sender = new ChatSenderAccount("UC-1", PlatformAuthRole.Bot, "selected");
+        var first = await messenger.SendAsAsync(sender, "vid-1", "first");
+        Assert.That(first.DeliveryStatus, Is.EqualTo(ChatDeliveryStatus.Sent));
+
+        var secondTask = messenger.SendAsAsync(sender, "vid-1", "second");
+        await Task.Delay(50);
+
+        messenger.Dispose();
+
+        var second = await secondTask;
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(sendAttempts, Is.EqualTo(1));
+            Assert.That(second.DeliveryStatus, Is.EqualTo(ChatDeliveryStatus.QueueClosed));
+            Assert.That(second.SentParts, Is.Zero);
+        });
+    }
+
+    [Test]
+    public async Task AuthHandlers_CheckExpectedAccountId_AndReportUnauthorizedOnMismatch()
+    {
+        var accounts = new YouTubeAccountsStore(filePath: Path.Combine(_directory, "yt-handler-match.json"));
+        accounts.UpsertContext(PlatformAuthRole.Bot, "selected", "Other", new YouTubeAccountSettings
+        {
+            ChannelId = "UC-OTHER", ChannelTitle = "Other", AccessToken = "bot-token", RefreshToken = "bot-refresh",
+        });
+        accounts.UpsertContext(PlatformAuthRole.Broadcaster, "bc-ctx", "Owner", new YouTubeAccountSettings
+        {
+            ChannelId = "UC-OWNER", ChannelTitle = "Owner", AccessToken = "bc-token", RefreshToken = "bc-refresh",
+        });
+
+        var auth = new StubPlatformAuthService(
+            (PlatformAuthRole.Bot, "selected", "bot-token"),
+            (PlatformAuthRole.Broadcaster, "bc-ctx", "bc-token"));
+
+        using var botHandler = new BotYouTubeAuthHandler(
+            auth, Microsoft.Extensions.Logging.Abstractions.NullLogger<BotYouTubeAuthHandler>.Instance, accounts)
+        {
+            InnerHandler = new OkHttpMessageHandler(),
+        };
+        using var broadcasterHandler = new BroadcasterYouTubeAuthHandler(
+            auth, Microsoft.Extensions.Logging.Abstractions.NullLogger<BroadcasterYouTubeAuthHandler>.Instance, accounts)
+        {
+            InnerHandler = new OkHttpMessageHandler(),
+        };
+        using var botClient = new HttpClient(botHandler);
+        using var broadcasterClient = new HttpClient(broadcasterHandler);
+
+        YouTubeApiException? mismatch;
+        using (PlatformAuthRequestOptions.UseContext("selected", "UC-EXPECTED"))
+        {
+            mismatch = Assert.ThrowsAsync<YouTubeApiException>(
+                async () => await botClient.GetAsync("https://www.googleapis.com/youtube/v3/liveChat/messages"));
+        }
+
+        HttpResponseMessage broadcasterResponse;
+        using (PlatformAuthRequestOptions.UseContext("bc-ctx", "UC-OWNER"))
+        {
+            broadcasterResponse = await broadcasterClient.GetAsync("https://www.googleapis.com/youtube/v3/liveChat/messages");
+        }
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(mismatch, Is.Not.Null);
+            Assert.That(mismatch!.Kind, Is.EqualTo(YouTubeApiErrorKind.Unauthorized));
+            Assert.That(broadcasterResponse.StatusCode, Is.EqualTo(System.Net.HttpStatusCode.OK));
+        });
+    }
+
+    private sealed class StubPlatformAuthService(params (PlatformAuthRole Role, string ContextId, string Token)[] tokens)
+        : IPlatformAuthService
+    {
+        public StreamingPlatform Platform => StreamingPlatform.YouTube;
+
+        public ValueTask<string?> GetAccessTokenAsync(PlatformAuthRole role, bool forceRefresh = false, CancellationToken ct = default) =>
+            ValueTask.FromResult<string?>(null);
+
+        public ValueTask<string?> GetAccessTokenAsync(
+            PlatformAuthRole role, string? contextId, bool forceRefresh = false, CancellationToken ct = default) =>
+            ValueTask.FromResult(tokens.FirstOrDefault(t => t.Role == role && t.ContextId == contextId).Token);
+
+        public bool HasUsableAccessToken(PlatformAuthRole role) => true;
+
+        public bool TryClearAccessToken(PlatformAuthRole role, string failedAccessToken) => false;
+
+        public void ResetRetryState(PlatformAuthRole role)
+        {
+        }
+    }
+
+    private sealed class OkHttpMessageHandler : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken) =>
+            Task.FromResult(new HttpResponseMessage(System.Net.HttpStatusCode.OK));
+    }
+
     private async Task WaitAndAdvanceUntilAsync(Func<bool> condition)
     {
         var deadline = DateTime.UtcNow.AddSeconds(5);
@@ -385,7 +587,7 @@ public class YouTubeMessengerTests
         Assert.That(condition(), Is.True, "Ожидание завершения отправки с продвижением ManualTimeProvider истекло");
     }
 
-    private YouTubeMessenger CreateMessenger(IYouTubeLiveChatSendClient sendClient)
+    private YouTubeMessenger CreateMessenger(IYouTubeLiveChatSendClient sendClient, YouTubeAccountsStore? accountsStore = null)
     {
         return new YouTubeMessenger(
             sendClient,
@@ -395,7 +597,8 @@ public class YouTubeMessengerTests
             _sentTracker,
             _responseTracker,
             _clock,
-            Microsoft.Extensions.Logging.Abstractions.NullLogger<YouTubeMessenger>.Instance);
+            Microsoft.Extensions.Logging.Abstractions.NullLogger<YouTubeMessenger>.Instance,
+            accountsStore: accountsStore);
     }
 
     private sealed class StubSendClient(

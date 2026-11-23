@@ -197,6 +197,7 @@
                                             <Button Content="Выйти"
                                                     Style="{StaticResource AccountSignOutButtonStyle}"
                                                     Command="{Binding SignOutCommand}"
+                                                    Visibility="{Binding CanRemove, Converter={StaticResource BoolToVisibility}}"
                                                     ToolTip="Удалить токены этого аккаунта"
                                                     MinHeight="26"
                                                     Padding="10,2"
@@ -212,6 +213,7 @@
                                                        Margin="0,0,8,0" />
                                             <Border Style="{StaticResource Badge}"
                                                     VerticalAlignment="Center"
+                                                    Visibility="{Binding DataContext.IsTechnicalMode, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource BoolToVisibility}}"
                                                     Margin="0,0,6,0">
                                                 <TextBlock Text="{Binding AccountId, StringFormat='ID: {0}'}"
                                                            Style="{StaticResource TextBlock.Mono}"
@@ -267,6 +269,7 @@
                                                                 <Button Content="Убрать роль"
                                                                         Style="{StaticResource Button.Ghost}"
                                                                         Command="{Binding RemoveRoleCommand}"
+                                                                        Visibility="{Binding CanRemove, Converter={StaticResource BoolToVisibility}}"
                                                                         MinHeight="26"
                                                                         Padding="8,2"
                                                                         FontSize="{DynamicResource Font.Size.S}" />
@@ -290,6 +293,28 @@
                                                                            VerticalAlignment="Center" />
                                                             </StackPanel>
                                                         </DockPanel>
+
+                                                        <Button Content="{Binding PermissionsLabel}" Command="{Binding TogglePermissionsCommand}"
+                                                                Style="{StaticResource Button.Ghost}" HorizontalAlignment="Left"
+                                                                Padding="0,2" MinHeight="0" Margin="0,3,0,0"
+                                                                Visibility="{Binding HasPermissions, Converter={StaticResource BoolToVisibility}}" />
+                                                        <ItemsControl ItemsSource="{Binding Permissions}" Focusable="False" Margin="0,4,0,0"
+                                                                      Visibility="{Binding IsPermissionsExpanded, Converter={StaticResource BoolToVisibility}}">
+                                                            <ItemsControl.ItemTemplate>
+                                                                <DataTemplate>
+                                                                    <Grid Margin="0,3,0,3">
+                                                                        <Grid.ColumnDefinitions>
+                                                                            <ColumnDefinition Width="3*" />
+                                                                            <ColumnDefinition Width="2*" />
+                                                                        </Grid.ColumnDefinitions>
+                                                                        <TextBlock Text="{Binding Name}" Style="{StaticResource TextBlock.Subtle}"
+                                                                                   Margin="0,0,10,0" TextWrapping="Wrap" />
+                                                                        <TextBlock Grid.Column="1" Text="{Binding Status}" Style="{StaticResource TextBlock.Subtle}"
+                                                                                   TextWrapping="Wrap" keepshell:SeverityBrushBehavior.Foreground="{Binding Severity}" />
+                                                                    </Grid>
+                                                                </DataTemplate>
+                                                            </ItemsControl.ItemTemplate>
+                                                        </ItemsControl>
 
                                                         <TextBlock Text="{Binding ActionStatusText}"
                                                                    Style="{StaticResource Form.Hint}"
@@ -382,45 +407,6 @@
                                         </ItemsControl.ItemTemplate>
                                     </ItemsControl>
 
-                                    <StackPanel Visibility="{Binding DataContext.IsTechnicalMode, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource InverseBoolToVisibility}}"
-                                                Margin="0,6,0,0">
-                                        <Button Command="{Binding ToggleScopesCommand}"
-                                                Style="{StaticResource Button.Ghost}"
-                                                HorizontalAlignment="Left"
-                                                Padding="4,2"
-                                                MinHeight="24"
-                                                FontSize="{DynamicResource Font.Size.S}">
-                                            <StackPanel Orientation="Horizontal">
-                                                <TextBlock Text="{Binding ScopesToggleLabel}"
-                                                           Foreground="{DynamicResource Fg.Muted}"
-                                                           VerticalAlignment="Center" />
-                                            </StackPanel>
-                                        </Button>
-
-                                        <ItemsControl ItemsSource="{Binding Grants}"
-                                                      Focusable="False"
-                                                      Margin="0,6,0,0"
-                                                      Visibility="{Binding IsScopesExpanded, Converter={StaticResource BoolToVisibility}}">
-                                            <ItemsControl.ItemTemplate>
-                                                <DataTemplate DataType="{x:Type vm:PlatformAccountGrantViewModel}">
-                                                    <StackPanel Margin="0,0,0,6">
-                                                        <TextBlock Foreground="{DynamicResource Fg.Muted}"
-                                                                   FontSize="{DynamicResource Font.Size.S}">
-                                                            <Run Text="{Binding RoleTitle, Mode=OneWay}" />
-                                                            <Run Text=" (" />
-                                                            <Run Text="{Binding ContextDisplay, Mode=OneWay}" />
-                                                            <Run Text="):" />
-                                                        </TextBlock>
-                                                        <TextBlock Text="{Binding GrantedScopesSummary}"
-                                                                   Style="{StaticResource TextBlock.Mono}"
-                                                                   Foreground="{DynamicResource Fg.Secondary}"
-                                                                   TextWrapping="Wrap"
-                                                                   Margin="0,2,0,0" />
-                                                    </StackPanel>
-                                                </DataTemplate>
-                                            </ItemsControl.ItemTemplate>
-                                        </ItemsControl>
-                                    </StackPanel>
                                 </StackPanel>
                             </Border>
                         </DataTemplate>

@@ -11,9 +11,14 @@ using PoproshaykaBot.Core.Chat.Display;
 using PoproshaykaBot.Core.Debugging;
 using PoproshaykaBot.Core.Infrastructure.Events;
 using PoproshaykaBot.Core.Platforms;
+using PoproshaykaBot.Core.Platforms.Auth;
 using PoproshaykaBot.Core.Settings;
 using PoproshaykaBot.Core.Settings.Stores;
 using PoproshaykaBot.Core.Streaming;
+using PoproshaykaBot.Core.Twitch.Auth;
+using PoproshaykaBot.Core.Twitch.Chat;
+using PoproshaykaBot.Core.YouTube.Auth;
+using PoproshaykaBot.Wpf.Tests.Support;
 using PoproshaykaBot.Wpf.ViewModels.Tiles;
 using PoproshaykaBot.Wpf.Views;
 using PoproshaykaBot.Wpf.Views.Tiles;
@@ -21,6 +26,7 @@ using System.IO;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Data;
+using System.Windows.Media;
 
 namespace PoproshaykaBot.Wpf.Tests.Tiles;
 
@@ -342,6 +348,120 @@ public sealed class WebViewTileModalHidingTests
         ChatDisplayLayout layout = ChatDisplayLayout.Single) =>
         model.SelectModeCommand.Execute(model.Modes.Single(mode => mode.Platform == platform && mode.Layout == layout));
 
+    [TestCase("Light")]
+    [TestCase("Dark")]
+    public void Сплит_вмещает_площадку_и_аккаунт_в_одну_строку_и_отправляет_от_имени_YouTube(string theme)
+    {
+        var twitch = new AccountsStore(filePath: Path.Combine(_directory.FullName, "accounts.json"));
+        twitch.UpsertContext(PlatformAuthRole.Bot, "sample", "alice", new TwitchAccountSettings
+        {
+            Login = "alice", UserId = "tw-user", AccessToken = "fixture", BrowserProfileName = Guid.NewGuid().ToString("N"),
+        });
+        var youtube = new YouTubeAccountsStore(filePath: Path.Combine(_directory.FullName, "youtube-accounts.json"));
+        youtube.UpsertContext(PlatformAuthRole.Bot, "sample", "Bob on YouTube", new YouTubeAccountSettings
+        {
+            ChannelId = "yt-user", ChannelTitle = "Bob on YouTube", AccessToken = "fixture",
+        });
+        var sender = new FakeAccountMessenger();
+        var registry = new ChatPlatformRegistry([
+            new FakeChatPlatform(StreamingPlatform.Twitch, "Twitch", new FakeStreamStatus()),
+            new FakeChatPlatform(StreamingPlatform.YouTube, "YouTube", new FakeStreamStatus()) { AccountMessenger = sender },
+        ]);
+        var model = (ChatDisplayTileViewModel)CreateViewModel(Tile.Chat, registry, accountDirectories: [twitch, youtube]);
+        SelectMode(model, StreamingPlatform.YouTube, ChatDisplayLayout.Rows);
+        model.TwitchChat.SelectedAccount = model.TwitchChat.AccountChoices.Single(option => option.Id == "tw-user");
+        model.PlatformChat.SelectedAccount = model.PlatformChat.AccountChoices.Single(option => option.Id == "yt-user");
+        var view = CreateView(Tile.Chat, model);
+        view.Resources.MergedDictionaries.Add(new ResourceDictionary
+        {
+            Source = new($"pack://application:,,,/KeepShell;component/Resources/Themes/{theme}.xaml"),
+        });
+        view.SetResourceReference(Control.BackgroundProperty, "Bg.Surface");
+        Layout(view);
+
+        var pickers = FindChildren<ComboBox>(view).ToArray();
+        Assert.Multiple(() =>
+        {
+            Assert.That(pickers, Has.Length.EqualTo(2));
+            Assert.That(pickers.Select(picker => picker.ActualHeight), Is.All.InRange(12.0, 26.0));
+            Assert.That(model.PlatformChat.ShowMessageInput, Is.True);
+        });
+        model.PlatformChat.Message = "sample message";
+        Assert.That(model.PlatformChat.SelectedAccount!.Label, Is.EqualTo("Bob on YouTube (бот)"));
+        model.PlatformChat.SendMessageCommand.ExecuteAsync(null).GetAwaiter().GetResult();
+        Assert.That(sender.LastSend, Is.EqualTo(("yt-user", "selected-video", "sample message")));
+        Assert.That(model.PlatformChat.MessageStatus, Is.EqualTo("Сообщение отправлено"));
+        TestResources.CaptureAccountLayout(view, $"chat-{theme}", 380, 460);
+    }
+
+    [Test]
+    public void Отказ_YouTube_в_авторизации_виден_в_плитке_и_сохраняет_сообщение()
+    {
+        var youtube = new YouTubeAccountsStore(filePath: Path.Combine(_directory.FullName, "youtube-accounts.json"));
+        youtube.UpsertContext(PlatformAuthRole.Bot, "sample", "Bob on YouTube", new YouTubeAccountSettings
+        {
+            ChannelId = "yt-user", ChannelTitle = "Bob on YouTube", AccessToken = "fixture",
+        });
+        var sender = new FakeAccountMessenger { Status = ChatDeliveryStatus.AuthorizationRequired };
+        var registry = new ChatPlatformRegistry([
+            new FakeChatPlatform(StreamingPlatform.YouTube, "YouTube", new FakeStreamStatus()) { AccountMessenger = sender },
+        ]);
+        var model = (ChatDisplayTileViewModel)CreateViewModel(Tile.Chat, registry, accountDirectories: [youtube]);
+        SelectMode(model, StreamingPlatform.YouTube);
+        model.PlatformChat.SelectedAccount = model.PlatformChat.AccountChoices.Single(option => option.Id == "yt-user");
+        model.PlatformChat.Message = "sample message";
+        model.PlatformChat.SendMessageCommand.ExecuteAsync(null).GetAwaiter().GetResult();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(model.PlatformChat.Message, Is.EqualTo("sample message"));
+            Assert.That(model.PlatformChat.MessageStatus, Is.EqualTo("Авторизуйте аккаунт YouTube заново"));
+        });
+    }
+
+    [Test]
+    public void Исключение_при_отправке_в_YouTube_не_роняет_плитку_и_обновляет_статус()
+    {
+        var youtube = new YouTubeAccountsStore(filePath: Path.Combine(_directory.FullName, "youtube-accounts-err.json"));
+        youtube.UpsertContext(PlatformAuthRole.Bot, "sample", "Bob on YouTube", new YouTubeAccountSettings
+        {
+            ChannelId = "yt-user", ChannelTitle = "Bob on YouTube", AccessToken = "fixture",
+        });
+        var sender = new FakeAccountMessenger { ExceptionToThrow = new InvalidOperationException("boom") };
+        var registry = new ChatPlatformRegistry([
+            new FakeChatPlatform(StreamingPlatform.YouTube, "YouTube", new FakeStreamStatus()) { AccountMessenger = sender },
+        ]);
+        var model = (ChatDisplayTileViewModel)CreateViewModel(Tile.Chat, registry, accountDirectories: [youtube]);
+        SelectMode(model, StreamingPlatform.YouTube);
+        model.PlatformChat.SelectedAccount = model.PlatformChat.AccountChoices.Single(option => option.Id == "yt-user");
+        model.PlatformChat.Message = "sample message";
+
+        Assert.DoesNotThrow(() => model.PlatformChat.SendMessageCommand.ExecuteAsync(null).GetAwaiter().GetResult());
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(model.PlatformChat.Message, Is.EqualTo("sample message"));
+            Assert.That(model.PlatformChat.MessageStatus, Is.EqualTo("Не удалось отправить сообщение"));
+        });
+    }
+
+    private static IEnumerable<T> FindChildren<T>(DependencyObject parent) where T : DependencyObject
+    {
+        for (var index = 0; index < VisualTreeHelper.GetChildrenCount(parent); index++)
+        {
+            var child = VisualTreeHelper.GetChild(parent, index);
+            if (child is T target)
+            {
+                yield return target;
+            }
+
+            foreach (var descendant in FindChildren<T>(child))
+            {
+                yield return descendant;
+            }
+        }
+    }
+
     private static UserControl CreateView(Tile tile, DashboardTileViewModel viewModel)
     {
         UserControl view = tile switch
@@ -377,7 +497,8 @@ public sealed class WebViewTileModalHidingTests
     }
 
     private DashboardTileViewModel CreateViewModel(Tile tile, IChatPlatformRegistry? platformRegistry = null,
-        YouTubeSettingsStore? youtubeSettings = null, ISettingsStore? uiSettings = null)
+        YouTubeSettingsStore? youtubeSettings = null, ISettingsStore? uiSettings = null,
+        IEnumerable<IPlatformAccountDirectory>? accountDirectories = null)
     {
         var settings = new SettingsManager(NullLogger<SettingsManager>.Instance, Path.Combine(_directory.FullName, "settings.json"));
 
@@ -389,7 +510,8 @@ public sealed class WebViewTileModalHidingTests
                 new FakeShellLauncher(),
                 new FakeDialogService(),
                 new InMemoryEventBus(NullLogger<InMemoryEventBus>.Instance),
-                new ChatDisplayStore(NullLogger<ChatDisplayStore>.Instance, _directory.FullName), platformRegistry, youtubeSettings, uiSettings: uiSettings),
+                new ChatDisplayStore(NullLogger<ChatDisplayStore>.Instance, _directory.FullName), platformRegistry, youtubeSettings,
+                uiSettings: uiSettings, accountDirectories: accountDirectories),
             Tile.OverlayPreview => new ChatOverlayPreviewTileViewModel(settings, NullLogger<ChatOverlayPreviewTileViewModel>.Instance),
             _ => throw new ArgumentOutOfRangeException(nameof(tile)),
         };
@@ -452,9 +574,30 @@ public sealed class WebViewTileModalHidingTests
         public bool IsConnected => false;
         public IStreamStatus StreamStatus => status;
         public IPlatformMessenger Messenger => throw new NotSupportedException();
+        public IChatAccountMessenger? AccountMessenger { get; init; }
         public string BuildNativeChatUrl(StreamInfo stream) => $"https://www.youtube.com/live_chat?v={stream.Id}";
         public string BuildStreamUrl(StreamInfo? stream = null) => stream is { } info
             ? $"https://www.youtube.com/watch?v={info.Id}" : offlineUrl is not null ? offlineUrl() : "https://www.youtube.com/@channel";
+    }
+
+    private sealed class FakeAccountMessenger : IChatAccountMessenger
+    {
+        public (string AccountId, string StreamId, string Text)? LastSend { get; private set; }
+        public ChatDeliveryStatus Status { get; init; } = ChatDeliveryStatus.Sent;
+        public Exception? ExceptionToThrow { get; init; }
+
+        public bool CanSendAs(ChatSenderAccount account) => account.Role == PlatformAuthRole.Bot;
+
+        public Task<ChatAccountSendResult> SendAsAsync(ChatSenderAccount account, string streamId, string text)
+        {
+            LastSend = (account.AccountId, streamId, text);
+            if (ExceptionToThrow is not null)
+            {
+                return Task.FromException<ChatAccountSendResult>(ExceptionToThrow);
+            }
+
+            return Task.FromResult(new ChatAccountSendResult(ChatEnqueueResult.Queued, Status, Status == ChatDeliveryStatus.Sent ? 1 : 0));
+        }
     }
 
     private sealed class FakeShellLauncher : IShellLauncher

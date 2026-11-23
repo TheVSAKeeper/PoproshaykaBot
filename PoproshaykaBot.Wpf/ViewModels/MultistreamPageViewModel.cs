@@ -5,6 +5,8 @@ using Microsoft.Extensions.DependencyInjection;
 using PoproshaykaBot.Core.Platforms;
 using PoproshaykaBot.Core.Platforms.Auth;
 using PoproshaykaBot.Core.Settings.Stores;
+using PoproshaykaBot.Core.Streaming;
+using PoproshaykaBot.Wpf.Infrastructure;
 using PoproshaykaBot.Wpf.ViewModels.Dialogs;
 using PoproshaykaBot.Wpf.ViewModels.Settings;
 using PoproshaykaBot.Wpf.ViewModels.Tiles;
@@ -172,6 +174,7 @@ public sealed partial class MultistreamPageViewModel : ObservableObject, IPageHe
         {
             Catalog.PropertyChanged += OnCatalogPropertyChanged;
             Catalog.AccountsChanged += OnCatalogAccountsChanged;
+            status.ChannelStatesRefreshed += RefreshChannelCards;
         }
 
         if (Accounts is not null)
@@ -698,6 +701,11 @@ public sealed partial class MultistreamPageViewModel : ObservableObject, IPageHe
 
     private void OnCatalogPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
+        if (e.PropertyName == nameof(ChannelCatalogSettingsSectionViewModel.VisibleChannelCount))
+        {
+            RefreshChannelCards();
+        }
+
         if (string.IsNullOrEmpty(e.PropertyName)
             || e.PropertyName is nameof(ChannelCatalogSettingsSectionViewModel.VisibleChannelCount)
                 or nameof(ChannelCatalogSettingsSectionViewModel.HasChannels)
@@ -708,6 +716,60 @@ public sealed partial class MultistreamPageViewModel : ObservableObject, IPageHe
             OpenAssignAccountWizardCommand.NotifyCanExecuteChanged();
             RefreshReadinessSummary();
         }
+    }
+
+    private void RefreshChannelCards()
+    {
+        if (Catalog is null || SelectedCard?.Status is not { } platform || Catalog.SelectedPlatform != platform.Platform)
+        {
+            return;
+        }
+
+        foreach (var channel in Catalog.VisibleChannels)
+        {
+            var isActive = string.Equals(channel.ChannelId, platform.ActiveChannelId, StringComparison.Ordinal);
+            var snapshot = platform.IsPlatformEnabled && !platform.IsChannelSwitchBlockedByDebug
+                ? Status.GetChannelSnapshot(new(channel.Platform, channel.ChannelId))
+                : null;
+            var (status, stream, detail) = DescribeChannelBroadcast(platform, snapshot, isActive);
+            var (text, severity) = status switch
+            {
+                StreamStatus.Online when stream?.ViewerCount > 0 =>
+                    ($"В эфире · {stream.ViewerCount.ToString("N0", UiCulture.Russian)} зр.", StatusSeverity.Success),
+                StreamStatus.Online => ("В эфире", StatusSeverity.Success),
+                StreamStatus.Offline => ("Не в эфире", StatusSeverity.None),
+                _ => ("Статус эфира неизвестен", StatusSeverity.Info),
+            };
+            channel.RuntimeStatus = new(text, severity, detail,
+                isActive ? platform.ChatText : "Чат: не подключён",
+                isActive ? platform.ChatSeverity : StatusSeverity.None);
+        }
+    }
+
+    private static (StreamStatus Status, StreamInfo? Stream, string? Detail) DescribeChannelBroadcast(
+        MultistreamPlatformRowViewModel platform, ChannelMonitoringSnapshot? snapshot, bool isActive)
+    {
+        if (platform.IsChannelSwitchBlockedByDebug || !platform.IsPlatformEnabled)
+        {
+            return (StreamStatus.Unknown, null, platform.IsChannelSwitchBlockedByDebug
+                ? "Площадка работает в режиме отладки"
+                : "Площадка выключена");
+        }
+
+        if (snapshot is { Availability: ChannelMonitoringAvailability.Active or ChannelMonitoringAvailability.Degraded,
+            Status: not StreamStatus.Unknown })
+        {
+            return (snapshot.Status, snapshot.Stream, snapshot.Stream?.Title);
+        }
+
+        if (snapshot is null && isActive)
+        {
+            var current = platform.Source.StreamStatus.GetSnapshot();
+            return (current.Status, current.Stream, current.Stream?.Title);
+        }
+
+        return (StreamStatus.Unknown, null, snapshot?.Detail
+            ?? MultistreamPlatformRowViewModel.DescribeUnavailableReason(snapshot?.Reason));
     }
 
     private void NotifyHeaderActionsChanged()

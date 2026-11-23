@@ -4,14 +4,16 @@ public static class PlatformAuthRequestOptions
 {
     public static readonly HttpRequestOptionsKey<string> ContextIdKey = new("poproshayka.auth.context-id");
 
-    private static readonly AsyncLocal<string?> AmbientContextId = new();
+    private static readonly AsyncLocal<(string? ContextId, string? AccountId)> AmbientContext = new();
 
-    public static string? CurrentContextId => AmbientContextId.Value;
+    public static string? CurrentContextId => AmbientContext.Value.ContextId;
 
-    public static IDisposable UseContext(string? contextId)
+    public static string? ExpectedAccountId => AmbientContext.Value.AccountId;
+
+    public static IDisposable UseContext(string? contextId, string? expectedAccountId = null)
     {
-        var previous = AmbientContextId.Value;
-        AmbientContextId.Value = AuthContextIds.Normalize(contextId);
+        var previous = AmbientContext.Value;
+        AmbientContext.Value = (AuthContextIds.Normalize(contextId), expectedAccountId);
         return new Scope(previous);
     }
 
@@ -24,10 +26,10 @@ public static class PlatformAuthRequestOptions
             return AuthContextIds.Normalize(explicitContextId);
         }
 
-        return AuthContextIds.Normalize(AmbientContextId.Value);
+        return AuthContextIds.Normalize(CurrentContextId);
     }
 
-    private sealed class Scope(string? previous) : IDisposable
+    private sealed class Scope((string? ContextId, string? AccountId) previous) : IDisposable
     {
         private bool _disposed;
 
@@ -39,7 +41,7 @@ public static class PlatformAuthRequestOptions
             }
 
             _disposed = true;
-            AmbientContextId.Value = previous;
+            AmbientContext.Value = previous;
         }
     }
 }

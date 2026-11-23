@@ -36,6 +36,9 @@ public sealed partial class PlatformAccountsSectionViewModel : ObservableObject
     private readonly IEmbeddedTwitchAuthDialog? _embeddedTwitchAuth;
     private readonly ILogger<PlatformAccountsSectionViewModel>? _logger;
     private readonly IChatPlatformRegistry? _platformRegistry;
+    private readonly IReadOnlyDictionary<StreamingPlatform, IPlatformAccountDirectory> _accountDirectories;
+    private readonly IReadOnlyDictionary<StreamingPlatform, IPlatformAccountLogin> _accountLogins;
+    private readonly IPlatformAuthRegistry? _authRegistry;
 
     private OAuthSettingsViewModel? _twitchCredentials;
     private YouTubeSettingsSectionViewModel? _youtubeCredentials;
@@ -78,7 +81,10 @@ public sealed partial class PlatformAccountsSectionViewModel : ObservableObject
         TimeProvider? timeProvider = null,
         IEmbeddedTwitchAuthDialog? embeddedTwitchAuth = null,
         ILogger<PlatformAccountsSectionViewModel>? logger = null,
-        IChatPlatformRegistry? platformRegistry = null)
+        IChatPlatformRegistry? platformRegistry = null,
+        IEnumerable<IPlatformAccountDirectory>? accountDirectories = null,
+        IEnumerable<IPlatformAccountLogin>? accountLogins = null,
+        IPlatformAuthRegistry? authRegistry = null)
     {
         ArgumentNullException.ThrowIfNull(catalogStore);
         _catalogStore = catalogStore;
@@ -95,6 +101,12 @@ public sealed partial class PlatformAccountsSectionViewModel : ObservableObject
         _embeddedTwitchAuth = embeddedTwitchAuth;
         _logger = logger;
         _platformRegistry = platformRegistry;
+        _accountDirectories = (accountDirectories ?? [])
+            .Concat(new IPlatformAccountDirectory?[] { twitchAccountsStore, youtubeAccountsStore }.OfType<IPlatformAccountDirectory>())
+            .DistinctBy(static directory => directory.Platform)
+            .ToDictionary(static directory => directory.Platform);
+        _accountLogins = (accountLogins ?? []).ToDictionary(static login => login.Platform);
+        _authRegistry = authRegistry;
     }
 
     public event EventHandler<StreamingPlatform>? AccountsChanged;
@@ -114,7 +126,8 @@ public sealed partial class PlatformAccountsSectionViewModel : ObservableObject
 
     public bool SupportsAccounts => SupportsAccountsFor(SelectedPlatform);
 
-    public bool SupportsBrowserToggle => SelectedPlatform == StreamingPlatform.Twitch && _embeddedTwitchAuth is not null;
+    public bool SupportsBrowserToggle => _accountLogins.GetValueOrDefault(SelectedPlatform)?.SupportsEmbeddedBrowser
+        ?? (SelectedPlatform == StreamingPlatform.Twitch && _embeddedTwitchAuth is not null);
 
     public bool CanAuthorize => CanAuthorizePlatform(SelectedPlatform);
 
@@ -124,17 +137,14 @@ public sealed partial class PlatformAccountsSectionViewModel : ObservableObject
         _youtubeCredentials = youtube;
     }
 
-    public bool SupportsAccountsFor(StreamingPlatform? platform) => platform switch
-    {
-        StreamingPlatform.Twitch => _twitchAccountsStore is not null,
-        StreamingPlatform.YouTube => _youtubeAccountsStore is not null,
-        _ => false,
-    };
+    public bool SupportsAccountsFor(StreamingPlatform? platform) =>
+        platform is { } id && _accountDirectories.ContainsKey(id);
 
     private bool CanAuthorizePlatform(StreamingPlatform platform) =>
+        _accountLogins.GetValueOrDefault(platform)?.CanAuthorize ?? (
         _shellLauncher is not null
         && ((platform == StreamingPlatform.Twitch && _twitchOAuth is not null && _twitchAccountsStore is not null && _settingsManager is not null)
-            || (platform == StreamingPlatform.YouTube && _youtubeOAuth is not null && _youtubeAccountsStore is not null && _youtubeSettingsStore is not null));
+            || (platform == StreamingPlatform.YouTube && _youtubeOAuth is not null && _youtubeAccountsStore is not null && _youtubeSettingsStore is not null)));
 
     partial void OnSelectedPlatformChanged(StreamingPlatform value)
     {
@@ -162,10 +172,10 @@ public sealed partial class PlatformAccountsSectionViewModel : ObservableObject
             _unsavedDrafts.Remove(keyToDrop);
         }
 
-        var expandedAccounts = Accounts
-            .Where(static card => card.IsScopesExpanded)
-            .Select(static card => card.AccountId)
-            .ToHashSet(StringComparer.Ordinal);
+        var expandedPermissions = Accounts.SelectMany(static card => card.Grants)
+            .Where(static grant => grant.IsPermissionsExpanded)
+            .Select(static grant => new GrantDraftKey(grant.Platform, grant.Role, grant.ContextId))
+            .ToHashSet();
 
         Accounts.Clear();
         if (!SupportsAccounts)
@@ -184,7 +194,11 @@ public sealed partial class PlatformAccountsSectionViewModel : ObservableObject
 
         foreach (var account in platformAccounts)
         {
-            var grants = BuildGrantViewModels(platform, account, now, canAuth);
+            var grants = BuildGrantViewModels(platform, account, channels, now, canAuth);
+            foreach (var grant in grants)
+            {
+                grant.IsPermissionsExpanded = expandedPermissions.Contains(new(grant.Platform, grant.Role, grant.ContextId));
+            }
             var assignedSummary = BuildAssignedChannelsSummary(account.Key.AccountId, channels);
             var card = new PlatformAccountCardViewModel(
                 platform,
@@ -196,7 +210,7 @@ public sealed partial class PlatformAccountsSectionViewModel : ObservableObject
                 AddRoleForAccountAsync,
                 SignOutAccountAsync)
             {
-                IsScopesExpanded = expandedAccounts.Contains(account.Key.AccountId),
+                CanRemove = _accountDirectories[platform].CanRemove,
             };
             Accounts.Add(card);
         }
@@ -311,7 +325,9 @@ public sealed partial class PlatformAccountsSectionViewModel : ObservableObject
 
         try
         {
-            var succeeded = platform switch
+            var succeeded = _accountLogins.TryGetValue(platform, out var login)
+                ? await AuthorizeWithAdapterAsync(login, combined, role, targetAccountId, preferredContextId, customScopes)
+                : platform switch
             {
                 StreamingPlatform.Twitch => await AuthorizeTwitchAsync(combined, role, targetAccountId, preferredContextId, customScopes),
                 StreamingPlatform.YouTube => await AuthorizeYouTubeAsync(combined, role, targetAccountId, preferredContextId),
@@ -337,6 +353,27 @@ public sealed partial class PlatformAccountsSectionViewModel : ObservableObject
         {
             IsAuthorizing = false;
         }
+    }
+
+    private async Task<bool> AuthorizeWithAdapterAsync(IPlatformAccountLogin login, bool combined, PlatformAuthRole role,
+        string? targetAccountId, string? preferredContextId, string[]? customScopes)
+    {
+        var result = await login.AuthorizeAsync(new(combined ? PlatformAuthRoles.Active : [role],
+            targetAccountId, preferredContextId, customScopes ?? [], UseSystemBrowser));
+        foreach (var grant in result.ChangedAuthorizations)
+        {
+            PublishAuthorizationRefreshed(login.Platform, grant.Role, grant.ContextId);
+        }
+
+        if (result.ChangedAuthorizations.Count > 0 && !result.ChangedAuthorizations.All(grant =>
+            grant.SubjectId is not null && IsAuthorizationPersisted(login.Platform, grant.Role, grant.ContextId, grant.SubjectId)))
+        {
+            SetNotice("Не удалось подтвердить запись авторизации на диске.", StatusSeverity.Warning);
+            return true;
+        }
+
+        SetNotice(result.Message, result.Severity);
+        return result.ChangedAuthorizations.Count > 0;
     }
 
     private async Task<bool> AuthorizeTwitchAsync(
@@ -462,6 +499,12 @@ public sealed partial class PlatformAccountsSectionViewModel : ObservableObject
             return true;
         }
 
+        if (!entriesToSave.All(entry => IsAuthorizationPersisted(StreamingPlatform.Twitch, entry.Role, entry.ContextId, id)))
+        {
+            SetNotice("Не удалось подтвердить запись авторизации Twitch на диске.", StatusSeverity.Warning);
+            return true;
+        }
+
         if (combined && missingRoles.Count > 0)
         {
             var savedRoleText = PlatformAuthRoles.Describe(entriesToSave[0].Role).ToLowerInvariant();
@@ -471,7 +514,7 @@ public sealed partial class PlatformAccountsSectionViewModel : ObservableObject
         }
 
         var roleText = combined ? "для бота и стримера" : $"как {PlatformAuthRoles.Describe(role).ToLowerInvariant()}";
-        SetNotice($"Аккаунт «{flow.Login}» подключён ({roleText}).", StatusSeverity.Success);
+        SetNotice($"Аккаунт «{flow.Login}» подключён ({roleText}). Запись проверена.", StatusSeverity.Success);
         return true;
     }
 
@@ -578,6 +621,12 @@ public sealed partial class PlatformAccountsSectionViewModel : ObservableObject
             return true;
         }
 
+        if (!entriesToSave.All(entry => IsAuthorizationPersisted(StreamingPlatform.YouTube, entry.Role, entry.ContextId, id)))
+        {
+            SetNotice("Не удалось подтвердить запись авторизации YouTube на диске.", StatusSeverity.Warning);
+            return true;
+        }
+
         if (combined && missingRoles.Count > 0)
         {
             var savedRoleText = PlatformAuthRoles.Describe(entriesToSave[0].Role).ToLowerInvariant();
@@ -587,7 +636,7 @@ public sealed partial class PlatformAccountsSectionViewModel : ObservableObject
         }
 
         var roleText = combined ? "для бота и стримера" : $"как {PlatformAuthRoles.Describe(role).ToLowerInvariant()}";
-        SetNotice($"Аккаунт «{name}» подключён ({roleText}).", StatusSeverity.Success);
+        SetNotice($"Аккаунт «{name}» подключён ({roleText}). Запись проверена.", StatusSeverity.Success);
         return true;
     }
 
@@ -614,6 +663,11 @@ public sealed partial class PlatformAccountsSectionViewModel : ObservableObject
 
     private Task SignOutAccountAsync(PlatformAccountCardViewModel card)
     {
+        if (!_accountDirectories.TryGetValue(card.Platform, out var directory) || !directory.CanRemove)
+        {
+            return Task.CompletedTask;
+        }
+
         var prompt = string.IsNullOrWhiteSpace(card.AssignedChannelsText) || card.AssignedChannelsText.StartsWith("Не назначен", StringComparison.Ordinal)
             ? $"Удалить токены и выйти из аккаунта «{card.DisplayName}»?"
             : $"Удалить токены и выйти из аккаунта «{card.DisplayName}»?\n\n{card.AssignedChannelsText}. После выхода на этих каналах нужно будет выбрать другой аккаунт или снять назначение.";
@@ -623,28 +677,10 @@ public sealed partial class PlatformAccountsSectionViewModel : ObservableObject
             return Task.CompletedTask;
         }
 
-        IReadOnlyList<(PlatformAuthRole Role, string ContextId)> removed;
-        bool written;
-        switch (card.Platform)
+        var (removed, written) = directory.RemoveAccount(card.AccountId);
+        foreach (var (role, contextId) in removed)
         {
-            case StreamingPlatform.Twitch when _twitchAccountsStore is not null:
-                (removed, written) = _twitchAccountsStore.RemoveAccount(card.AccountId);
-                foreach (var entry in removed)
-                {
-                    _twitchOAuth?.ResetRetryState(entry.Role, entry.ContextId);
-                    PublishAuthorizationRefreshed(StreamingPlatform.Twitch, entry.Role, entry.ContextId);
-                }
-                break;
-            case StreamingPlatform.YouTube when _youtubeAccountsStore is not null:
-                (removed, written) = _youtubeAccountsStore.RemoveAccount(card.AccountId);
-                foreach (var entry in removed)
-                {
-                    _youtubeOAuth?.ResetRetryState(entry.Role, entry.ContextId);
-                    PublishAuthorizationRefreshed(StreamingPlatform.YouTube, entry.Role, entry.ContextId);
-                }
-                break;
-            default:
-                return Task.CompletedTask;
+            ResetAuthorization(card.Platform, role, contextId);
         }
 
         _logger?.PlatformAccountSignedOut(card.Platform, card.AccountId);
@@ -660,6 +696,11 @@ public sealed partial class PlatformAccountsSectionViewModel : ObservableObject
 
     private Task RemoveGrantRoleAsync(PlatformAccountGrantViewModel grant)
     {
+        if (!_accountDirectories.TryGetValue(grant.Platform, out var directory) || !directory.CanRemove)
+        {
+            return Task.CompletedTask;
+        }
+
         if (_dialogService is not null
             && !_dialogService.Confirm("Удаление роли аккаунта",
                 $"Удалить права роли «{grant.RoleTitle}» у аккаунта «{grant.AccountDisplayName}»?"))
@@ -667,28 +708,10 @@ public sealed partial class PlatformAccountsSectionViewModel : ObservableObject
             return Task.CompletedTask;
         }
 
-        IReadOnlyList<string> removedContexts;
-        bool written;
-        switch (grant.Platform)
+        var (removedContexts, written) = directory.RemoveAccountRole(grant.AccountId, grant.Role);
+        foreach (var contextId in removedContexts)
         {
-            case StreamingPlatform.Twitch when _twitchAccountsStore is not null:
-                (removedContexts, written) = _twitchAccountsStore.RemoveAccountRole(grant.AccountId, grant.Role);
-                foreach (var contextId in removedContexts)
-                {
-                    _twitchOAuth?.ResetRetryState(grant.Role, contextId);
-                    PublishAuthorizationRefreshed(StreamingPlatform.Twitch, grant.Role, contextId);
-                }
-                break;
-            case StreamingPlatform.YouTube when _youtubeAccountsStore is not null:
-                (removedContexts, written) = _youtubeAccountsStore.RemoveAccountRole(grant.AccountId, grant.Role);
-                foreach (var contextId in removedContexts)
-                {
-                    _youtubeOAuth?.ResetRetryState(grant.Role, contextId);
-                    PublishAuthorizationRefreshed(StreamingPlatform.YouTube, grant.Role, contextId);
-                }
-                break;
-            default:
-                return Task.CompletedTask;
+            ResetAuthorization(grant.Platform, grant.Role, contextId);
         }
 
         if (removedContexts.Count > 0)
@@ -704,6 +727,24 @@ public sealed partial class PlatformAccountsSectionViewModel : ObservableObject
         }
 
         return Task.CompletedTask;
+    }
+
+    private void ResetAuthorization(StreamingPlatform platform, PlatformAuthRole role, string contextId)
+    {
+        if (_authRegistry?.TryGet(platform, out var auth) == true)
+        {
+            auth.ResetRetryState(role, contextId);
+        }
+        else if (platform == StreamingPlatform.Twitch)
+        {
+            _twitchOAuth?.ResetRetryState(role, contextId);
+        }
+        else if (platform == StreamingPlatform.YouTube)
+        {
+            _youtubeOAuth?.ResetRetryState(role, contextId);
+        }
+
+        PublishAuthorizationRefreshed(platform, role, contextId);
     }
 
     private async Task ValidateGrantAsync(PlatformAccountGrantViewModel grant)
@@ -832,9 +873,13 @@ public sealed partial class PlatformAccountsSectionViewModel : ObservableObject
                 .ToString("dd.MM.yyyy HH:mm:ss", UiCulture.Russian);
             RefreshIfPlatform(grant.Platform, dropDraft: new(grant.Platform, grant.Role, grant.ContextId));
             AccountsChanged?.Invoke(this, grant.Platform);
-            if (result.Persisted)
+            if (result.Persisted && IsAuthorizationPersisted(grant.Platform, grant.Role, grant.ContextId, grant.AccountId))
             {
-                SetNotice($"Токен ({grant.RoleTitle}, «{grant.AccountDisplayName}») обновлён ({refreshedAt}).", StatusSeverity.Success);
+                SetNotice($"Токен ({grant.RoleTitle}, «{grant.AccountDisplayName}») обновлён ({refreshedAt}). Запись проверена.", StatusSeverity.Success);
+            }
+            else if (result.Persisted)
+            {
+                SetNotice("Токен обновлён, но подтвердить запись на диске не удалось.", StatusSeverity.Warning);
             }
             else
             {
@@ -940,28 +985,35 @@ public sealed partial class PlatformAccountsSectionViewModel : ObservableObject
         }
 
         AccountsChanged?.Invoke(this, grant.Platform);
-        SetNotice(written
-            ? $"Правки токена ({grant.RoleTitle}, «{grant.AccountDisplayName}») сохранены."
-            : "Правки приняты в памяти до перезапуска.",
-            written ? StatusSeverity.Success : StatusSeverity.Warning);
+        if (written && IsAuthorizationPersisted(grant.Platform, grant.Role, grant.ContextId, grant.AccountId))
+        {
+            SetNotice($"Правки токена ({grant.RoleTitle}, «{grant.AccountDisplayName}») сохранены. Запись проверена.", StatusSeverity.Success);
+        }
+        else
+        {
+            SetNotice(written ? "Не удалось подтвердить запись правок на диске." : "Правки приняты в памяти до перезапуска.",
+                StatusSeverity.Warning);
+        }
+
         return Task.CompletedTask;
     }
 
-    private IReadOnlyList<PlatformAccount> ListPlatformAccounts(StreamingPlatform platform) => platform switch
-    {
-        StreamingPlatform.Twitch => _twitchAccountsStore?.ListAccounts() ?? [],
-        StreamingPlatform.YouTube => _youtubeAccountsStore?.ListAccounts() ?? [],
-        _ => [],
-    };
+    private IReadOnlyList<PlatformAccount> ListPlatformAccounts(StreamingPlatform platform) =>
+        _accountDirectories.GetValueOrDefault(platform)?.ListAccounts() ?? [];
+
+    private bool IsAuthorizationPersisted(StreamingPlatform platform, PlatformAuthRole role, string contextId, string accountId) =>
+        _accountDirectories.GetValueOrDefault(platform)?.VerifyPersistedAuthorization(role, contextId, accountId) == true;
 
     private IReadOnlyList<PlatformAccountGrantViewModel> BuildGrantViewModels(
         StreamingPlatform platform,
         PlatformAccount account,
+        IReadOnlyList<ChannelCatalogEntry> channels,
         DateTimeOffset now,
         bool canAuthorize)
     {
+        var directory = _accountDirectories[platform];
         var grants = new List<PlatformAccountGrantViewModel>();
-        foreach (var role in new[] { PlatformAuthRole.Bot, PlatformAuthRole.Broadcaster })
+        foreach (var role in PlatformAuthRoles.Active)
         {
             var roleAuthorizations = account.Authorizations
                 .Where(a => a.Role == role)
@@ -974,15 +1026,10 @@ public sealed partial class PlatformAccountsSectionViewModel : ObservableObject
                 continue;
             }
 
-            if (platform == StreamingPlatform.Twitch && _twitchAccountsStore is not null)
+            if (directory.LoadAuthorization(role, summary.ContextId) is { } settings)
             {
-                var settings = _twitchAccountsStore.Load(role, summary.ContextId);
-                grants.Add(BuildGrantViewModel(platform, account.Key.AccountId, account.DisplayName, role, summary.ContextId, summary.IsDefault, settings, now, canAuthorize));
-            }
-            else if (platform == StreamingPlatform.YouTube && _youtubeAccountsStore is not null)
-            {
-                var settings = _youtubeAccountsStore.Load(role, summary.ContextId);
-                grants.Add(BuildGrantViewModel(platform, account.Key.AccountId, account.DisplayName, role, summary.ContextId, summary.IsDefault, settings, now, canAuthorize));
+                grants.Add(BuildGrantViewModel(platform, account.Key.AccountId, account.DisplayName, role, summary.ContextId,
+                    summary.IsDefault, settings, now, canAuthorize, directory.GetPermissions(role), channels));
             }
         }
 
@@ -998,15 +1045,13 @@ public sealed partial class PlatformAccountsSectionViewModel : ObservableObject
         bool isDefault,
         IRoleAccountSettings settings,
         DateTimeOffset now,
-        bool canAuthorize)
+        bool canAuthorize,
+        IReadOnlyList<PlatformAccountOperation> permissions,
+        IReadOnlyList<ChannelCatalogEntry> channels)
     {
         var hasAccess = !string.IsNullOrWhiteSpace(settings.AccessToken);
         var hasRefresh = !string.IsNullOrWhiteSpace(settings.RefreshToken);
-        var expectedScopes = settings.Scopes.Length > 0
-            ? settings.Scopes
-            : platform == StreamingPlatform.Twitch
-                ? (role == PlatformAuthRole.Bot ? [.. TwitchScopes.BotRequired] : [.. TwitchScopes.BroadcasterRequired])
-                : [.. YouTubeScopes.RequiredFor(role)];
+        var expectedScopes = settings.Scopes;
         var storedScopes = settings.StoredScopes;
         var scopeMismatch = storedScopes.Length > 0 && !new HashSet<string>(storedScopes, StringComparer.Ordinal).SetEquals(expectedScopes);
 
@@ -1035,7 +1080,12 @@ public sealed partial class PlatformAccountsSectionViewModel : ObservableObject
             refreshAsync: RefreshGrantAsync,
             validateAsync: ValidateGrantAsync,
             saveManualEditsAsync: SaveManualGrantEditsAsync,
-            removeRoleAsync: RemoveGrantRoleAsync);
+            removeRoleAsync: RemoveGrantRoleAsync)
+        {
+            CanRemove = _accountDirectories[platform].CanRemove,
+            Permissions = DescribePermissions(permissions, channels, accountId, role, contextId, storedScopes,
+                hasAccess, hasRefresh, scopeMismatch, settings.AccessTokenExpiresAt, now),
+        };
 
         if (_unsavedDrafts.TryGetValue(new(platform, role, AuthContextIds.Normalize(contextId)), out var draft))
         {
@@ -1043,6 +1093,62 @@ public sealed partial class PlatformAccountsSectionViewModel : ObservableObject
         }
 
         return vm;
+    }
+
+    private static IReadOnlyList<AccountPermissionStatus> DescribePermissions(
+        IReadOnlyList<PlatformAccountOperation> permissions, IReadOnlyList<ChannelCatalogEntry> channels,
+        string accountId, PlatformAuthRole role, string contextId, string[] scopes,
+        bool hasAccess, bool hasRefresh, bool scopeMismatch, DateTimeOffset? expiresAt, DateTimeOffset now)
+    {
+        var assignedChannels = channels
+            .Select(channel => (Channel: channel, Assignment: channel.GetAccountAssignment(role)))
+            .Where(value => value.Assignment is { } assignment
+                && string.Equals(assignment.Account.AccountId, accountId, StringComparison.Ordinal)
+                && string.Equals(assignment.ContextId, contextId, StringComparison.Ordinal))
+            .ToArray();
+        var granted = scopes.ToHashSet(StringComparer.Ordinal);
+        var sessionStatus = scopeMismatch || (!hasRefresh && (!hasAccess || expiresAt <= now))
+            ? ("Нужен вход", StatusSeverity.Warning)
+            : !hasAccess || expiresAt <= now
+                ? ("Токен нужно обновить", StatusSeverity.Info)
+                : ((string?)null, StatusSeverity.None);
+        var result = new List<AccountPermissionStatus>();
+        foreach (var permission in permissions)
+        {
+            var (message, severity) = sessionStatus;
+            if (message is null && permission.RequiredScopes.Length > 0)
+            {
+                if (granted.Count == 0)
+                {
+                    (message, severity) = ("Выданные права не подтверждены", StatusSeverity.Info);
+                }
+                else if (!permission.RequiredScopes.All(granted.Contains))
+                {
+                    (message, severity) = ("Не хватает прав", StatusSeverity.Warning);
+                }
+            }
+
+            if (message is not null || !permission.IsChannelScoped)
+            {
+                result.Add(new(permission.Name, message ?? "Право выдано", message is null ? StatusSeverity.Success : severity));
+            }
+            else if (assignedChannels.Length == 0)
+            {
+                result.Add(new(permission.Name, "Назначьте аккаунт на канал", StatusSeverity.Info));
+            }
+            else
+            {
+                foreach (var (channel, assignment) in assignedChannels)
+                {
+                    var channelName = string.IsNullOrWhiteSpace(channel.DisplayName) ? channel.ChannelId : channel.DisplayName;
+                    result.Add(new($"{permission.Name} · {channelName}",
+                        assignment!.IsVerified ? "Право выдано · канал проверен" : "Доступ к каналу не проверен",
+                        assignment.IsVerified ? StatusSeverity.Success : StatusSeverity.Info));
+                }
+            }
+        }
+
+        return result;
     }
 
     private static (string Text, StatusSeverity Severity) DescribeTokenStatus(
@@ -1146,10 +1252,6 @@ public sealed partial class PlatformAccountCardViewModel : ObservableObject
     private readonly Func<PlatformAccountCardViewModel, PlatformAuthRole, Task> _addRole;
     private readonly Func<PlatformAccountCardViewModel, Task> _signOut;
 
-    [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(ScopesToggleLabel))]
-    private bool _isScopesExpanded;
-
     public PlatformAccountCardViewModel(
         StreamingPlatform platform,
         string accountId,
@@ -1189,6 +1291,8 @@ public sealed partial class PlatformAccountCardViewModel : ObservableObject
 
     public bool CanAuthorize { get; }
 
+    public bool CanRemove { get; init; }
+
     public bool HasBotRole { get; }
 
     public bool HasBroadcasterRole { get; }
@@ -1201,11 +1305,6 @@ public sealed partial class PlatformAccountCardViewModel : ObservableObject
 
     public StatusSeverity BroadcasterBadgeSeverity { get; }
 
-    public string ScopesToggleLabel => IsScopesExpanded ? "Скрыть права доступа" : "Права доступа";
-
-    [RelayCommand]
-    private void ToggleScopes() => IsScopesExpanded = !IsScopesExpanded;
-
     [RelayCommand(CanExecute = nameof(CanAddBotRole))]
     private Task AddBotRoleAsync() => _addRole(this, PlatformAuthRole.Bot);
 
@@ -1215,6 +1314,8 @@ public sealed partial class PlatformAccountCardViewModel : ObservableObject
     [RelayCommand]
     private Task SignOutAsync() => _signOut(this);
 }
+
+public sealed record AccountPermissionStatus(string Name, string Status, StatusSeverity Severity);
 
 public sealed partial class PlatformAccountGrantViewModel : ObservableObject
 {
@@ -1247,6 +1348,10 @@ public sealed partial class PlatformAccountGrantViewModel : ObservableObject
 
     [ObservableProperty]
     private StatusSeverity _actionStatusSeverity;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(PermissionsLabel))]
+    private bool _isPermissionsExpanded;
 
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(ReauthorizeCommand), nameof(RefreshTokenCommand), nameof(ValidateTokenCommand),
@@ -1321,6 +1426,8 @@ public sealed partial class PlatformAccountGrantViewModel : ObservableObject
 
     public bool CanAuthorize { get; }
 
+    public bool CanRemove { get; init; }
+
     public bool SupportsEditableScopes => Platform == StreamingPlatform.Twitch;
 
     public bool SupportsTokenValidation => Platform is StreamingPlatform.Twitch or StreamingPlatform.YouTube;
@@ -1330,6 +1437,27 @@ public sealed partial class PlatformAccountGrantViewModel : ObservableObject
     public StatusSeverity TokenStatusSeverity { get; }
 
     public string TokenExpiryText { get; }
+
+    public IReadOnlyList<AccountPermissionStatus> Permissions { get; init; } = [];
+
+    public bool HasPermissions => Permissions.Count > 0;
+
+    public string PermissionsLabel
+    {
+        get
+        {
+            if (IsPermissionsExpanded)
+            {
+                return "Скрыть возможности";
+            }
+
+            var available = Permissions.Count(static permission => permission.Severity == StatusSeverity.Success);
+            return $"Возможности · подтверждено {available} из {Permissions.Count}";
+        }
+    }
+
+    [RelayCommand]
+    private void TogglePermissions() => IsPermissionsExpanded = !IsPermissionsExpanded;
 
     public string ExpectedScopesSummary { get; }
 
@@ -1371,7 +1499,7 @@ public sealed partial class PlatformAccountGrantViewModel : ObservableObject
     {
         if (Platform != StreamingPlatform.Twitch)
         {
-            return [.. YouTubeScopes.RequiredFor(Role)];
+            return [.. _initialScopesText.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)];
         }
 
         var required = Role == PlatformAuthRole.Bot ? TwitchScopes.BotRequired : TwitchScopes.BroadcasterRequired;

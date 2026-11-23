@@ -27,6 +27,45 @@ public sealed class AccountsStoreTests
 
     private const int RacerCount = 32;
 
+    [Test]
+    public void Verifying_authorization_reads_disk_and_detects_an_older_write_for_the_same_account()
+    {
+        var store = Store();
+        var role = PlatformAuthRole.Bot;
+        store.UpsertContext(role, "named", "bot", new()
+        {
+            UserId = "42", AccessToken = "first",
+        });
+        var older = File.ReadAllText(_filePath);
+        store.UpsertContext(role, "named", "bot", new()
+        {
+            UserId = "42", AccessToken = "second",
+        });
+        Assert.That(store.VerifyPersistedAuthorization(role, "named", "42"), Is.True);
+
+        File.WriteAllText(_filePath, older);
+
+        Assert.That(store.VerifyPersistedAuthorization(role, "named", "42"), Is.False);
+        Assert.That(store.Load(role, "named").AccessToken, Is.EqualTo("second"));
+    }
+
+    [TestCase("default")]
+    [TestCase("named")]
+    public void Reauthorizing_in_system_browser_keeps_the_profile_only_for_the_same_account(string contextId)
+    {
+        var store = Store();
+        var profile = Guid.NewGuid().ToString("N");
+        var account = new TwitchAccountSettings { UserId = "42", Login = "first", BrowserProfileName = profile };
+        store.UpsertContext(PlatformAuthRole.Bot, contextId, account.Login, account);
+
+        var reopened = Store();
+        reopened.UpsertContext(PlatformAuthRole.Bot, contextId, "first", new() { UserId = "42", Login = "first" });
+        Assert.That(Store().Load(PlatformAuthRole.Bot, contextId).BrowserProfileName, Is.EqualTo(profile));
+
+        reopened.UpsertContext(PlatformAuthRole.Bot, contextId, "second", new() { UserId = "43", Login = "second" });
+        Assert.That(Store().Load(PlatformAuthRole.Bot, contextId).BrowserProfileName, Is.Null);
+    }
+
     private const string ParseableButInvalid = """
         {
           "botAccount": {
@@ -246,6 +285,44 @@ public sealed class AccountsStoreTests
                 "Откатная копия нужна только на время подмены; пережив её, она держит токены открытым текстом – а после переноса данных и весь сеанс.");
 
             Assert.That(Store().LoadBot().AccessToken, Is.EqualTo("new-secret-access"));
+        }
+    }
+
+    [Test]
+    public void Переавторизация_одной_роли_через_встроенный_браузер_обновляет_профиль_соседней_роли()
+    {
+        var store = Store();
+        var oldProfile = Guid.NewGuid().ToString("N");
+        var newProfile = Guid.NewGuid().ToString("N");
+
+        store.UpsertContexts([
+            (PlatformAuthRole.Broadcaster, "tw-broadcaster-42", "alpha", new TwitchAccountSettings
+            {
+                UserId = "42", Login = "alpha", AccessToken = "a1", RefreshToken = "r1", BrowserProfileName = oldProfile,
+            }),
+            (PlatformAuthRole.Bot, "tw-bot-42", "alpha", new TwitchAccountSettings
+            {
+                UserId = "42", Login = "alpha", AccessToken = "a1", RefreshToken = "r1", BrowserProfileName = oldProfile,
+            }),
+        ]);
+
+        store.UpsertContext(PlatformAuthRole.Bot, "tw-bot-42", "alpha", new TwitchAccountSettings
+        {
+            UserId = "42", Login = "alpha", AccessToken = "a2", RefreshToken = "r2", BrowserProfileName = newProfile,
+        });
+
+        store.UpsertContext(PlatformAuthRole.Bot, "tw-bot-42", "alpha", new TwitchAccountSettings
+        {
+            UserId = "42", Login = "alpha", AccessToken = "a3", RefreshToken = "r3", BrowserProfileName = null,
+        });
+
+        var account = store.ListAccounts().Single(entry => entry.Key.AccountId == "42");
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(store.Load(PlatformAuthRole.Broadcaster, "tw-broadcaster-42").BrowserProfileName, Is.EqualTo(newProfile));
+            Assert.That(store.Load(PlatformAuthRole.Bot, "tw-bot-42").BrowserProfileName, Is.EqualTo(newProfile));
+            Assert.That(account.Authorizations.Select(grant => grant.ChatBrowserProfile?.ProfileName), Is.All.EqualTo(newProfile));
         }
     }
 

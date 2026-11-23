@@ -18,6 +18,11 @@ public static class WebView2UserDataFolders
         return AppPaths.Combine(RootFolderName, OverlayPreviewSegment);
     }
 
+    public static string ResolveTwitchAccounts()
+    {
+        return AppPaths.Combine(RootFolderName, "twitch-accounts");
+    }
+
     private static string RoleSegment(PlatformAuthRole role)
     {
         return role switch

@@ -2,6 +2,7 @@
 using PoproshaykaBot.Core.Infrastructure;
 using PoproshaykaBot.Core.Platforms;
 using PoproshaykaBot.Core.Settings.Migrations.LegacyImport;
+using System.Text.Json;
 
 namespace PoproshaykaBot.Core.Settings.Stores;
 
@@ -24,6 +25,10 @@ public sealed class ChannelCatalogStore
     {
         return _store.Load();
     }
+
+    public bool VerifyPersisted() => _store.VerifyPersisted(static (current, persisted) =>
+        string.Equals(JsonSerializer.Serialize(current, JsonStoreOptions.Default),
+            JsonSerializer.Serialize(persisted, JsonStoreOptions.Default), StringComparison.Ordinal));
 
     public bool Save(ChannelsSettings settings)
     {

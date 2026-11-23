@@ -165,6 +165,8 @@ public sealed class MultistreamLayoutTests
 
                 var catalogView = Descendants<ChannelCatalogSettingsSectionView>(view).Single();
                 var channelList = Descendants<ListBox>(catalogView).Single();
+                var cardGrid = Descendants<System.Windows.Controls.Primitives.UniformGrid>(channelList).Single();
+                Assert.That(cardGrid.Columns, Is.EqualTo(catalogView.IsTwoColumnCards ? 2 : 1));
                 List<double> rowHeights = [];
 
                 foreach (var channel in harness.Editor.VisibleChannels)
@@ -224,6 +226,100 @@ public sealed class MultistreamLayoutTests
                     $"Поле добавления канала слишком узкое на {card.Status.DisplayName} при {width}x{height} @ {scale}: Width={addInput.ActualWidth:F1}");
             }
         });
+    }
+
+    [TestCase("Light", 764, 540, StreamingPlatform.Twitch)]
+    [TestCase("Dark", 1390, 840, StreamingPlatform.YouTube)]
+    public async Task Multistream_channel_cards_keep_live_offline_and_unavailable_states_distinct(
+        string theme, int width, int height, StreamingPlatform platform)
+    {
+        var active = platform == StreamingPlatform.Twitch ? "90020006" : "UC_MAIN";
+        var other = platform == StreamingPlatform.Twitch ? "77001122" : "UC_ARCH";
+        var monitor = new CardMonitor(platform);
+        monitor.Set(active, StreamStatus.Offline);
+        monitor.Set(other, StreamStatus.Online, new() { Title = "Вечерний стрим", ViewerCount = 42 });
+        await using var harness = CreateHarness(monitor);
+        harness.Page.OpenPlatform(platform);
+        harness.Page.Status.SetPageOnScreen(true);
+
+        var view = new MultistreamPageView { DataContext = harness.Page };
+        var host = new Border { Child = HostWithMainWindowFont(view) };
+        host.Resources.MergedDictionaries.Add(new ResourceDictionary
+        {
+            Source = new($"pack://application:,,,/KeepShell;component/Resources/Themes/{theme}.xaml"),
+        });
+        host.SetResourceReference(Border.BackgroundProperty, "Bg.Base");
+        var viewport = new Size(width, height);
+        ArrangeWithResponsivePass(host, view, viewport);
+
+        var catalog = Descendants<ChannelCatalogSettingsSectionView>(view).Single();
+        var cards = Descendants<ListBox>(catalog).Single();
+        var activeCard = harness.Editor.VisibleChannels.Single(c => c.ChannelId == active);
+        var otherCard = harness.Editor.VisibleChannels.Single(c => c.ChannelId == other);
+        var otherItem = (ListBoxItem)cards.ItemContainerGenerator.ContainerFromItem(otherCard);
+        Assert.Multiple(() =>
+        {
+            Assert.That(activeCard.RuntimeStatus.BroadcastText, Is.EqualTo("Не в эфире"));
+            Assert.That(otherCard.RuntimeStatus.BroadcastText, Is.EqualTo("В эфире · 42 зр."));
+            Assert.That(otherCard.RuntimeStatus.BroadcastDetails, Is.EqualTo("Вечерний стрим"));
+            Assert.That(otherCard.RuntimeStatus.ChatText, Is.EqualTo("Чат: не подключён"));
+            Assert.That(Descendants<TextBlock>(otherItem).Any(t => t.Text == otherCard.RuntimeStatus.BroadcastText), Is.True);
+        });
+        TestResources.CaptureAccountLayout(host, $"channels-{theme}", width, height);
+
+        cards.SelectedItem = otherCard;
+        Assert.That(harness.Editor.SelectedChannel, Is.SameAs(otherCard));
+        Assert.That(activeCard.IsActive, Is.True);
+        Assert.That(harness.Page.HasUnsavedChanges, Is.False);
+
+        monitor.Set(other, StreamStatus.Online, availability: ChannelMonitoringAvailability.Unavailable);
+        var statusTimer = harness.Dispatcher.Timers.Single(timer => timer.Interval == TimeSpan.FromSeconds(1));
+        statusTimer.Tick();
+        ArrangeWithResponsivePass(host, view, viewport);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(activeCard.RuntimeStatus.BroadcastText, Is.EqualTo("Не в эфире"));
+            Assert.That(otherCard.RuntimeStatus.BroadcastText, Is.EqualTo("Статус эфира неизвестен"));
+            Assert.That(otherCard.RuntimeStatus.BroadcastSeverity, Is.Not.EqualTo(StatusSeverity.Success));
+            Assert.That(otherCard.RuntimeStatus.BroadcastDetails, Is.EqualTo("мониторинг недоступен"));
+            Assert.That(Descendants<TextBlock>(otherItem).Any(t => t.Text == otherCard.RuntimeStatus.BroadcastText), Is.True);
+            Assert.That(cards.SelectedItem, Is.SameAs(otherCard));
+            Assert.That(harness.Page.HasUnsavedChanges, Is.False);
+        });
+        TestResources.CaptureAccountLayout(host, $"channels-{theme}-unavailable", width, height);
+
+        monitor.Set(other, StreamStatus.Offline);
+        statusTimer.Tick();
+        Assert.That(otherCard.RuntimeStatus.BroadcastText, Is.EqualTo("Не в эфире"));
+    }
+
+    [TestCase("Light", 764, 540)]
+    [TestCase("Dark", 1190, 820)]
+    public async Task Multistream_accounts_show_compact_permission_summaries_until_expanded(string theme, int width, int height)
+    {
+        await using var harness = CreateHarness();
+        harness.Page.SelectPlatformTabCommand.Execute(MultistreamPlatformTab.Accounts);
+        var view = new MultistreamPageView { DataContext = harness.Page };
+        var host = HostWithMainWindowFont(view);
+        host.Resources.MergedDictionaries.Add(new ResourceDictionary
+        {
+            Source = new($"pack://application:,,,/KeepShell;component/Resources/Themes/{theme}.xaml"),
+        });
+        host.SetResourceReference(Control.BackgroundProperty, "Bg.Base");
+        var viewport = new Size(width, height);
+        ArrangeWithResponsivePass(host, view, viewport);
+        var accounts = (ContentControl)view.FindName("PlatformAccountsHost")!;
+        var grant = harness.Page.Accounts!.Accounts[0].Grants[0];
+        var summary = Descendants<Button>(accounts).First(b => Equals(b.Content, grant.PermissionsLabel));
+        Assert.That(IsEffectivelyVisible(summary), Is.True);
+        Assert.That(grant.IsPermissionsExpanded, Is.False);
+        TestResources.CaptureAccountLayout(host, $"accounts-{theme}-compact", width, height);
+
+        grant.TogglePermissionsCommand.Execute(null);
+        ArrangeWithResponsivePass(host, view, viewport);
+        Assert.That(Descendants<TextBlock>(accounts).Any(t => IsEffectivelyVisible(t) && t.Text == grant.Permissions[0].Name), Is.True);
+        TestResources.CaptureAccountLayout(host, $"accounts-{theme}-details", width, height);
     }
 
     [TestCase(1660, 980, Description = "wide")]
@@ -385,7 +481,7 @@ public sealed class MultistreamLayoutTests
         });
     }
 
-    private LayoutHarness CreateHarness()
+    private LayoutHarness CreateHarness(params IPlatformChannelMonitor[] monitors)
     {
         var twitch = new StubPlatform(StreamingPlatform.Twitch, "Twitch");
         var youtube = new StubPlatform(StreamingPlatform.YouTube, "YouTube");
@@ -459,7 +555,7 @@ public sealed class MultistreamLayoutTests
             broadcastProfiles: profilesSection, platformRegistry: registry);
 
         var connection = new BotConnectionManager(new AppHost([], NullLogger<AppHost>.Instance), [], null, bus, NullLogger<BotConnectionManager>.Instance);
-        var status = new MultistreamTileViewModel(registry, catalog, connection, new PlatformAuthRegistry([]), [], bus, dispatcher, ytSettingsStore);
+        var status = new MultistreamTileViewModel(registry, catalog, connection, new PlatformAuthRegistry([]), monitors, bus, dispatcher, ytSettingsStore);
         var ytControls = new YouTubeMultistreamPlatformControls(settings);
         var platformAccounts = new PlatformAccountsSectionViewModel(
             catalog,
@@ -476,7 +572,7 @@ public sealed class MultistreamLayoutTests
         var page = new MultistreamPageViewModel(settings, status, [ytControls], platformAccounts);
         page.OnEnter();
 
-        return new(page, editor, settings, status, connection);
+        return new(page, editor, settings, status, connection, dispatcher);
     }
 
     private static void ArrangeWithResponsivePass(FrameworkElement host, MultistreamPageView view, Size size)
@@ -583,16 +679,41 @@ public sealed class MultistreamLayoutTests
         ChannelCatalogSettingsSectionViewModel editor,
         SettingsPageViewModel settings,
         MultistreamTileViewModel status,
-        BotConnectionManager connection) : IAsyncDisposable
+        BotConnectionManager connection,
+        ManualUiDispatcher dispatcher) : IAsyncDisposable
     {
         public MultistreamPageViewModel Page { get; } = page;
         public ChannelCatalogSettingsSectionViewModel Editor { get; } = editor;
+        public ManualUiDispatcher Dispatcher { get; } = dispatcher;
 
         public async ValueTask DisposeAsync()
         {
             status.Dispose();
             settings.Dispose();
             await connection.DisposeAsync();
+        }
+    }
+
+    private sealed class CardMonitor(StreamingPlatform platform) : IPlatformChannelMonitor
+    {
+        private readonly Dictionary<ChannelKey, ChannelMonitoringSnapshot> _snapshots = [];
+
+        public StreamingPlatform Platform => platform;
+        public string Name => "Мониторинг";
+        public int StartOrder => 0;
+        public Task StartAsync(IProgress<string> progress, CancellationToken cancellationToken) => Task.CompletedTask;
+        public Task StopAsync(IProgress<string> progress, CancellationToken cancellationToken) => Task.CompletedTask;
+        public Task RefreshAsync(ChannelKey? channel = null, CancellationToken cancellationToken = default) => Task.CompletedTask;
+        public ChannelMonitoringSnapshot GetSnapshot(ChannelKey channel) => _snapshots[channel];
+        public IReadOnlyList<ChannelMonitoringSnapshot> GetSnapshots() => [.. _snapshots.Values];
+
+        public void Set(string id, StreamStatus status, StreamInfo? stream = null,
+            ChannelMonitoringAvailability availability = ChannelMonitoringAvailability.Active)
+        {
+            var key = new ChannelKey(platform, id);
+            var reason = availability == ChannelMonitoringAvailability.Unavailable
+                ? MonitoringUnavailableReason.TransportDisconnected : MonitoringUnavailableReason.None;
+            _snapshots[key] = new(key, id, availability, reason, null, status, stream, null, false);
         }
     }
 

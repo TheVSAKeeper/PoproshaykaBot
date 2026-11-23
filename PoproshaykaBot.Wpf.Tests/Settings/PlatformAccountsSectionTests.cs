@@ -2,6 +2,7 @@
 using System.Reflection;
 using KeepShell.Services;
 using KeepShell.Services.Platform;
+using KeepShell.Testing;
 using KeepShell.ViewModels;
 using Microsoft.Extensions.Logging.Abstractions;
 using PoproshaykaBot.Core.Infrastructure.Events;
@@ -13,7 +14,9 @@ using PoproshaykaBot.Core.Twitch.Auth;
 using PoproshaykaBot.Core.Twitch.Chat;
 using PoproshaykaBot.Core.YouTube.Auth;
 using PoproshaykaBot.Wpf.Infrastructure;
+using PoproshaykaBot.Wpf.Infrastructure.Platforms;
 using PoproshaykaBot.Wpf.ViewModels.Settings;
+using PoproshaykaBot.Wpf.ViewModels.Tiles;
 
 namespace PoproshaykaBot.Wpf.Tests.Settings;
 
@@ -51,8 +54,12 @@ public sealed class PlatformAccountsSectionTests
         });
 
         var oauth = new FakeTwitchOAuthService();
+        var browserProfile = Guid.NewGuid().ToString("N");
         var embedded = new FakeEmbeddedTwitchAuth(req =>
-            EmbeddedTwitchAuthResult.Completed(new OAuthFlowResult("acc-tok", "ref-tok", [.. TwitchScopes.CombinedDefault], "streamer777", "777", 14400)));
+            EmbeddedTwitchAuthResult.Completed(new OAuthFlowResult("acc-tok", "ref-tok", [.. TwitchScopes.CombinedDefault], "streamer777", "777", 14400)
+            {
+                BrowserProfileName = browserProfile,
+            }));
         var bus = new InMemoryEventBus(NullLogger<InMemoryEventBus>.Instance);
 
         var accountsVm = new PlatformAccountsSectionViewModel(
@@ -76,11 +83,21 @@ public sealed class PlatformAccountsSectionTests
 
         await accountsVm.AuthorizeCombinedCommand.ExecuteAsync(null);
 
+        var reopened = new AccountsStore(filePath: Path.Combine(_dir.FullName, "accounts.json"));
+        var uiSettings = new MemorySettings();
+        var shell = DispatchProxy.Create<IShellLauncher, TrueProxy>();
+        var pane = new ChatDisplayPaneViewModel(shell, null, uiSettings);
+        pane.SetAccounts(reopened, null, "Сеанс браузера");
+        pane.SelectedAccount = pane.AccountChoices.Single(option => option.Id == "777");
+        var restoredPane = new ChatDisplayPaneViewModel(shell, null, uiSettings);
+        restoredPane.SetAccounts(reopened, null, "Сеанс браузера");
+
         Assert.Multiple(() =>
         {
             Assert.That(embedded.LastRequest, Is.Not.Null);
             Assert.That(embedded.LastRequest!.Scopes, Is.EquivalentTo(TwitchScopes.CombinedDefault));
             Assert.That(accountsVm.AccountCount, Is.EqualTo(1));
+            Assert.That(accountsVm.StatusNotice, Does.Contain("Запись проверена"));
             var card = accountsVm.Accounts.Single();
             Assert.That(card.DisplayName, Is.EqualTo("streamer777"));
             Assert.That(card.HasBotRole, Is.True);
@@ -88,6 +105,8 @@ public sealed class PlatformAccountsSectionTests
             Assert.That(card.CanAddBotRole, Is.False);
             Assert.That(card.CanAddBroadcasterRole, Is.False);
             Assert.That(card.Grants, Has.Count.EqualTo(2));
+            Assert.That(restoredPane.SelectedAccount?.Label, Does.Contain("streamer777").And.Contain("бот").And.Contain("стример"));
+            Assert.That(restoredPane.SelectedAccount?.BrowserProfile?.ProfileName, Is.EqualTo(browserProfile));
 
             var channel = catalogVm.VisibleChannels.Single();
             var botRole = channel.Roles.Single(r => r.Role == PlatformAuthRole.Bot);
@@ -95,6 +114,69 @@ public sealed class PlatformAccountsSectionTests
             Assert.That(botRole.Accounts.Single(o => o.AccountId == "777").HasRoleGrant, Is.True);
             Assert.That(broadcasterRole.Accounts.Single(o => o.AccountId == "777").HasRoleGrant, Is.True);
         });
+    }
+
+    [Test]
+    public async Task Additional_platform_uses_shared_login_permissions_and_browser_account_picker()
+    {
+        var adapter = new AdditionalPlatform();
+        var catalog = new ChannelCatalogStore(filePath: Path.Combine(_dir.FullName, "extra-platform-channels.json"));
+        catalog.Save(new()
+        {
+            Channels = [new()
+            {
+                Platform = adapter.Platform, ChannelId = "channel", DisplayName = "Канал", IsConfigured = true,
+                BotAccountId = "account", BotContextId = "grant", BotVerifiedSubjectId = "account",
+            }],
+        });
+        var viewModel = new PlatformAccountsSectionViewModel(catalog, accountDirectories: [adapter], accountLogins: [adapter])
+        {
+            SelectedPlatform = adapter.Platform,
+        };
+
+        await viewModel.AuthorizeBotCommand.ExecuteAsync(null);
+
+        var card = viewModel.Accounts.Single();
+        var pane = new ChatDisplayPaneViewModel(DispatchProxy.Create<IShellLauncher, TrueProxy>(), null);
+        pane.SetTarget(adapter.Platform, new Uri("https://example.test/chat"), null, shown: true);
+        pane.SetAccounts(adapter, null, "Просмотр чата");
+        Assert.Multiple(() =>
+        {
+            Assert.That(viewModel.SupportsAccounts, Is.True);
+            Assert.That(viewModel.SupportsBrowserToggle, Is.True);
+            Assert.That(card.Grants.Single().Permissions.Single().Status, Is.EqualTo("Право выдано · канал проверен"));
+            Assert.That(pane.AccountChoices[1].Label, Is.EqualTo("Example (бот)"));
+            Assert.That(pane.AccountChoices[1].BrowserProfile, Is.EqualTo(adapter.BrowserProfile));
+        });
+    }
+
+    private sealed class AdditionalPlatform : IPlatformAccountDirectory, IPlatformAccountLogin
+    {
+        private AuthContextSummary? _grant;
+        public StreamingPlatform Platform => StreamingPlatform.VkLive;
+        public bool CanAuthorize => true;
+        public bool SupportsEmbeddedBrowser => true;
+        public PlatformChatBrowserProfile BrowserProfile { get; } = new("fixture-folder", "fixture-profile");
+
+        public Task<PlatformAccountLoginResult> AuthorizeAsync(PlatformAccountLoginRequest request)
+        {
+            _grant = new("grant", request.Roles.Single(), "Example", "account", "Example", true, false)
+            {
+                ChatBrowserProfile = BrowserProfile,
+            };
+            return Task.FromResult(new PlatformAccountLoginResult("Вход выполнен", StatusSeverity.Success, [_grant]));
+        }
+
+        public IReadOnlyList<PlatformAccount> ListAccounts() => _grant is { } grant ? [new(new(Platform, "account"), "Example", [grant])] : [];
+
+        public IRoleAccountSettings LoadAuthorization(PlatformAuthRole role, string contextId) =>
+            new TwitchAccountSettings { AccessToken = "fixture", Scopes = ["write"], StoredScopes = ["write"] };
+
+        public IReadOnlyList<PlatformAccountOperation> GetPermissions(PlatformAuthRole role) =>
+            [new("Отправка в чат", true, "write")];
+
+        public bool VerifyPersistedAuthorization(PlatformAuthRole role, string contextId, string accountId) =>
+            _grant is { } grant && grant.Role == role && grant.ContextId == contextId && grant.SubjectId == accountId;
     }
 
     [Test]

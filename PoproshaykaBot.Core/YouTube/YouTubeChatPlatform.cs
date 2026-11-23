@@ -73,6 +73,8 @@ public sealed class YouTubeChatPlatform : IChatPlatform
 
     public IPlatformMessenger Messenger => _messenger;
 
+    public IChatAccountMessenger? AccountMessenger => _messenger as IChatAccountMessenger;
+
     public IChatDecorations Decorations => NullChatDecorations.Instance;
 
     public PlatformBotIdentity? BotIdentity

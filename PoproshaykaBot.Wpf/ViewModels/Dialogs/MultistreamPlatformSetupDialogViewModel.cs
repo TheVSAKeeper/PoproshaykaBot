@@ -14,6 +14,7 @@ using PoproshaykaBot.Core.YouTube.Auth;
 using PoproshaykaBot.Wpf.Bootstrap;
 using PoproshaykaBot.Wpf.Infrastructure;
 using PoproshaykaBot.Wpf.Infrastructure.Platforms;
+using System.IO;
 
 namespace PoproshaykaBot.Wpf.ViewModels.Dialogs;
 
@@ -21,7 +22,9 @@ public sealed record WizardAccountSummaryItem(
     string AccountId,
     string DisplayName,
     string RolesSummary,
-    StatusSeverity Severity);
+    StatusSeverity Severity,
+    bool CanAddBotRole,
+    bool CanAddBroadcasterRole);
 
 public sealed partial class MultistreamPlatformSetupDialogViewModel : ObservableObject, IDialogViewModel, IAcceptableDialog
 {
@@ -39,6 +42,9 @@ public sealed partial class MultistreamPlatformSetupDialogViewModel : Observable
     private readonly SettingsManager? _settingsManager;
     private readonly IEventBus? _eventBus;
     private readonly TimeProvider _timeProvider;
+    private readonly IReadOnlyDictionary<StreamingPlatform, IPlatformAccountDirectory> _accountDirectories;
+    private readonly IReadOnlyDictionary<StreamingPlatform, IPlatformAccountLogin> _accountLogins;
+    private bool _youtubeEnableWritePending;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsStep1), nameof(IsStep2), nameof(IsStep3), nameof(StepProgressText),
@@ -63,6 +69,7 @@ public sealed partial class MultistreamPlatformSetupDialogViewModel : Observable
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(BackCommand), nameof(NextCommand), nameof(EnableYouTubeAndContinueCommand),
         nameof(AuthorizeCombinedCommand), nameof(AuthorizeBotCommand), nameof(AuthorizeBroadcasterCommand),
+        nameof(AddBotRoleCommand), nameof(AddBroadcasterRoleCommand),
         nameof(RetryVerificationCommand))]
     private bool _isBusy;
 
@@ -103,7 +110,9 @@ public sealed partial class MultistreamPlatformSetupDialogViewModel : Observable
         ILogger<MultistreamPlatformSetupDialogViewModel>? logger = null,
         SettingsManager? settingsManager = null,
         IEventBus? eventBus = null,
-        TimeProvider? timeProvider = null)
+        TimeProvider? timeProvider = null,
+        IEnumerable<IPlatformAccountDirectory>? accountDirectories = null,
+        IEnumerable<IPlatformAccountLogin>? accountLogins = null)
     {
         ArgumentNullException.ThrowIfNull(catalogStore);
         ArgumentNullException.ThrowIfNull(adapters);
@@ -125,6 +134,11 @@ public sealed partial class MultistreamPlatformSetupDialogViewModel : Observable
         _settingsManager = settingsManager;
         _eventBus = eventBus;
         _timeProvider = timeProvider ?? TimeProvider.System;
+        _accountDirectories = (accountDirectories ?? [])
+            .Concat(new IPlatformAccountDirectory[] { twitchAccountsStore, youtubeAccountsStore })
+            .DistinctBy(static directory => directory.Platform)
+            .ToDictionary(static directory => directory.Platform);
+        _accountLogins = (accountLogins ?? []).ToDictionary(static login => login.Platform);
     }
 
     public event EventHandler<bool>? RequestClose;
@@ -163,9 +177,9 @@ public sealed partial class MultistreamPlatformSetupDialogViewModel : Observable
         _ => $"Настройка площадки {PlatformDisplayName}: выберите аккаунт и проверьте доступ к активному каналу.",
     };
 
-    public bool CanAuthorize => _shellLauncher is not null
+    public bool CanAuthorize => _accountLogins.GetValueOrDefault(Platform)?.CanAuthorize ?? (_shellLauncher is not null
         && ((Platform == StreamingPlatform.Twitch && _twitchOAuth is not null)
-            || (Platform == StreamingPlatform.YouTube && _youtubeOAuth is not null));
+            || (Platform == StreamingPlatform.YouTube && _youtubeOAuth is not null)));
 
     public bool HasStepNotice => !string.IsNullOrWhiteSpace(StepNotice);
 
@@ -178,6 +192,7 @@ public sealed partial class MultistreamPlatformSetupDialogViewModel : Observable
         Platform = platform;
         PlatformDisplayName = _platformRegistry?.Find(platform)?.DisplayName ?? PlatformVisuals.GetDisplayName(platform);
         HasSavedChanges = false;
+        _youtubeEnableWritePending = false;
         CurrentStep = 1;
         StepNotice = null;
         StepNoticeSeverity = StatusSeverity.None;
@@ -225,7 +240,10 @@ public sealed partial class MultistreamPlatformSetupDialogViewModel : Observable
         StepNotice = null;
         if (CurrentStep == 1)
         {
-            PersistPlatformEnableIfNeeded();
+            if (!PersistPlatformEnableIfNeeded())
+            {
+                return;
+            }
             RefreshAccounts();
             CurrentStep = 2;
             return;
@@ -264,29 +282,56 @@ public sealed partial class MultistreamPlatformSetupDialogViewModel : Observable
     [RelayCommand(CanExecute = nameof(CanStartOAuth))]
     private Task AuthorizeBroadcasterAsync() => AuthorizeAndVerifyAsync(combined: false, PlatformAuthRole.Broadcaster);
 
+    private bool CanAddBotRole(WizardAccountSummaryItem? account) => CanStartOAuth() && account?.CanAddBotRole == true;
+
+    private bool CanAddBroadcasterRole(WizardAccountSummaryItem? account) => CanStartOAuth() && account?.CanAddBroadcasterRole == true;
+
+    [RelayCommand(CanExecute = nameof(CanAddBotRole))]
+    private Task AddBotRoleAsync(WizardAccountSummaryItem account) =>
+        AuthorizeAndVerifyAsync(combined: false, PlatformAuthRole.Bot, account.AccountId);
+
+    [RelayCommand(CanExecute = nameof(CanAddBroadcasterRole))]
+    private Task AddBroadcasterRoleAsync(WizardAccountSummaryItem account) =>
+        AuthorizeAndVerifyAsync(combined: false, PlatformAuthRole.Broadcaster, account.AccountId);
+
     private bool CanRetryNow() => !IsBusy && CurrentStep == 3 && CanRetryVerification;
 
     [RelayCommand(CanExecute = nameof(CanRetryNow))]
     private Task RetryVerificationAsync() => RunAutoVerificationAsync();
 
-    private void PersistPlatformEnableIfNeeded()
+    private bool PersistPlatformEnableIfNeeded()
     {
         if (!IsYouTubePlatform)
         {
-            return;
+            return true;
         }
 
         var current = _youtubeSettingsStore.Load();
-        if (current.Enabled == EnableYouTube)
+        if (current.Enabled == EnableYouTube && !_youtubeEnableWritePending)
         {
-            return;
+            return true;
         }
 
-        _youtubeSettingsStore.Mutate(settings => settings.Enabled = EnableYouTube);
+        try
+        {
+            _youtubeEnableWritePending = !_youtubeSettingsStore.Mutate(settings => settings.Enabled = EnableYouTube);
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            _youtubeEnableWritePending = true;
+        }
+
+        if (_youtubeEnableWritePending)
+        {
+            SetStepNotice("Не удалось подтвердить запись настройки площадки. Повторите сохранение.", StatusSeverity.Warning);
+            return false;
+        }
+
         HasSavedChanges = true;
+        return true;
     }
 
-    private async Task AuthorizeAndVerifyAsync(bool combined, PlatformAuthRole role)
+    private async Task AuthorizeAndVerifyAsync(bool combined, PlatformAuthRole role, string? expectedAccountId = null)
     {
         if (IsBusy)
         {
@@ -307,10 +352,12 @@ public sealed partial class MultistreamPlatformSetupDialogViewModel : Observable
         var succeeded = false;
         try
         {
-            succeeded = Platform switch
+            succeeded = _accountLogins.TryGetValue(Platform, out var login)
+                ? await AuthorizeWithAdapterAsync(login, combined, role, expectedAccountId).ConfigureAwait(true)
+                : Platform switch
             {
-                StreamingPlatform.Twitch => await AuthorizeTwitchAsync(combined, role).ConfigureAwait(true),
-                StreamingPlatform.YouTube => await AuthorizeYouTubeAsync(combined, role).ConfigureAwait(true),
+                StreamingPlatform.Twitch => await AuthorizeTwitchAsync(combined, role, expectedAccountId).ConfigureAwait(true),
+                StreamingPlatform.YouTube => await AuthorizeYouTubeAsync(combined, role, expectedAccountId).ConfigureAwait(true),
                 _ => false,
             };
         }
@@ -335,12 +382,35 @@ public sealed partial class MultistreamPlatformSetupDialogViewModel : Observable
 
         HasSavedChanges = true;
         RefreshAccounts();
-        StepNotice = null;
+        SetStepNotice("Авторизация сохранена и проверена на диске.", StatusSeverity.Success);
         CurrentStep = 3;
         await RunAutoVerificationAsync().ConfigureAwait(true);
     }
 
-    private async Task<bool> AuthorizeTwitchAsync(bool combined, PlatformAuthRole role)
+    private async Task<bool> AuthorizeWithAdapterAsync(IPlatformAccountLogin login, bool combined, PlatformAuthRole role, string? expectedAccountId)
+    {
+        var result = await login.AuthorizeAsync(new(combined ? PlatformAuthRoles.Active : [role], expectedAccountId, null, [], false))
+            .ConfigureAwait(true);
+        SetStepNotice(result.Message, result.Severity);
+        if (result.ChangedAuthorizations.Count == 0)
+        {
+            return false;
+        }
+
+        if (!VerifyWrittenAuthorizations(result.ChangedAuthorizations.Select(grant => (grant.Role, grant.ContextId, grant.SubjectId))))
+        {
+            return false;
+        }
+
+        foreach (var grant in result.ChangedAuthorizations)
+        {
+            PublishAuthorizationRefreshed(Platform, grant.Role, grant.ContextId);
+        }
+
+        return true;
+    }
+
+    private async Task<bool> AuthorizeTwitchAsync(bool combined, PlatformAuthRole role, string? expectedAccountId)
     {
         if (_twitchOAuth is null || _shellLauncher is null)
         {
@@ -387,6 +457,10 @@ public sealed partial class MultistreamPlatformSetupDialogViewModel : Observable
         }
 
         var userId = flow.UserId.Trim();
+        if (!MatchesExpectedAccount(expectedAccountId, userId))
+        {
+            return false;
+        }
         var now = _timeProvider.GetUtcNow();
         var grantedScopes = flow.Scopes ?? [];
         List<(PlatformAuthRole Role, string ContextId, string Label, TwitchAccountSettings Account)> entries = [];
@@ -414,13 +488,29 @@ public sealed partial class MultistreamPlatformSetupDialogViewModel : Observable
         }
         else
         {
+            if (!HasRequiredTwitchScopes(role, grantedScopes))
+            {
+                SetStepNotice("Twitch не выдал обязательные права для выбранной роли.", StatusSeverity.Warning);
+                return false;
+            }
+
             var contextId = ResolveContextForSave(StreamingPlatform.Twitch, role, userId);
             var account = new TwitchAccountSettings();
             flow.ApplyTo(account, now);
             entries.Add((role, contextId, flow.Login, account));
         }
 
-        _twitchAccountsStore.UpsertContexts(entries);
+        if (!_twitchAccountsStore.UpsertContexts(entries))
+        {
+            SetAuthorizationWriteWarning();
+            return false;
+        }
+
+        if (!VerifyWrittenAuthorizations(entries.Select(entry => (entry.Role, entry.ContextId, (string?)userId))))
+        {
+            return false;
+        }
+
         foreach (var saved in entries)
         {
             _twitchOAuth.ResetRetryState(saved.Role, saved.ContextId);
@@ -430,7 +520,7 @@ public sealed partial class MultistreamPlatformSetupDialogViewModel : Observable
         return true;
     }
 
-    private async Task<bool> AuthorizeYouTubeAsync(bool combined, PlatformAuthRole role)
+    private async Task<bool> AuthorizeYouTubeAsync(bool combined, PlatformAuthRole role, string? expectedAccountId)
     {
         if (_youtubeOAuth is null || _shellLauncher is null)
         {
@@ -459,6 +549,10 @@ public sealed partial class MultistreamPlatformSetupDialogViewModel : Observable
         }
 
         var channelId = flow.ChannelId.Trim();
+        if (!MatchesExpectedAccount(expectedAccountId, channelId))
+        {
+            return false;
+        }
         var name = string.IsNullOrWhiteSpace(flow.ChannelTitle) ? channelId : flow.ChannelTitle;
         var now = _timeProvider.GetUtcNow();
         var grantedScopes = flow.Scopes ?? [];
@@ -487,13 +581,29 @@ public sealed partial class MultistreamPlatformSetupDialogViewModel : Observable
         }
         else
         {
+            if (!YouTubeScopes.ContainsRequiredScopes(role, grantedScopes))
+            {
+                SetStepNotice("YouTube не выдал обязательные права для выбранной роли.", StatusSeverity.Warning);
+                return false;
+            }
+
             var contextId = ResolveContextForSave(StreamingPlatform.YouTube, role, channelId);
             var account = new YouTubeAccountSettings();
             flow.ApplyTo(account, now);
             entries.Add((role, contextId, name, account));
         }
 
-        _youtubeAccountsStore.UpsertContexts(entries);
+        if (!_youtubeAccountsStore.UpsertContexts(entries))
+        {
+            SetAuthorizationWriteWarning();
+            return false;
+        }
+
+        if (!VerifyWrittenAuthorizations(entries.Select(entry => (entry.Role, entry.ContextId, (string?)channelId))))
+        {
+            return false;
+        }
+
         foreach (var saved in entries)
         {
             _youtubeOAuth.ResetRetryState(saved.Role, saved.ContextId);
@@ -502,6 +612,34 @@ public sealed partial class MultistreamPlatformSetupDialogViewModel : Observable
 
         return true;
     }
+
+    private bool MatchesExpectedAccount(string? expectedAccountId, string actualAccountId)
+    {
+        if (expectedAccountId is null || string.Equals(expectedAccountId, actualAccountId, StringComparison.Ordinal))
+        {
+            return true;
+        }
+
+        SetStepNotice("Выполнен вход в другой аккаунт. Войдите в аккаунт, которому выдаёте роль.", StatusSeverity.Warning);
+        return false;
+    }
+
+    private bool VerifyWrittenAuthorizations(IEnumerable<(PlatformAuthRole Role, string ContextId, string? AccountId)> grants)
+    {
+        if (grants.All(grant => grant.AccountId is not null && IsAuthorizationPersisted(grant.Role, grant.ContextId, grant.AccountId)))
+        {
+            return true;
+        }
+
+        SetAuthorizationWriteWarning();
+        return false;
+    }
+
+    private bool IsAuthorizationPersisted(PlatformAuthRole role, string contextId, string accountId) =>
+        _accountDirectories.GetValueOrDefault(Platform)?.VerifyPersistedAuthorization(role, contextId, accountId) == true;
+
+    private void SetAuthorizationWriteWarning() =>
+        SetStepNotice("Не удалось подтвердить запись авторизации. Проверьте доступ к файлу и повторите вход.", StatusSeverity.Warning);
 
     private async Task RunAutoVerificationAsync()
     {
@@ -527,7 +665,11 @@ public sealed partial class MultistreamPlatformSetupDialogViewModel : Observable
 
             if (channel is null)
             {
-                if (botGrant is not null)
+                if (botGrant is { } grant && !IsAuthorizationPersisted(PlatformAuthRole.Bot, grant.ContextId, grant.AccountId))
+                {
+                    ShowVerificationWriteFailure("Не удалось подтвердить запись авторизации бота. Вернитесь на шаг входа.");
+                }
+                else if (botGrant is not null)
                 {
                     VerificationSeverity = StatusSeverity.Success;
                     VerificationHeading = "Готово к работе";
@@ -569,6 +711,12 @@ public sealed partial class MultistreamPlatformSetupDialogViewModel : Observable
             }
 
             var channelName = string.IsNullOrWhiteSpace(channel.DisplayName) ? channel.ChannelId : channel.DisplayName;
+            if (!IsAuthorizationPersisted(PlatformAuthRole.Bot, targetBotGrant.Value.ContextId, targetBotGrant.Value.AccountId))
+            {
+                ShowVerificationWriteFailure("Не удалось подтвердить запись авторизации бота. Вернитесь на шаг входа.");
+                return;
+            }
+
             _logger?.ChannelRoleVerificationStarted(PlatformAuthRole.Bot, channel.ChannelId, Platform);
 
             ChannelAccessVerification botResult;
@@ -583,12 +731,16 @@ public sealed partial class MultistreamPlatformSetupDialogViewModel : Observable
                 botResult = new(false, null, StreamingErrorMessages.SafeMessage(exception));
             }
 
-            var botVerified = botResult.IsAllowed && !string.IsNullOrWhiteSpace(botResult.SubjectId);
+            var botVerified = botResult.IsAllowed && string.Equals(botResult.SubjectId, targetBotGrant.Value.AccountId, StringComparison.Ordinal);
             if (!botVerified)
             {
                 _logger?.ChannelRoleVerificationDenied(PlatformAuthRole.Bot, channel.ChannelId, Platform);
-                PersistVerification(channel.Key, targetBotGrant.Value.AccountId, targetBotGrant.Value.ContextId, verifiedBotId: null,
-                    broadcasterAccountId: null, broadcasterContextId: null, verifiedBroadcasterId: null, updateBroadcaster: false);
+                if (!PersistVerification(channel.Key, targetBotGrant.Value.AccountId, targetBotGrant.Value.ContextId, verifiedBotId: null,
+                    broadcasterAccountId: null, broadcasterContextId: null, verifiedBroadcasterId: null, updateBroadcaster: false))
+                {
+                    ShowVerificationWriteFailure("Доступ бота не подтверждён. Записать результат проверки не удалось.");
+                    return;
+                }
                 VerificationSeverity = StatusSeverity.Error;
                 VerificationHeading = "Доступ не подтверждён";
                 VerificationMessage = !string.IsNullOrWhiteSpace(botResult.FailureReason)
@@ -599,19 +751,29 @@ public sealed partial class MultistreamPlatformSetupDialogViewModel : Observable
                 return;
             }
 
-            var broadcasterGrant = ResolveChannelRoleGrant(accounts, channel, PlatformAuthRole.Broadcaster);
+            var broadcasterGrant = ResolveChannelRoleGrant(accounts, channel, PlatformAuthRole.Broadcaster)
+                ?? (channel.GetAccountAssignment(PlatformAuthRole.Broadcaster) is null
+                    ? FindBestGrant(accounts.Where(account => account.Key.AccountId == channel.ChannelId), PlatformAuthRole.Broadcaster)
+                    : null);
             string? verifiedBroadcasterId = null;
             string? broadcasterFailure = null;
             var updateBroadcaster = false;
             if (broadcasterGrant is not null)
             {
+                if (!IsAuthorizationPersisted(PlatformAuthRole.Broadcaster, broadcasterGrant.Value.ContextId, broadcasterGrant.Value.AccountId))
+                {
+                    ShowVerificationWriteFailure("Не удалось подтвердить запись авторизации стримера. Вернитесь на шаг входа.");
+                    return;
+                }
+
                 updateBroadcaster = true;
                 _logger?.ChannelRoleVerificationStarted(PlatformAuthRole.Broadcaster, channel.ChannelId, Platform);
                 try
                 {
                     var broadcasterResult = await adapter.VerifyChannelAccessAsync(
                         channel.Key, PlatformAuthRole.Broadcaster, broadcasterGrant.Value.ContextId, CancellationToken.None).ConfigureAwait(true);
-                    if (broadcasterResult.IsAllowed && !string.IsNullOrWhiteSpace(broadcasterResult.SubjectId))
+                    if (broadcasterResult.IsAllowed
+                        && string.Equals(broadcasterResult.SubjectId, broadcasterGrant.Value.AccountId, StringComparison.Ordinal))
                     {
                         verifiedBroadcasterId = broadcasterResult.SubjectId;
                     }
@@ -628,7 +790,7 @@ public sealed partial class MultistreamPlatformSetupDialogViewModel : Observable
                 }
             }
 
-            PersistVerification(
+            if (!PersistVerification(
                 channel.Key,
                 botResult.SubjectId!,
                 targetBotGrant.Value.ContextId,
@@ -636,8 +798,11 @@ public sealed partial class MultistreamPlatformSetupDialogViewModel : Observable
                 broadcasterGrant?.AccountId,
                 broadcasterGrant?.ContextId,
                 verifiedBroadcasterId,
-                updateBroadcaster);
-            HasSavedChanges = true;
+                updateBroadcaster))
+            {
+                ShowVerificationWriteFailure("Доступ проверен, но запись назначения в каталоге каналов не подтверждена.");
+                return;
+            }
 
             if (!string.IsNullOrWhiteSpace(broadcasterFailure))
             {
@@ -661,7 +826,15 @@ public sealed partial class MultistreamPlatformSetupDialogViewModel : Observable
         }
     }
 
-    private void PersistVerification(
+    private void ShowVerificationWriteFailure(string message)
+    {
+        VerificationSeverity = StatusSeverity.Warning;
+        VerificationHeading = "Запись не подтверждена";
+        VerificationMessage = message;
+        CanRetryVerification = true;
+    }
+
+    private bool PersistVerification(
         ChannelKey key,
         string botAccountId,
         string botContextId,
@@ -671,26 +844,44 @@ public sealed partial class MultistreamPlatformSetupDialogViewModel : Observable
         string? verifiedBroadcasterId,
         bool updateBroadcaster)
     {
-        _catalogStore.Mutate(settings =>
+        var found = false;
+        bool written;
+        try
         {
-            var entry = settings.Channels.FirstOrDefault(c =>
-                c.Platform == key.Platform && string.Equals(c.ChannelId, key.ChannelId, StringComparison.Ordinal));
-            if (entry is null)
+            written = _catalogStore.Mutate(settings =>
             {
-                return;
-            }
+                var entry = settings.Channels.FirstOrDefault(c =>
+                    c.Platform == key.Platform && string.Equals(c.ChannelId, key.ChannelId, StringComparison.Ordinal));
+                if (entry is null)
+                {
+                    return;
+                }
 
-            entry.BotAccountId = botAccountId;
-            entry.BotContextId = AuthContextIds.Normalize(botContextId);
-            entry.BotVerifiedSubjectId = verifiedBotId;
+                found = true;
+                entry.BotAccountId = botAccountId;
+                entry.BotContextId = AuthContextIds.Normalize(botContextId);
+                entry.BotVerifiedSubjectId = verifiedBotId;
 
-            if (updateBroadcaster && !string.IsNullOrWhiteSpace(broadcasterAccountId))
-            {
-                entry.BroadcasterAccountId = broadcasterAccountId;
-                entry.BroadcasterContextId = AuthContextIds.Normalize(broadcasterContextId);
-                entry.BroadcasterVerifiedSubjectId = verifiedBroadcasterId;
-            }
-        });
+                if (updateBroadcaster && !string.IsNullOrWhiteSpace(broadcasterAccountId))
+                {
+                    entry.BroadcasterAccountId = broadcasterAccountId;
+                    entry.BroadcasterContextId = AuthContextIds.Normalize(broadcasterContextId);
+                    entry.BroadcasterVerifiedSubjectId = verifiedBroadcasterId;
+                }
+            });
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            return false;
+        }
+
+        if (!written || !found || !_catalogStore.VerifyPersisted())
+        {
+            return false;
+        }
+
+        HasSavedChanges = true;
+        return true;
     }
 
     private void RefreshAccounts()
@@ -707,7 +898,9 @@ public sealed partial class MultistreamPlatformSetupDialogViewModel : Observable
                 (false, true) => ("Владелец", StatusSeverity.Info),
                 _ => ("Требуется повторный вход", StatusSeverity.Warning),
             };
-            ExistingAccounts.Add(new(account.Key.AccountId, account.DisplayName, rolesSummary, severity));
+            var hasRole = hasBot || hasBroadcaster;
+            ExistingAccounts.Add(new(account.Key.AccountId, account.DisplayName, rolesSummary, severity,
+                CanAuthorize && hasRole && !hasBot, CanAuthorize && hasRole && !hasBroadcaster));
         }
 
         OnPropertyChanged(nameof(HasExistingAccounts));
@@ -715,12 +908,7 @@ public sealed partial class MultistreamPlatformSetupDialogViewModel : Observable
 
     private IReadOnlyList<PlatformAccount> ListPlatformAccounts(StreamingPlatform platform)
     {
-        var accounts = _adapters.GetValueOrDefault(platform)?.ListAccounts() ?? (platform switch
-        {
-            StreamingPlatform.Twitch => _twitchAccountsStore.ListAccounts(),
-            StreamingPlatform.YouTube => _youtubeAccountsStore.ListAccounts(),
-            _ => [],
-        });
+        var accounts = _accountDirectories.GetValueOrDefault(platform)?.ListAccounts() ?? [];
 
         return [.. accounts.Where(account => account.Key.Platform == platform)];
     }
@@ -765,7 +953,7 @@ public sealed partial class MultistreamPlatformSetupDialogViewModel : Observable
     }
 
     private static (string AccountId, string DisplayName, string ContextId)? FindBestGrant(
-        IReadOnlyList<PlatformAccount> accounts, PlatformAuthRole role)
+        IEnumerable<PlatformAccount> accounts, PlatformAuthRole role)
     {
         foreach (var account in accounts)
         {

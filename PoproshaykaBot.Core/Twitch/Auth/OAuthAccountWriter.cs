@@ -59,6 +59,11 @@ public sealed class OAuthAccountWriter(
             account.AccessToken = accessToken;
             account.RefreshToken = refreshToken;
             account.Login = login;
+            if (!string.Equals(account.UserId, userId, StringComparison.Ordinal))
+            {
+                account.BrowserProfileName = null;
+            }
+
             account.UserId = userId;
 
             if (scopesSnapshot != null)

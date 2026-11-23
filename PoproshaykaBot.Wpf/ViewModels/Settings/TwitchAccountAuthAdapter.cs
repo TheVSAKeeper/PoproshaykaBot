@@ -116,6 +116,7 @@ public sealed class TwitchAccountAuthAdapter :
         twitchTarget.RefreshToken = _draft.RefreshToken;
         twitchTarget.Login = _draft.Login;
         twitchTarget.UserId = _draft.UserId;
+        twitchTarget.BrowserProfileName = _draft.BrowserProfileName;
         twitchTarget.Scopes = [.._draft.Scopes];
         twitchTarget.StoredScopes = [.._draft.StoredScopes];
         twitchTarget.AccessTokenExpiresAt = _draft.AccessTokenExpiresAt;
@@ -147,6 +148,7 @@ public sealed class TwitchAccountAuthAdapter :
         _draft.RefreshToken = refreshToken;
         _draft.Login = string.Empty;
         _draft.UserId = string.Empty;
+        _draft.BrowserProfileName = null;
         _draft.AccessTokenExpiresAt = null;
         _draft.StoredScopes = [];
     }
@@ -157,6 +159,7 @@ public sealed class TwitchAccountAuthAdapter :
         _draft.RefreshToken = string.Empty;
         _draft.Login = string.Empty;
         _draft.UserId = string.Empty;
+        _draft.BrowserProfileName = null;
         _draft.AccessTokenExpiresAt = null;
         _draft.StoredScopes = [];
     }
@@ -290,6 +293,7 @@ public sealed class TwitchAccountAuthAdapter :
         _draft.RefreshToken = refreshedLive.RefreshToken;
         _draft.Login = refreshedLive.Login;
         _draft.UserId = refreshedLive.UserId;
+        _draft.BrowserProfileName = refreshedLive.BrowserProfileName;
         _draft.Scopes = [..refreshedLive.Scopes];
         _draft.StoredScopes = [..refreshedLive.StoredScopes];
         _draft.AccessTokenExpiresAt = refreshedLive.AccessTokenExpiresAt;

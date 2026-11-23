@@ -9,6 +9,7 @@ public static class SettingsKeys
     public const string LastPage = "ui.shell.last_page";
     public const string SettingsSection = "ui.settings.section";
     public const string ChatTileDisplayMode = "ui.chat_tile.display_mode";
+    public const string ChatTileAccountPrefix = "ui.chat_tile.account.";
     public const string ChatFeedFontSize = "ui.chat_feed.font_size";
     public const string ChatFeedCompactMode = "ui.chat_feed.compact_mode";
     public const string ChatFeedShowTimestamps = "ui.chat_feed.show_timestamps";

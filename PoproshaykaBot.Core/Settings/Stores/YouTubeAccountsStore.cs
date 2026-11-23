@@ -12,6 +12,20 @@ public sealed class YouTubeAccountsStore : RoleAccountsStoreBase<YouTubeAccounts
 {
     protected override StreamingPlatform Platform => StreamingPlatform.YouTube;
 
+    private static readonly PlatformAccountOperation[] BotPermissions =
+    [
+        new("Чтение чата", true, YouTubeScopes.ForceSsl),
+        new("Отправка в чат", true, YouTubeScopes.ForceSsl),
+    ];
+
+    private static readonly PlatformAccountOperation[] BroadcasterPermissions =
+    [
+        new("Чтение данных эфира", true, YouTubeScopes.ReadOnly),
+    ];
+
+    public override IReadOnlyList<PlatformAccountOperation> GetPermissions(PlatformAuthRole role) =>
+        role == PlatformAuthRole.Bot ? BotPermissions : BroadcasterPermissions;
+
     public YouTubeAccountsStore(
         ILogger<YouTubeAccountsStore>? logger = null,
         string? filePath = null,
@@ -82,11 +96,11 @@ public sealed class YouTubeAccountsStore : RoleAccountsStoreBase<YouTubeAccounts
     public (bool Changed, bool Written) RemoveRoleContext(PlatformAuthRole role, string? contextId) =>
         RemoveRoleContextCore(role, contextId, YouTubeOAuthRoleHelpers.ClearAccountInPlace);
 
-    public (IReadOnlyList<string> RemovedContextIds, bool Written) RemoveAccountRole(string channelId, PlatformAuthRole role) =>
-        RemoveAccountRoleCore(channelId, role, YouTubeOAuthRoleHelpers.ClearAccountInPlace);
+    public override (IReadOnlyList<string> RemovedContextIds, bool Written) RemoveAccountRole(string accountId, PlatformAuthRole role) =>
+        RemoveAccountRoleCore(accountId, role, YouTubeOAuthRoleHelpers.ClearAccountInPlace);
 
-    public (IReadOnlyList<(PlatformAuthRole Role, string ContextId)> Removed, bool Written) RemoveAccount(string channelId) =>
-        RemoveAccountCore(channelId, YouTubeOAuthRoleHelpers.ClearAccountInPlace);
+    public override (IReadOnlyList<(PlatformAuthRole Role, string ContextId)> Removed, bool Written) RemoveAccount(string accountId) =>
+        RemoveAccountCore(accountId, YouTubeOAuthRoleHelpers.ClearAccountInPlace);
 
     protected override YouTubeAccountSettings? GetAccount(YouTubeAccountsFileDto state, PlatformAuthRole role)
     {

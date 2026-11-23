@@ -38,4 +38,7 @@ public sealed record AuthContextSummary(
     string? SubjectId,
     string? DisplayLabel,
     bool HasToken,
-    bool IsDefault);
+    bool IsDefault)
+{
+    public PlatformChatBrowserProfile? ChatBrowserProfile { get; init; }
+}

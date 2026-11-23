@@ -22,6 +22,7 @@ internal static class OAuthRoleHelpers
         account.RefreshToken = string.Empty;
         account.Login = string.Empty;
         account.UserId = string.Empty;
+        account.BrowserProfileName = null;
         account.StoredScopes = [];
         account.AccessTokenExpiresAt = null;
     }

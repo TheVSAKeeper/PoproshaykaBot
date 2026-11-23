@@ -99,6 +99,18 @@
                                         Padding="12,8"
                                         Margin="0,0,0,6">
                                     <DockPanel>
+                                        <WrapPanel DockPanel.Dock="Right" Margin="12,0,0,0" VerticalAlignment="Center">
+                                            <Button Content="Выдать права бота"
+                                                    Style="{StaticResource Button.Secondary}"
+                                                    Command="{Binding DataContext.AddBotRoleCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                    CommandParameter="{Binding}"
+                                                    Visibility="{Binding CanAddBotRole, Converter={StaticResource BoolToVisibility}}" />
+                                            <Button Content="Выдать права стримера"
+                                                    Style="{StaticResource Button.Secondary}"
+                                                    Command="{Binding DataContext.AddBroadcasterRoleCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                    CommandParameter="{Binding}"
+                                                    Visibility="{Binding CanAddBroadcasterRole, Converter={StaticResource BoolToVisibility}}" />
+                                        </WrapPanel>
                                         <StackPanel DockPanel.Dock="Right"
                                                     Orientation="Horizontal"
                                                     VerticalAlignment="Center"
@@ -114,6 +126,7 @@
                                                        VerticalAlignment="Center" />
                                         </StackPanel>
                                         <TextBlock Text="{Binding DisplayName}"
+                                                   ToolTip="{Binding DisplayName}"
                                                    Foreground="{DynamicResource Fg.Primary}"
                                                    FontWeight="{DynamicResource Font.Weight.SemiBold}"
                                                    TextTrimming="CharacterEllipsis"

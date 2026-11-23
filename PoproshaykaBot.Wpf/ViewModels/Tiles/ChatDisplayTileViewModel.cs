@@ -28,6 +28,7 @@ public sealed partial class ChatDisplayTileViewModel : DashboardTileViewModel, I
     private readonly ISettingsStore? _uiSettings;
     private readonly IDialogService _dialogService;
     private readonly IChatPlatformRegistry? _platformRegistry;
+    private readonly IReadOnlyDictionary<StreamingPlatform, IPlatformAccountDirectory> _accountDirectories;
     private readonly YouTubeSettingsStore? _youtubeSettingsStore;
     private readonly IUiDispatcher? _uiDispatcher;
     private readonly List<IDisposable> _subscriptions = [];
@@ -40,17 +41,12 @@ public sealed partial class ChatDisplayTileViewModel : DashboardTileViewModel, I
     private readonly ToolbarItemViewModel _openInBrowserAction;
 
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(ShowAccountChangeNotice))]
     private ChatDisplayMode _selectedMode;
 
     private PlatformAuthRole _chatDisplayAccount;
 
     [ObservableProperty]
     private double _zoomFactor;
-
-    [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(ShowAccountChangeNotice))]
-    private bool _accountChangeRequiresRestart;
 
     public ChatDisplayTileViewModel(
         SettingsManager settings,
@@ -63,24 +59,26 @@ public sealed partial class ChatDisplayTileViewModel : DashboardTileViewModel, I
         IChatPlatformRegistry? platformRegistry = null,
         YouTubeSettingsStore? youtubeSettingsStore = null,
         IUiDispatcher? uiDispatcher = null,
-        ISettingsStore? uiSettings = null)
+        ISettingsStore? uiSettings = null,
+        IEnumerable<IPlatformAccountDirectory>? accountDirectories = null)
         : base("twitch-chat", "Чат трансляции", minWidth: 280, minHeight: 234)
     {
         _targetChannelProvider = targetChannelProvider;
         _uiSettings = uiSettings;
-        TwitchChat = new(shellLauncher, platformRegistry);
-        PlatformChat = new(shellLauncher, platformRegistry);
+        TwitchChat = new(shellLauncher, platformRegistry, uiSettings);
+        PlatformChat = new(shellLauncher, platformRegistry, uiSettings);
+        TwitchChat.ChatAccountChanged += () => OpenRequested?.Invoke(TwitchChat, false);
+        PlatformChat.ChatAccountChanged += () => OpenRequested?.Invoke(PlatformChat, false);
         _dialogService = dialogService;
         _store = store;
         _platformRegistry = platformRegistry;
+        _accountDirectories = (accountDirectories ?? []).ToDictionary(static directory => directory.Platform);
         _youtubeSettingsStore = youtubeSettingsStore;
         _uiDispatcher = uiDispatcher;
         Logger = logger;
 
         var twitch = settings.Current.Twitch;
         _chatDisplayAccount = twitch.ChatDisplayAccount;
-        UserDataFolder = WebView2UserDataFolders.Resolve(twitch.ChatDisplayAccount);
-        AccountLabel = ResolveAccountLabel(twitch.ChatDisplayAccount);
         var modes = new List<ChatDisplayMode>();
         if (platformRegistry is not null)
         {
@@ -155,7 +153,7 @@ public sealed partial class ChatDisplayTileViewModel : DashboardTileViewModel, I
 
     public ILogger Logger { get; }
 
-    public string UserDataFolder { get; }
+    public string UserDataFolder => WebView2UserDataFolders.Resolve(_chatDisplayAccount);
 
     public IReadOnlyList<ChatDisplayMode> Modes { get; }
 
@@ -164,10 +162,6 @@ public sealed partial class ChatDisplayTileViewModel : DashboardTileViewModel, I
     public ChatDisplayPaneViewModel PlatformChat { get; }
 
     public bool HasMultiplePlatforms => Modes.Count > 1;
-
-    public bool ShowAccountChangeNotice => TwitchChat.IsShown && AccountChangeRequiresRestart;
-
-    public string AccountLabel { get; private set; }
 
     public void Dispose()
     {
@@ -226,14 +220,13 @@ public sealed partial class ChatDisplayTileViewModel : DashboardTileViewModel, I
 
     private void OnChatDisplaySettingsChanged(ChatDisplaySettingsChanged @event)
     {
-        if (@event.ChatDisplayAccount != _chatDisplayAccount)
-        {
-            _chatDisplayAccount = @event.ChatDisplayAccount;
-            AccountLabel = ResolveAccountLabel(@event.ChatDisplayAccount);
-            AccountChangeRequiresRestart = true;
-        }
-
+        var legacyProfileChanged = @event.ChatDisplayAccount != _chatDisplayAccount;
+        _chatDisplayAccount = @event.ChatDisplayAccount;
         RefreshChat();
+        if (legacyProfileChanged && TwitchChat.IsShown && TwitchChat.SelectedAccount?.BrowserProfile is null)
+        {
+            OpenRequested?.Invoke(TwitchChat, true);
+        }
     }
 
     private void RefreshChat()
@@ -242,12 +235,20 @@ public sealed partial class ChatDisplayTileViewModel : DashboardTileViewModel, I
         var twitchShown = mode.Platform == StreamingPlatform.Twitch || mode.IsSplit;
         var twitchUri = BuildChannelUri(_targetChannelProvider.Current.Login);
         var twitchChanged = TwitchChat.SetTarget(StreamingPlatform.Twitch, twitchUri, twitchUri, twitchShown);
+        if (twitchShown)
+        {
+            TwitchChat.SetAccounts(_accountDirectories.GetValueOrDefault(TwitchChat.Platform), null, $"Сеанс {ResolveAccountLabel(_chatDisplayAccount)}");
+        }
 
         var platformShown = mode.Platform != StreamingPlatform.Twitch;
         var platform = platformShown ? _platformRegistry?.Find(mode.Platform) : null;
         var stream = platform?.StreamStatus is { CurrentStatus: StreamStatus.Online } status ? status.CurrentStream : null;
         var uri = stream is not null ? ParseWebUri(platform?.BuildNativeChatUrl(stream)) : null;
         var platformChanged = PlatformChat.SetTarget(mode.Platform, uri, ParseWebUri(platform?.BuildStreamUrl(stream)), platformShown);
+        if (platformShown)
+        {
+            PlatformChat.SetAccounts(_accountDirectories.GetValueOrDefault(PlatformChat.Platform), stream?.Id, "Просмотр чата");
+        }
 
         _resetZoomAction.IsVisible = twitchShown || platformShown;
         _resetSessionAction.IsVisible = twitchShown;

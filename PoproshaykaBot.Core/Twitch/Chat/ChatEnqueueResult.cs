@@ -9,4 +9,5 @@ public enum ChatEnqueueResult
     QueueClosed = 4,
     NotConnected = 5,
     QuotaBudgetReached = 6,
+    AuthorizationRequired = 7,
 }

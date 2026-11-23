@@ -1,5 +1,6 @@
 ﻿using Microsoft.Extensions.Logging;
 using PoproshaykaBot.Core.Platforms.Auth;
+using PoproshaykaBot.Core.Settings.Stores;
 using System.Net;
 using System.Net.Http.Headers;
 
@@ -7,7 +8,8 @@ namespace PoproshaykaBot.Core.YouTube.Client;
 
 internal abstract class YouTubeAuthHttpHandlerBase(
     IPlatformAuthService authService,
-    ILogger logger)
+    ILogger logger,
+    YouTubeAccountsStore? accountsStore = null)
     : DelegatingHandler
 {
     public static readonly HttpRequestOptionsKey<bool> KeepTokenOnUnauthorized = new("poproshayka.youtube.keep-token-on-401");
@@ -26,6 +28,16 @@ internal abstract class YouTubeAuthHttpHandlerBase(
             throw new YouTubeApiException(
                 YouTubeApiErrorKind.Unauthorized,
                 $"Токен YouTube для роли {Role} (контекст {contextId}) отсутствует или недействителен.",
+                statusCode: HttpStatusCode.Unauthorized);
+        }
+
+        if (PlatformAuthRequestOptions.ExpectedAccountId is { } expected
+            && (accountsStore?.Load(Role, contextId) is not { } current
+                || !string.Equals(current.ChannelId, expected, StringComparison.Ordinal)
+                || !string.Equals(current.AccessToken, token, StringComparison.Ordinal)))
+        {
+            throw new YouTubeApiException(
+                YouTubeApiErrorKind.Unauthorized, "Выбранный аккаунт YouTube изменился до отправки.",
                 statusCode: HttpStatusCode.Unauthorized);
         }
 

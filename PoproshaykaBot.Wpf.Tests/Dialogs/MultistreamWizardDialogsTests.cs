@@ -188,6 +188,75 @@ public sealed class MultistreamWizardDialogsTests
     }
 
     [Test]
+    public async Task PlatformSetupWizard_adds_a_role_only_to_the_selected_and_persisted_account()
+    {
+        var accountsPath = Path.Combine(_directory, "role-accounts.json");
+        var accounts = new AccountsStore(filePath: accountsPath);
+        accounts.UpsertContext(PlatformAuthRole.Bot, AuthContextIds.Default, "operator", new()
+        {
+            UserId = "1001", Login = "operator", AccessToken = "existing", StoredScopes = [.. TwitchScopes.BotRequired],
+        });
+        var catalog = new ChannelCatalogStore(filePath: Path.Combine(_directory, "role-channels.json"));
+        var youtube = new YouTubeAccountsStore(filePath: Path.Combine(_directory, "role-youtube-accounts.json"));
+        var settings = new YouTubeSettingsStore(filePath: Path.Combine(_directory, "role-youtube.json"));
+        var launcher = DispatchProxy.Create<IShellLauncher, InertLauncher>();
+
+        foreach (var id in new[] { "1002", "1001" })
+        {
+            var oauth = new StubTwitchOAuthService(new("new-access", "new-refresh",
+                [.. TwitchScopes.BroadcasterRequired], "operator", id, 3600));
+            var wizard = new MultistreamPlatformSetupDialogViewModel(catalog, [], accounts, youtube, settings,
+                twitchOAuth: oauth, shellLauncher: launcher);
+            wizard.Initialize(StreamingPlatform.Twitch);
+            await wizard.NextCommand.ExecuteAsync(null);
+
+            var chosen = wizard.ExistingAccounts.Single();
+            Assert.That(wizard.AddBroadcasterRoleCommand.CanExecute(chosen), Is.True);
+            await wizard.AddBroadcasterRoleCommand.ExecuteAsync(chosen);
+            var reopened = new AccountsStore(filePath: accountsPath);
+            if (id == "1002")
+            {
+                Assert.That(wizard.CurrentStep, Is.EqualTo(2));
+                Assert.That(wizard.StepNotice, Does.Contain("другой аккаунт"));
+                Assert.That(reopened.LoadBroadcaster().AccessToken, Is.Empty);
+            }
+            else
+            {
+                Assert.That(wizard.CurrentStep, Is.EqualTo(3));
+                Assert.That(wizard.StepNotice, Does.Contain("сохранена и проверена"));
+                Assert.That(reopened.LoadBroadcaster().UserId, Is.EqualTo("1001"));
+                Assert.That(reopened.LoadBot().AccessToken, Is.EqualTo("existing"));
+            }
+        }
+    }
+
+    [Test]
+    public async Task PlatformSetupWizard_does_not_continue_when_authorization_exists_only_in_memory()
+    {
+        var path = Path.Combine(_directory, "accounts.json");
+        var gate = new SettingsWriteGate();
+        var accounts = new AccountsStore(filePath: path, gate: gate);
+        await gate.RunExternalWriteAsync(() => Task.FromResult(path), file => [file]);
+        var catalog = new ChannelCatalogStore(filePath: Path.Combine(_directory, "channels.json"));
+        var youtube = new YouTubeAccountsStore(filePath: Path.Combine(_directory, "youtube-accounts.json"));
+        var settings = new YouTubeSettingsStore(filePath: Path.Combine(_directory, "youtube.json"));
+        var oauth = new StubTwitchOAuthService(new("access", "refresh", [.. TwitchScopes.BotRequired], "bot", "1001", 3600));
+        var wizard = new MultistreamPlatformSetupDialogViewModel(catalog, [], accounts, youtube, settings,
+            twitchOAuth: oauth, shellLauncher: DispatchProxy.Create<IShellLauncher, InertLauncher>());
+        wizard.Initialize(StreamingPlatform.Twitch);
+        await wizard.NextCommand.ExecuteAsync(null);
+        await wizard.AuthorizeBotCommand.ExecuteAsync(null);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(wizard.CurrentStep, Is.EqualTo(2));
+            Assert.That(wizard.StepNotice, Does.Contain("запись авторизации"));
+            Assert.That(wizard.HasSavedChanges, Is.False);
+            Assert.That(new AccountsStore(filePath: path).ListAccounts(), Is.Empty);
+        });
+    }
+
+    [Test]
     public async Task ChannelWizard_add_flow_saves_immediately_and_runs_automatic_verification()
     {
         var catalog = new ChannelCatalogStore(filePath: Path.Combine(_directory, "channels.json"));

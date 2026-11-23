@@ -18,6 +18,8 @@ public static class SettingsServiceCollectionExtensions
         services.AddSingleton<AccountsStore>();
         services.AddSingleton<YouTubeSettingsStore>();
         services.AddSingleton<YouTubeAccountsStore>();
+        services.AddSingleton<Platforms.Auth.IPlatformAccountDirectory>(sp => sp.GetRequiredService<AccountsStore>());
+        services.AddSingleton<Platforms.Auth.IPlatformAccountDirectory>(sp => sp.GetRequiredService<YouTubeAccountsStore>());
         services.AddSingleton<CommandSettingsStore>();
         services.AddSingleton<BroadcastProfilesStore>();
         services.AddSingleton<BroadcastProfilePlatformsStore>();

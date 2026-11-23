@@ -1,5 +1,7 @@
 ﻿using PoproshaykaBot.Core.Platforms.Auth;
 
+using System.Text.Json.Serialization;
+
 namespace PoproshaykaBot.Core.Twitch.Auth;
 
 public sealed class TwitchAccountSettings : IRoleAccountSettings
@@ -17,4 +19,7 @@ public sealed class TwitchAccountSettings : IRoleAccountSettings
     public string[] StoredScopes { get; set; } = [];
 
     public DateTimeOffset? AccessTokenExpiresAt { get; set; }
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? BrowserProfileName { get; set; }
 }

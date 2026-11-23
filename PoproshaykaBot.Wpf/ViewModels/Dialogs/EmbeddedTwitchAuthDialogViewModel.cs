@@ -69,13 +69,16 @@ public sealed partial class EmbeddedTwitchAuthDialogViewModel : ObservableObject
 
     public ILogger Logger => _logger;
 
-    public string UserDataFolder => WebView2UserDataFolders.Resolve(_request?.Role ?? PlatformAuthRole.Bot);
+    public string UserDataFolder => WebView2UserDataFolders.ResolveTwitchAccounts();
+
+    public string BrowserProfileName { get; private set; } = string.Empty;
 
     public void Configure(EmbeddedTwitchAuthRequest request)
     {
         ArgumentNullException.ThrowIfNull(request);
 
         _request = request;
+        BrowserProfileName = Guid.NewGuid().ToString("N");
 
         Title = request.Role == PlatformAuthRole.Broadcaster
             ? "Авторизация стримера в Twitch"
@@ -107,7 +110,7 @@ public sealed partial class EmbeddedTwitchAuthDialogViewModel : ObservableObject
                 request.CheckBroadcasterChannel,
                 cts.Token);
 
-            Finish(EmbeddedTwitchAuthResult.Completed(flow));
+            Finish(EmbeddedTwitchAuthResult.Completed(flow with { BrowserProfileName = BrowserProfileName }));
         }
         catch (OperationCanceledException) when (cts.IsCancellationRequested)
         {

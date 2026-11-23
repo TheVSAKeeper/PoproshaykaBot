@@ -12,19 +12,6 @@
              d:DesignHeight="460">
 
     <DockPanel LastChildFill="True">
-        <Border DockPanel.Dock="Top"
-                Background="{DynamicResource Bg.SurfaceAlt}"
-                BorderBrush="{DynamicResource Border.Subtle}"
-                BorderThickness="1"
-                CornerRadius="6"
-                Padding="8,6"
-                Margin="0,0,0,6"
-                Visibility="{Binding ShowAccountChangeNotice, Converter={StaticResource BoolToVisibility}}">
-            <TextBlock Text="Аккаунт отображения чата изменён. Перезапустите приложение, чтобы чат открылся под новым аккаунтом."
-                       Style="{StaticResource TextBlock.Subtle}"
-                       TextWrapping="Wrap" />
-        </Border>
-
         <Grid>
             <Grid.Resources>
                 <Style x:Key="ChatWebView" TargetType="wv2:WebView2">
@@ -54,9 +41,55 @@
                                          HorizontalAlignment="Center" />
                 </DataTemplate>
                 <Style x:Key="ChatPaneTitle" TargetType="TextBlock" BasedOn="{StaticResource TextBlock.Subtle}">
-                    <Setter Property="Margin" Value="8,2" />
+                    <Setter Property="Margin" Value="0,0,8,0" />
                     <Setter Property="Visibility" Value="{Binding DataContext.SelectedMode.IsSplit, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource BoolToVisibility}}" />
                 </Style>
+                <DataTemplate x:Key="ChatPaneHeader">
+                    <DockPanel Margin="7,1">
+                        <DockPanel.Style>
+                            <Style TargetType="DockPanel">
+                                <Style.Triggers>
+                                    <MultiDataTrigger>
+                                        <MultiDataTrigger.Conditions>
+                                            <Condition Binding="{Binding HasAccountChoices}" Value="False" />
+                                            <Condition Binding="{Binding DataContext.SelectedMode.IsSplit, RelativeSource={RelativeSource AncestorType=UserControl}}" Value="False" />
+                                        </MultiDataTrigger.Conditions>
+                                        <Setter Property="Visibility" Value="Collapsed" />
+                                    </MultiDataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </DockPanel.Style>
+                        <TextBlock DockPanel.Dock="Left" Text="{Binding DisplayName}" Style="{StaticResource ChatPaneTitle}"
+                                   VerticalAlignment="Center" />
+                        <ComboBox ItemsSource="{Binding AccountChoices}"
+                                  SelectedItem="{Binding SelectedAccount, Mode=TwoWay}"
+                                  DisplayMemberPath="Label"
+                                  AutomationProperties.Name="Аккаунт чата"
+                                  ToolTip="{Binding SelectedAccount.Label}"
+                                  Style="{StaticResource ComboBox.Form}"
+                                  HorizontalAlignment="Left" MaxWidth="240"
+                                  MinHeight="22" Padding="5,2"
+                                  Background="Transparent"
+                                  FontSize="{DynamicResource Font.Size.S}"
+                                  Visibility="{Binding HasAccountChoices, Converter={StaticResource BoolToVisibility}}" />
+                    </DockPanel>
+                </DataTemplate>
+                <DataTemplate x:Key="ChatMessageInput">
+                    <StackPanel Margin="6,4"
+                                Visibility="{Binding ShowMessageInput, Converter={StaticResource BoolToVisibility}}">
+                        <DockPanel>
+                            <Button DockPanel.Dock="Right" Content="Через API" Command="{Binding SendMessageCommand}"
+                                    AutomationProperties.Name="Отправить сообщение через API"
+                                    ToolTip="Отправить от выбранного аккаунта приложения"
+                                    Style="{StaticResource Button.Secondary}" Margin="6,0,0,0" />
+                            <TextBox Text="{Binding Message, UpdateSourceTrigger=PropertyChanged}"
+                                     AutomationProperties.Name="Сообщение в чат" />
+                        </DockPanel>
+                        <TextBlock Text="{Binding MessageStatus}" Style="{StaticResource TextBlock.Subtle}"
+                                   TextWrapping="Wrap"
+                                   Visibility="{Binding MessageStatus, Converter={StaticResource NullToVisibility}}" />
+                    </StackPanel>
+                </DataTemplate>
             </Grid.Resources>
 
             <UniformGrid x:Name="ChatPanes">
@@ -82,7 +115,8 @@
                 </UniformGrid.Style>
                 <DockPanel DataContext="{Binding TwitchChat}" ClipToBounds="True"
                            Visibility="{Binding IsShown, Converter={StaticResource BoolToVisibility}}">
-                    <TextBlock DockPanel.Dock="Top" Text="{Binding DisplayName}" Style="{StaticResource ChatPaneTitle}" />
+                    <ContentPresenter DockPanel.Dock="Top" Content="{Binding}" ContentTemplate="{StaticResource ChatPaneHeader}" />
+                    <ContentPresenter DockPanel.Dock="Bottom" Content="{Binding}" ContentTemplate="{StaticResource ChatMessageInput}" />
                     <Grid>
                         <wv2:WebView2 x:Name="WebView" Style="{StaticResource ChatWebView}"
                                       ZoomFactor="{Binding DataContext.ZoomFactor, RelativeSource={RelativeSource AncestorType=UserControl}, Mode=TwoWay}" />
@@ -92,7 +126,8 @@
                 </DockPanel>
                 <DockPanel DataContext="{Binding PlatformChat}" ClipToBounds="True"
                            Visibility="{Binding IsShown, Converter={StaticResource BoolToVisibility}}">
-                    <TextBlock DockPanel.Dock="Top" Text="{Binding DisplayName}" Style="{StaticResource ChatPaneTitle}" />
+                    <ContentPresenter DockPanel.Dock="Top" Content="{Binding}" ContentTemplate="{StaticResource ChatPaneHeader}" />
+                    <ContentPresenter DockPanel.Dock="Bottom" Content="{Binding}" ContentTemplate="{StaticResource ChatMessageInput}" />
                     <Grid>
                         <wv2:WebView2 x:Name="PlatformWebView" Style="{StaticResource ChatWebView}"
                                       ZoomFactor="{Binding DataContext.ZoomFactor, RelativeSource={RelativeSource AncestorType=UserControl}, Mode=TwoWay}" />

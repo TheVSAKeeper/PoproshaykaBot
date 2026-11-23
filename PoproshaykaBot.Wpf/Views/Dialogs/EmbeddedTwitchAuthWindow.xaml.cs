@@ -122,13 +122,21 @@ public partial class EmbeddedTwitchAuthWindow : Window
                 return false;
             }
 
-            await WebView.EnsureCoreWebView2Async(environment);
+            var options = environment.CreateCoreWebView2ControllerOptions();
+            options.ProfileName = _viewModel.BrowserProfileName;
+            await WebView.EnsureCoreWebView2Async(environment, options);
 
             if (_tornDown)
             {
                 return false;
             }
 
+            WebView.CoreWebView2.Profile.PreferredColorScheme = ThemeManager.Current?.IsDark switch
+            {
+                true => CoreWebView2PreferredColorScheme.Dark,
+                false => CoreWebView2PreferredColorScheme.Light,
+                null => CoreWebView2PreferredColorScheme.Auto,
+            };
             WebView.CoreWebView2.NewWindowRequested += OnNewWindowRequested;
 
             return true;
@@ -211,6 +219,10 @@ public partial class EmbeddedTwitchAuthWindow : Window
         if (WebView.CoreWebView2 is { } core)
         {
             core.NewWindowRequested -= OnNewWindowRequested;
+            if (_viewModel.Result.Outcome != EmbeddedTwitchAuthOutcome.Completed)
+            {
+                core.Profile.Delete();
+            }
         }
 
         WebView.Dispose();

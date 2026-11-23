@@ -8,7 +8,7 @@ public readonly record struct SharedRefreshSyncResult(
     bool Written,
     IReadOnlyList<(PlatformAuthRole Role, string ContextId)> SyncedSiblings);
 
-public abstract class RoleAccountsStoreBase<TFile, TAccount>
+public abstract class RoleAccountsStoreBase<TFile, TAccount> : IPlatformAccountDirectory
     where TFile : class, new()
     where TAccount : class, IRoleAccountSettings, new()
 {
@@ -99,6 +99,38 @@ public abstract class RoleAccountsStoreBase<TFile, TAccount>
 
     protected abstract StreamingPlatform Platform { get; }
 
+    StreamingPlatform IPlatformAccountDirectory.Platform => Platform;
+
+    IRoleAccountSettings? IPlatformAccountDirectory.LoadAuthorization(PlatformAuthRole role, string contextId) =>
+        TryLoadContext(role, contextId, out var account) ? account : null;
+
+    public virtual IReadOnlyList<PlatformAccountOperation> GetPermissions(PlatformAuthRole role) => [];
+
+    public bool VerifyPersistedAuthorization(PlatformAuthRole role, string contextId, string accountId)
+    {
+        var normalized = AuthContextIds.Normalize(contextId);
+        return _store.VerifyPersisted((current, persisted) =>
+        {
+            var live = TryFindExistingAccount(current, role, normalized);
+            var disk = TryFindExistingAccount(persisted, role, normalized);
+            return live is not null && disk is not null
+                && string.Equals(GetSubjectId(live)?.Trim(), accountId, StringComparison.Ordinal)
+                && string.Equals(GetSubjectId(disk)?.Trim(), accountId, StringComparison.Ordinal)
+                && string.Equals(live.AccessToken, disk.AccessToken, StringComparison.Ordinal)
+                && string.Equals(live.RefreshToken, disk.RefreshToken, StringComparison.Ordinal)
+                && live.AccessTokenExpiresAt == disk.AccessTokenExpiresAt
+                && live.Scopes.SequenceEqual(disk.Scopes, StringComparer.Ordinal)
+                && live.StoredScopes.SequenceEqual(disk.StoredScopes, StringComparer.Ordinal)
+                && GetChatBrowserProfile(live) == GetChatBrowserProfile(disk);
+        });
+    }
+
+    bool IPlatformAccountDirectory.CanRemove => true;
+
+    public abstract (IReadOnlyList<(PlatformAuthRole Role, string ContextId)> Removed, bool Written) RemoveAccount(string accountId);
+
+    public abstract (IReadOnlyList<string> RemovedContextIds, bool Written) RemoveAccountRole(string accountId, PlatformAuthRole role);
+
     private IReadOnlyList<AuthContextSummary> ListContexts(TFile state, PlatformAuthRole role)
     {
         var defaultAccount = TakeAccount(state, role, null);
@@ -162,46 +194,7 @@ public abstract class RoleAccountsStoreBase<TFile, TAccount>
 
     public bool UpsertContext(PlatformAuthRole role, string contextId, string label, TAccount account)
     {
-        PlatformAuthRoles.EnsureActive(role);
-        ArgumentException.ThrowIfNullOrWhiteSpace(contextId);
-        ArgumentNullException.ThrowIfNull(account);
-
-        var normalized = AuthContextIds.Normalize(contextId);
-        if (AuthContextIds.IsDefault(normalized))
-        {
-            return Mutate(role, target =>
-            {
-                CopyAccountFields(account, target);
-            });
-        }
-
-        var written = _store.Mutate(state =>
-        {
-            var contexts = GetContexts(state);
-            var existing = contexts.FirstOrDefault(c =>
-                string.Equals(c.ContextId, normalized, StringComparison.Ordinal));
-            EnsureDefaultScopes(account, role);
-
-            if (existing is not null)
-            {
-                existing.Role = role;
-                existing.Label = string.IsNullOrWhiteSpace(label) ? normalized : label.Trim();
-                existing.Account = account;
-            }
-            else
-            {
-                contexts.Add(new()
-                {
-                    ContextId = normalized,
-                    Role = role,
-                    Label = string.IsNullOrWhiteSpace(label) ? normalized : label.Trim(),
-                    Account = account,
-                });
-            }
-        });
-
-        OnRoleMutated(role, written);
-        return written;
+        return UpsertContexts([(role, contextId, label, account)]);
     }
 
     public bool UpsertContexts(IReadOnlyList<(PlatformAuthRole Role, string ContextId, string Label, TAccount Account)> entries)
@@ -235,25 +228,29 @@ public abstract class RoleAccountsStoreBase<TFile, TAccount>
                 var contexts = GetContexts(state);
                 var existing = contexts.FirstOrDefault(c =>
                     string.Equals(c.ContextId, normalized, StringComparison.Ordinal));
-                EnsureDefaultScopes(entry.Account, entry.Role);
-
                 if (existing is not null)
                 {
+                    CopyAccountFields(entry.Account, existing.Account);
+                    EnsureDefaultScopes(existing.Account, entry.Role);
                     existing.Role = entry.Role;
                     existing.Label = string.IsNullOrWhiteSpace(entry.Label) ? normalized : entry.Label.Trim();
-                    existing.Account = entry.Account;
                 }
                 else
                 {
+                    var account = new TAccount();
+                    CopyAccountFields(entry.Account, account);
+                    EnsureDefaultScopes(account, entry.Role);
                     contexts.Add(new()
                     {
                         ContextId = normalized,
                         Role = entry.Role,
                         Label = string.IsNullOrWhiteSpace(entry.Label) ? normalized : entry.Label.Trim(),
-                        Account = entry.Account,
+                        Account = account,
                     });
                 }
             }
+
+            OnContextsUpserted(state, entries);
         });
 
         foreach (var role in entries.Select(static e => e.Role).Distinct())
@@ -262,6 +259,12 @@ public abstract class RoleAccountsStoreBase<TFile, TAccount>
         }
 
         return written;
+    }
+
+    protected virtual void OnContextsUpserted(
+        TFile state,
+        IReadOnlyList<(PlatformAuthRole Role, string ContextId, string Label, TAccount Account)> entries)
+    {
     }
 
     public (bool Applied, bool Written) TryMutateExisting(PlatformAuthRole role, string? contextId, Func<TAccount, bool> mutator)
@@ -629,6 +632,8 @@ public abstract class RoleAccountsStoreBase<TFile, TAccount>
 
     protected virtual string? GetDisplayLabel(TAccount account) => null;
 
+    protected virtual PlatformChatBrowserProfile? GetChatBrowserProfile(TAccount account) => null;
+
     protected virtual void CopyAccountFields(TAccount source, TAccount target)
     {
         target.AccessToken = source.AccessToken;
@@ -667,7 +672,10 @@ public abstract class RoleAccountsStoreBase<TFile, TAccount>
             string.IsNullOrWhiteSpace(subjectId) ? null : subjectId,
             string.IsNullOrWhiteSpace(displayLabel) ? null : displayLabel,
             hasToken,
-            isDefault);
+            isDefault)
+        {
+            ChatBrowserProfile = GetChatBrowserProfile(account),
+        };
     }
 
     private void EnsureDefaultScopes(TAccount account, PlatformAuthRole role)

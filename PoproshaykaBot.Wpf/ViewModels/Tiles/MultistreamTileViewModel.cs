@@ -116,6 +116,8 @@ public sealed partial class MultistreamTileViewModel : DashboardTileViewModel, I
 
     public event Action<string, StatusSeverity>? StatusReported;
 
+    internal event Action? ChannelStatesRefreshed;
+
     public IReadOnlyList<MultistreamPlatformRowViewModel> Rows { get; }
 
     public override PackIconLucideKind Icon => PackIconLucideKind.Radio;
@@ -137,6 +139,9 @@ public sealed partial class MultistreamTileViewModel : DashboardTileViewModel, I
     public void SetOnScreen(bool onScreen) => SetSurfaceVisibility(ref _tileOnScreen, onScreen);
 
     public void SetPageOnScreen(bool onScreen) => SetSurfaceVisibility(ref _pageOnScreen, onScreen);
+
+    internal ChannelMonitoringSnapshot? GetChannelSnapshot(ChannelKey channel) =>
+        _monitors.GetValueOrDefault(channel.Platform)?.GetSnapshot(channel);
 
     private bool AnySurfaceVisible => _tileOnScreen || _pageOnScreen;
 
@@ -448,6 +453,10 @@ public sealed partial class MultistreamTileViewModel : DashboardTileViewModel, I
         }
 
         RefreshSummaryAndBulkState();
+        if (_pageOnScreen)
+        {
+            ChannelStatesRefreshed?.Invoke();
+        }
     }
 
     private void RefreshSummaryAndBulkState()
@@ -657,6 +666,8 @@ public sealed partial class MultistreamPlatformRowViewModel(
     private bool _canToggleConnectionBase;
 
     internal IChatPlatform Source { get; } = source;
+
+    internal string? ActiveChannelId => _activeChannelId;
 
     public StreamingPlatform Platform => Source.Id;
 

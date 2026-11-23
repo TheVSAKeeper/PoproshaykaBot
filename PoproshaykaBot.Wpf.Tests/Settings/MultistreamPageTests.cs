@@ -268,12 +268,12 @@ public sealed class MultistreamPageTests
                 Assert.That(editor.VisibleChannels, Has.Count.EqualTo(2));
                 Assert.That(editor.VisibleChannels[0].IsActive, Is.True);
                 Assert.That(editor.VisibleChannels[0].IsPreselectedNext, Is.False);
-                Assert.That(editor.VisibleChannels[0].MonitoringSummaryText, Is.EqualTo("Мониторинг: вкл."));
+                Assert.That(editor.VisibleChannels[0].MonitoringSummaryText, Is.EqualTo("Фоновый мониторинг: вкл."));
                 Assert.That(editor.VisibleChannels[1].IsActive, Is.False);
                 Assert.That(editor.VisibleChannels[1].IsPreselectedNext, Is.True);
                 Assert.That(editor.VisibleChannels[1].BotSummaryText, Is.EqualTo("Бот: не назначен"));
                 Assert.That(editor.VisibleChannels[1].BroadcasterSummaryText, Is.EqualTo("Стример: –"));
-                Assert.That(editor.VisibleChannels[1].MonitoringSummaryText, Is.EqualTo("Мониторинг: выкл."));
+                Assert.That(editor.VisibleChannels[1].MonitoringSummaryText, Is.EqualTo("Фоновый мониторинг: выкл."));
                 Assert.That(editor.VisibleChannels[1].EditorHeading, Is.EqualTo("Настройка канала «Запасной»"));
                 Assert.That(editor.VisibleChannels[1].AutomationSummary, Does.Contain("Запасной").And.Contain("Следующий"));
             });

@@ -18,8 +18,8 @@
             </ResourceDictionary.MergedDictionaries>
 
             <Style x:Key="ChannelListItemStyle" TargetType="ListBoxItem">
-                <Setter Property="Padding" Value="12,8" />
-                <Setter Property="Margin" Value="0,0,0,6" />
+                <Setter Property="Padding" Value="12,10" />
+                <Setter Property="Margin" Value="4,0,4,8" />
                 <Setter Property="HorizontalContentAlignment" Value="Stretch" />
                 <Setter Property="Cursor" Value="Hand" />
                 <Setter Property="FocusVisualStyle" Value="{StaticResource Chrome.FocusVisual}" />
@@ -48,6 +48,17 @@
                         </ControlTemplate>
                     </Setter.Value>
                 </Setter>
+            </Style>
+
+            <Style x:Key="ChannelStatusLine" TargetType="TextBlock">
+                <Setter Property="FontSize" Value="{DynamicResource Font.Size.S}" />
+                <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+                <Setter Property="ToolTip" Value="{Binding Text, RelativeSource={RelativeSource Self}}" />
+                <Style.Triggers>
+                    <Trigger Property="Text" Value="">
+                        <Setter Property="Visibility" Value="Collapsed" />
+                    </Trigger>
+                </Style.Triggers>
             </Style>
 
             <Style x:Key="ChannelRemoveButtonStyle" TargetType="Button" BasedOn="{StaticResource Button.Secondary}">
@@ -163,131 +174,95 @@
                                 <ItemsPresenter />
                             </ControlTemplate>
                         </ListBox.Template>
+                        <ListBox.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <UniformGrid>
+                                    <UniformGrid.Style>
+                                        <Style TargetType="UniformGrid">
+                                            <Setter Property="Columns" Value="1" />
+                                            <Style.Triggers>
+                                                <MultiDataTrigger>
+                                                    <MultiDataTrigger.Conditions>
+                                                        <Condition Binding="{Binding IsTwoColumnCards, RelativeSource={RelativeSource AncestorType=UserControl}}" Value="True" />
+                                                        <Condition Binding="{Binding DataContext.HasMultipleChannels, RelativeSource={RelativeSource AncestorType=ListBox}}" Value="True" />
+                                                    </MultiDataTrigger.Conditions>
+                                                    <Setter Property="Columns" Value="2" />
+                                                </MultiDataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </UniformGrid.Style>
+                                </UniformGrid>
+                            </ItemsPanelTemplate>
+                        </ListBox.ItemsPanel>
                         <ListBox.ItemTemplate>
                             <DataTemplate DataType="{x:Type vm:ChannelCatalogItemViewModel}">
-                                <Grid>
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="*" />
-                                        <ColumnDefinition Width="Auto" />
-                                        <ColumnDefinition Width="Auto" />
-                                    </Grid.ColumnDefinitions>
-                                    <Grid.RowDefinitions>
-                                        <RowDefinition MinHeight="28" Height="Auto" />
-                                        <RowDefinition Height="Auto" />
-                                    </Grid.RowDefinitions>
+                                <StackPanel>
+                                    <TextBlock Text="{Binding DisplayName}"
+                                               ToolTip="{Binding DisplayName}"
+                                               TextTrimming="CharacterEllipsis"
+                                               Foreground="{DynamicResource Fg.Primary}"
+                                               FontWeight="{DynamicResource Font.Weight.SemiBold}" />
 
-                                    <Grid Grid.Row="0"
-                                          Grid.Column="0"
-                                          HorizontalAlignment="Left"
-                                          VerticalAlignment="Center">
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="*" />
-                                            <ColumnDefinition Width="Auto" />
-                                            <ColumnDefinition Width="Auto" />
-                                        </Grid.ColumnDefinitions>
-                                        <TextBlock Grid.Column="0"
-                                                   Text="{Binding DisplayName}"
-                                                   ToolTip="{Binding DisplayName}"
-                                                   TextTrimming="CharacterEllipsis"
-                                                   TextWrapping="NoWrap"
-                                                   Foreground="{DynamicResource Fg.Primary}"
-                                                   FontWeight="{DynamicResource Font.Weight.SemiBold}"
-                                                   VerticalAlignment="Center"
-                                                   Margin="0,0,8,0" />
-                                        <Border Grid.Column="1"
-                                                Style="{StaticResource Badge.Success}"
-                                                VerticalAlignment="Center"
-                                                Margin="0,0,6,0"
-                                                Visibility="{Binding IsActive, Converter={StaticResource BoolToVisibility}}">
-                                            <TextBlock Text="Активный"
-                                                       FontSize="{DynamicResource Font.Size.Caption}" />
-                                        </Border>
-                                        <Border Grid.Column="2"
-                                                Style="{StaticResource Badge.Info}"
-                                                VerticalAlignment="Center"
-                                                Margin="0,0,6,0"
-                                                Visibility="{Binding IsPreselectedNext, Converter={StaticResource BoolToVisibility}}">
-                                            <TextBlock Text="Следующий"
-                                                       FontSize="{DynamicResource Font.Size.Caption}" />
-                                        </Border>
-                                    </Grid>
-
-                                    <WrapPanel VerticalAlignment="Center">
-                                        <WrapPanel.Style>
-                                            <Style TargetType="WrapPanel">
-                                                <Setter Property="Grid.Row" Value="1" />
-                                                <Setter Property="Grid.Column" Value="0" />
-                                                <Setter Property="Grid.ColumnSpan" Value="3" />
-                                                <Setter Property="HorizontalAlignment" Value="Left" />
-                                                <Setter Property="Margin" Value="0,4,0,0" />
-                                                <Style.Triggers>
-                                                    <DataTrigger Binding="{Binding IsTwoColumnCards, RelativeSource={RelativeSource AncestorType=UserControl}}" Value="True">
-                                                        <Setter Property="Grid.Row" Value="0" />
-                                                        <Setter Property="Grid.Column" Value="1" />
-                                                        <Setter Property="Grid.ColumnSpan" Value="1" />
-                                                        <Setter Property="HorizontalAlignment" Value="Right" />
-                                                        <Setter Property="Margin" Value="12,0,0,0" />
-                                                    </DataTrigger>
-                                                </Style.Triggers>
-                                            </Style>
-                                        </WrapPanel.Style>
-                                        <TextBlock Text="{Binding BotSummaryText}"
-                                                   FontSize="{DynamicResource Font.Size.S}"
-                                                   keepshell:SeverityBrushBehavior.Foreground="{Binding BotSummarySeverity}"
-                                                   VerticalAlignment="Center"
-                                                   Margin="0,0,12,0">
-                                            <TextBlock.Style>
-                                                <Style TargetType="TextBlock">
-                                                    <Style.Triggers>
-                                                        <DataTrigger Binding="{Binding BotSummaryText}" Value="">
-                                                            <Setter Property="Visibility" Value="Collapsed" />
-                                                        </DataTrigger>
-                                                        <DataTrigger Binding="{Binding BotSummaryText}" Value="{x:Null}">
-                                                            <Setter Property="Visibility" Value="Collapsed" />
-                                                        </DataTrigger>
-                                                    </Style.Triggers>
-                                                </Style>
-                                            </TextBlock.Style>
-                                        </TextBlock>
-                                        <TextBlock Text="{Binding BroadcasterSummaryText}"
-                                                   FontSize="{DynamicResource Font.Size.S}"
-                                                   keepshell:SeverityBrushBehavior.Foreground="{Binding BroadcasterSummarySeverity}"
-                                                   VerticalAlignment="Center"
-                                                   Margin="0,0,12,0">
-                                            <TextBlock.Style>
-                                                <Style TargetType="TextBlock">
-                                                    <Style.Triggers>
-                                                        <DataTrigger Binding="{Binding BroadcasterSummaryText}" Value="">
-                                                            <Setter Property="Visibility" Value="Collapsed" />
-                                                        </DataTrigger>
-                                                        <DataTrigger Binding="{Binding BroadcasterSummaryText}" Value="{x:Null}">
-                                                            <Setter Property="Visibility" Value="Collapsed" />
-                                                        </DataTrigger>
-                                                    </Style.Triggers>
-                                                </Style>
-                                            </TextBlock.Style>
-                                        </TextBlock>
+                                    <TextBlock Text="{Binding RuntimeStatus.BroadcastText}"
+                                               ToolTip="{Binding RuntimeStatus.BroadcastDetails}"
+                                               TextTrimming="CharacterEllipsis"
+                                               Margin="0,6,0,0"
+                                               FontWeight="{DynamicResource Font.Weight.SemiBold}"
+                                               keepshell:SeverityBrushBehavior.Foreground="{Binding RuntimeStatus.BroadcastSeverity}" />
+                                    <WrapPanel>
+                                        <TextBlock Text="{Binding RuntimeStatus.ChatText}"
+                                                   keepshell:SeverityBrushBehavior.Foreground="{Binding RuntimeStatus.ChatSeverity}"
+                                                   Margin="0,0,12,0"
+                                                   Style="{StaticResource ChannelStatusLine}" />
                                         <TextBlock Text="{Binding MonitoringSummaryText}"
-                                                   FontSize="{DynamicResource Font.Size.S}"
                                                    Foreground="{DynamicResource Fg.Muted}"
-                                                   VerticalAlignment="Center"
-                                                   Margin="0"
+                                                   Style="{StaticResource ChannelStatusLine}"
                                                    Visibility="{Binding SupportsMonitoring, Converter={StaticResource BoolToVisibility}}" />
                                     </WrapPanel>
 
-                                    <Button Grid.Row="0"
-                                            Grid.Column="2"
-                                            Content="Сделать активным"
-                                            Style="{StaticResource Button.Secondary}"
-                                            Command="{Binding MakeActiveCommand}"
-                                            AutomationProperties.Name="{Binding DisplayName, StringFormat='Сделать активным – {0}'}"
-                                            MinHeight="26"
-                                            Padding="10,2"
-                                            FontSize="{DynamicResource Font.Size.S}"
-                                            Margin="10,0,0,0"
-                                            VerticalAlignment="Center"
-                                            Visibility="{Binding IsActive, Converter={StaticResource InverseBoolToVisibility}}" />
-                                </Grid>
+                                    <WrapPanel Margin="0,6,0,0">
+                                        <TextBlock Text="{Binding BotSummaryText}"
+                                                   keepshell:SeverityBrushBehavior.Foreground="{Binding BotSummarySeverity}"
+                                                   Margin="0,0,12,0"
+                                                   Style="{StaticResource ChannelStatusLine}" />
+                                        <TextBlock Text="{Binding BroadcasterSummaryText}"
+                                                   keepshell:SeverityBrushBehavior.Foreground="{Binding BroadcasterSummarySeverity}"
+                                                   Style="{StaticResource ChannelStatusLine}" />
+                                    </WrapPanel>
+
+                                    <WrapPanel Margin="0,8,0,0">
+                                        <Grid Margin="0,0,8,0">
+                                            <Button Content="Сделать активным"
+                                                    Command="{Binding MakeActiveCommand}"
+                                                    AutomationProperties.Name="{Binding DisplayName, StringFormat='Сделать активным – {0}'}"
+                                                    MinHeight="26"
+                                                    Padding="10,2"
+                                                    FontSize="{DynamicResource Font.Size.S}"
+                                                    HorizontalAlignment="Left">
+                                                <Button.Style>
+                                                    <Style TargetType="Button" BasedOn="{StaticResource Button.Secondary}">
+                                                        <Style.Triggers>
+                                                            <DataTrigger Binding="{Binding IsActive}" Value="True">
+                                                                <Setter Property="Visibility" Value="Hidden" />
+                                                            </DataTrigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </Button.Style>
+                                            </Button>
+                                            <Border Style="{StaticResource Badge.Success}"
+                                                    HorizontalAlignment="Left"
+                                                    VerticalAlignment="Center"
+                                                    Visibility="{Binding IsActive, Converter={StaticResource BoolToVisibility}}">
+                                                <TextBlock Text="Активный" FontSize="{DynamicResource Font.Size.Caption}" />
+                                            </Border>
+                                        </Grid>
+                                        <Border Style="{StaticResource Badge.Info}"
+                                                VerticalAlignment="Center"
+                                                Visibility="{Binding IsPreselectedNext, Converter={StaticResource BoolToVisibility}}">
+                                            <TextBlock Text="Следующий" FontSize="{DynamicResource Font.Size.Caption}" />
+                                        </Border>
+                                    </WrapPanel>
+                                </StackPanel>
                             </DataTemplate>
                         </ListBox.ItemTemplate>
                     </ListBox>

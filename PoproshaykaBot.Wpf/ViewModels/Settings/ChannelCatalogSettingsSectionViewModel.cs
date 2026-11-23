@@ -4,6 +4,7 @@ using CommunityToolkit.Mvvm.Input;
 using KeepShell.Services.Platform;
 using KeepShell.ViewModels;
 using Microsoft.Extensions.Logging;
+using PoproshaykaBot.Core.Infrastructure.Events;
 using PoproshaykaBot.Core.Platforms;
 using PoproshaykaBot.Core.Platforms.Auth;
 using PoproshaykaBot.Core.Settings;
@@ -43,6 +44,7 @@ public sealed partial class ChannelCatalogSettingsSectionViewModel : ObservableO
     private readonly IEmbeddedTwitchAuthDialog? _embeddedTwitchAuth;
     private readonly ILogger<ChannelCatalogSettingsSectionViewModel>? _logger;
     private readonly IChatPlatformRegistry? _platformRegistry;
+    private readonly IEventBus? _eventBus;
     private readonly Dictionary<StreamingPlatform, IPlatformChannelAdapter> _adapters;
     private readonly List<ChannelCatalogItemViewModel> _allChannels = [];
     private readonly HashSet<ChannelKey> _removedChannels = [];
@@ -92,7 +94,8 @@ public sealed partial class ChannelCatalogSettingsSectionViewModel : ObservableO
         TimeProvider? timeProvider = null,
         IEmbeddedTwitchAuthDialog? embeddedTwitchAuth = null,
         ILogger<ChannelCatalogSettingsSectionViewModel>? logger = null,
-        IChatPlatformRegistry? platformRegistry = null)
+        IChatPlatformRegistry? platformRegistry = null,
+        IEventBus? eventBus = null)
     {
         ArgumentNullException.ThrowIfNull(catalogStore);
         _catalogStore = catalogStore;
@@ -107,6 +110,7 @@ public sealed partial class ChannelCatalogSettingsSectionViewModel : ObservableO
         _embeddedTwitchAuth = embeddedTwitchAuth;
         _logger = logger;
         _platformRegistry = platformRegistry;
+        _eventBus = eventBus;
         _adapters = (adapters ?? []).ToDictionary(static a => a.Platform);
     }
 
@@ -126,6 +130,8 @@ public sealed partial class ChannelCatalogSettingsSectionViewModel : ObservableO
     public string PlatformChannelsTitle => $"Каналы {PlatformDisplayName}";
 
     public int VisibleChannelCount => VisibleChannels.Count;
+
+    public bool HasMultipleChannels => VisibleChannelCount > 1;
 
     public string SelectedSwitchModeDescription => SelectedSwitchModeOption.Mode switch
     {
@@ -547,6 +553,10 @@ public sealed partial class ChannelCatalogSettingsSectionViewModel : ObservableO
             {
                 RefreshAccountOptions(platform);
                 AccountsChanged?.Invoke(this, platform);
+                if (_eventBus is not null)
+                {
+                    await _eventBus.PublishAsync(new PlatformAuthorizationRefreshed(platform, role, account.ContextId));
+                }
             }
             return account;
         }
@@ -914,6 +924,7 @@ public sealed partial class ChannelCatalogSettingsSectionViewModel : ObservableO
             ?? VisibleChannels.FirstOrDefault();
         OnPropertyChanged(nameof(HasChannels));
         OnPropertyChanged(nameof(VisibleChannelCount));
+        OnPropertyChanged(nameof(HasMultipleChannels));
         OnPropertyChanged(nameof(SwitchModeOptions));
         OnPropertyChanged(nameof(SelectedSwitchModeOption));
         OnPropertyChanged(nameof(IsPreselectedNextMode));
@@ -987,6 +998,13 @@ public sealed partial class ChannelCatalogSettingsSectionViewModel : ObservableO
     }
 }
 
+public sealed record ChannelCardStatus(
+    string BroadcastText,
+    StatusSeverity BroadcastSeverity,
+    string? BroadcastDetails,
+    string ChatText,
+    StatusSeverity ChatSeverity);
+
 public sealed partial class ChannelCatalogItemViewModel : ObservableObject
 {
     private readonly Action _onEdited;
@@ -1016,6 +1034,10 @@ public sealed partial class ChannelCatalogItemViewModel : ObservableObject
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(AutomationSummary))]
     private bool _isPreselectedNext;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(AutomationSummary))]
+    private ChannelCardStatus _runtimeStatus = new("Статус эфира неизвестен", StatusSeverity.Info, null, "Чат: не подключён", StatusSeverity.None);
 
     public ChannelCatalogItemViewModel(
         ChannelCatalogEntry entry,
@@ -1073,13 +1095,15 @@ public sealed partial class ChannelCatalogItemViewModel : ObservableObject
 
     public StatusSeverity BroadcasterSummarySeverity => DescribeRoleSummary(Roles[1], "Стример", emptyLabel: "–").Severity;
 
-    public string MonitoringSummaryText => MonitoringEnabled ? "Мониторинг: вкл." : "Мониторинг: выкл.";
+    public string MonitoringSummaryText => MonitoringEnabled ? "Фоновый мониторинг: вкл." : "Фоновый мониторинг: выкл.";
 
     public string AutomationSummary => string.Join(", ", new[]
     {
         DisplayName,
         IsActive ? "Активный" : null,
         IsPreselectedNext ? "Следующий" : null,
+        RuntimeStatus.BroadcastText,
+        RuntimeStatus.ChatText,
         BotSummaryText,
         BroadcasterSummaryText,
         SupportsMonitoring ? MonitoringSummaryText : null,

@@ -1,9 +1,28 @@
 ﻿<!DOCTYPE html>
 <html lang="ru">
 <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Авторизация успешна</title>
     <style>
+        :root {
+            color-scheme: light dark;
+            --page-background: #ffffff;
+            --page-text: #202124;
+            --success-text: #137333;
+        }
+
+        @media (prefers-color-scheme: dark) {
+            :root {
+                --page-background: #171a1f;
+                --page-text: #e8eaed;
+                --success-text: #81c995;
+            }
+        }
+
         body {
+            background-color: var(--page-background);
+            color: var(--page-text);
             font-family: Arial, sans-serif;
             margin-top: 50px;
             text-align: center;
@@ -11,7 +30,7 @@
 
         .success {
             font-size: 24px;
-            color: green;
+            color: var(--success-text);
         }
     </style>
 </head>

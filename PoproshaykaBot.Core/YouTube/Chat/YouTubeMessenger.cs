@@ -4,8 +4,10 @@ using PoproshaykaBot.Core.Debugging;
 using PoproshaykaBot.Core.Infrastructure.Hosting;
 using PoproshaykaBot.Core.Platforms;
 using PoproshaykaBot.Core.Platforms.Auth;
+using PoproshaykaBot.Core.Settings.Stores;
 using PoproshaykaBot.Core.Twitch.Chat;
 using PoproshaykaBot.Core.YouTube.Chat.Transport;
+using PoproshaykaBot.Core.YouTube.Auth;
 using PoproshaykaBot.Core.YouTube.Client;
 using PoproshaykaBot.Core.YouTube.Quota;
 using PoproshaykaBot.Core.YouTube.Streaming;
@@ -22,8 +24,9 @@ internal sealed class YouTubeMessenger(
     CommandResponseTracker commandResponseTracker,
     TimeProvider timeProvider,
     ILogger<YouTubeMessenger> logger,
-    YouTubeSessionContext? sessionContext = null)
-    : IPlatformMessenger, IHostedComponent, IDisposable
+    YouTubeSessionContext? sessionContext = null,
+    YouTubeAccountsStore? accountsStore = null)
+    : IPlatformMessenger, IChatAccountMessenger, IHostedComponent, IDisposable
 {
     public const int QueueCapacity = 256;
 
@@ -82,7 +85,7 @@ internal sealed class YouTubeMessenger(
             var cts = new CancellationTokenSource();
             _cts = cts;
             _isRunning = true;
-            _backgroundTask = RunAsync(cts);
+            _backgroundTask = RunAsync(_channel, cts);
         }
 
         logger.LogInformation("YouTubeMessenger запущен");
@@ -168,6 +171,39 @@ internal sealed class YouTubeMessenger(
         ChatSendCategory category = ChatSendCategory.None,
         ChatOrigin? origin = null)
     {
+        return Enqueue(text, commandResponse, category, origin, null, null);
+    }
+
+    public bool CanSendAs(ChatSenderAccount account)
+    {
+        return account.Role == PlatformAuthRole.Bot
+            && accountsStore is not null
+            && accountsStore.TryLoadContext(account.Role, account.ContextId, out var settings)
+            && settings is not null
+            && string.Equals(settings.ChannelId, account.AccountId, StringComparison.Ordinal)
+            && YouTubeScopes.IsGranted(settings, YouTubeScopes.ForceSsl)
+            && PlatformAuthRoles.HasCredentials(settings.AccessToken, settings.RefreshToken);
+    }
+
+    public async Task<ChatAccountSendResult> SendAsAsync(ChatSenderAccount account, string streamId, string text)
+    {
+        if (!CanSendAs(account))
+        {
+            return new(ChatEnqueueResult.AuthorizationRequired);
+        }
+
+        ArgumentException.ThrowIfNullOrWhiteSpace(streamId);
+        var completion = new TaskCompletionSource<ChatAccountSendResult>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var result = Enqueue(text, null, ChatSendCategory.None, null, account, streamId, completion);
+        return result == ChatEnqueueResult.Queued
+            ? await completion.Task.ConfigureAwait(false)
+            : new(result);
+    }
+
+    private ChatEnqueueResult Enqueue(
+        string text, CommandResponseMark? commandResponse, ChatSendCategory category, ChatOrigin? origin,
+        ChatSenderAccount? sender, string? expectedStreamId, TaskCompletionSource<ChatAccountSendResult>? completion = null)
+    {
         var chunks = YouTubeMessageSplitter.Split(text);
 
         if (chunks.Count == 0)
@@ -185,7 +221,8 @@ internal sealed class YouTubeMessenger(
         var liveChatId = origin?.ChatId ?? broadcast?.LiveChatId;
         var channelKey = origin?.Channel ?? ChannelKey.FromId(StreamingPlatform.YouTube, broadcast?.ChannelId);
 
-        if (string.IsNullOrWhiteSpace(liveChatId) || !IsAddressCurrent(origin, broadcast))
+        if (string.IsNullOrWhiteSpace(liveChatId) || !IsAddressCurrent(origin, broadcast)
+            || (expectedStreamId is not null && !string.Equals(broadcast?.VideoId, expectedStreamId, StringComparison.Ordinal)))
         {
             logger.LogDebug("YouTubeMessenger: отправка пропущена – активный чат эфира отсутствует");
             return ChatEnqueueResult.NotConnected;
@@ -216,7 +253,8 @@ internal sealed class YouTubeMessenger(
         var ttl = priority == YouTubeQuotaPriority.ScheduledBroadcast
             ? ScheduledBroadcastTtl
             : CommandAndGreetingTtl;
-        var item = new YouTubeSendItem(chunks, priority, commandResponse, liveChatId, pacificDate, nowUtc + ttl, channelKey, origin);
+        var item = new YouTubeSendItem(chunks, priority, commandResponse, liveChatId, pacificDate, nowUtc + ttl, channelKey,
+            origin, sender, completion);
 
         if (!channel.Writer.TryWrite(item))
         {
@@ -387,20 +425,24 @@ internal sealed class YouTubeMessenger(
         return channel;
     }
 
-    private async Task RunAsync(CancellationTokenSource runCts)
+    private async Task RunAsync(Channel<YouTubeSendItem> channel, CancellationTokenSource runCts)
     {
         var ct = runCts.Token;
         var lastSendStartedAt = DateTimeOffset.MinValue;
 
         try
         {
-            await foreach (var item in _channel.Reader.ReadAllAsync(ct).ConfigureAwait(false))
+            await foreach (var item in channel.Reader.ReadAllAsync(ct).ConfigureAwait(false))
             {
+                var status = ChatDeliveryStatus.Unconfirmed;
+                var sentParts = 0;
+                var sendAttempted = false;
                 try
                 {
                     foreach (var chunk in item.Chunks)
                     {
-                        if (!CanSendChunk(item, out var rejectReason))
+                        status = CheckSendChunk(item, out var rejectReason);
+                        if (status != ChatDeliveryStatus.None)
                         {
                             logger.LogDebug("YouTubeMessenger: сообщение отброшено до отправки ({Reason})", rejectReason);
                             break;
@@ -416,7 +458,8 @@ internal sealed class YouTubeMessenger(
                             {
                                 await Task.Delay(SendInterval - elapsed, timeProvider, ct).ConfigureAwait(false);
 
-                                if (!CanSendChunk(item, out var postDelayReason))
+                                status = CheckSendChunk(item, out var postDelayReason);
+                                if (status != ChatDeliveryStatus.None)
                                 {
                                     logger.LogDebug("YouTubeMessenger: сообщение отброшено после ожидания интервала ({Reason})", postDelayReason);
                                     break;
@@ -425,23 +468,33 @@ internal sealed class YouTubeMessenger(
                         }
 
                         lastSendStartedAt = timeProvider.GetUtcNow();
-                        var sent = await SendChunkWithRetryAsync(item, chunk, ct).ConfigureAwait(false);
+                        sendAttempted = true;
+                        status = await SendChunkWithRetryAsync(item, chunk, ct).ConfigureAwait(false);
 
-                        if (!sent)
+                        if (status != ChatDeliveryStatus.Sent)
                         {
                             break;
                         }
+
+                        sentParts++;
                     }
                 }
                 catch (OperationCanceledException) when (ct.IsCancellationRequested)
                 {
+                    var cancelStatus = sendAttempted || sentParts > 0
+                        ? ChatDeliveryStatus.Unconfirmed
+                        : ChatDeliveryStatus.QueueClosed;
+                    item.Completion?.TrySetResult(new(ChatEnqueueResult.Queued, cancelStatus, sentParts));
                     throw;
                 }
                 catch (Exception ex)
                 {
+                    status = ChatDeliveryStatus.Unconfirmed;
                     Interlocked.Increment(ref _failedCount);
                     logger.LogWarning(ex, "YouTubeMessenger: неожиданная ошибка при обработке сообщения из очереди");
                 }
+
+                item.Completion?.TrySetResult(new(ChatEnqueueResult.Queued, status, sentParts));
             }
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
@@ -453,6 +506,12 @@ internal sealed class YouTubeMessenger(
         }
         finally
         {
+            channel.Writer.TryComplete();
+            while (channel.Reader.TryRead(out var pending))
+            {
+                pending.Completion?.TrySetResult(new(ChatEnqueueResult.Queued, ChatDeliveryStatus.QueueClosed));
+            }
+
             lock (_sync)
             {
                 if (ReferenceEquals(_cts, runCts))
@@ -463,7 +522,7 @@ internal sealed class YouTubeMessenger(
         }
     }
 
-    private async Task<bool> SendChunkWithRetryAsync(YouTubeSendItem item, string chunk, CancellationToken ct)
+    private async Task<ChatDeliveryStatus> SendChunkWithRetryAsync(YouTubeSendItem item, string chunk, CancellationToken ct)
     {
         var unauthorizedRetries = 0;
         var rateLimitRetries = 0;
@@ -472,17 +531,19 @@ internal sealed class YouTubeMessenger(
         {
             ct.ThrowIfCancellationRequested();
 
-            if (!CanSendChunk(item, out var rejectReason))
+            var status = CheckSendChunk(item, out var rejectReason);
+            if (status != ChatDeliveryStatus.None)
             {
                 logger.LogDebug("YouTubeMessenger: повтор отменён ({Reason})", rejectReason);
-                return false;
+                return status;
             }
 
             using var inFlightScope = sentMessageTracker.BeginInFlightSend(item.TargetLiveChatId);
 
             try
             {
-                using var _ = PlatformAuthRequestOptions.UseContext(sessionContext?.Current?.BotContextId);
+                using var _ = PlatformAuthRequestOptions.UseContext(
+                    item.Sender?.ContextId ?? sessionContext?.Current?.BotContextId, item.Sender?.AccountId);
                 var result = await sendClient.InsertMessageAsync(
                     item.TargetLiveChatId,
                     chunk,
@@ -504,7 +565,7 @@ internal sealed class YouTubeMessenger(
                     item.TargetLiveChatId,
                     chunk.Length);
 
-                return true;
+                return ChatDeliveryStatus.Sent;
             }
             catch (OperationCanceledException) when (ct.IsCancellationRequested)
             {
@@ -524,7 +585,7 @@ internal sealed class YouTubeMessenger(
 
                 Interlocked.Increment(ref _failedCount);
                 logger.LogWarning(ex, "YouTubeMessenger: отправка отклонена из-за ошибки авторизации");
-                return false;
+                return ChatDeliveryStatus.AuthorizationRequired;
             }
             catch (YouTubeApiException ex) when (ex.Kind == YouTubeApiErrorKind.RateLimitExceeded)
             {
@@ -545,7 +606,7 @@ internal sealed class YouTubeMessenger(
 
                 Interlocked.Increment(ref _failedCount);
                 logger.LogWarning(ex, "YouTubeMessenger: исчерпаны повторы 429, сообщение отброшено");
-                return false;
+                return ChatDeliveryStatus.Rejected;
             }
             catch (YouTubeApiException ex) when (ex.Kind is YouTubeApiErrorKind.LocalQuotaBudgetReached or YouTubeApiErrorKind.QuotaExceeded)
             {
@@ -559,7 +620,7 @@ internal sealed class YouTubeMessenger(
                 Interlocked.Increment(ref _failedCount);
                 var currentPacificDate = PacificQuotaClock.GetWindow(timeProvider.GetUtcNow()).PacificDate;
                 LogQuotaSuppressedOnce(currentPacificDate, item.Priority, ex.Message);
-                return false;
+                return ChatDeliveryStatus.QuotaExhausted;
             }
             catch (YouTubeApiException ex) when (ex.Kind is YouTubeApiErrorKind.LiveChatEnded
                 or YouTubeApiErrorKind.Forbidden
@@ -569,24 +630,32 @@ internal sealed class YouTubeMessenger(
                 inFlightScope.CompleteRejected();
                 Interlocked.Increment(ref _failedCount);
                 logger.LogWarning(ex, "YouTubeMessenger: отправка отклонена YouTube API ({Kind})", ex.Kind);
-                return false;
+                return ex.Kind is YouTubeApiErrorKind.LiveChatEnded or YouTubeApiErrorKind.NotFound
+                    ? ChatDeliveryStatus.ChatUnavailable
+                    : ChatDeliveryStatus.Rejected;
             }
             catch (Exception ex)
             {
                 inFlightScope.CompleteUncertain();
                 Interlocked.Increment(ref _failedCount);
                 logger.LogWarning(ex, "YouTubeMessenger: отправка завершилась с неопределённым исходом – повтор запрещён во избежание дубля");
-                return false;
+                return ChatDeliveryStatus.Unconfirmed;
             }
         }
     }
 
-    private bool CanSendChunk(YouTubeSendItem item, out string reason)
+    private ChatDeliveryStatus CheckSendChunk(YouTubeSendItem item, out string reason)
     {
         if (!targetChannelProvider.Current.IsSendingAllowed)
         {
             reason = "режим наблюдателя";
-            return false;
+            return ChatDeliveryStatus.ObserverMode;
+        }
+
+        if (item.Sender is { } sender && !CanSendAs(sender))
+        {
+            reason = "выбранная авторизация изменилась";
+            return ChatDeliveryStatus.AuthorizationRequired;
         }
 
         var nowUtc = timeProvider.GetUtcNow();
@@ -594,7 +663,7 @@ internal sealed class YouTubeMessenger(
         if (nowUtc >= item.ExpiresAtUtc)
         {
             reason = "истёк срок ожидания в очереди";
-            return false;
+            return ChatDeliveryStatus.Rejected;
         }
 
         var currentPacificDate = PacificQuotaClock.GetWindow(nowUtc).PacificDate;
@@ -602,7 +671,7 @@ internal sealed class YouTubeMessenger(
         if (currentPacificDate != item.EnqueuedPacificDate)
         {
             reason = "наступили новые тихоокеанские сутки квоты";
-            return false;
+            return ChatDeliveryStatus.QuotaExhausted;
         }
 
         var broadcast = activeBroadcastSource.CurrentBroadcast;
@@ -612,11 +681,11 @@ internal sealed class YouTubeMessenger(
             || item.Origin is { IsCurrent: false })
         {
             reason = "сменился или завершился активный чат";
-            return false;
+            return ChatDeliveryStatus.ChatUnavailable;
         }
 
         reason = string.Empty;
-        return true;
+        return ChatDeliveryStatus.None;
     }
 
     private static bool IsAddressCurrent(ChatOrigin? origin, YouTubeBroadcastSummary? broadcast)
@@ -663,5 +732,7 @@ internal sealed class YouTubeMessenger(
         DateOnly EnqueuedPacificDate,
         DateTimeOffset ExpiresAtUtc,
         ChannelKey? Channel,
-        ChatOrigin? Origin);
+        ChatOrigin? Origin,
+        ChatSenderAccount? Sender,
+        TaskCompletionSource<ChatAccountSendResult>? Completion);
 }

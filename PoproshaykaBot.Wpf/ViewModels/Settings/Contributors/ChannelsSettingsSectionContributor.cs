@@ -143,6 +143,11 @@ public sealed class ChannelsSettingsSectionContributor : ISettingsSectionContrib
                 _groupsViewModel.ApplyTo(settings);
             }
         });
+        if (written && !_catalogStore.VerifyPersisted())
+        {
+            return new(false, [], FailureMessage: "Не удалось подтвердить запись каналов и назначений на диске.");
+        }
+
         if (written)
         {
             if (_catalogEdited)

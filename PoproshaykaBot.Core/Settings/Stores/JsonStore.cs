@@ -48,6 +48,34 @@ internal sealed class JsonStore<T>
         }
     }
 
+    public bool VerifyPersisted(Func<T, T, bool> matches)
+    {
+        ArgumentNullException.ThrowIfNull(matches);
+
+        string reason;
+        lock (_syncLock)
+        {
+            try
+            {
+                var json = File.ReadAllText(_filePath);
+                var persisted = JsonSerializer.Deserialize<T>(json, JsonStoreOptions.Default);
+                if (persisted is not null && matches(_state, persisted))
+                {
+                    return true;
+                }
+
+                reason = "файл отличается от ожидаемого состояния";
+            }
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or JsonException)
+            {
+                reason = exception.GetType().Name;
+            }
+        }
+
+        _logger?.LogWarning("Не удалось подтвердить запись {FilePath}: {Reason}", _filePath, reason);
+        return false;
+    }
+
     public bool Save(T value)
     {
         ArgumentNullException.ThrowIfNull(value);

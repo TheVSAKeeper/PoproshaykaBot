@@ -41,7 +41,8 @@ public class EmbeddedTwitchAuthDialogTests
         using (Assert.EnterMultipleScope())
         {
             Assert.That(viewModel.Result.Outcome, Is.EqualTo(EmbeddedTwitchAuthOutcome.Completed));
-            Assert.That(viewModel.Result.Flow, Is.SameAs(expected));
+        Assert.That(viewModel.Result.Flow, Is.EqualTo(expected with { BrowserProfileName = viewModel.BrowserProfileName }));
+        Assert.That(Guid.TryParseExact(viewModel.BrowserProfileName, "N", out _), Is.True);
             Assert.That(closeRequests, Is.EqualTo(1));
             Assert.That(oauth.HasStatusSubscribers, Is.False);
         }

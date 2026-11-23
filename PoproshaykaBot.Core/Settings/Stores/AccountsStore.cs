@@ -39,6 +39,24 @@ public sealed class AccountsStore : RoleAccountsStoreBase<AccountsStore.Accounts
 
     protected override IReadOnlyList<string> BroadcasterDefaultScopes => TwitchScopes.BroadcasterRequired;
 
+    private static readonly PlatformAccountOperation[] BotPermissions =
+    [
+        new("Чтение чата", true, TwitchScopes.UserReadChat),
+        new("Отправка в чат", true, TwitchScopes.UserWriteChat),
+        new("Шёпот", false, TwitchScopes.UserManageWhispers),
+    ];
+
+    private static readonly PlatformAccountOperation[] BroadcasterPermissions =
+    [
+        new("Доступ бота к чату", true, TwitchScopes.ChannelBot),
+        new("Чтение опросов", true, TwitchScopes.ChannelReadPolls),
+        new("Управление опросами", true, TwitchScopes.ChannelManagePolls),
+        new("Изменение данных эфира", true, TwitchScopes.ChannelManageBroadcast),
+    ];
+
+    public override IReadOnlyList<PlatformAccountOperation> GetPermissions(PlatformAuthRole role) =>
+        role == PlatformAuthRole.Bot ? BotPermissions : BroadcasterPermissions;
+
     public bool SaveAll(TwitchAccountSettings bot, TwitchAccountSettings broadcaster)
     {
         ArgumentNullException.ThrowIfNull(bot);
@@ -63,11 +81,11 @@ public sealed class AccountsStore : RoleAccountsStoreBase<AccountsStore.Accounts
     public (bool Changed, bool Written) RemoveRoleContext(PlatformAuthRole role, string? contextId) =>
         RemoveRoleContextCore(role, contextId, OAuthRoleHelpers.ClearAccountInPlace);
 
-    public (IReadOnlyList<string> RemovedContextIds, bool Written) RemoveAccountRole(string userId, PlatformAuthRole role) =>
-        RemoveAccountRoleCore(userId, role, OAuthRoleHelpers.ClearAccountInPlace);
+    public override (IReadOnlyList<string> RemovedContextIds, bool Written) RemoveAccountRole(string accountId, PlatformAuthRole role) =>
+        RemoveAccountRoleCore(accountId, role, OAuthRoleHelpers.ClearAccountInPlace);
 
-    public (IReadOnlyList<(PlatformAuthRole Role, string ContextId)> Removed, bool Written) RemoveAccount(string userId) =>
-        RemoveAccountCore(userId, OAuthRoleHelpers.ClearAccountInPlace);
+    public override (IReadOnlyList<(PlatformAuthRole Role, string ContextId)> Removed, bool Written) RemoveAccount(string accountId) =>
+        RemoveAccountCore(accountId, OAuthRoleHelpers.ClearAccountInPlace);
 
     protected override TwitchAccountSettings? GetAccount(AccountsFileDto state, PlatformAuthRole role)
     {
@@ -104,11 +122,55 @@ public sealed class AccountsStore : RoleAccountsStoreBase<AccountsStore.Accounts
 
     protected override string? GetDisplayLabel(TwitchAccountSettings account) => account.Login;
 
+    protected override PlatformChatBrowserProfile? GetChatBrowserProfile(TwitchAccountSettings account) =>
+        Guid.TryParseExact(account.BrowserProfileName, "N", out var profileId)
+            ? new(WebView2UserDataFolders.ResolveTwitchAccounts(), profileId.ToString("N"))
+            : null;
+
     protected override void CopyAccountFields(TwitchAccountSettings source, TwitchAccountSettings target)
     {
         base.CopyAccountFields(source, target);
         target.Login = source.Login;
+        target.BrowserProfileName = source.BrowserProfileName
+            ?? (string.Equals(source.UserId, target.UserId, StringComparison.Ordinal) ? target.BrowserProfileName : null);
         target.UserId = source.UserId;
+    }
+
+    protected override void OnContextsUpserted(
+        AccountsFileDto state,
+        IReadOnlyList<(PlatformAuthRole Role, string ContextId, string Label, TwitchAccountSettings Account)> entries)
+    {
+        foreach (var entry in entries)
+        {
+            if (string.IsNullOrWhiteSpace(entry.Account.UserId)
+                || string.IsNullOrWhiteSpace(entry.Account.BrowserProfileName))
+            {
+                continue;
+            }
+
+            SyncBrowserProfileForUser(state, entry.Account.UserId, entry.Account.BrowserProfileName);
+        }
+    }
+
+    private void SyncBrowserProfileForUser(AccountsFileDto state, string userId, string profileName)
+    {
+        foreach (var role in PlatformAuthRoles.Active)
+        {
+            if (GetAccount(state, role) is { } defaultAccount
+                && string.Equals(defaultAccount.UserId, userId, StringComparison.Ordinal))
+            {
+                defaultAccount.BrowserProfileName = profileName;
+            }
+        }
+
+        foreach (var context in GetContexts(state))
+        {
+            if (context.Account is not null
+                && string.Equals(context.Account.UserId, userId, StringComparison.Ordinal))
+            {
+                context.Account.BrowserProfileName = profileName;
+            }
+        }
     }
 
     protected override void OnRoleMutated(PlatformAuthRole role, bool written)
