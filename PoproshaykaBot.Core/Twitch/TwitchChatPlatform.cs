@@ -4,6 +4,7 @@ using PoproshaykaBot.Core.Chat;
 using PoproshaykaBot.Core.Debugging;
 using PoproshaykaBot.Core.Diagnostics;
 using PoproshaykaBot.Core.Infrastructure.Events.Lifecycle;
+using PoproshaykaBot.Core.Infrastructure.Hosting;
 using PoproshaykaBot.Core.Platforms;
 using PoproshaykaBot.Core.Platforms.Auth;
 using PoproshaykaBot.Core.Settings.Stores;
@@ -21,7 +22,8 @@ public sealed class TwitchChatPlatform(
     ILogger<TwitchChatPlatform>? logger = null,
     ITargetChannelProvider? targetChannelProvider = null,
     TwitchChannelAuthorization? authorization = null,
-    ChatIngestionService? chatIngestion = null) : IChatPlatform
+    ChatIngestionService? chatIngestion = null,
+    [FromKeyedServices(StreamingPlatform.Twitch)] PlatformHost? platformHost = null) : IChatPlatform
 {
     private const string BotFallbackDisplayName = "PoproshaykaBot";
 
@@ -38,7 +40,9 @@ public sealed class TwitchChatPlatform(
 
     public bool IsEnabled => true;
 
-    public bool IsConnected => !string.IsNullOrWhiteSpace(channels.GetChannel(StreamingPlatform.Twitch));
+    public bool IsConnected =>
+        !string.IsNullOrWhiteSpace(channels.GetChannel(StreamingPlatform.Twitch))
+        && (platformHost?.IsRunning ?? true);
 
     public bool? HasWhisperPermission
     {

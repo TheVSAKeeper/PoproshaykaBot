@@ -37,6 +37,7 @@ public sealed class ChatPipelineHandler :
     private readonly ILogger<ChatPipelineHandler> _logger;
     private readonly ITargetChannelProvider? _targetChannelProvider;
     private readonly IBroadcastState? _broadcastState;
+    private readonly ChatHistoryManager? _chatHistoryManager;
     private readonly List<IDisposable> _subscriptions;
 
     public ChatPipelineHandler(
@@ -51,7 +52,8 @@ public sealed class ChatPipelineHandler :
         IEventBus eventBus,
         ILogger<ChatPipelineHandler> logger,
         ITargetChannelProvider? targetChannelProvider = null,
-        IBroadcastState? broadcastState = null)
+        IBroadcastState? broadcastState = null,
+        ChatHistoryManager? chatHistoryManager = null)
     {
         _platformRegistry = platformRegistry;
         _channels = channels;
@@ -65,6 +67,7 @@ public sealed class ChatPipelineHandler :
         _logger = logger;
         _targetChannelProvider = targetChannelProvider;
         _broadcastState = broadcastState;
+        _chatHistoryManager = chatHistoryManager;
 
         _subscriptions =
         [
@@ -137,18 +140,31 @@ public sealed class ChatPipelineHandler :
             return;
         }
 
-        var isFirstSeen = !chatMessage.IsBot
-                          && !@event.IsReplacement
-                          && audience.OnUserMessage(chatMessage.UserId, chatMessage.DisplayName);
-
-        var commandResponse = chatMessage.IsBot
-            ? _commandResponseTracker.TryConsume(chatMessage.Platform, chatMessage.Id, @event.ChannelKey, chatMessage.ChatSessionId)
-            : null;
-
         var liveStream = platform.StreamStatus is { CurrentStatus: StreamStatus.Online } streamStatus
             ? streamStatus.CurrentStream
             : null;
         var broadcastId = liveStream is not null ? _broadcastState?.CurrentBroadcastId : null;
+
+        var seenBeforeInStream = !chatMessage.IsBot
+                                 && !@event.IsReplacement
+                                 && (liveStream is not null || !string.IsNullOrWhiteSpace(chatMessage.ChatSessionId))
+                                 && _chatHistoryManager?.HasUserMessageInCurrentStream(
+                                     chatMessage.Platform,
+                                     @event.ChannelKey?.ChannelId ?? chatMessage.ChannelId,
+                                     chatMessage.UserId,
+                                     liveStream?.Id,
+                                     broadcastId,
+                                     liveStream?.StartedAt ?? default,
+                                     chatMessage.ChatSessionId) == true;
+
+        var isFirstSeen = !chatMessage.IsBot
+                          && !@event.IsReplacement
+                          && audience.OnUserMessage(chatMessage.UserId, chatMessage.DisplayName)
+                          && !seenBeforeInStream;
+
+        var commandResponse = chatMessage.IsBot
+            ? _commandResponseTracker.TryConsume(chatMessage.Platform, chatMessage.Id, @event.ChannelKey, chatMessage.ChatSessionId)
+            : null;
 
         var historyEntry = ChatMessageDataFactory.Create(
             chatMessage,

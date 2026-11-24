@@ -38,6 +38,7 @@ public sealed class StreamStatusManager : IStreamStatus, IPlatformChannelMonitor
     private readonly Dictionary<string, string> _subscriptionToChannelId = new(StringComparer.Ordinal);
     private readonly CancellationTokenSource _disposeCts = new();
     private readonly SemaphoreSlim _refreshGate = new(1, 1);
+    private readonly SemaphoreSlim _subscriptionsGate = new(1, 1);
     private readonly EventSubSubscriptionLedger _ledger;
     private readonly EventSubSubscriptionRetry _retry;
 
@@ -267,6 +268,15 @@ public sealed class StreamStatusManager : IStreamStatus, IPlatformChannelMonitor
             _logger.LogDebug("Опрос Helix не завершился за {Timeout} – семафор опроса оставлен сборщику мусора", RefreshGateDrainTimeout);
         }
 
+        if (await _subscriptionsGate.WaitAsync(RefreshGateDrainTimeout, CancellationToken.None).ConfigureAwait(false))
+        {
+            _subscriptionsGate.Dispose();
+        }
+        else
+        {
+            _logger.LogDebug("Синхронизация подписок EventSub не завершилась за {Timeout} – семафор оставлен сборщику мусора", RefreshGateDrainTimeout);
+        }
+
         _disposeCts.Dispose();
         _runCts?.Dispose();
         _runCts = null;
@@ -326,11 +336,28 @@ public sealed class StreamStatusManager : IStreamStatus, IPlatformChannelMonitor
                 return;
             }
 
-            var streamsByUserId = await FetchStreamsMapAsync(slots, token).ConfigureAwait(false);
+            var (streamsByUserId, failedAuthChannelIds) = await FetchStreamsMapAsync(slots, token).ConfigureAwait(false);
 
             foreach (var slot in slots)
             {
                 var previousSnapshot = slot.ToMonitoringSnapshot();
+                if (failedAuthChannelIds.Contains(slot.ChannelId))
+                {
+                    slot.Availability = ChannelMonitoringAvailability.Unavailable;
+                    slot.Reason = MonitoringUnavailableReason.MissingBotAuth;
+                    slot.Detail = "нет авторизации бота";
+                    var failedSnapshot = slot.ToMonitoringSnapshot();
+                    if (HasMonitoringStateChanged(previousSnapshot.Availability, previousSnapshot.Reason, previousSnapshot.Detail,
+                            failedSnapshot.Availability, failedSnapshot.Reason, failedSnapshot.Detail))
+                    {
+                        await _eventBus.PublishAsync(
+                            new ChannelMonitoringStateChanged(StreamingPlatform.Twitch, new ChannelKey(StreamingPlatform.Twitch, slot.ChannelId), failedSnapshot),
+                            CancellationToken.None).ConfigureAwait(false);
+                    }
+
+                    continue;
+                }
+
                 streamsByUserId.TryGetValue(slot.ChannelId, out var stream);
 
                 if (stream != null)
@@ -613,11 +640,28 @@ public sealed class StreamStatusManager : IStreamStatus, IPlatformChannelMonitor
             }
 
             _logger.LogDebug("Запрос начального статуса стримов через API для {Count} каналов Twitch", slots.Count);
-            var streamsByUserId = await FetchStreamsMapAsync(slots, token).ConfigureAwait(false);
+            var (streamsByUserId, failedAuthChannelIds) = await FetchStreamsMapAsync(slots, token).ConfigureAwait(false);
 
             foreach (var slot in slots)
             {
                 var previousSnapshot = slot.ToMonitoringSnapshot();
+                if (failedAuthChannelIds.Contains(slot.ChannelId))
+                {
+                    slot.Availability = ChannelMonitoringAvailability.Unavailable;
+                    slot.Reason = MonitoringUnavailableReason.MissingBotAuth;
+                    slot.Detail = "нет авторизации бота";
+                    var failedSnapshot = slot.ToMonitoringSnapshot();
+                    if (HasMonitoringStateChanged(previousSnapshot.Availability, previousSnapshot.Reason, previousSnapshot.Detail,
+                            failedSnapshot.Availability, failedSnapshot.Reason, failedSnapshot.Detail))
+                    {
+                        await _eventBus.PublishAsync(
+                            new ChannelMonitoringStateChanged(StreamingPlatform.Twitch, new ChannelKey(StreamingPlatform.Twitch, slot.ChannelId), failedSnapshot),
+                            CancellationToken.None).ConfigureAwait(false);
+                    }
+
+                    continue;
+                }
+
                 streamsByUserId.TryGetValue(slot.ChannelId, out var stream);
 
                 StatusTransition transition;
@@ -951,6 +995,30 @@ public sealed class StreamStatusManager : IStreamStatus, IPlatformChannelMonitor
 
     private async Task CreateEventSubSubscriptionsAsync(string sessionId, CancellationToken cancellationToken)
     {
+        using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, _disposeCts.Token);
+        var token = linkedCts.Token;
+
+        try
+        {
+            await _subscriptionsGate.WaitAsync(token).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            return;
+        }
+
+        try
+        {
+            await CreateEventSubSubscriptionsCoreAsync(sessionId, token).ConfigureAwait(false);
+        }
+        finally
+        {
+            _subscriptionsGate.Release();
+        }
+    }
+
+    private async Task CreateEventSubSubscriptionsCoreAsync(string sessionId, CancellationToken cancellationToken)
+    {
         var generation = await _ledger.BeginSessionAsync(cancellationToken);
         var slots = await EnsureMonitoredSlotsAsync(cancellationToken);
 
@@ -1243,36 +1311,59 @@ public sealed class StreamStatusManager : IStreamStatus, IPlatformChannelMonitor
         return ensured.Count > 0 ? ensured[0] : null;
     }
 
-    private async Task<Dictionary<string, HelixStreamInfo>> FetchStreamsMapAsync(
+    private async Task<(Dictionary<string, HelixStreamInfo> Streams, HashSet<string> FailedAuthChannelIds)> FetchStreamsMapAsync(
         IReadOnlyList<TwitchChannelSlot> slots,
         CancellationToken token)
     {
         var map = new Dictionary<string, HelixStreamInfo>(StringComparer.Ordinal);
+        var failedAuthChannelIds = new HashSet<string>(StringComparer.Ordinal);
         foreach (var group in slots.GroupBy(static s => s.BotContextId, StringComparer.Ordinal))
         {
             var groupSlots = group.ToArray();
-            if (groupSlots.Length == 1)
+            if (!HasUsableBotContext(group.Key))
             {
-                var single = await WithContextAsync(group.Key, () => _helix.GetStreamAsync(groupSlots[0].ChannelId, token)).ConfigureAwait(false);
-                if (single is not null)
+                foreach (var slot in groupSlots)
                 {
-                    map[groupSlots[0].ChannelId] = single;
+                    failedAuthChannelIds.Add(slot.ChannelId);
                 }
 
                 continue;
             }
 
-            var streams = await WithContextAsync(group.Key, () => _helix.GetStreamsAsync(groupSlots.Select(static s => s.ChannelId), token)).ConfigureAwait(false);
-            foreach (var stream in streams)
+            try
             {
-                if (!string.IsNullOrWhiteSpace(stream.UserId))
+                if (groupSlots.Length == 1)
                 {
-                    map[stream.UserId] = stream;
+                    var single = await WithContextAsync(group.Key, () => _helix.GetStreamAsync(groupSlots[0].ChannelId, token)).ConfigureAwait(false);
+                    if (single is not null)
+                    {
+                        map[groupSlots[0].ChannelId] = single;
+                    }
+
+                    continue;
+                }
+
+                var streams = await WithContextAsync(group.Key, () => _helix.GetStreamsAsync(groupSlots.Select(static s => s.ChannelId), token)).ConfigureAwait(false);
+                foreach (var stream in streams)
+                {
+                    if (!string.IsNullOrWhiteSpace(stream.UserId))
+                    {
+                        map[stream.UserId] = stream;
+                    }
+                }
+            }
+            catch (TwitchAuthorizationMissingException ex)
+            {
+                _logger.LogWarning(ex, "Опрос статуса стримов Twitch пропущен для контекста {ContextId} ({Count} кан.)",
+                    group.Key, groupSlots.Length);
+                foreach (var slot in groupSlots)
+                {
+                    failedAuthChannelIds.Add(slot.ChannelId);
                 }
             }
         }
 
-        return map;
+        return (map, failedAuthChannelIds);
     }
 
     private static async Task<T> WithContextAsync<T>(string contextId, Func<Task<T>> action)

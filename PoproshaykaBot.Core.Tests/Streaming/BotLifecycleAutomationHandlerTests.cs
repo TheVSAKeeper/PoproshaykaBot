@@ -264,6 +264,80 @@ public sealed class BotLifecycleAutomationHandlerTests
         await _connectionController.Received(1).StopAsync(StreamingPlatform.YouTube, BotStopMode.Graceful);
     }
 
+    [Test]
+    public async Task ActiveChannelChanged_ToOnlineChannel_AutoConnectsWhenDisconnected()
+    {
+        var monitor = Substitute.For<IPlatformChannelMonitor>();
+        monitor.Platform.Returns(StreamingPlatform.Twitch);
+        var newChannel = new ChannelKey(StreamingPlatform.Twitch, "177128531");
+        monitor.GetSnapshot(newChannel).Returns(new ChannelMonitoringSnapshot(
+            newChannel,
+            "bobito217",
+            ChannelMonitoringAvailability.Active,
+            MonitoringUnavailableReason.None,
+            null,
+            StreamStatus.Online,
+            null,
+            DateTimeOffset.UtcNow,
+            false));
+
+        using var handlerWithMonitor = new BotLifecycleAutomationHandler(
+            _connectionController,
+            new BotLifecycleAutomationSettingsProvider(_lifecycleStore),
+            _aggregator,
+            _targetChannelProvider,
+            _eventBus,
+            NullLogger<BotLifecycleAutomationHandler>.Instance,
+            [monitor]);
+
+        await _eventBus.PublishAsync(new PlatformConnectionChanged(StreamingPlatform.Twitch, BotLifecyclePhase.Idle));
+        await _eventBus.PublishAsync(new ActiveChannelChanged(
+            StreamingPlatform.Twitch,
+            new ChannelKey(StreamingPlatform.Twitch, "107618204"),
+            newChannel,
+            "bobito217",
+            ChannelSwitchMode.Manual));
+
+        _connectionController.Received(1).StartConnection(StreamingPlatform.Twitch);
+    }
+
+    [Test]
+    public async Task ActiveChannelChanged_ToOfflineChannel_DoesNotAutoConnect()
+    {
+        var monitor = Substitute.For<IPlatformChannelMonitor>();
+        monitor.Platform.Returns(StreamingPlatform.Twitch);
+        var newChannel = new ChannelKey(StreamingPlatform.Twitch, "177128531");
+        monitor.GetSnapshot(newChannel).Returns(new ChannelMonitoringSnapshot(
+            newChannel,
+            "bobito217",
+            ChannelMonitoringAvailability.Active,
+            MonitoringUnavailableReason.None,
+            null,
+            StreamStatus.Offline,
+            null,
+            DateTimeOffset.UtcNow,
+            false));
+
+        using var handlerWithMonitor = new BotLifecycleAutomationHandler(
+            _connectionController,
+            new BotLifecycleAutomationSettingsProvider(_lifecycleStore),
+            _aggregator,
+            _targetChannelProvider,
+            _eventBus,
+            NullLogger<BotLifecycleAutomationHandler>.Instance,
+            [monitor]);
+
+        await _eventBus.PublishAsync(new PlatformConnectionChanged(StreamingPlatform.Twitch, BotLifecyclePhase.Idle));
+        await _eventBus.PublishAsync(new ActiveChannelChanged(
+            StreamingPlatform.Twitch,
+            new ChannelKey(StreamingPlatform.Twitch, "107618204"),
+            newChannel,
+            "bobito217",
+            ChannelSwitchMode.Manual));
+
+        _connectionController.DidNotReceive().StartConnection(Arg.Any<StreamingPlatform>());
+    }
+
     private FakeTargetChannelProvider _targetChannelProvider = null!;
     private BroadcastAggregator _aggregator = null!;
 

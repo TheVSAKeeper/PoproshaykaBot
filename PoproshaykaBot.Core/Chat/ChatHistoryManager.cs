@@ -68,6 +68,94 @@ public sealed class ChatHistoryManager : IDisposable
         }
     }
 
+    public bool HasUserMessageInCurrentStream(
+        StreamingPlatform platform,
+        string? channelId,
+        string userId,
+        string? streamId,
+        Guid? broadcastId,
+        DateTime streamStartedAt,
+        string? chatSessionId = null)
+    {
+        if (string.IsNullOrWhiteSpace(userId))
+        {
+            return false;
+        }
+
+        var normalizedChannelId = string.IsNullOrWhiteSpace(channelId) ? null : channelId.Trim();
+        var normalizedSessionId = string.IsNullOrWhiteSpace(chatSessionId) ? null : chatSessionId.Trim();
+        var startedAtUtc = streamStartedAt != default
+            ? DateTime.SpecifyKind(streamStartedAt, DateTimeKind.Utc)
+            : (DateTime?)null;
+
+        lock (_sync)
+        {
+            foreach (var (scope, buffer) in _buffers)
+            {
+                if (scope.Platform != platform)
+                {
+                    continue;
+                }
+
+                if (normalizedChannelId is not null
+                    && !string.IsNullOrWhiteSpace(scope.ChannelId)
+                    && !string.Equals(scope.ChannelId, normalizedChannelId, StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
+                foreach (var entry in buffer.GetSnapshot())
+                {
+                    if (entry.IsBot
+                        || !string.Equals(entry.UserId, userId, StringComparison.Ordinal))
+                    {
+                        continue;
+                    }
+
+                    if (MatchesCurrentStream(entry, streamId, broadcastId, startedAtUtc, normalizedSessionId))
+                    {
+                        return true;
+                    }
+                }
+            }
+        }
+
+        return false;
+    }
+
+    private static bool MatchesCurrentStream(
+        ChatMessageData entry,
+        string? streamId,
+        Guid? broadcastId,
+        DateTime? startedAtUtc,
+        string? chatSessionId)
+    {
+        if (!string.IsNullOrWhiteSpace(chatSessionId) && !string.IsNullOrWhiteSpace(entry.ChatSessionId))
+        {
+            return string.Equals(entry.ChatSessionId, chatSessionId, StringComparison.Ordinal);
+        }
+
+        if (!string.IsNullOrWhiteSpace(streamId) && !string.IsNullOrWhiteSpace(entry.StreamId))
+        {
+            return string.Equals(entry.StreamId, streamId, StringComparison.Ordinal);
+        }
+
+        if (broadcastId.HasValue && entry.BroadcastId.HasValue)
+        {
+            return entry.BroadcastId.Value == broadcastId.Value;
+        }
+
+        if (startedAtUtc.HasValue)
+        {
+            var entryUtc = entry.Timestamp.Kind == DateTimeKind.Utc
+                ? entry.Timestamp
+                : entry.Timestamp.ToUniversalTime();
+            return entryUtc >= startedAtUtc.Value;
+        }
+
+        return false;
+    }
+
     public void AddMessage(ChatMessageData chatMessage, string channel = "")
     {
         ArgumentNullException.ThrowIfNull(chatMessage);

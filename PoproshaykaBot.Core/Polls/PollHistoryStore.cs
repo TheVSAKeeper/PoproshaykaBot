@@ -220,6 +220,7 @@ public sealed class PollHistoryStore(
             return 0;
         }
 
+        var missingBroadcasterAuth = false;
         try
         {
             var broadcasterId = await broadcasterIdProvider.GetAsync(cancellationToken);
@@ -265,11 +266,22 @@ public sealed class PollHistoryStore(
 
             return added;
         }
+        catch (TwitchAuthorizationMissingException)
+        {
+            missingBroadcasterAuth = true;
+        }
         catch (Exception ex)
         {
             logger.LogWarning(ex, "PollHistoryStore: бэкфилл не выполнен");
             return 0;
         }
+
+        if (missingBroadcasterAuth)
+        {
+            logger.LogInformation("PollHistoryStore: бэкфилл пропущен – нет авторизации стримера для активного канала");
+        }
+
+        return 0;
     }
 
     public Task StartAsync(IProgress<string> progress, CancellationToken cancellationToken)

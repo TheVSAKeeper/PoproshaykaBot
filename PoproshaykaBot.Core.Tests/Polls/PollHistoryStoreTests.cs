@@ -77,6 +77,25 @@ public class PollHistoryStoreTests
     }
 
     [Test]
+    public async Task BackfillAsync_WhenBroadcasterAuthMissing_SkipsWithoutWarning()
+    {
+        _helix.GetPollsAsync("1", Arg.Any<int>(), Arg.Any<CancellationToken>())
+            .Returns<IReadOnlyList<HelixPollInfo>>(_ => throw new TwitchAuthorizationMissingException("нет токена стримера"));
+
+        var logger = new RecordingLogger<PollHistoryStore>();
+        var store = Create(logger);
+
+        var added = await store.BackfillAsync(CancellationToken.None);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(added, Is.Zero);
+            Assert.That(logger.Entries.Any(e => e.Level >= LogLevel.Warning), Is.False);
+            Assert.That(logger.Entries.Any(e => e.Level == LogLevel.Information), Is.True);
+        });
+    }
+
+    [Test]
     public void TryAdd_Unique_Persists()
     {
         var added = _store.TryAdd(Entry("p1"));

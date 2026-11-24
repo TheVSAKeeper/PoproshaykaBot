@@ -13,6 +13,7 @@ public sealed class BotLifecycleAutomationHandler :
     IEventHandler<StreamWentOnline>,
     IEventHandler<StreamWentOffline>,
     IEventHandler<PlatformConnectionChanged>,
+    IEventHandler<ActiveChannelChanged>,
     IEventSubscriber,
     IDisposable
 {
@@ -27,10 +28,12 @@ public sealed class BotLifecycleAutomationHandler :
     private readonly IBotLifecycleAutomationSettingsProvider _settingsProvider;
     private readonly IBroadcastOfflineStopCoordinator _offlineStopCoordinator;
     private readonly ITargetChannelProvider _targetChannelProvider;
+    private readonly IReadOnlyDictionary<StreamingPlatform, IPlatformChannelMonitor> _channelMonitors;
     private readonly ILogger<BotLifecycleAutomationHandler> _logger;
     private readonly IDisposable _onlineSubscription;
     private readonly IDisposable _offlineSubscription;
     private readonly IDisposable _phaseSubscription;
+    private readonly IDisposable _activeChannelSubscription;
     private readonly Lock _stateLock = new();
     private readonly Dictionary<StreamingPlatform, PlatformState> _states = [];
 
@@ -40,17 +43,20 @@ public sealed class BotLifecycleAutomationHandler :
         IBroadcastOfflineStopCoordinator offlineStopCoordinator,
         ITargetChannelProvider targetChannelProvider,
         IEventBus eventBus,
-        ILogger<BotLifecycleAutomationHandler> logger)
+        ILogger<BotLifecycleAutomationHandler> logger,
+        IEnumerable<IPlatformChannelMonitor>? channelMonitors = null)
     {
         _connectionManager = connectionManager;
         _settingsProvider = settingsProvider;
         _offlineStopCoordinator = offlineStopCoordinator;
         _targetChannelProvider = targetChannelProvider;
+        _channelMonitors = channelMonitors?.ToDictionary(static monitor => monitor.Platform) ?? [];
         _logger = logger;
 
         _onlineSubscription = eventBus.Subscribe<StreamWentOnline>(this);
         _offlineSubscription = eventBus.Subscribe<StreamWentOffline>(this);
         _phaseSubscription = eventBus.Subscribe<PlatformConnectionChanged>(this);
+        _activeChannelSubscription = eventBus.Subscribe<ActiveChannelChanged>(this);
     }
 
     public Task HandleAsync(PlatformConnectionChanged @event, CancellationToken cancellationToken)
@@ -58,6 +64,31 @@ public sealed class BotLifecycleAutomationHandler :
         lock (_stateLock)
         {
             GetOrCreateStateLocked(@event.Platform).Phase = @event.Phase;
+        }
+
+        return Task.CompletedTask;
+    }
+
+    public Task HandleAsync(ActiveChannelChanged @event, CancellationToken cancellationToken)
+    {
+        if (!_channelMonitors.TryGetValue(@event.Platform, out var monitor))
+        {
+            return Task.CompletedTask;
+        }
+
+        var snapshot = monitor.GetSnapshot(@event.NewChannel);
+        BotLifecyclePhase phase;
+
+        lock (_stateLock)
+        {
+            var state = GetOrCreateStateLocked(@event.Platform);
+            state.IsStreamOnline = snapshot.Status == StreamStatus.Online;
+            phase = state.Phase;
+        }
+
+        if (snapshot.Status == StreamStatus.Online)
+        {
+            TryAutoConnect(@event.Platform, @event.NewDisplayName, phase);
         }
 
         return Task.CompletedTask;
@@ -74,42 +105,46 @@ public sealed class BotLifecycleAutomationHandler :
             phase = state.Phase;
         }
 
+        TryAutoConnect(@event.Platform, @event.Channel, phase);
+        return Task.CompletedTask;
+    }
+
+    private void TryAutoConnect(StreamingPlatform platform, string channel, BotLifecyclePhase phase)
+    {
         if (!_targetChannelProvider.Current.RecordsUserData)
         {
-            _logger.LogDebug("Авто-подключение {Platform} пропущено – режим отладки без записи данных", @event.Platform);
-            return Task.CompletedTask;
+            _logger.LogDebug("Авто-подключение {Platform} пропущено – режим отладки без записи данных", platform);
+            return;
         }
 
-        var settings = _settingsProvider.Get(@event.Platform);
+        var settings = _settingsProvider.Get(platform);
 
         if (!settings.AutoConnectOnStreamOnline)
         {
-            return Task.CompletedTask;
+            return;
         }
 
         if (!IsDisconnectedPhase(phase))
         {
-            _logger.LogDebug("Авто-подключение {Platform} пропущено: текущая фаза {Phase}", @event.Platform, phase);
-            return Task.CompletedTask;
+            _logger.LogDebug("Авто-подключение {Platform} пропущено: текущая фаза {Phase}", platform, phase);
+            return;
         }
 
-        if (_connectionManager.IsPlatformBusy(@event.Platform))
+        if (_connectionManager.IsPlatformBusy(platform))
         {
-            _logger.LogDebug("Авто-подключение {Platform} пропущено: BotConnectionManager занят", @event.Platform);
-            return Task.CompletedTask;
+            _logger.LogDebug("Авто-подключение {Platform} пропущено: BotConnectionManager занят", platform);
+            return;
         }
 
         try
         {
-            _logger.LogInformation("🔴 Стрим онлайн ({Platform}, {Channel}) – автоматически подключаю бота", @event.Platform, @event.Channel);
-            _connectionManager.StartConnection(@event.Platform);
+            _logger.LogInformation("🔴 Стрим онлайн ({Platform}, {Channel}) – автоматически подключаю бота", platform, channel);
+            _connectionManager.StartConnection(platform);
         }
         catch (InvalidOperationException exception)
         {
-            _logger.LogWarning(exception, "Не удалось запустить авто-подключение бота для {Platform}", @event.Platform);
+            _logger.LogWarning(exception, "Не удалось запустить авто-подключение бота для {Platform}", platform);
         }
-
-        return Task.CompletedTask;
     }
 
     public Task HandleAsync(StreamWentOffline @event, CancellationToken cancellationToken)
@@ -163,6 +198,7 @@ public sealed class BotLifecycleAutomationHandler :
         _onlineSubscription.Dispose();
         _offlineSubscription.Dispose();
         _phaseSubscription.Dispose();
+        _activeChannelSubscription.Dispose();
     }
 
     private PlatformState GetOrCreateStateLocked(StreamingPlatform platform)
