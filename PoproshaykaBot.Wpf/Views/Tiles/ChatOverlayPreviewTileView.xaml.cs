@@ -18,6 +18,7 @@ public partial class ChatOverlayPreviewTileView : UserControl, IView<ChatOverlay
     private CancellationTokenSource? _browserCts;
     private int _browserGeneration;
     private bool _initializing;
+    private bool _hasNavigated;
     private bool _disposed;
     private ChatOverlayPreviewTileViewModel? _viewModel;
 
@@ -113,9 +114,17 @@ public partial class ChatOverlayPreviewTileView : UserControl, IView<ChatOverlay
 
         if (IsVisible)
         {
-            if (!_initializing && WebView.CoreWebView2 is null && !viewModel.HasError)
+            if (!_initializing && !viewModel.HasError)
             {
-                _ = InitializeWebViewAsync(viewModel);
+                if (WebView.CoreWebView2 is null)
+                {
+                    _ = InitializeWebViewAsync(viewModel);
+                }
+                else if (!_hasNavigated)
+                {
+                    _hasNavigated = true;
+                    WebView.CoreWebView2.Navigate(viewModel.CurrentUrl);
+                }
             }
 
             return;
@@ -133,6 +142,7 @@ public partial class ChatOverlayPreviewTileView : UserControl, IView<ChatOverlay
     {
         _browserGeneration++;
         _initializing = false;
+        _hasNavigated = false;
         CancelBrowserInitialization();
         ReplaceBrowser();
     }
@@ -218,6 +228,7 @@ public partial class ChatOverlayPreviewTileView : UserControl, IView<ChatOverlay
                 return;
             }
 
+            _hasNavigated = true;
             WebView.CoreWebView2.Navigate(viewModel.CurrentUrl);
         }
         catch (OperationCanceledException)
@@ -267,6 +278,7 @@ public partial class ChatOverlayPreviewTileView : UserControl, IView<ChatOverlay
             return;
         }
 
+        _hasNavigated = true;
         WebView.CoreWebView2.Navigate(_viewModel.CurrentUrl);
     }
 }

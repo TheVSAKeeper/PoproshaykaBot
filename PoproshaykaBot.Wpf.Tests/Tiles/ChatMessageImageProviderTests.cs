@@ -91,6 +91,7 @@ public sealed class ChatMessageImageProviderTests
             Assert.That(h3.HasImage, Is.True);
             Assert.That(h2.HasImage, Is.False);
             Assert.That(h2.Image, Is.Null);
+            Assert.That(provider.TrackedHandleCount, Is.EqualTo(2));
         }
 
         var reloadedH2 = provider.Request(u2, 160, settings);
@@ -98,15 +99,16 @@ public sealed class ChatMessageImageProviderTests
 
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(reloadedH2, Is.SameAs(h2));
-            Assert.That(h2.HasImage, Is.True);
+            Assert.That(reloadedH2, Is.Not.SameAs(h2));
+            Assert.That(reloadedH2.HasImage, Is.True);
             Assert.That(h1.HasImage, Is.False);
+            Assert.That(provider.TrackedHandleCount, Is.EqualTo(2));
             Assert.That(fetchCounts[u2.AbsoluteUri], Is.EqualTo(2));
         }
     }
 
     [Test]
-    public async Task Request_WhenFetchFailsOrBytesAreInvalid_LeavesImageNull()
+    public async Task Request_WhenFetchFailsOrBytesAreInvalid_LeavesImageNullAndDropsHandle()
     {
         var provider = new ChatMessageImageProvider(
             (uri, _, _) =>
@@ -137,7 +139,45 @@ public sealed class ChatMessageImageProviderTests
             Assert.That(nullHandle.HasImage, Is.False);
             Assert.That(brokenHandle.HasImage, Is.False);
             Assert.That(thrownHandle.HasImage, Is.False);
+            Assert.That(provider.TrackedHandleCount, Is.EqualTo(0));
         }
+    }
+
+    [Test]
+    public async Task Request_LimitsConcurrentFetches()
+    {
+        var inFlight = 0;
+        var maxObserved = 0;
+        var pngBytes = CreatePngBytes();
+
+        var provider = new ChatMessageImageProvider(
+            async (_, _, cancellationToken) =>
+            {
+                var current = Interlocked.Increment(ref inFlight);
+                var snapshot = Volatile.Read(ref maxObserved);
+                while (current > snapshot && Interlocked.CompareExchange(ref maxObserved, current, snapshot) != snapshot)
+                {
+                    snapshot = Volatile.Read(ref maxObserved);
+                }
+
+                await Task.Delay(30, cancellationToken);
+                Interlocked.Decrement(ref inFlight);
+                return new MessageImageContent(pngBytes, "image/png");
+            },
+            NullLogger<ChatMessageImageProvider>.Instance,
+            maxLoadedImages: 16,
+            maxConcurrentFetches: 2);
+
+        var settings = new ObsChatSettings { ShowMessageImages = true };
+
+        for (var i = 0; i < 8; i++)
+        {
+            _ = provider.Request(new Uri($"https://i.imgur.com/img-{i}.png"), 160, settings);
+        }
+
+        await provider.WaitForPendingAsync();
+
+        Assert.That(maxObserved, Is.LessThanOrEqualTo(2));
     }
 
     private static byte[] CreatePngBytes()

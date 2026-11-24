@@ -198,11 +198,13 @@ public sealed class ObsIntegrationService(
             await EnsureConnectedAsync(settings, cts.Token).ConfigureAwait(false);
 
             var inputs = await GetInputListAsync(cts.Token).ConfigureAwait(false);
+            var exactBrowserSources = new HashSet<string>(StringComparer.Ordinal);
             var browserSources = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             foreach (var input in inputs)
             {
                 if (IsBrowserSourceInput(input))
                 {
+                    exactBrowserSources.Add(input.Name);
                     browserSources.TryAdd(input.Name, input.Name);
                 }
             }
@@ -210,7 +212,12 @@ public sealed class ObsIntegrationService(
             var refreshed = 0;
             foreach (var sourceName in sourceNames)
             {
-                if (!browserSources.TryGetValue(sourceName, out var actualSourceName))
+                string actualSourceName;
+                if (exactBrowserSources.Contains(sourceName))
+                {
+                    actualSourceName = sourceName;
+                }
+                else if (!browserSources.TryGetValue(sourceName, out actualSourceName!))
                 {
                     LogChatSourceMissingInObs(logger, sourceName, null);
                     continue;

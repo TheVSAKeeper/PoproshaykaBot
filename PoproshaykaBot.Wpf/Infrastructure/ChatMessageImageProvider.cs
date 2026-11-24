@@ -20,13 +20,15 @@ public sealed partial class ChatMessageImageHandle : ObservableObject
     public bool HasImage => Image is not null;
 }
 
-public sealed class ChatMessageImageProvider
+public sealed class ChatMessageImageProvider : IDisposable
 {
-    public const int DefaultMaxLoadedImages = 128;
+    public const int DefaultMaxLoadedImages = 250;
+    public const int MaxConcurrentFetches = 4;
 
     private readonly Func<Uri, ObsChatSettings, CancellationToken, Task<MessageImageContent?>> _fetchAsync;
     private readonly ILogger<ChatMessageImageProvider> _logger;
     private readonly int _maxLoadedImages;
+    private readonly SemaphoreSlim _fetchGate;
     private readonly Lock _sync = new();
     private readonly Lock _applyGate = new();
     private readonly Dictionary<CacheKey, ChatMessageImageHandle> _handles = new();
@@ -38,7 +40,8 @@ public sealed class ChatMessageImageProvider
         : this(
             (uri, settings, cancellationToken) => fetcher.FetchAsync(uri, settings, cancellationToken),
             logger,
-            DefaultMaxLoadedImages)
+            DefaultMaxLoadedImages,
+            MaxConcurrentFetches)
     {
         ArgumentNullException.ThrowIfNull(fetcher);
     }
@@ -46,15 +49,29 @@ public sealed class ChatMessageImageProvider
     internal ChatMessageImageProvider(
         Func<Uri, ObsChatSettings, CancellationToken, Task<MessageImageContent?>> fetchAsync,
         ILogger<ChatMessageImageProvider> logger,
-        int maxLoadedImages = DefaultMaxLoadedImages)
+        int maxLoadedImages = DefaultMaxLoadedImages,
+        int maxConcurrentFetches = MaxConcurrentFetches)
     {
         ArgumentNullException.ThrowIfNull(fetchAsync);
         ArgumentNullException.ThrowIfNull(logger);
         ArgumentOutOfRangeException.ThrowIfLessThan(maxLoadedImages, 1);
+        ArgumentOutOfRangeException.ThrowIfLessThan(maxConcurrentFetches, 1);
 
         _fetchAsync = fetchAsync;
         _logger = logger;
         _maxLoadedImages = maxLoadedImages;
+        _fetchGate = new SemaphoreSlim(maxConcurrentFetches, maxConcurrentFetches);
+    }
+
+    internal int TrackedHandleCount
+    {
+        get
+        {
+            lock (_sync)
+            {
+                return _handles.Count;
+            }
+        }
     }
 
     public ChatMessageImageHandle Request(Uri uri, int maxHeightPixels, ObsChatSettings settings)
@@ -114,31 +131,43 @@ public sealed class ChatMessageImageProvider
         ObsChatSettings settings,
         ChatMessageImageHandle handle)
     {
+        var loaded = false;
+
         try
         {
-            var content = await _fetchAsync(uri, settings, CancellationToken.None).ConfigureAwait(false);
+            await _fetchGate.WaitAsync().ConfigureAwait(false);
 
-            if (content is null)
+            try
             {
-                return;
-            }
+                var content = await _fetchAsync(uri, settings, CancellationToken.None).ConfigureAwait(false);
 
-            var decoded = TryDecode(content.Content, maxHeightPixels, uri);
-
-            if (decoded is null)
-            {
-                return;
-            }
-
-            lock (_applyGate)
-            {
-                lock (_sync)
+                if (content is null)
                 {
-                    TouchLruCore(key);
+                    return;
                 }
 
-                handle.Image = decoded;
-                EvictExcessLocked();
+                var decoded = TryDecode(content.Content, maxHeightPixels, uri);
+
+                if (decoded is null)
+                {
+                    return;
+                }
+
+                lock (_applyGate)
+                {
+                    lock (_sync)
+                    {
+                        TouchLruCore(key);
+                    }
+
+                    handle.Image = decoded;
+                    loaded = true;
+                    EvictExcessLocked();
+                }
+            }
+            finally
+            {
+                _fetchGate.Release();
             }
         }
         catch (Exception exception)
@@ -150,6 +179,11 @@ public sealed class ChatMessageImageProvider
             lock (_sync)
             {
                 _inFlight.Remove(key);
+
+                if (!loaded && _handles.TryGetValue(key, out var current) && ReferenceEquals(current, handle))
+                {
+                    _handles.Remove(key);
+                }
             }
         }
     }
@@ -182,7 +216,7 @@ public sealed class ChatMessageImageProvider
                 var victimKey = oldest.Value;
                 _lruOrder.RemoveFirst();
                 _lruNodes.Remove(victimKey);
-                _handles.TryGetValue(victimKey, out victim);
+                _handles.Remove(victimKey, out victim);
             }
 
             if (victim is not null)
@@ -217,6 +251,11 @@ public sealed class ChatMessageImageProvider
             _logger.ChatMessageImageDecodeFailed(exception, uri);
             return null;
         }
+    }
+
+    public void Dispose()
+    {
+        _fetchGate.Dispose();
     }
 
     private readonly record struct CacheKey(string AbsoluteUri, int MaxHeightPixels);

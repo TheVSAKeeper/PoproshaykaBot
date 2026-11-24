@@ -365,6 +365,7 @@ public sealed partial class ObsIntegrationSectionViewModel : ObservableObject, I
         catch (Exception exception)
         {
             _logger.ObsOperationFailed(exception);
+            ClearMissingInObsState();
             SetStatus($"● Ошибка: {ToSafeMessage(exception)}", StatusSeverity.Error);
         }
         finally
@@ -379,6 +380,7 @@ public sealed partial class ObsIntegrationSectionViewModel : ObservableObject, I
 
         if (!snapshot.IsConnected)
         {
+            ClearMissingInObsState();
             SetStatus($"● Ошибка: {snapshot.ErrorMessage}", StatusSeverity.Error);
             return;
         }
@@ -453,6 +455,21 @@ public sealed partial class ObsIntegrationSectionViewModel : ObservableObject, I
             item.PropertyChanged += OnSourceItemPropertyChanged;
             collection.Add(item);
         }
+    }
+
+    private void ClearMissingInObsState()
+    {
+        foreach (var item in DashboardSources)
+        {
+            item.IsMissingInObs = false;
+        }
+
+        foreach (var item in ChatRefreshSources)
+        {
+            item.IsMissingInObs = false;
+        }
+
+        UpdateMissingSourcesWarnings();
     }
 
     private void UnsubscribeSourceItems(IEnumerable<ObsSourceItemViewModel> items)

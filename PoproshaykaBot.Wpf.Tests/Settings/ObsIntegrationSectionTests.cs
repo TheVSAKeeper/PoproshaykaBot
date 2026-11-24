@@ -108,6 +108,36 @@ public sealed class ObsIntegrationSectionTests
         }
     }
 
+    [Test]
+    public async Task TestConnectionAsync_WhenSubsequentCheckFails_ClearsStaleMissingMarkers()
+    {
+        var client = new FakeObsWebSocketClient();
+        client.EnqueueResponse("GetVersion", """{"obsVersion":"31.0.0","obsWebSocketVersion":"5.5.2"}""");
+        client.EnqueueResponse("GetSceneList", """{"currentProgramSceneName":"Main","scenes":[{"sceneName":"Main"}]}""");
+        client.EnqueueResponse("GetInputList", """{"inputs":[{"inputName":"Chat Overlay","inputKind":"browser_source","unversionedInputKind":"browser_source"}]}""");
+        client.EnqueueResponse("GetInputList", """{"inputs":[{"inputName":"Chat Overlay","inputKind":"browser_source","unversionedInputKind":"browser_source"}]}""");
+
+        var vm = CreateViewModel(client, out _);
+        vm.Load(new ObsIntegrationSettings
+        {
+            Enabled = true,
+            ChatRefreshSources = ["Чатик попрошайка"],
+        });
+
+        await vm.TestConnectionCommand.ExecuteAsync(null);
+        Assert.That(vm.HasMissingChatRefreshSources, Is.True);
+
+        client.FailNextConnect = true;
+        await vm.TestConnectionCommand.ExecuteAsync(null);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(vm.ChatRefreshSources.Single(i => i.Name == "Чатик попрошайка").IsMissingInObs, Is.False);
+            Assert.That(vm.HasMissingChatRefreshSources, Is.False);
+            Assert.That(vm.MissingChatRefreshSourcesWarning, Is.Empty);
+        }
+    }
+
     private ObsIntegrationSectionViewModel CreateViewModel(IObsWebSocketClient client, out SettingsManager settingsManager)
     {
         settingsManager = new SettingsManager(
@@ -137,8 +167,16 @@ public sealed class ObsIntegrationSectionTests
 
         public DateTimeOffset? LastExchangeAt { get; private set; }
 
+        public bool FailNextConnect { get; set; }
+
         public Task<ObsConnectionSnapshot> ConnectAsync(ObsConnectionOptions options, CancellationToken cancellationToken)
         {
+            if (FailNextConnect)
+            {
+                IsConnected = false;
+                return Task.FromResult(new ObsConnectionSnapshot(false, null, null, "OBS недоступен"));
+            }
+
             IsConnected = true;
             return Task.FromResult(new ObsConnectionSnapshot(true, "31.0.0", "5.5.2", null));
         }

@@ -1050,7 +1050,7 @@
                                                FontWeight="{DynamicResource Font.Weight.SemiBold}"
                                                VerticalAlignment="Center" />
                                     <TextBlock Text="· Профили трансляции, рассылка, автозапуск и группы каналов"
-                                               ToolTip="Профили трансляции, рассылка, автозапуск и группы каналов"
+                                               ToolTip="{Binding Text, RelativeSource={RelativeSource Self}}"
                                                Foreground="{DynamicResource Fg.Muted}"
                                                FontSize="{DynamicResource Font.Size.S}"
                                                TextTrimming="CharacterEllipsis"
