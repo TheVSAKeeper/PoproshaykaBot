@@ -169,6 +169,11 @@ public sealed partial class ShellViewModel : ShellViewModelBase, IDisposable
         _settingsSection = new("Настройки", PackIconLucideKind.Settings, settingsPage, key: SectionKeys.Settings);
 
         _statisticsPage = statisticsPage;
+        if (_statisticsPage is not null)
+        {
+            _statisticsPage.StatusReported += OnOverviewStatusReported;
+        }
+
         _statisticsSection = new("Пользователи", PackIconLucideKind.Users, statisticsPage, key: SectionKeys.Users) { StartsGroup = true };
         _streamHistorySection = new(
             "История стримов",
@@ -336,6 +341,10 @@ public sealed partial class ShellViewModel : ShellViewModelBase, IDisposable
         Overview.ConnectionToggleRequested -= OnOverviewConnectionToggleRequested;
         Overview.PlatformRequested -= OnOverviewPlatformRequested;
         Overview.StatusReported -= OnOverviewStatusReported;
+        if (_statisticsPage is not null)
+        {
+            _statisticsPage.StatusReported -= OnOverviewStatusReported;
+        }
         _preferences.PropertyChanged -= OnPreferencesPropertyChanged;
 
         if (ChannelSwitchBanner is not null)

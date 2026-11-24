@@ -208,6 +208,38 @@ public sealed class StatisticsAutoSaver : IHostedComponent, IAsyncDisposable
         return SaveAsync(true, cancellationToken);
     }
 
+    internal async Task<bool> SaveUnitNowAsync(
+        IPeriodicStatisticsUnit unit,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(unit);
+        await _saveSemaphore.WaitAsync(cancellationToken).ConfigureAwait(false);
+
+        try
+        {
+            var work = unit.PrepareSave(force: true);
+            if (work is null)
+            {
+                return false;
+            }
+
+            try
+            {
+                await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+                return true;
+            }
+            catch
+            {
+                work.Rollback();
+                throw;
+            }
+        }
+        finally
+        {
+            _saveSemaphore.Release();
+        }
+    }
+
     public async ValueTask DisposeAsync()
     {
         if (_disposed)

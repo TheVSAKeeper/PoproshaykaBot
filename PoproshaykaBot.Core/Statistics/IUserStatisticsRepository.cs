@@ -46,4 +46,8 @@ public interface IUserStatisticsRepository
         out AccountLinkGroupRecord? resultGroup);
 
     AccountLinkOperationStatus UnlinkAccount(PlatformUserKey key, AccountLinkAuthor author);
+
+    PointsTransferPreview PreviewTransfer(PointsTransferRequest request);
+
+    PointsTransferResult ExecuteTransfer(PointsTransferRequest request);
 }

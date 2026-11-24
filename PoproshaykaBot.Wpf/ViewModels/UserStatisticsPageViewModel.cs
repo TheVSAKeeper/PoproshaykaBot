@@ -45,6 +45,7 @@ public sealed partial class UserStatisticsPageViewModel : ObservableObject, IPag
     private readonly IUiDispatcher? _uiDispatcher;
     private readonly ChannelCatalogStore? _channelCatalog;
     private readonly IAccountLinkingService? _accountLinking;
+    private readonly PointsTransferService _pointsTransfer;
     private readonly ILogger<UserStatisticsPageViewModel>? _logger;
     private readonly List<UserStatisticsRowViewModel> _allRows = [];
     private readonly ObservableCollection<UserStatisticsRowViewModel> _rows = [];
@@ -177,7 +178,8 @@ public sealed partial class UserStatisticsPageViewModel : ObservableObject, IPag
         IUiDispatcher? uiDispatcher = null,
         ChannelCatalogStore? channelCatalog = null,
         IAccountLinkingService? accountLinking = null,
-        ILogger<UserStatisticsPageViewModel>? logger = null)
+        ILogger<UserStatisticsPageViewModel>? logger = null,
+        PointsTransferService? pointsTransfer = null)
     {
         _userStatistics = userStatistics;
         _statisticsAutoSaver = statisticsAutoSaver;
@@ -194,6 +196,7 @@ public sealed partial class UserStatisticsPageViewModel : ObservableObject, IPag
         _channelCatalog = channelCatalog;
         _accountLinking = accountLinking;
         _logger = logger;
+        _pointsTransfer = pointsTransfer ?? new PointsTransferService(userStatistics, eventBus, statisticsAutoSaver);
         _isBalanceExpanded = settings.GetBool(SettingsKeys.UserBalanceExpanded, true);
         _isSummaryExpanded = settings.GetBool(SettingsKeys.UserSummaryExpanded, true);
 
@@ -201,6 +204,7 @@ public sealed partial class UserStatisticsPageViewModel : ObservableObject, IPag
         _subscriptions.Add(eventBus.SubscribeOnUi<UserRewarded>(_ => Reload()));
         _subscriptions.Add(eventBus.SubscribeOnUi<RanksSettingsChanged>(_ => Reload()));
         _subscriptions.Add(eventBus.SubscribeOnUi<AccountLinksChanged>(_ => Reload()));
+        _subscriptions.Add(eventBus.SubscribeOnUi<UserPointsTransferred>(_ => Reload()));
 
         if (_channelCatalog is not null)
         {
@@ -242,6 +246,8 @@ public sealed partial class UserStatisticsPageViewModel : ObservableObject, IPag
     public string PageTitle => "Пользователи";
 
     public string? PageDescription => "Статистика сообщений, баллов и рангов";
+
+    public event Action<string, StatusSeverity>? StatusReported;
 
     public ObservableCollection<UserStatisticsRowViewModel> Users => _rows;
 
@@ -856,6 +862,71 @@ public sealed partial class UserStatisticsPageViewModel : ObservableObject, IPag
         }
     }
 
+    [RelayCommand]
+    private async Task TransferPointsAsync()
+    {
+        PointsTransferSource? initialSource = SelectedSliceOption?.Slice.Kind switch
+        {
+            StatisticsSliceKind.Channel when SelectedSliceOption.Slice.Channel is { } channel
+                => PointsTransferSource.ForChannel(channel),
+            StatisticsSliceKind.UnattributedPlatform when SelectedSliceOption.Slice.Platform is { } platform
+                => PointsTransferSource.ForUnattributed(platform),
+            _ => null,
+        };
+
+        var filteredKeys = _rows
+            .SelectMany(static r => r.Aggregate.Accounts.Select(static a => a.Key))
+            .Distinct()
+            .ToList();
+
+        var selectedKeys = SelectedRow?.Aggregate.Accounts
+            .Select(static a => a.Key)
+            .ToList() ?? [];
+
+        var previousSelectedKey = SelectedRow?.Key;
+
+        var dialog = new TransferPointsDialogViewModel(
+            _userStatistics,
+            _pointsTransfer,
+            _channelCatalog,
+            _userRankService.PointTerm,
+            _dialogService,
+            initialSource,
+            filteredKeys,
+            selectedKeys,
+            hasPageFilter: IsFilterActive,
+            logger: _logger);
+
+        await _dialogService.ShowAsync(dialog);
+
+        if (dialog.ExecutionResult is not { Result: { TransferredCount: > 0 } result } execution)
+        {
+            return;
+        }
+
+        Reload();
+        if (previousSelectedKey is { } key)
+        {
+            TrySelect(key);
+        }
+
+        var pointTerm = _userRankService.PointTerm;
+        var pointsLabel = $"{result.TotalPoints.ToString("N0", UiCulture.Russian)} {pointTerm.ForCount(result.TotalPoints)}";
+        var statusMessage = result.SkippedCount > 0
+            ? $"Перенос баллов завершён: перенесено {result.TransferredCount} ({pointsLabel}), пропущено {result.SkippedCount}"
+            : $"Перенос баллов завершён: перенесено {result.TransferredCount} ({pointsLabel})";
+
+        if (!execution.PersistedToDisk)
+        {
+            StatusReported?.Invoke(
+                $"{statusMessage}, но каталог не записан на диск",
+                StatusSeverity.Warning);
+            return;
+        }
+
+        StatusReported?.Invoke(statusMessage, StatusSeverity.Info);
+    }
+
     [RelayCommand(CanExecute = nameof(CanManageLinks))]
     private async Task LinkAccountAsync()
     {
@@ -1058,28 +1129,18 @@ public sealed partial class UserStatisticsPageViewModel : ObservableObject, IPag
             UserStatisticsSliceOption.All,
         };
 
-        var knownChannels = new HashSet<ChannelKey>(_userStatistics.GetKnownChannels());
-        var catalogSettings = _channelCatalog?.Load();
-        if (catalogSettings is not null)
-        {
-            foreach (var channel in catalogSettings.Channels)
-            {
-                if (Enum.IsDefined(channel.Platform) && !string.IsNullOrWhiteSpace(channel.ChannelId))
-                {
-                    knownChannels.Add(new ChannelKey(channel.Platform, channel.ChannelId.Trim()));
-                }
-            }
-        }
+        var knownChannels = UserStatisticsChannelCatalog.BuildChannels(
+            _userStatistics,
+            _channelCatalog,
+            includeCatalogChannels: true,
+            out var catalogSettings);
 
-        foreach (var channel in knownChannels
-            .OrderBy(static c => c.Platform)
-            .ThenBy(c => ResolveChannelLabel(c, catalogSettings), StringComparer.OrdinalIgnoreCase))
+        foreach (var channel in knownChannels)
         {
-            var label = $"{PlatformVisuals.GetDisplayName(channel.Platform)} · {ResolveChannelLabel(channel, catalogSettings)}";
             nextOptions.Add(new(
-                $"channel:{channel.Platform}:{channel.ChannelId}",
-                label,
-                StatisticsSlice.ForChannel(channel)));
+                $"channel:{channel.Key.Platform}:{channel.Key.ChannelId}",
+                channel.FullLabel,
+                StatisticsSlice.ForChannel(channel.Key)));
         }
 
         if (catalogSettings is not null)
@@ -1135,19 +1196,6 @@ public sealed partial class UserStatisticsPageViewModel : ObservableObject, IPag
         {
             _suppressFilterRebuild = wasSuppressed;
         }
-    }
-
-    private string ResolveChannelLabel(ChannelKey channel, ChannelsSettings? catalogSettings)
-    {
-        var fromCatalog = _channelCatalog?.ResolveDisplayName(channel);
-        if (!string.IsNullOrWhiteSpace(fromCatalog))
-        {
-            return fromCatalog;
-        }
-
-        var fromSettings = catalogSettings?.Channels.FirstOrDefault(c =>
-            c.Platform == channel.Platform && string.Equals(c.ChannelId, channel.ChannelId, StringComparison.Ordinal))?.DisplayName;
-        return string.IsNullOrWhiteSpace(fromSettings) ? channel.ChannelId : fromSettings;
     }
 
     private void RebuildAdjustmentTargets(UserStatisticsRowViewModel? row)

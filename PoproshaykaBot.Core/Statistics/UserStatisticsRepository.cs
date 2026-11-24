@@ -438,6 +438,55 @@ public sealed class UserStatisticsRepository(
         }
     }
 
+    public PointsTransferPreview PreviewTransfer(PointsTransferRequest request)
+    {
+        ValidateTransferRequest(request);
+
+        lock (_lock)
+        {
+            var plan = BuildTransferPlanLocked(request);
+            return plan.ToPreview();
+        }
+    }
+
+    public PointsTransferResult ExecuteTransfer(PointsTransferRequest request)
+    {
+        ValidateTransferRequest(request);
+
+        var now = _timeProvider.GetUtcNow().UtcDateTime;
+
+        lock (_lock)
+        {
+            var plan = BuildTransferPlanLocked(request);
+
+            foreach (var entry in plan.Entries)
+            {
+                if (!entry.Preview.WillTransfer || entry.Preview.TargetUserKey is not { } targetUserKey)
+                {
+                    continue;
+                }
+
+                ApplyTransferEntryLocked(request, entry.SourceUserKey, targetUserKey, entry.Preview, now);
+            }
+
+            if (plan.TransferredCount > 0)
+            {
+                _hasChanges = true;
+                logger.LogInformation(
+                    "Выполнен перенос баллов из {Source} в {TargetPlatform}/{TargetChannelId} (режим: {Mode}): перенесено {TransferredCount}, пропущено {SkippedCount}, баллов {TotalPoints}",
+                    request.Source,
+                    request.Target.Platform,
+                    request.Target.ChannelId,
+                    request.Mode,
+                    plan.TransferredCount,
+                    plan.SkippedCount,
+                    plan.TotalPoints);
+            }
+
+            return plan.ToResult();
+        }
+    }
+
     public void SeedPlatform(StreamingPlatform platform, IEnumerable<UserStatistics> users)
     {
         ArgumentNullException.ThrowIfNull(users);
@@ -1070,6 +1119,378 @@ public sealed class UserStatisticsRepository(
     }
 
     private static DateTime MaxDate(DateTime first, DateTime second) => first > second ? first : second;
+
+    private static void ValidateTransferRequest(PointsTransferRequest request)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        if (!request.Source.IsValid)
+        {
+            throw new ArgumentException("Источник переноса баллов не задан.", nameof(request));
+        }
+
+        if (!request.Target.IsValid)
+        {
+            throw new ArgumentException("Целевой канал переноса баллов не задан.", nameof(request));
+        }
+
+        if (!Enum.IsDefined(request.Mode) || request.Mode == PointsTransferMode.None)
+        {
+            throw new ArgumentException("Режим переноса баллов не задан.", nameof(request));
+        }
+
+        if (request.Source.MatchesTarget(request.Target))
+        {
+            throw new ArgumentException("Источник и целевой канал не могут совпадать.", nameof(request));
+        }
+    }
+
+    private TransferPlan BuildTransferPlanLocked(PointsTransferRequest request)
+    {
+        HashSet<PlatformUserKey>? filter = request.SourceUserKeys is null
+            ? null
+            : [.. request.SourceUserKeys];
+
+        var snapshots = CollectSourceSnapshotsLocked(request.Source, filter);
+        var entries = new List<TransferPlanEntry>(snapshots.Count);
+        var pendingTargetTotals = new Dictionary<PlatformUserKey, (ulong Messages, ulong Bonus, ulong Penalty)>();
+
+        var transferredCount = 0;
+        var skippedCount = 0;
+        var missingLinkSkippedCount = 0;
+        var ambiguousLinkSkippedCount = 0;
+        ulong totalMessages = 0;
+        ulong totalBonus = 0;
+        ulong totalPenalty = 0;
+
+        foreach (var snapshot in snapshots
+            .OrderByDescending(static s => PointsTransferMath.ComputeSignedPoints(s.MessageCount, s.BonusPoints, s.PenaltyPoints))
+            .ThenBy(s => ResolveAccountNameLocked(s.UserKey), StringComparer.OrdinalIgnoreCase)
+            .ThenBy(static s => s.UserKey.UserId, StringComparer.Ordinal))
+        {
+            var sourceName = ResolveAccountNameLocked(snapshot.UserKey);
+            var (targetUserKey, linkSkipReason) = ResolveTransferTargetLocked(snapshot.UserKey, request.Source.Platform, request.Target.Platform);
+
+            var skipReason = linkSkipReason;
+            var requestedMessages = request.Mode == PointsTransferMode.AllCounters ? snapshot.MessageCount : 0UL;
+            var transferredMessages = requestedMessages;
+            var transferredBonus = snapshot.BonusPoints;
+            var transferredPenalty = snapshot.PenaltyPoints;
+
+            if (skipReason == PointsTransferSkipReason.None && targetUserKey is { } resolvedTargetKey)
+            {
+                if (!pendingTargetTotals.TryGetValue(resolvedTargetKey, out var currentTarget))
+                {
+                    if (_channelCounters.TryGetValue(new ChannelUserKey(request.Target, resolvedTargetKey), out var existingTarget))
+                    {
+                        currentTarget = (existingTarget.MessageCount, existingTarget.BonusPoints, existingTarget.PenaltyPoints);
+                    }
+                    else
+                    {
+                        currentTarget = (0UL, 0UL, 0UL);
+                    }
+                }
+
+                transferredMessages = Math.Min(requestedMessages, ulong.MaxValue - currentTarget.Messages);
+                transferredBonus = Math.Min(snapshot.BonusPoints, ulong.MaxValue - currentTarget.Bonus);
+                transferredPenalty = Math.Min(snapshot.PenaltyPoints, ulong.MaxValue - currentTarget.Penalty);
+
+                if (transferredMessages == 0 && transferredBonus == 0 && transferredPenalty == 0)
+                {
+                    skipReason = PointsTransferSkipReason.NothingToTransfer;
+                }
+                else
+                {
+                    pendingTargetTotals[resolvedTargetKey] = (
+                        currentTarget.Messages + transferredMessages,
+                        currentTarget.Bonus + transferredBonus,
+                        currentTarget.Penalty + transferredPenalty);
+                }
+            }
+
+            var targetName = targetUserKey is { } resolvedTarget ? ResolveAccountNameLocked(resolvedTarget) : null;
+
+            var preview = new PointsTransferUserPreview(
+                snapshot.UserKey,
+                sourceName,
+                targetUserKey,
+                targetName,
+                transferredMessages,
+                transferredBonus,
+                transferredPenalty,
+                skipReason);
+
+            entries.Add(new(snapshot.UserKey, preview));
+
+            if (preview.WillTransfer)
+            {
+                transferredCount++;
+                totalMessages = PointsTransferMath.AddSaturating(totalMessages, transferredMessages);
+                totalBonus = PointsTransferMath.AddSaturating(totalBonus, transferredBonus);
+                totalPenalty = PointsTransferMath.AddSaturating(totalPenalty, transferredPenalty);
+            }
+            else
+            {
+                skippedCount++;
+                if (skipReason == PointsTransferSkipReason.MissingTargetAccountLink)
+                {
+                    missingLinkSkippedCount++;
+                }
+                else if (skipReason == PointsTransferSkipReason.AmbiguousTargetAccountLink)
+                {
+                    ambiguousLinkSkippedCount++;
+                }
+            }
+        }
+
+        var totalPoints = PointsTransferMath.ComputeSignedPoints(totalMessages, totalBonus, totalPenalty);
+        return new(
+            request.Source,
+            request.Target,
+            request.Mode,
+            entries,
+            transferredCount,
+            skippedCount,
+            missingLinkSkippedCount,
+            ambiguousLinkSkippedCount,
+            totalMessages,
+            totalBonus,
+            totalPenalty,
+            totalPoints);
+    }
+
+    private List<SourceCounterSnapshot> CollectSourceSnapshotsLocked(
+        PointsTransferSource source,
+        HashSet<PlatformUserKey>? filter)
+    {
+        var list = new List<SourceCounterSnapshot>();
+
+        if (source.Kind == PointsTransferSourceKind.UnattributedPlatform)
+        {
+            foreach (var counter in _unattributedCounters.Values)
+            {
+                if (counter.Platform != source.Platform)
+                {
+                    continue;
+                }
+
+                var userKey = counter.UserKey;
+                if (filter is not null && !filter.Contains(userKey))
+                {
+                    continue;
+                }
+
+                list.Add(new(userKey, counter.MessageCount, counter.BonusPoints, counter.PenaltyPoints, counter.FirstSeen, counter.LastSeen));
+            }
+
+            return list;
+        }
+
+        var sourceChannel = source.AsChannelKey!.Value;
+        foreach (var counter in _channelCounters.Values)
+        {
+            if (counter.ChannelKey != sourceChannel)
+            {
+                continue;
+            }
+
+            var userKey = counter.UserKey;
+            if (filter is not null && !filter.Contains(userKey))
+            {
+                continue;
+            }
+
+            list.Add(new(userKey, counter.MessageCount, counter.BonusPoints, counter.PenaltyPoints, counter.FirstSeen, counter.LastSeen));
+        }
+
+        return list;
+    }
+
+    private (PlatformUserKey? TargetUserKey, PointsTransferSkipReason SkipReason) ResolveTransferTargetLocked(
+        PlatformUserKey sourceUserKey,
+        StreamingPlatform sourcePlatform,
+        StreamingPlatform targetPlatform)
+    {
+        if (sourcePlatform == targetPlatform)
+        {
+            return (sourceUserKey, PointsTransferSkipReason.None);
+        }
+
+        if (!_keyToGroupId.TryGetValue(sourceUserKey, out var groupId)
+            || !_linkGroups.TryGetValue(groupId, out var group))
+        {
+            return (null, PointsTransferSkipReason.MissingTargetAccountLink);
+        }
+
+        PlatformUserKey? matched = null;
+        var count = 0;
+        foreach (var member in group.Members)
+        {
+            if (member.Platform == targetPlatform)
+            {
+                matched = member.Key;
+                count++;
+                if (count > 1)
+                {
+                    return (null, PointsTransferSkipReason.AmbiguousTargetAccountLink);
+                }
+            }
+        }
+
+        return count == 1
+            ? (matched, PointsTransferSkipReason.None)
+            : (null, PointsTransferSkipReason.MissingTargetAccountLink);
+    }
+
+    private string ResolveAccountNameLocked(PlatformUserKey key)
+    {
+        return _accounts.TryGetValue(key, out var account) && !string.IsNullOrWhiteSpace(account.Name)
+            ? account.Name
+            : key.UserId;
+    }
+
+    private void ApplyTransferEntryLocked(
+        PointsTransferRequest request,
+        PlatformUserKey sourceUserKey,
+        PlatformUserKey targetUserKey,
+        PointsTransferUserPreview preview,
+        DateTime now)
+    {
+        var movedMessages = preview.MessageCount;
+        var movedBonus = preview.BonusPoints;
+        var movedPenalty = preview.PenaltyPoints;
+        DateTime sourceFirstSeen;
+        DateTime sourceLastSeen;
+
+        if (request.Source.Kind == PointsTransferSourceKind.UnattributedPlatform)
+        {
+            if (!_unattributedCounters.TryGetValue(sourceUserKey, out var sourceCounter))
+            {
+                return;
+            }
+
+            sourceFirstSeen = sourceCounter.FirstSeen;
+            sourceLastSeen = sourceCounter.LastSeen;
+            sourceCounter.MessageCount -= Math.Min(sourceCounter.MessageCount, movedMessages);
+            sourceCounter.BonusPoints -= Math.Min(sourceCounter.BonusPoints, movedBonus);
+            sourceCounter.PenaltyPoints -= Math.Min(sourceCounter.PenaltyPoints, movedPenalty);
+
+            if (sourceCounter.MessageCount == 0 && sourceCounter.BonusPoints == 0 && sourceCounter.PenaltyPoints == 0)
+            {
+                _unattributedCounters.Remove(sourceUserKey);
+            }
+        }
+        else
+        {
+            var sourceCompositeKey = new ChannelUserKey(request.Source.AsChannelKey!.Value, sourceUserKey);
+            if (!_channelCounters.TryGetValue(sourceCompositeKey, out var sourceCounter))
+            {
+                return;
+            }
+
+            sourceFirstSeen = sourceCounter.FirstSeen;
+            sourceLastSeen = sourceCounter.LastSeen;
+            sourceCounter.MessageCount -= Math.Min(sourceCounter.MessageCount, movedMessages);
+            sourceCounter.BonusPoints -= Math.Min(sourceCounter.BonusPoints, movedBonus);
+            sourceCounter.PenaltyPoints -= Math.Min(sourceCounter.PenaltyPoints, movedPenalty);
+
+            if (sourceCounter.MessageCount == 0 && sourceCounter.BonusPoints == 0 && sourceCounter.PenaltyPoints == 0)
+            {
+                _channelCounters.Remove(sourceCompositeKey);
+            }
+        }
+
+        var targetCompositeKey = new ChannelUserKey(request.Target, targetUserKey);
+        if (!_channelCounters.TryGetValue(targetCompositeKey, out var targetCounter))
+        {
+            targetCounter = new()
+            {
+                Platform = request.Target.Platform,
+                ChannelId = request.Target.ChannelId,
+                UserId = targetUserKey.UserId,
+                FirstSeen = sourceFirstSeen == default ? now : sourceFirstSeen,
+                LastSeen = sourceLastSeen == default ? now : sourceLastSeen,
+            };
+            _channelCounters[targetCompositeKey] = targetCounter;
+        }
+        else if (request.Mode == PointsTransferMode.AllCounters && movedMessages > 0)
+        {
+            targetCounter.FirstSeen = MinDate(targetCounter.FirstSeen, sourceFirstSeen);
+            targetCounter.LastSeen = MaxDate(targetCounter.LastSeen, sourceLastSeen);
+        }
+
+        if (movedMessages > 0)
+        {
+            targetCounter.MessageCount = PointsTransferMath.AddSaturating(targetCounter.MessageCount, movedMessages);
+        }
+
+        targetCounter.BonusPoints = PointsTransferMath.AddSaturating(targetCounter.BonusPoints, movedBonus);
+        targetCounter.PenaltyPoints = PointsTransferMath.AddSaturating(targetCounter.PenaltyPoints, movedPenalty);
+
+        UpsertAccountSeedLocked(
+            targetUserKey,
+            string.IsNullOrWhiteSpace(preview.TargetUserName) ? targetUserKey.UserId : preview.TargetUserName,
+            targetCounter.FirstSeen,
+            targetCounter.LastSeen);
+    }
+
+    private readonly record struct SourceCounterSnapshot(
+        PlatformUserKey UserKey,
+        ulong MessageCount,
+        ulong BonusPoints,
+        ulong PenaltyPoints,
+        DateTime FirstSeen,
+        DateTime LastSeen);
+
+    private sealed record TransferPlanEntry(
+        PlatformUserKey SourceUserKey,
+        PointsTransferUserPreview Preview);
+
+    private sealed record TransferPlan(
+        PointsTransferSource Source,
+        ChannelKey Target,
+        PointsTransferMode Mode,
+        List<TransferPlanEntry> Entries,
+        int TransferredCount,
+        int SkippedCount,
+        int MissingLinkSkippedCount,
+        int AmbiguousLinkSkippedCount,
+        ulong TotalMessages,
+        ulong TotalBonusPoints,
+        ulong TotalPenaltyPoints,
+        long TotalPoints)
+    {
+        public PointsTransferPreview ToPreview()
+        {
+            return new(
+                Source,
+                Target,
+                Mode,
+                Entries.Select(static e => e.Preview).ToList(),
+                TransferredCount,
+                SkippedCount,
+                TotalMessages,
+                TotalBonusPoints,
+                TotalPenaltyPoints,
+                TotalPoints);
+        }
+
+        public PointsTransferResult ToResult()
+        {
+            return new(
+                Source,
+                Target,
+                Mode,
+                TransferredCount,
+                SkippedCount,
+                MissingLinkSkippedCount,
+                AmbiguousLinkSkippedCount,
+                TotalMessages,
+                TotalBonusPoints,
+                TotalPenaltyPoints,
+                TotalPoints);
+        }
+    }
 
     private sealed class ViewerAggregateBuilder(ViewerIdentityKey identityKey)
     {

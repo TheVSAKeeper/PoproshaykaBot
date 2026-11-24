@@ -12,6 +12,8 @@ public sealed class UserStatisticsLoader
         _unit = unit;
     }
 
+    internal IPeriodicStatisticsUnit PersistenceUnit => _unit;
+
     public StatisticsLoadState LoadState => _unit.LoadState;
 
     public bool IsLoaded => _unit.IsLoaded;

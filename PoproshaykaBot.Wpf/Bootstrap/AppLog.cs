@@ -428,4 +428,10 @@ internal static partial class AppLog
 
     [LoggerMessage(EventId = 1810, Level = LogLevel.Warning, Message = "Ошибка поиска категорий игр в автодополнении")]
     public static partial void GameAutocompleteSearchFailed(this ILogger logger, Exception? exception);
+
+    [LoggerMessage(EventId = 1811, Level = LogLevel.Information, Message = "Перенос баллов со страницы «Пользователи»: перенесено {TransferredCount}, пропущено {SkippedCount}, баллов {TotalPoints}")]
+    public static partial void UserPointsTransferred(this ILogger logger, int transferredCount, int skippedCount, long totalPoints);
+
+    [LoggerMessage(EventId = 1812, Level = LogLevel.Error, Message = "Ошибка переноса баллов между источниками")]
+    public static partial void UserPointsTransferFailed(this ILogger logger, Exception? exception);
 }

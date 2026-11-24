@@ -30,7 +30,7 @@ public partial class UserStatisticsPageView : IView<UserStatisticsPageViewModel>
     public const double RankColumnListWidth = 464;
     public const double SummaryCompactHeight = 460;
     public const double InspectorCombinedScrollHeight = 500;
-    public const double ToolbarWrapWidth = 370;
+    public const double ToolbarWrapWidth = 450;
 
     private double _listWidth;
     private string? _announcedAdjustmentError;

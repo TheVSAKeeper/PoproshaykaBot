@@ -384,6 +384,11 @@
                         </Style.Triggers>
                     </Style>
                 </StackPanel.Style>
+                <Button Content="Перенос баллов…"
+                        Style="{StaticResource Button.Secondary}"
+                        Command="{Binding TransferPointsCommand}"
+                        AutomationProperties.Name="Перенести баллы между источниками"
+                        Margin="8,0,0,0" />
                 <Button Content="Названия баллов"
                         Style="{StaticResource Button.Secondary}"
                         Command="{Binding EditPointTermCommand}"

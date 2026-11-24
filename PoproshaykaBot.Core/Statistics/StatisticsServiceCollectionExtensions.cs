@@ -59,6 +59,11 @@ public static class StatisticsServiceCollectionExtensions
             sp.GetRequiredService<IEventBus>(),
             sp.GetService<TimeProvider>()));
         services.AddSingleton<StatisticsAutoSaver>();
+        services.AddSingleton(sp => new PointsTransferService(
+            sp.GetRequiredService<IUserStatisticsRepository>(),
+            sp.GetRequiredService<IEventBus>(),
+            sp.GetRequiredService<StatisticsAutoSaver>(),
+            sp.GetRequiredService<UserStatisticsLoader>()));
         services.AddKeyedSingleton<IHostedComponent>(
             HostingKeys.Shared,
             (sp, _) => sp.GetRequiredService<StatisticsAutoSaver>());
