@@ -198,15 +198,19 @@ public sealed class ObsIntegrationService(
             await EnsureConnectedAsync(settings, cts.Token).ConfigureAwait(false);
 
             var inputs = await GetInputListAsync(cts.Token).ConfigureAwait(false);
-            var browserSources = inputs
-                .Where(IsBrowserSourceInput)
-                .Select(input => input.Name)
-                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+            var browserSources = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var input in inputs)
+            {
+                if (IsBrowserSourceInput(input))
+                {
+                    browserSources.TryAdd(input.Name, input.Name);
+                }
+            }
 
             var refreshed = 0;
             foreach (var sourceName in sourceNames)
             {
-                if (!browserSources.Contains(sourceName))
+                if (!browserSources.TryGetValue(sourceName, out var actualSourceName))
                 {
                     LogChatSourceMissingInObs(logger, sourceName, null);
                     continue;
@@ -215,16 +219,16 @@ public sealed class ObsIntegrationService(
                 try
                 {
                     await client.SendRequestAsync("PressInputPropertiesButton",
-                            new { inputName = sourceName, propertyName = "refreshnocache" },
+                            new { inputName = actualSourceName, propertyName = "refreshnocache" },
                             cts.Token)
                         .ConfigureAwait(false);
 
-                    LogChatSourceRefreshed(logger, sourceName, null);
+                    LogChatSourceRefreshed(logger, actualSourceName, null);
                     refreshed++;
                 }
                 catch (Exception exception) when (exception is not OperationCanceledException)
                 {
-                    LogChatSourceRefreshRejected(logger, sourceName, exception);
+                    LogChatSourceRefreshRejected(logger, actualSourceName, exception);
                 }
             }
 

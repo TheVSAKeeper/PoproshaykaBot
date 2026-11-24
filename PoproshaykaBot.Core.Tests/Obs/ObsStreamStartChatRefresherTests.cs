@@ -80,6 +80,7 @@ public sealed class ObsStreamStartChatRefresherTests
     {
         SaveSettings(true, true, "Chat Overlay", "Secondary Chat");
         _client.EnqueueResponse("GetVersion", """{"obsVersion":"31.0.0"}""");
+        _client.EnqueueResponse("GetInputList", BuildBrowserInputsJson("Chat Overlay", "Secondary Chat"));
         _client.MarkConnected();
 
         await _refresher.StartAsync(CancellationToken.None);
@@ -95,6 +96,7 @@ public sealed class ObsStreamStartChatRefresherTests
     {
         SaveSettings(true, true, "Chat Overlay");
         _client.EnqueueResponse("GetVersion", """{"obsVersion":"31.0.0"}""");
+        _client.EnqueueResponse("GetInputList", BuildBrowserInputsJson("Chat Overlay"));
         _client.MarkConnected();
 
         await _refresher.StartAsync(CancellationToken.None);
@@ -112,7 +114,9 @@ public sealed class ObsStreamStartChatRefresherTests
     {
         SaveSettings(true, true, "Chat Overlay");
         _client.EnqueueResponse("GetVersion", """{"obsVersion":"31.0.0"}""");
+        _client.EnqueueResponse("GetInputList", BuildBrowserInputsJson("Chat Overlay"));
         _client.EnqueueResponse("GetVersion", """{"obsVersion":"31.0.0"}""");
+        _client.EnqueueResponse("GetInputList", BuildBrowserInputsJson("Chat Overlay"));
         _client.MarkConnected();
 
         await _refresher.StartAsync(CancellationToken.None);
@@ -137,6 +141,12 @@ public sealed class ObsStreamStartChatRefresherTests
         await _refresher.StopAsync(CancellationToken.None);
 
         Assert.That(_client.PressButtonRequests, Is.Empty);
+    }
+
+    private static string BuildBrowserInputsJson(params string[] names)
+    {
+        var inputs = names.Select(name => new { inputName = name, inputKind = "browser_source" }).ToArray();
+        return JsonSerializer.Serialize(new { inputs });
     }
 
     private void SaveSettings(bool enabled, bool autoRefresh, params string[] sources)
