@@ -8,6 +8,12 @@
                 Value="Pixel" />
     </Style>
 
+    <Style TargetType="ListBoxItem"
+           BasedOn="{StaticResource {x:Type ListBoxItem}}">
+        <Setter Property="VerticalContentAlignment"
+                Value="Center" />
+    </Style>
+
     <Style x:Key="MonoCell"
            TargetType="TextBlock">
         <Setter Property="FontFamily"

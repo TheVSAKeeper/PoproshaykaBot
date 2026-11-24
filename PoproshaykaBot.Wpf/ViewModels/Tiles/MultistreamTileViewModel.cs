@@ -746,7 +746,7 @@ public sealed partial class MultistreamPlatformRowViewModel(
     private string _connectionActionLabel = "Подключить";
 
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(ConnectionActionWithPlatform))]
+    [NotifyPropertyChangedFor(nameof(IsConnectionAttentionRequired))]
     private BotLifecyclePhase _lifecyclePhase;
 
     [ObservableProperty]
@@ -771,9 +771,11 @@ public sealed partial class MultistreamPlatformRowViewModel(
     private bool _isSetupRequired;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsConnectionAttentionRequired))]
     private bool _showConnectionAction;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsConnectionAttentionRequired))]
     private bool _isOnline;
 
     [ObservableProperty]
@@ -874,6 +876,12 @@ public sealed partial class MultistreamPlatformRowViewModel(
     public string PlatformActionName => $"{PlatformActionLabel} – {DisplayName}";
 
     public string ConnectionActionName => $"{ConnectionActionLabel} – {DisplayName}";
+
+    public bool IsConnectionAttentionRequired =>
+        ShowConnectionAction
+        && IsOnline
+        && !IsChatConnected
+        && LifecyclePhase is not (BotLifecyclePhase.Connecting or BotLifecyclePhase.Connected or BotLifecyclePhase.Disconnecting);
 
     public string AutomationSummary => string.Join(", ", new[]
     {
@@ -1096,6 +1104,7 @@ public sealed partial class MultistreamPlatformRowViewModel(
         CanToggleConnection = _canToggleConnectionBase && !IsSwitchingChannel;
 
         (ChatText, ChatSeverity) = DescribeChat(enabled, phase, chat);
+        OnPropertyChanged(nameof(IsConnectionAttentionRequired));
     }
 
     private (string, StatusSeverity) DescribeChat(bool enabled, BotLifecyclePhase phase, ChatConnectionStatus? chat)
@@ -1132,7 +1141,7 @@ public sealed partial class MultistreamPlatformRowViewModel(
 
         return chat?.Issue switch
         {
-            ChatReadIssue.WaitingForActiveBroadcast => ("Чат: ожидание чата эфира", StatusSeverity.Info),
+            ChatReadIssue.WaitingForActiveBroadcast => ("Чат: ожидание чата эфира", IsOnline ? StatusSeverity.Warning : StatusSeverity.Info),
             ChatReadIssue.QuotaExhausted => ("Чат: исчерпана квота API", StatusSeverity.Warning),
             ChatReadIssue.TransientError => ("Чат: сбой чтения, повтор подключения", StatusSeverity.Warning),
             ChatReadIssue.SubscriptionFailed => ("Чат: подписка не подтверждена", StatusSeverity.Error),
@@ -1143,8 +1152,8 @@ public sealed partial class MultistreamPlatformRowViewModel(
                 (BotLifecyclePhase.Failed, _) or (_, ConnectionState.Failed) =>
                     ("Чат: сбой подключения, подробности в журнале", StatusSeverity.Error),
                 (BotLifecyclePhase.Connected, null or ConnectionState.Unknown) =>
-                    ("Чат: статус неизвестен", StatusSeverity.Info),
-                _ => ("Чат: не подключён", StatusSeverity.Info),
+                    ("Чат: статус неизвестен", IsOnline ? StatusSeverity.Warning : StatusSeverity.Info),
+                _ => ("Чат: не подключён", IsOnline ? StatusSeverity.Warning : StatusSeverity.Info),
             },
         };
     }

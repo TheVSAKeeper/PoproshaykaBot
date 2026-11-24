@@ -2,6 +2,7 @@
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
+using KeepShell.Bootstrap;
 using KeepShell.Services.Platform;
 using KeepShell.ViewModels;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -878,6 +879,106 @@ public sealed class MultistreamTileTests
         }
     }
 
+    [Test]
+    [Apartment(ApartmentState.STA)]
+    public async Task Отключённый_бот_при_идущем_эфире_выделяется_Warning_и_Primary_кнопкой_без_лишнего_зелёного()
+    {
+        EnsureWpfResources();
+        var directory = Directory.CreateTempSubdirectory("poproshayka-multistream-hierarchy-");
+
+        try
+        {
+            var twitchInfo = new StreamInfo
+            {
+                Title = "Стрим на проверку",
+                ViewerCount = 3540,
+                StartedAt = DateTime.UtcNow.AddMinutes(-45),
+            };
+            var twitch = new FakePlatform(StreamingPlatform.Twitch)
+            {
+                StreamStatus = new FakeStreamStatus(StreamStatus.Online, twitchInfo),
+            };
+            var youtube = new FakePlatform(StreamingPlatform.YouTube)
+            {
+                StreamStatus = new FakeStreamStatus(StreamStatus.Offline),
+            };
+            var platforms = new ChatPlatformRegistry([twitch, youtube]);
+            var catalog = new ChannelCatalogStore(filePath: Path.Combine(directory.FullName, "channels.json"));
+            var bus = new InMemoryEventBus(NullLogger<InMemoryEventBus>.Instance);
+            var dispatcher = new ManualUiDispatcher();
+            var youtubeSettings = new YouTubeSettingsStore(filePath: Path.Combine(directory.FullName, "youtube.json"));
+            await using var connection = new BotConnectionManager(
+                new AppHost([], NullLogger<AppHost>.Instance),
+                [new FakeConnectionAdapter(StreamingPlatform.Twitch), new FakeConnectionAdapter(StreamingPlatform.YouTube)],
+                null, bus, NullLogger<BotConnectionManager>.Instance);
+
+            using var tile = new MultistreamTileViewModel(
+                platforms, catalog, connection, new PlatformAuthRegistry([]), [], bus, dispatcher, youtubeSettings);
+            tile.SetOnScreen(true);
+
+            var twitchRow = tile.Rows.Single(r => r.Platform == StreamingPlatform.Twitch);
+            var ytRow = tile.Rows.Single(r => r.Platform == StreamingPlatform.YouTube);
+
+            Assert.Multiple(() =>
+            {
+                Assert.That(twitchRow.ChatText, Is.EqualTo("Чат: не подключён"));
+                Assert.That(twitchRow.ChatSeverity, Is.EqualTo(StatusSeverity.Warning));
+                Assert.That(twitchRow.IsConnectionAttentionRequired, Is.True);
+                Assert.That(ytRow.ChatText, Is.EqualTo("Чат: не подключён"));
+                Assert.That(ytRow.ChatSeverity, Is.EqualTo(StatusSeverity.Info));
+                Assert.That(ytRow.IsConnectionAttentionRequired, Is.False);
+            });
+
+            using var bindingErrors = BindingErrorSink.Attach();
+            bindingErrors.Clear();
+
+            var view = new MultistreamTileView { DataContext = tile };
+            view.Measure(new(320, 600));
+            view.Arrange(new(0, 0, 320, 600));
+            view.UpdateLayout();
+
+            var buttons = Descendants<Button>(view).ToArray();
+            var twitchConnect = buttons.Single(b => System.Windows.Automation.AutomationProperties.GetAutomationId(b) == "MultistreamConnectionTwitch");
+            var ytConnect = buttons.Single(b => System.Windows.Automation.AutomationProperties.GetAutomationId(b) == "MultistreamConnectionYouTube");
+            var primaryStyle = (Style)Application.Current.FindResource("Button.Primary");
+            var secondaryStyle = (Style)Application.Current.FindResource("Button.Secondary");
+            var neutralBadgeStyle = (Style)Application.Current.FindResource("Badge");
+            var chatBlocks = Descendants<TextBlock>(view).Where(t => t.Name == "ChatStatusText").ToArray();
+            var viewerBadges = Descendants<Border>(view).Where(b => b.Name == "ViewerCountBadge").ToArray();
+
+            Assert.Multiple(() =>
+            {
+                Assert.That(bindingErrors.Count, Is.Zero);
+                Assert.That(twitchConnect.Style, Is.SameAs(primaryStyle));
+                Assert.That(ytConnect.Style, Is.SameAs(secondaryStyle));
+                Assert.That(chatBlocks.Select(t => t.FontSize), Is.All.EqualTo((double)Application.Current.FindResource("Font.Size.Body")));
+                Assert.That(chatBlocks.Select(t => t.FontWeight), Is.All.EqualTo(FontWeights.SemiBold));
+                Assert.That(viewerBadges[0].Style, Is.SameAs(neutralBadgeStyle));
+                Assert.That(view.DesiredSize.Width, Is.LessThanOrEqualTo(320));
+            });
+
+            connection.StartConnection(StreamingPlatform.Twitch);
+            await connection.WaitForConnectionAsync(StreamingPlatform.Twitch);
+            twitch.ChatState = ConnectionState.Connected;
+            tile.SetOnScreen(true);
+            dispatcher.Timers.Single().Tick();
+            view.UpdateLayout();
+
+            Assert.Multiple(() =>
+            {
+                Assert.That(twitchRow.ChatText, Is.EqualTo("Чат: подключён"));
+                Assert.That(twitchRow.ChatSeverity, Is.EqualTo(StatusSeverity.Success));
+                Assert.That(twitchRow.IsConnectionAttentionRequired, Is.False);
+                Assert.That(twitchConnect.Style, Is.SameAs(secondaryStyle));
+                Assert.That(bindingErrors.Count, Is.Zero);
+            });
+        }
+        finally
+        {
+            directory.Delete(recursive: true);
+        }
+    }
+
     private sealed class NoOpLauncher : IShellLauncher
     {
         public bool Open(string target) => true;
@@ -1025,6 +1126,7 @@ public sealed class MultistreamTileTests
             "pack://application:,,,/KeepShell;component/Resources/Converters.xaml",
             "pack://application:,,,/KeepShell;component/Resources/Styles/Controls.xaml",
             "pack://application:,,,/PoproshaykaBot.Wpf;component/Infrastructure/Converters/AppConverters.xaml",
+            "pack://application:,,,/PoproshaykaBot.Wpf;component/Resources/TableStyles.xaml",
             "pack://application:,,,/PoproshaykaBot.Wpf;component/Resources/PlatformIcons.xaml",
         ];
         var merged = Application.Current!.Resources.MergedDictionaries;

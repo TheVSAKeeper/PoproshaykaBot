@@ -16,10 +16,10 @@
             <DockPanel LastChildFill="True">
                 <Button DockPanel.Dock="Right"
                         Style="{StaticResource Button.Secondary}"
-                        MinHeight="26"
-                        Padding="8,2"
+                        MinHeight="28"
+                        Padding="10,3"
                         Margin="8,0,0,0"
-                        FontSize="{DynamicResource Font.Size.XS}"
+                        FontSize="{DynamicResource Font.Size.S}"
                         Content="{Binding BulkConnectionLabel}"
                         Command="{Binding BulkConnectionCommand}"
                         Visibility="{Binding ShowBulkConnectionAction, Converter={StaticResource BoolToVisibility}}"
@@ -33,7 +33,7 @@
                              Margin="0,0,6,0"
                              keepshell:SeverityBrushBehavior.Fill="{Binding SummarySeverity}" />
                     <TextBlock Text="{Binding SummaryText}"
-                               FontSize="{DynamicResource Font.Size.S}"
+                               FontSize="{DynamicResource Font.Size.M}"
                                FontWeight="{DynamicResource Font.Weight.SemiBold}"
                                Foreground="{DynamicResource Fg.Primary}"
                                TextTrimming="CharacterEllipsis"
@@ -102,15 +102,31 @@
                                        Text="{Binding SwitchErrorText}"
                                        keepshell:SeverityBrushBehavior.Foreground="{Binding SwitchErrorSeverity}"
                                        Visibility="{Binding HasSwitchError, Converter={StaticResource BoolToVisibility}}" />
-                            <DockPanel LastChildFill="True">
-                                <Border DockPanel.Dock="Right"
-                                        Style="{StaticResource Badge.Success}"
-                                        Padding="6,1"
+                            <DockPanel Margin="0,2,0,2">
+                                <Ellipse DockPanel.Dock="Left"
+                                         Width="8"
+                                         Height="8"
+                                         VerticalAlignment="Center"
+                                         Margin="0,0,7,0"
+                                         keepshell:SeverityBrushBehavior.Fill="{Binding ChatSeverity}" />
+                                <TextBlock x:Name="ChatStatusText"
+                                           Text="{Binding ChatText}"
+                                           TextWrapping="Wrap"
+                                           FontSize="{DynamicResource Font.Size.Body}"
+                                           FontWeight="{DynamicResource Font.Weight.SemiBold}"
+                                           keepshell:SeverityBrushBehavior.Foreground="{Binding ChatSeverity}" />
+                            </DockPanel>
+                            <DockPanel LastChildFill="True" Margin="0,2,0,0">
+                                <Border x:Name="ViewerCountBadge"
+                                        DockPanel.Dock="Right"
+                                        Style="{StaticResource Badge}"
+                                        Padding="7,2"
                                         Margin="6,0,0,0"
                                         VerticalAlignment="Center"
                                         Visibility="{Binding HasViewerCount, Converter={StaticResource BoolToVisibility}}">
                                     <TextBlock Text="{Binding ViewerCountText}"
-                                               FontSize="{DynamicResource Font.Size.XS}" />
+                                               Foreground="{DynamicResource Fg.Secondary}"
+                                               FontSize="{DynamicResource Font.Size.S}" />
                                 </Border>
                                 <Ellipse DockPanel.Dock="Left"
                                          Width="6"
@@ -118,28 +134,18 @@
                                          VerticalAlignment="Center"
                                          Margin="0,0,6,0"
                                          keepshell:SeverityBrushBehavior.Fill="{Binding BroadcastSeverity}" />
-                                <TextBlock Style="{StaticResource PlatformStatus}"
+                                <TextBlock x:Name="BroadcastStatusText"
+                                           Style="{StaticResource PlatformStatus}"
                                            Text="{Binding BroadcastText}"
-                                           keepshell:SeverityBrushBehavior.Foreground="{Binding BroadcastSeverity}" />
+                                           Foreground="{DynamicResource Fg.Secondary}" />
                             </DockPanel>
-                            <TextBlock Margin="12,1,0,2"
+                            <TextBlock Margin="12,2,0,2"
                                        Text="{Binding LiveSummaryText}"
                                        ToolTip="{Binding LiveSummaryText}"
                                        Foreground="{DynamicResource Fg.Muted}"
-                                       FontSize="{DynamicResource Font.Size.XS}"
+                                       FontSize="{DynamicResource Font.Size.S}"
                                        TextTrimming="CharacterEllipsis"
                                        Visibility="{Binding HasLiveSummary, Converter={StaticResource BoolToVisibility}}" />
-                            <DockPanel Margin="0,2,0,0">
-                                <Ellipse DockPanel.Dock="Left"
-                                         Width="6"
-                                         Height="6"
-                                         VerticalAlignment="Center"
-                                         Margin="0,0,6,0"
-                                         keepshell:SeverityBrushBehavior.Fill="{Binding ChatSeverity}" />
-                                <TextBlock Style="{StaticResource PlatformStatus}"
-                                           Text="{Binding ChatText}"
-                                           keepshell:SeverityBrushBehavior.Foreground="{Binding ChatSeverity}" />
-                            </DockPanel>
                             <WrapPanel Margin="0,5,0,0"
                                        Visibility="{Binding HasContextBadges, Converter={StaticResource BoolToVisibility}}">
                                 <Border Style="{StaticResource Badge}"
@@ -149,7 +155,7 @@
                                         Visibility="{Binding IsBotOnly, Converter={StaticResource BoolToVisibility}}">
                                     <TextBlock Text="Только бот"
                                                Foreground="{DynamicResource Fg.Secondary}"
-                                               FontSize="{DynamicResource Font.Size.XS}" />
+                                               FontSize="{DynamicResource Font.Size.S}" />
                                 </Border>
                                 <Border Style="{StaticResource Badge.Info}"
                                         Padding="6,1"
@@ -157,25 +163,28 @@
                                         ToolTip="{Binding SwitchModeBadgeTooltip}"
                                         Visibility="{Binding HasSwitchModeBadge, Converter={StaticResource BoolToVisibility}}">
                                     <TextBlock Text="{Binding SwitchModeBadgeText}"
-                                               FontSize="{DynamicResource Font.Size.XS}" />
+                                               FontSize="{DynamicResource Font.Size.S}" />
                                 </Border>
-                                <Border Style="{StaticResource Badge.Success}"
+                                <Border x:Name="BackgroundLiveBadge"
+                                        Style="{StaticResource Badge}"
                                         Padding="6,1"
                                         Margin="0,0,5,3"
                                         ToolTip="{Binding BackgroundLiveTooltip}"
                                         Visibility="{Binding HasBackgroundLive, Converter={StaticResource BoolToVisibility}}">
                                     <TextBlock Text="{Binding BackgroundLiveText}"
-                                               FontSize="{DynamicResource Font.Size.XS}" />
+                                               Foreground="{DynamicResource Fg.Secondary}"
+                                               FontSize="{DynamicResource Font.Size.S}" />
                                 </Border>
                             </WrapPanel>
                             <TextBlock Margin="0,3,0,0"
                                        Text="{Binding MonitoringWarningText}"
                                        Foreground="{DynamicResource State.WarningText}"
-                                       FontSize="{DynamicResource Font.Size.XS}"
+                                       FontSize="{DynamicResource Font.Size.S}"
                                        TextWrapping="Wrap"
                                        Visibility="{Binding HasMonitoringWarning, Converter={StaticResource BoolToVisibility}}" />
-                            <WrapPanel Margin="0,2,0,0">
-                                <Button Style="{StaticResource Button.Secondary}"
+                            <WrapPanel Margin="0,4,0,0">
+                                <Button x:Name="ToggleConnection"
+                                        Style="{StaticResource Button.Secondary}"
                                         MinHeight="30"
                                         Padding="10,3"
                                         FontSize="{DynamicResource Font.Size.S}"
@@ -183,6 +192,7 @@
                                         Content="{Binding ConnectionActionLabel}"
                                         Command="{Binding ToggleConnectionCommand}"
                                         Visibility="{Binding ShowConnectionAction, Converter={StaticResource BoolToVisibility}}"
+                                        AutomationProperties.AutomationId="{Binding Platform, StringFormat='MultistreamConnection{0}'}"
                                         AutomationProperties.Name="{Binding ConnectionActionName}" />
                                 <Button x:Name="OpenPlatform"
                                         Style="{StaticResource Button.Ghost}"
@@ -198,6 +208,9 @@
                         </StackPanel>
                     </Border>
                     <DataTemplate.Triggers>
+                        <DataTrigger Binding="{Binding IsConnectionAttentionRequired}" Value="True">
+                            <Setter TargetName="ToggleConnection" Property="Style" Value="{StaticResource Button.Primary}" />
+                        </DataTrigger>
                         <DataTrigger Binding="{Binding IsSetupRequired}" Value="True">
                             <Setter TargetName="OpenPlatform" Property="Style" Value="{StaticResource Button.Primary}" />
                         </DataTrigger>

@@ -163,6 +163,11 @@ public partial class ChatDisplayTileView : UserControl, IView<ChatDisplayTileVie
         if (!pane.IsShown)
         {
             state.OpenRequest++;
+            if (state.Initialization is not null || browser.CoreWebView2 is not null)
+            {
+                _ = ReplaceBrowser(browser);
+            }
+
             return;
         }
 
