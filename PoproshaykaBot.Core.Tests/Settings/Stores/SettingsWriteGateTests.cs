@@ -36,6 +36,7 @@ public sealed class SettingsWriteGateTests
         typeof(ObsChatStore),
         typeof(ObsIntegrationStore),
         typeof(PollsStore),
+        typeof(PlatformLifecycleSettingsStore),
         typeof(RecentCategoriesStore),
         typeof(UpdateStore),
         typeof(YouTubeSettingsStore),
@@ -110,6 +111,12 @@ public sealed class SettingsWriteGateTests
         yield return Owner("polls.json", (path, gate) =>
         {
             var store = new PollsStore(null, path, gate);
+            return () => store.Save(new());
+        });
+
+        yield return Owner("platform-lifecycle.json", (path, gate) =>
+        {
+            var store = new PlatformLifecycleSettingsStore(null, null, path, gate);
             return () => store.Save(new());
         });
 

@@ -25,6 +25,7 @@ public static class LegacyImportText
         ["obs-chat.json"] = "Оформление чата для OBS",
         ["obs-integration.json"] = "Подключение к OBS",
         ["polls.json"] = "Профили голосований",
+        ["platform-lifecycle.json"] = "Автозапуск бота по площадкам",
         ["polls-history.json"] = "История голосований",
         ["recent-categories.json"] = "Недавние категории",
         ["update.json"] = "Настройки обновлений",
