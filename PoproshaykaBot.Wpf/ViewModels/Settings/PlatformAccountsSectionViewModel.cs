@@ -19,7 +19,7 @@ using PoproshaykaBot.Wpf.Infrastructure.Platforms;
 
 namespace PoproshaykaBot.Wpf.ViewModels.Settings;
 
-public sealed partial class PlatformAccountsSectionViewModel : ObservableObject
+public sealed partial class PlatformAccountsSectionViewModel : ObservableObject, IDisposable
 {
     private readonly ChannelCatalogStore _catalogStore;
     private readonly SettingsManager? _settingsManager;
@@ -35,15 +35,18 @@ public sealed partial class PlatformAccountsSectionViewModel : ObservableObject
     private readonly IPlatformAuthRegistry? _authRegistry;
     private readonly Dictionary<StreamingPlatform, Func<string?>> _unsavedCredentialChecks = [];
     private readonly Dictionary<GrantDraftKey, GrantDraft> _unsavedDrafts = [];
+    private CancellationTokenSource? _authorizationCts;
+    private bool _disposed;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(PlatformDisplayName), nameof(AccountsTitle), nameof(SupportsAccounts),
-        nameof(CanAuthorize), nameof(SupportsBrowserToggle))]
+        nameof(CanAuthorize), nameof(SupportsBrowserToggle), nameof(SupportsWebChatAfterLogin),
+        nameof(OAuthMethodHint), nameof(HasOAuthMethodHint))]
     [NotifyCanExecuteChangedFor(nameof(AuthorizeCombinedCommand), nameof(AuthorizeBotCommand), nameof(AuthorizeBroadcasterCommand))]
     private StreamingPlatform _selectedPlatform = StreamingPlatform.Twitch;
 
     [ObservableProperty]
-    [NotifyCanExecuteChangedFor(nameof(AuthorizeCombinedCommand), nameof(AuthorizeBotCommand), nameof(AuthorizeBroadcasterCommand))]
+    [NotifyCanExecuteChangedFor(nameof(AuthorizeCombinedCommand), nameof(AuthorizeBotCommand), nameof(AuthorizeBroadcasterCommand), nameof(CancelAuthorizationCommand))]
     private bool _isAuthorizing;
 
     [ObservableProperty]
@@ -52,6 +55,9 @@ public sealed partial class PlatformAccountsSectionViewModel : ObservableObject
 
     [ObservableProperty]
     private bool _useSystemBrowser;
+
+    [ObservableProperty]
+    private bool _connectWebChatAfterLogin = true;
 
     [ObservableProperty]
     private string? _statusNotice;
@@ -126,6 +132,14 @@ public sealed partial class PlatformAccountsSectionViewModel : ObservableObject
 
     public bool SupportsBrowserToggle => _accountLogins.GetValueOrDefault(SelectedPlatform)?.SupportsEmbeddedBrowser == true;
 
+    public bool SupportsWebChatAfterLogin => CanAuthorize && (_accountLogins.GetValueOrDefault(SelectedPlatform)?.SupportsWebChatSignIn == true);
+
+    public string? OAuthMethodHint => CanAuthorize && !SupportsBrowserToggle
+        ? _accountLogins.GetValueOrDefault(SelectedPlatform)?.OAuthMethod.HintText
+        : null;
+
+    public bool HasOAuthMethodHint => !string.IsNullOrWhiteSpace(OAuthMethodHint);
+
     public bool CanAuthorize => CanAuthorizePlatform(SelectedPlatform);
 
     internal void SetCredentialDrafts(OAuthSettingsViewModel? twitch, YouTubeSettingsSectionViewModel? youtube)
@@ -165,8 +179,20 @@ public sealed partial class PlatformAccountsSectionViewModel : ObservableObject
 
     partial void OnSelectedPlatformChanged(StreamingPlatform value)
     {
+        CancelActiveAuthorization(notice: null);
         StatusNotice = null;
         Load();
+    }
+
+    public void Dispose()
+    {
+        if (_disposed)
+        {
+            return;
+        }
+
+        _disposed = true;
+        CancelActiveAuthorization(notice: null, dispose: true);
     }
 
     public void Load() => LoadInternal(dropDraft: null);
@@ -276,7 +302,7 @@ public sealed partial class PlatformAccountsSectionViewModel : ObservableObject
             ? new(
                 "web-chat",
                 "Веб-чат",
-                hasWebChatSession ? PlatformAuthMethodStatus.Ready : PlatformAuthMethodStatus.Missing,
+                hasWebChatSession ? PlatformAuthMethodStatus.Ready : PlatformAuthMethodStatus.Attention,
                 hasWebChatSession ? "Подключён" : "Не подключён")
             : null;
 
@@ -348,6 +374,11 @@ public sealed partial class PlatformAccountsSectionViewModel : ObservableObject
 
     private bool CanStartAuthorization() => !IsAuthorizing && CanAuthorize;
 
+    private bool CanCancelAuthorization() => IsAuthorizing;
+
+    [RelayCommand(CanExecute = nameof(CanCancelAuthorization))]
+    private void CancelAuthorization() => CancelActiveAuthorization(notice: "Вход отменён.");
+
     [RelayCommand(CanExecute = nameof(CanStartAuthorization))]
     private Task AuthorizeCombinedAsync() => AuthorizePlatformAsync(SelectedPlatform, combined: true, role: PlatformAuthRole.Bot, targetAccountId: null);
 
@@ -363,6 +394,33 @@ public sealed partial class PlatformAccountsSectionViewModel : ObservableObject
     private Task ReauthorizeGrantAsync(PlatformAccountGrantViewModel grant) =>
         AuthorizePlatformAsync(grant.Platform, combined: false, role: grant.Role, targetAccountId: grant.AccountId, preferredContextId: grant.ContextId, customScopes: grant.GetRequestedScopes());
 
+    private void CancelActiveAuthorization(string? notice, bool dispose = false)
+    {
+        var cts = _authorizationCts;
+        _authorizationCts = null;
+        if (cts is not null)
+        {
+            try
+            {
+                cts.Cancel();
+            }
+            catch (ObjectDisposedException)
+            {
+            }
+
+            if (dispose)
+            {
+                cts.Dispose();
+            }
+        }
+
+        IsAuthorizing = false;
+        if (notice is not null && !_disposed)
+        {
+            SetNotice(notice, StatusSeverity.Info);
+        }
+    }
+
     private async Task AuthorizePlatformAsync(
         StreamingPlatform platform,
         bool combined,
@@ -371,6 +429,11 @@ public sealed partial class PlatformAccountsSectionViewModel : ObservableObject
         string? preferredContextId = null,
         string[]? customScopes = null)
     {
+        if (_disposed)
+        {
+            return;
+        }
+
         if (IsAuthorizing)
         {
             SetNotice("Дождитесь завершения текущего входа.", StatusSeverity.Info);
@@ -388,6 +451,8 @@ public sealed partial class PlatformAccountsSectionViewModel : ObservableObject
             return;
         }
 
+        var cts = new CancellationTokenSource();
+        _authorizationCts = cts;
         IsAuthorizing = true;
         SetNotice("Ожидаем вход на площадке…", StatusSeverity.Info);
         if (combined)
@@ -399,9 +464,18 @@ public sealed partial class PlatformAccountsSectionViewModel : ObservableObject
             _logger?.ChannelAuthorizationStarted(platform, role);
         }
 
+        string? authorizedAccountId = null;
+        var succeeded = false;
         try
         {
-            var succeeded = await AuthorizeWithAdapterAsync(login, combined, role, targetAccountId, preferredContextId, customScopes);
+            var outcome = await AuthorizeWithAdapterAsync(login, combined, role, targetAccountId, preferredContextId, customScopes, cts.Token);
+            if (cts.IsCancellationRequested || _disposed)
+            {
+                return;
+            }
+
+            succeeded = outcome.Succeeded;
+            authorizedAccountId = outcome.AccountId;
             if (succeeded)
             {
                 RefreshIfPlatform(platform);
@@ -410,33 +484,64 @@ public sealed partial class PlatformAccountsSectionViewModel : ObservableObject
         }
         catch (OperationCanceledException)
         {
-            SetNotice("Вход отменён.", StatusSeverity.Info);
+            if (!_disposed && SelectedPlatform == platform && ReferenceEquals(_authorizationCts, cts))
+            {
+                SetNotice("Вход отменён.", StatusSeverity.Info);
+            }
         }
         catch (Exception exception)
         {
-            _logger?.ChannelAuthorizationFailed(platform, role, exception.GetType().Name);
-            SetNotice($"Не удалось подключить аккаунт. {StreamingErrorMessages.SafeMessage(exception, platform, _platformRegistry)}", StatusSeverity.Error);
+            if (!cts.IsCancellationRequested && !_disposed)
+            {
+                _logger?.ChannelAuthorizationFailed(platform, role, exception.GetType().Name);
+                SetNotice($"Не удалось подключить аккаунт. {StreamingErrorMessages.SafeMessage(exception, platform, _platformRegistry)}", StatusSeverity.Error);
+            }
         }
         finally
         {
-            IsAuthorizing = false;
+            if (ReferenceEquals(_authorizationCts, cts))
+            {
+                _authorizationCts = null;
+                IsAuthorizing = false;
+            }
+
+            cts.Dispose();
+        }
+
+        if (!succeeded || _disposed || cts.IsCancellationRequested || !ConnectWebChatAfterLogin || !login.SupportsWebChatSignIn
+            || SelectedPlatform != platform || string.IsNullOrWhiteSpace(authorizedAccountId))
+        {
+            return;
+        }
+
+        var card = Accounts.FirstOrDefault(c => string.Equals(c.AccountId, authorizedAccountId, StringComparison.Ordinal));
+        if (card is { SupportsWebChat: true, HasWebChatSession: false })
+        {
+            await SignInWebChatCoreAsync(card, fromPostLogin: true);
         }
     }
 
-    private async Task<bool> AuthorizeWithAdapterAsync(
+    private async Task<(bool Succeeded, string? AccountId)> AuthorizeWithAdapterAsync(
         IPlatformAccountLogin login,
         bool combined,
         PlatformAuthRole role,
         string? targetAccountId,
         string? preferredContextId,
-        string[]? customScopes)
+        string[]? customScopes,
+        CancellationToken cancellationToken)
     {
         var result = await login.AuthorizeAsync(new(
             combined ? PlatformAuthRoles.Active : [role],
             targetAccountId,
             preferredContextId,
             customScopes ?? [],
-            UseSystemBrowser));
+            UseSystemBrowser),
+            cancellationToken);
+
+        if (cancellationToken.IsCancellationRequested || _disposed)
+        {
+            return (false, null);
+        }
 
         foreach (var grant in result.ChangedAuthorizations)
         {
@@ -444,28 +549,62 @@ public sealed partial class PlatformAccountsSectionViewModel : ObservableObject
             PublishAuthorizationRefreshed(login.Platform, grant.Role, grant.ContextId);
         }
 
+        var accountId = result.ChangedAuthorizations
+            .Select(static grant => grant.SubjectId)
+            .FirstOrDefault(static id => !string.IsNullOrWhiteSpace(id));
+
         if (result.ChangedAuthorizations.Count > 0 && !result.ChangedAuthorizations.All(grant =>
             grant.SubjectId is not null && IsAuthorizationPersisted(login.Platform, grant.Role, grant.ContextId, grant.SubjectId)))
         {
             SetNotice("Не удалось подтвердить запись авторизации на диске.", StatusSeverity.Warning);
-            return true;
+            return (true, accountId);
         }
 
         SetNotice(result.Message, result.Severity);
-        return result.ChangedAuthorizations.Count > 0;
+        return (result.ChangedAuthorizations.Count > 0, accountId);
     }
 
-    private async Task SignInWebChatAsync(PlatformAccountCardViewModel card)
+    private Task SignInWebChatAsync(PlatformAccountCardViewModel card) =>
+        SignInWebChatCoreAsync(card, fromPostLogin: false);
+
+    private async Task SignInWebChatCoreAsync(PlatformAccountCardViewModel card, bool fromPostLogin)
     {
         if (!_accountLogins.TryGetValue(card.Platform, out var login) || !login.SupportsWebChatSignIn)
         {
             return;
         }
 
-        var result = await login.SignInWebChatAsync(card.AccountId, card.DisplayName);
+        PlatformWebChatSignInResult result;
+        try
+        {
+            result = await login.SignInWebChatAsync(card.AccountId, card.DisplayName);
+        }
+        catch (Exception exception)
+        {
+            _logger?.LogWarning(exception, "Ошибка открытия окна веб-чата для {Platform} {AccountId}", card.Platform, card.AccountId);
+            SetNotice(
+                fromPostLogin
+                    ? $"Аккаунт «{card.DisplayName}» сохранён, но не удалось открыть окно веб-чата."
+                    : "Не удалось открыть окно входа в веб-чат.",
+                StatusSeverity.Warning);
+            return;
+        }
+
         if (result.Outcome != PlatformWebChatLoginOutcome.Completed)
         {
-            if (!string.IsNullOrWhiteSpace(result.Message))
+            if (fromPostLogin)
+            {
+                if (result.Outcome == PlatformWebChatLoginOutcome.Canceled)
+                {
+                    SetNotice($"Аккаунт «{card.DisplayName}» сохранён. Веб-чат можно подключить позже в карточке аккаунта.", StatusSeverity.Info);
+                }
+                else if (!string.IsNullOrWhiteSpace(result.Message))
+                {
+                    var severity = result.Severity == StatusSeverity.Error ? StatusSeverity.Warning : result.Severity;
+                    SetNotice($"Аккаунт «{card.DisplayName}» сохранён, но веб-чат не подключён: {result.Message}", severity);
+                }
+            }
+            else if (!string.IsNullOrWhiteSpace(result.Message))
             {
                 SetNotice(result.Message, result.Severity);
             }
@@ -476,7 +615,11 @@ public sealed partial class PlatformAccountsSectionViewModel : ObservableObject
         PublishAccountRefreshed(card);
         RefreshIfPlatform(card.Platform);
         AccountsChanged?.Invoke(this, card.Platform);
-        if (!string.IsNullOrWhiteSpace(result.Message))
+        if (fromPostLogin && result.Persisted)
+        {
+            SetNotice($"Аккаунт «{card.DisplayName}» и веб-чат подключены.", StatusSeverity.Success);
+        }
+        else if (!string.IsNullOrWhiteSpace(result.Message))
         {
             SetNotice(result.Message, result.Severity);
         }
@@ -1083,7 +1226,7 @@ public sealed partial class PlatformAccountCardViewModel : ObservableObject
 
     public string WebChatStatusText => HasWebChatSession ? "Веб-чат: подключён" : "Веб-чат: не подключён";
 
-    public StatusSeverity WebChatStatusSeverity => HasWebChatSession ? StatusSeverity.Success : StatusSeverity.Info;
+    public StatusSeverity WebChatStatusSeverity => HasWebChatSession ? StatusSeverity.Success : StatusSeverity.Warning;
 
     public bool CanSignInWebChat => SupportsWebChat && !HasWebChatSession;
 
@@ -1120,6 +1263,9 @@ public sealed partial class PlatformAccountCardViewModel : ObservableObject
 
     [RelayCommand(CanExecute = nameof(CanSignInWebChat))]
     private Task SignInWebChatAsync() => _signInWebChat(this);
+
+    [RelayCommand(CanExecute = nameof(CanResetWebChat))]
+    private Task ReconnectWebChatAsync() => _signInWebChat(this);
 
     [RelayCommand(CanExecute = nameof(CanResetWebChat))]
     private Task ResetWebChatAsync() => _resetWebChat(this);

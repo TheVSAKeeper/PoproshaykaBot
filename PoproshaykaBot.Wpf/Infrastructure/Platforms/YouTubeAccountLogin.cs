@@ -36,7 +36,7 @@ public sealed class YouTubeAccountLogin(
 
     public PlatformOAuthMethodDescriptor OAuthMethod => new(
         "Системный браузер",
-        "Google разрешает OAuth-авторизацию только через системный браузер.",
+        "Вход в аккаунт откроется в системном браузере: Google блокирует OAuth во встроенном окне.",
         SupportsEmbeddedBrowser: false,
         SupportsSystemBrowser: true);
 
@@ -61,9 +61,12 @@ public sealed class YouTubeAccountLogin(
     public bool ShouldTreatScopeMismatchAsSessionFailure(PlatformAuthRole role, IReadOnlySet<string> grantedScopes) =>
         !(role == PlatformAuthRole.Broadcaster && YouTubeScopes.ContainsUsableScopes(role, grantedScopes));
 
-    public async Task<PlatformAccountLoginResult> AuthorizeAsync(PlatformAccountLoginRequest request)
+    public async Task<PlatformAccountLoginResult> AuthorizeAsync(
+        PlatformAccountLoginRequest request,
+        CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(request);
+        cancellationToken.ThrowIfCancellationRequested();
 
         if (settingsStore is null || youtubeOAuth is null || shellLauncher is null)
         {
@@ -92,7 +95,10 @@ public sealed class YouTubeAccountLogin(
             settings.ClientId,
             secret,
             scopes,
-            url => shellLauncher.Open(url));
+            url => shellLauncher.Open(url),
+            cancellationToken);
+
+        cancellationToken.ThrowIfCancellationRequested();
 
         if (string.IsNullOrWhiteSpace(flow.ChannelId))
         {

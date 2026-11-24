@@ -54,9 +54,12 @@ public sealed class TwitchAccountLogin(
         return [.. required.Union(configuredScopes, StringComparer.Ordinal)];
     }
 
-    public async Task<PlatformAccountLoginResult> AuthorizeAsync(PlatformAccountLoginRequest request)
+    public async Task<PlatformAccountLoginResult> AuthorizeAsync(
+        PlatformAccountLoginRequest request,
+        CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(request);
+        cancellationToken.ThrowIfCancellationRequested();
 
         if (twitchOAuth is null || shellLauncher is null)
         {
@@ -115,7 +118,10 @@ public sealed class TwitchAccountLogin(
             scopes,
             redirectUri,
             url => shellLauncher.Open(url),
-            checkBroadcasterChannel: false);
+            checkBroadcasterChannel: false,
+            ct: cancellationToken);
+
+        cancellationToken.ThrowIfCancellationRequested();
 
         if (string.IsNullOrWhiteSpace(flow.UserId))
         {

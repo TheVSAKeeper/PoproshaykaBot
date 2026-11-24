@@ -52,32 +52,29 @@
                 </Setter>
             </Style>
 
-            <Style x:Key="BotRoleBadgeStyle" TargetType="Border" BasedOn="{StaticResource Badge.Success}">
+            <Style x:Key="WebChatBannerStyle" TargetType="Border">
+                <Setter Property="Background" Value="{DynamicResource Bg.Base}" />
+                <Setter Property="BorderBrush" Value="{DynamicResource Border.Subtle}" />
+                <Setter Property="BorderThickness" Value="1" />
+                <Setter Property="CornerRadius" Value="{DynamicResource Radius.S}" />
+                <Setter Property="Padding" Value="10,8" />
                 <Style.Triggers>
-                    <DataTrigger Binding="{Binding BotBadgeSeverity}" Value="{x:Static keepshellVm:StatusSeverity.Warning}">
+                    <DataTrigger Binding="{Binding HasWebChatSession}" Value="False">
                         <Setter Property="Background" Value="{DynamicResource State.WarningSoft}" />
                         <Setter Property="BorderBrush" Value="{DynamicResource State.Warning}" />
-                        <Setter Property="TextElement.Foreground" Value="{DynamicResource State.WarningText}" />
-                    </DataTrigger>
-                    <DataTrigger Binding="{Binding BotBadgeSeverity}" Value="{x:Static keepshellVm:StatusSeverity.Info}">
-                        <Setter Property="Background" Value="{DynamicResource State.InfoSoft}" />
-                        <Setter Property="BorderBrush" Value="{DynamicResource State.Info}" />
-                        <Setter Property="TextElement.Foreground" Value="{DynamicResource State.InfoText}" />
                     </DataTrigger>
                 </Style.Triggers>
             </Style>
 
-            <Style x:Key="BroadcasterRoleBadgeStyle" TargetType="Border" BasedOn="{StaticResource Badge.Success}">
+            <Style x:Key="WebChatStatusLabelStyle" TargetType="TextBlock">
+                <Setter Property="Foreground" Value="{DynamicResource Fg.Primary}" />
+                <Setter Property="FontSize" Value="{DynamicResource Font.Size.S}" />
+                <Setter Property="FontWeight" Value="Normal" />
                 <Style.Triggers>
-                    <DataTrigger Binding="{Binding BroadcasterBadgeSeverity}" Value="{x:Static keepshellVm:StatusSeverity.Warning}">
-                        <Setter Property="Background" Value="{DynamicResource State.WarningSoft}" />
-                        <Setter Property="BorderBrush" Value="{DynamicResource State.Warning}" />
-                        <Setter Property="TextElement.Foreground" Value="{DynamicResource State.WarningText}" />
-                    </DataTrigger>
-                    <DataTrigger Binding="{Binding BroadcasterBadgeSeverity}" Value="{x:Static keepshellVm:StatusSeverity.Info}">
-                        <Setter Property="Background" Value="{DynamicResource State.InfoSoft}" />
-                        <Setter Property="BorderBrush" Value="{DynamicResource State.Info}" />
-                        <Setter Property="TextElement.Foreground" Value="{DynamicResource State.InfoText}" />
+                    <DataTrigger Binding="{Binding HasWebChatSession}" Value="False">
+                        <Setter Property="Foreground" Value="{DynamicResource State.WarningText}" />
+                        <Setter Property="FontSize" Value="{DynamicResource Font.Size.M}" />
+                        <Setter Property="FontWeight" Value="{DynamicResource Font.Weight.SemiBold}" />
                     </DataTrigger>
                 </Style.Triggers>
             </Style>
@@ -142,18 +139,53 @@
                             Margin="0,0,8,6" />
                 </WrapPanel>
 
-                <CheckBox Content="Открывать вход в системном браузере вместо встроенного окна"
-                          Style="{StaticResource CheckBox.Default}"
-                          IsChecked="{Binding UseSystemBrowser, Mode=TwoWay}"
-                          Visibility="{Binding SupportsBrowserToggle, Converter={StaticResource BoolToVisibility}}"
-                          Margin="0,0,0,10" />
+                <StackPanel Margin="0,0,0,10"
+                            Visibility="{Binding CanAuthorize, Converter={StaticResource BoolToVisibility}}">
+                    <CheckBox Content="Сразу подключить веб-чат после входа"
+                              Style="{StaticResource CheckBox.Default}"
+                              IsChecked="{Binding ConnectWebChatAfterLogin, Mode=TwoWay}"
+                              AutomationProperties.AutomationId="PlatformAccountsConnectWebChatAfterLogin"
+                              ToolTip="Для отправки сообщений в веб-чат, если браузерная сессия ещё не привязана."
+                              Visibility="{Binding SupportsWebChatAfterLogin, Converter={StaticResource BoolToVisibility}}"
+                              Margin="0,0,0,6" />
 
-                <TextBlock Text="{Binding StatusNotice}"
-                           Style="{StaticResource Form.Hint}"
-                           keepshell:SeverityBrushBehavior.Foreground="{Binding StatusNoticeSeverity}"
-                           TextWrapping="Wrap"
-                           Visibility="{Binding StatusNotice, Converter={StaticResource NullToVisibility}}"
-                           Margin="0,0,0,12" />
+                    <StackPanel Visibility="{Binding SupportsBrowserToggle, Converter={StaticResource BoolToVisibility}}"
+                                Margin="0,0,0,4">
+                        <CheckBox Content="Открывать вход в системном браузере вместо встроенного окна"
+                                  Style="{StaticResource CheckBox.Default}"
+                                  IsChecked="{Binding UseSystemBrowser, Mode=TwoWay}"
+                                  AutomationProperties.AutomationId="PlatformAccountsUseSystemBrowser"
+                                  Margin="0,0,0,2" />
+                        <TextBlock Text="Дополнительный способ входа: по умолчанию используется встроенное окно, где веб-чат привязывается сразу."
+                                   Style="{StaticResource Form.Hint}"
+                                   Margin="24,0,0,0" />
+                    </StackPanel>
+
+                    <TextBlock Text="{Binding OAuthMethodHint}"
+                               Style="{StaticResource Form.Hint}"
+                               Visibility="{Binding HasOAuthMethodHint, Converter={StaticResource BoolToVisibility}}"
+                               Margin="0,0,0,2" />
+                </StackPanel>
+
+                <WrapPanel Margin="0,0,0,12"
+                           VerticalAlignment="Center"
+                           Visibility="{Binding StatusNotice, Converter={StaticResource NullToVisibility}}">
+                    <TextBlock Text="{Binding StatusNotice}"
+                               Style="{StaticResource Form.Hint}"
+                               keepshell:SeverityBrushBehavior.Foreground="{Binding StatusNoticeSeverity}"
+                               TextWrapping="Wrap"
+                               VerticalAlignment="Center"
+                               Margin="0,0,12,0" />
+                    <Button Content="Отменить вход"
+                            Style="{StaticResource Button.Secondary}"
+                            Command="{Binding CancelAuthorizationCommand}"
+                            AutomationProperties.AutomationId="PlatformAccountsCancelAuthorization"
+                            MinHeight="28"
+                            Padding="10,4"
+                            FontSize="{DynamicResource Font.Size.S}"
+                            VerticalAlignment="Center"
+                            Visibility="{Binding IsAuthorizing, Converter={StaticResource BoolToVisibility}}" />
+                </WrapPanel>
 
                 <keepshell:EmptyState Icon="{x:Static iconPacks:PackIconLucideKind.KeyRound}"
                                       Heading="Нет подключённых аккаунтов"
@@ -172,7 +204,7 @@
                                     Padding="14,12"
                                     Margin="0,0,0,10">
                                 <StackPanel>
-                                    <DockPanel Margin="0,0,0,6">
+                                    <DockPanel Margin="0,0,0,4">
                                         <WrapPanel DockPanel.Dock="Right"
                                                    VerticalAlignment="Center"
                                                    Margin="12,0,0,0">
@@ -219,18 +251,6 @@
                                                            Style="{StaticResource TextBlock.Mono}"
                                                            Foreground="{DynamicResource Fg.Secondary}" />
                                             </Border>
-                                            <Border Style="{StaticResource BotRoleBadgeStyle}"
-                                                    VerticalAlignment="Center"
-                                                    Margin="0,0,6,0"
-                                                    Visibility="{Binding HasBotRole, Converter={StaticResource BoolToVisibility}}">
-                                                <TextBlock Text="Бот" FontSize="{DynamicResource Font.Size.Caption}" />
-                                            </Border>
-                                            <Border Style="{StaticResource BroadcasterRoleBadgeStyle}"
-                                                    VerticalAlignment="Center"
-                                                    Margin="0,0,6,0"
-                                                    Visibility="{Binding HasBroadcasterRole, Converter={StaticResource BoolToVisibility}}">
-                                                <TextBlock Text="Стример" FontSize="{DynamicResource Font.Size.Caption}" />
-                                            </Border>
                                         </WrapPanel>
                                     </DockPanel>
 
@@ -240,66 +260,60 @@
                                                TextWrapping="Wrap"
                                                Margin="0,0,0,8" />
 
-                                    <Border Background="{DynamicResource Bg.Base}"
-                                            BorderBrush="{DynamicResource Border.Subtle}"
-                                            BorderThickness="1"
-                                            CornerRadius="{DynamicResource Radius.S}"
-                                            Padding="10,7"
+                                    <Border Style="{StaticResource WebChatBannerStyle}"
+                                            Visibility="{Binding SupportsWebChat, Converter={StaticResource BoolToVisibility}}"
                                             Margin="0,0,0,10">
-                                        <StackPanel>
-                                            <DockPanel>
-                                                <TextBlock DockPanel.Dock="Right"
-                                                           Text="{Binding OAuthMethodLabel}"
-                                                           Foreground="{DynamicResource Fg.Muted}"
-                                                           FontSize="{DynamicResource Font.Size.Caption}"
-                                                           VerticalAlignment="Center"
-                                                           Margin="8,0,0,0"
-                                                           Visibility="{Binding HasOAuthMethodLabel, Converter={StaticResource BoolToVisibility}}" />
-                                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                                                    <Ellipse Width="7"
-                                                             Height="7"
-                                                             VerticalAlignment="Center"
-                                                             Margin="0,0,7,0"
-                                                             keepshell:SeverityBrushBehavior.Fill="{Binding ApiAuthStatusSeverity}" />
-                                                    <TextBlock Text="{Binding ApiAuthStatusText}"
-                                                               keepshell:SeverityBrushBehavior.Foreground="{Binding ApiAuthStatusSeverity}"
-                                                               FontSize="{DynamicResource Font.Size.S}"
-                                                               VerticalAlignment="Center" />
-                                                </StackPanel>
-                                            </DockPanel>
-                                            <DockPanel Margin="0,6,0,0"
-                                                       Visibility="{Binding SupportsWebChat, Converter={StaticResource BoolToVisibility}}">
-                                                <WrapPanel DockPanel.Dock="Right"
-                                                           VerticalAlignment="Center"
-                                                           Margin="8,0,0,0">
-                                                    <Button Content="Войти в веб-чат"
-                                                            Style="{StaticResource Button.Secondary}"
-                                                            Command="{Binding SignInWebChatCommand}"
-                                                            MinHeight="24"
-                                                            Padding="9,2"
-                                                            FontSize="{DynamicResource Font.Size.S}"
-                                                            Visibility="{Binding CanSignInWebChat, Converter={StaticResource BoolToVisibility}}" />
-                                                    <Button Content="Сбросить веб-сессию"
-                                                            Style="{StaticResource Button.Ghost}"
-                                                            Command="{Binding ResetWebChatCommand}"
-                                                            MinHeight="24"
-                                                            Padding="9,2"
-                                                            FontSize="{DynamicResource Font.Size.S}"
-                                                            Visibility="{Binding CanResetWebChat, Converter={StaticResource BoolToVisibility}}" />
-                                                </WrapPanel>
-                                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                                                    <Ellipse Width="7"
-                                                             Height="7"
-                                                             VerticalAlignment="Center"
-                                                             Margin="0,0,7,0"
-                                                             keepshell:SeverityBrushBehavior.Fill="{Binding WebChatStatusSeverity}" />
-                                                    <TextBlock Text="{Binding WebChatStatusText}"
-                                                               keepshell:SeverityBrushBehavior.Foreground="{Binding WebChatStatusSeverity}"
-                                                               FontSize="{DynamicResource Font.Size.S}"
-                                                               VerticalAlignment="Center" />
-                                                </StackPanel>
-                                            </DockPanel>
-                                        </StackPanel>
+                                        <DockPanel>
+                                            <WrapPanel DockPanel.Dock="Right"
+                                                       VerticalAlignment="Center"
+                                                       Margin="10,0,0,0">
+                                                <Button Content="Подключить веб-чат"
+                                                        Style="{StaticResource Button.Primary}"
+                                                        Command="{Binding SignInWebChatCommand}"
+                                                        AutomationProperties.AutomationId="PlatformAccountConnectWebChat"
+                                                        MinHeight="28"
+                                                        Padding="12,4"
+                                                        FontSize="{DynamicResource Font.Size.S}"
+                                                        Visibility="{Binding CanSignInWebChat, Converter={StaticResource BoolToVisibility}}" />
+                                                <Button Content="Переподключить"
+                                                        Style="{StaticResource Button.Secondary}"
+                                                        Command="{Binding ReconnectWebChatCommand}"
+                                                        AutomationProperties.AutomationId="PlatformAccountReconnectWebChat"
+                                                        MinHeight="26"
+                                                        Padding="10,2"
+                                                        FontSize="{DynamicResource Font.Size.S}"
+                                                        Margin="0,0,6,0"
+                                                        Visibility="{Binding CanResetWebChat, Converter={StaticResource BoolToVisibility}}" />
+                                                <Button Content="Отключить"
+                                                        Style="{StaticResource Button.Ghost}"
+                                                        Command="{Binding ResetWebChatCommand}"
+                                                        AutomationProperties.AutomationId="PlatformAccountDisconnectWebChat"
+                                                        MinHeight="26"
+                                                        Padding="8,2"
+                                                        FontSize="{DynamicResource Font.Size.S}"
+                                                        Visibility="{Binding CanResetWebChat, Converter={StaticResource BoolToVisibility}}" />
+                                            </WrapPanel>
+
+                                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                                <iconPacks:PackIconLucide Kind="{x:Static iconPacks:PackIconLucideKind.TriangleAlert}"
+                                                                          Width="15"
+                                                                          Height="15"
+                                                                          Foreground="{DynamicResource State.WarningText}"
+                                                                          VerticalAlignment="Center"
+                                                                          Margin="0,0,8,0"
+                                                                          Visibility="{Binding CanSignInWebChat, Converter={StaticResource BoolToVisibility}}" />
+                                                <Ellipse Width="7"
+                                                         Height="7"
+                                                         VerticalAlignment="Center"
+                                                         Margin="0,0,8,0"
+                                                         keepshell:SeverityBrushBehavior.Fill="{Binding WebChatStatusSeverity}"
+                                                         Visibility="{Binding HasWebChatSession, Converter={StaticResource BoolToVisibility}}" />
+                                                <TextBlock Text="{Binding WebChatStatusText}"
+                                                           Style="{StaticResource WebChatStatusLabelStyle}"
+                                                           TextWrapping="Wrap"
+                                                           VerticalAlignment="Center" />
+                                            </StackPanel>
+                                        </DockPanel>
                                     </Border>
 
                                     <ItemsControl ItemsSource="{Binding Grants}" Focusable="False">

@@ -47,7 +47,9 @@ public interface IPlatformAccountLogin
 
     bool ShouldTreatScopeMismatchAsSessionFailure(PlatformAuthRole role, IReadOnlySet<string> grantedScopes) => true;
 
-    Task<PlatformAccountLoginResult> AuthorizeAsync(PlatformAccountLoginRequest request);
+    Task<PlatformAccountLoginResult> AuthorizeAsync(
+        PlatformAccountLoginRequest request,
+        CancellationToken cancellationToken = default);
 
     Task<PlatformTokenValidationResult> ValidateTokenAsync(
         PlatformAuthRole role,
