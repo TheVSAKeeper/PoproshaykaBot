@@ -151,7 +151,8 @@ public sealed partial class MultistreamChannelWizardDialogViewModel : Observable
         TimeProvider? timeProvider = null,
         ILogger<MultistreamChannelWizardDialogViewModel>? logger = null,
         IEnumerable<IPlatformAccountDirectory>? accountDirectories = null,
-        IEnumerable<IPlatformAccountLogin>? accountLogins = null)
+        IEnumerable<IPlatformAccountLogin>? accountLogins = null,
+        IEmbeddedYouTubeAuthDialog? embeddedYouTubeAuth = null)
     {
         ArgumentNullException.ThrowIfNull(catalogStore);
         ArgumentNullException.ThrowIfNull(adapters);
@@ -173,7 +174,8 @@ public sealed partial class MultistreamChannelWizardDialogViewModel : Observable
             shellLauncher,
             timeProvider,
             embeddedTwitchAuth,
-            eventBus: eventBus);
+            eventBus: eventBus,
+            embeddedYouTubeAuth: embeddedYouTubeAuth);
         _platformRegistry = platformRegistry;
         _eventBus = eventBus;
         _logger = logger;

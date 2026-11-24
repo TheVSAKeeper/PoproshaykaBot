@@ -156,7 +156,7 @@
                                   IsChecked="{Binding UseSystemBrowser, Mode=TwoWay}"
                                   AutomationProperties.AutomationId="PlatformAccountsUseSystemBrowser"
                                   Margin="0,0,0,2" />
-                        <TextBlock Text="Дополнительный способ входа: по умолчанию используется встроенное окно, где веб-чат привязывается сразу."
+                        <TextBlock Text="{Binding BrowserToggleHint}"
                                    Style="{StaticResource Form.Hint}"
                                    Margin="24,0,0,0" />
                     </StackPanel>

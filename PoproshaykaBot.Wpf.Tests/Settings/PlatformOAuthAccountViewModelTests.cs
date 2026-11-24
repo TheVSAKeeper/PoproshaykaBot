@@ -244,6 +244,44 @@ public sealed class PlatformOAuthAccountViewModelTests
         Assert.That(vm.ChannelId, Is.EqualTo("UC2"));
     }
 
+    [Test]
+    public async Task YouTube_adapter_supports_embedded_auth_when_dialog_is_provided_and_saves_browser_profile()
+    {
+        var profile = Guid.NewGuid().ToString("N");
+        var embedded = new StubEmbeddedYouTubeAuthDialog(
+            new YouTubeOAuthFlowResult("yt-emb-at", "yt-emb-rt", [YouTubeScopes.ForceSsl], "UC_EMB", "Embedded Chan", 3600)
+                { BrowserProfileName = profile });
+        var adapter = new YouTubeAccountAuthAdapter(
+            PlatformAuthRole.Bot,
+            new FakeYouTubeService(),
+            () => "yt-client",
+            () => "yt-secret",
+            embedded);
+
+        using var vm = new PlatformOAuthAccountViewModel(
+            adapter,
+            new RecordingDialogService { ConfirmResult = true },
+            new StubShellLauncher(),
+            new ManualUiDispatcher(),
+            TimeProvider.System,
+            new RecordingLogger());
+
+        Assert.That(vm.Capabilities.SupportsEmbeddedAuth, Is.True);
+        Assert.That(vm.AuthorizeInAppCommand.CanExecute(null), Is.True);
+
+        await vm.AuthorizeInAppCommand.ExecuteAsync(null);
+
+        var saved = new YouTubeAccountSettings();
+        vm.SaveTo(saved);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(saved.AccessToken, Is.EqualTo("yt-emb-at"));
+            Assert.That(saved.ChannelId, Is.EqualTo("UC_EMB"));
+            Assert.That(saved.BrowserProfileName, Is.EqualTo(profile));
+        });
+    }
+
     private PlatformOAuthAccountViewModel CreateTwitchVm(
         bool confirmResult = true,
         RecordingDialogService? dialogs = null,
@@ -373,6 +411,14 @@ public sealed class PlatformOAuthAccountViewModelTests
         public Task<EmbeddedTwitchAuthResult> AuthorizeAsync(EmbeddedTwitchAuthRequest request, CancellationToken cancellationToken = default)
         {
             return Task.FromResult(EmbeddedTwitchAuthResult.Canceled("Отменено"));
+        }
+    }
+
+    private sealed class StubEmbeddedYouTubeAuthDialog(YouTubeOAuthFlowResult flow) : IEmbeddedYouTubeAuthDialog
+    {
+        public Task<EmbeddedYouTubeAuthResult> AuthorizeAsync(EmbeddedYouTubeAuthRequest request, CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult(EmbeddedYouTubeAuthResult.Completed(flow));
         }
     }
 

@@ -172,6 +172,7 @@ public sealed class YouTubeOAuthServiceTests
             Assert.That(authQuery["client_id"].ToString(), Is.EqualTo("yt-client-id.apps.googleusercontent.com"));
             Assert.That(authQuery["code_challenge_method"].ToString(), Is.EqualTo("S256"));
             Assert.That(authQuery["scope"].ToString(), Is.EqualTo(YouTubeScopes.ForceSsl));
+            Assert.That(authQuery["prompt"].ToString(), Is.EqualTo("select_account consent"));
             Assert.That(redirectParam, Does.StartWith("http://127.0.0.1:"));
             Assert.That(expectedChallenge, Is.EqualTo(codeChallenge), "Отправленный в token endpoint code_verifier должен соответствовать code_challenge из browser URL");
             Assert.That(tokenForm["client_secret"].ToString(), Is.EqualTo("yt-client-secret"));
@@ -188,6 +189,30 @@ public sealed class YouTubeOAuthServiceTests
 
         await _eventBus.Received(1)
             .PublishAsync(Arg.Is<PlatformAuthorizationRefreshed>(e => e.Role == PlatformAuthRole.Bot), Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public void FlowResult_ApplyTo_BindsPreservesAndClearsBrowserProfileName()
+    {
+        var account = new YouTubeAccountSettings
+        {
+            ChannelId = "UC1",
+            BrowserProfileName = "existingprofile",
+        };
+        var now = _clock.UtcNow;
+
+        new YouTubeOAuthFlowResult("at1", "rt1", [YouTubeScopes.ForceSsl], "UC1", "Chan1", 3600)
+            .ApplyTo(account, now);
+        Assert.That(account.BrowserProfileName, Is.EqualTo("existingprofile"));
+
+        new YouTubeOAuthFlowResult("at2", "rt2", [YouTubeScopes.ForceSsl], "UC1", "Chan1", 3600)
+            { BrowserProfileName = "embeddedprofile" }
+            .ApplyTo(account, now);
+        Assert.That(account.BrowserProfileName, Is.EqualTo("embeddedprofile"));
+
+        new YouTubeOAuthFlowResult("at3", "rt3", [YouTubeScopes.ForceSsl], "UC2", "Chan2", 3600)
+            .ApplyTo(account, now);
+        Assert.That(account.BrowserProfileName, Is.Null);
     }
 
     [Test]

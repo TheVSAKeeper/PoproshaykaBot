@@ -43,6 +43,7 @@ internal sealed class KeepShellRulesTests
             typeof(ShellViewModel).Assembly,
             type => ViewPairRule.IsDialogViewModel(type)
                 && type != typeof(EmbeddedTwitchAuthDialogViewModel)
+                && type != typeof(EmbeddedYouTubeAuthDialogViewModel)
                 && type != typeof(EmbeddedPlatformChatLoginDialogViewModel));
 
         Assert.That(violations, Is.Empty, () => RuleViolation.Report(violations));

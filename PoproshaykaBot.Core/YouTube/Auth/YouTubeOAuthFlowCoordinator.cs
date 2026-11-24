@@ -94,7 +94,7 @@ public sealed class YouTubeOAuthFlowCoordinator(
                 state,
                 pkce.Challenge);
 
-            statusReporter.Report(role, "Ожидание подтверждения входа в системном браузере...");
+            statusReporter.Report(role, "Ожидание подтверждения входа в Google...");
             logger.LogInformation(
                 "Запуск Google Desktop OAuth для роли {Role} с loopback {RedirectUri}",
                 role,
@@ -208,7 +208,7 @@ public sealed class YouTubeOAuthFlowCoordinator(
             $"code_challenge={Uri.EscapeDataString(codeChallenge)}",
             "code_challenge_method=S256",
             "access_type=offline",
-            "prompt=consent");
+            $"prompt={Uri.EscapeDataString("select_account consent")}");
 
         var separator = endpoint.Contains('?', StringComparison.Ordinal) ? '&' : '?';
         return $"{endpoint}{separator}{query}";

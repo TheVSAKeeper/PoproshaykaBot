@@ -8,12 +8,16 @@ public sealed record YouTubeOAuthFlowResult(
     string ChannelTitle,
     int ExpiresInSeconds)
 {
+    public string? BrowserProfileName { get; init; }
+
     public void ApplyTo(YouTubeAccountSettings account, DateTimeOffset now)
     {
         ArgumentNullException.ThrowIfNull(account);
 
         account.AccessToken = AccessToken;
         account.RefreshToken = RefreshToken;
+        account.BrowserProfileName = BrowserProfileName
+            ?? (string.Equals(account.ChannelId, ChannelId, StringComparison.Ordinal) ? account.BrowserProfileName : null);
         account.ChannelId = ChannelId;
         account.ChannelTitle = ChannelTitle;
         account.Scopes = [..Scopes];

@@ -41,7 +41,7 @@ public sealed partial class PlatformAccountsSectionViewModel : ObservableObject,
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(PlatformDisplayName), nameof(AccountsTitle), nameof(SupportsAccounts),
         nameof(CanAuthorize), nameof(SupportsBrowserToggle), nameof(SupportsWebChatAfterLogin),
-        nameof(OAuthMethodHint), nameof(HasOAuthMethodHint))]
+        nameof(BrowserToggleHint), nameof(OAuthMethodHint), nameof(HasOAuthMethodHint))]
     [NotifyCanExecuteChangedFor(nameof(AuthorizeCombinedCommand), nameof(AuthorizeBotCommand), nameof(AuthorizeBroadcasterCommand))]
     private StreamingPlatform _selectedPlatform = StreamingPlatform.Twitch;
 
@@ -83,7 +83,8 @@ public sealed partial class PlatformAccountsSectionViewModel : ObservableObject,
         IEnumerable<IPlatformAccountDirectory>? accountDirectories = null,
         IEnumerable<IPlatformAccountLogin>? accountLogins = null,
         IPlatformAuthRegistry? authRegistry = null,
-        IPlatformWebChatLoginDialog? webChatLoginDialog = null)
+        IPlatformWebChatLoginDialog? webChatLoginDialog = null,
+        IEmbeddedYouTubeAuthDialog? embeddedYouTubeAuth = null)
     {
         ArgumentNullException.ThrowIfNull(catalogStore);
         _catalogStore = catalogStore;
@@ -109,7 +110,8 @@ public sealed partial class PlatformAccountsSectionViewModel : ObservableObject,
             _timeProvider,
             embeddedTwitchAuth,
             webChatLoginDialog,
-            eventBus);
+            eventBus,
+            embeddedYouTubeAuth);
         _authRegistry = authRegistry;
     }
 
@@ -133,6 +135,10 @@ public sealed partial class PlatformAccountsSectionViewModel : ObservableObject,
     public bool SupportsBrowserToggle => _accountLogins.GetValueOrDefault(SelectedPlatform)?.SupportsEmbeddedBrowser == true;
 
     public bool SupportsWebChatAfterLogin => CanAuthorize && (_accountLogins.GetValueOrDefault(SelectedPlatform)?.SupportsWebChatSignIn == true);
+
+    public string BrowserToggleHint =>
+        _accountLogins.GetValueOrDefault(SelectedPlatform)?.OAuthMethod.HintText
+        ?? "Дополнительный способ входа: по умолчанию используется встроенное окно, где веб-чат привязывается сразу.";
 
     public string? OAuthMethodHint => CanAuthorize && !SupportsBrowserToggle
         ? _accountLogins.GetValueOrDefault(SelectedPlatform)?.OAuthMethod.HintText

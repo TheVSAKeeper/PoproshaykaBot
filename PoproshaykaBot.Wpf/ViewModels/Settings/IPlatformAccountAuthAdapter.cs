@@ -61,6 +61,8 @@ public interface IEditableScopesAccountAuthAdapter
 
 public interface IEmbeddedAccountAuthAdapter
 {
+    bool SupportsEmbeddedAuth => true;
+
     string EmbeddedAuthorizeButtonText { get; }
 
     bool TryPrepareEmbeddedAuthorization(out string? statusError);

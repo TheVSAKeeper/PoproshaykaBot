@@ -19,13 +19,14 @@ public sealed class YouTubeAccountLogin(
     TimeProvider timeProvider,
     IPlatformWebChatLoginDialog? webChatLoginDialog = null,
     IEventBus? eventBus = null,
-    ILogger<YouTubeAccountLogin>? logger = null) : IPlatformAccountLogin
+    ILogger<YouTubeAccountLogin>? logger = null,
+    IEmbeddedYouTubeAuthDialog? embeddedYouTubeAuth = null) : IPlatformAccountLogin
 {
     public StreamingPlatform Platform => StreamingPlatform.YouTube;
 
     public bool CanAuthorize => settingsStore is not null && youtubeOAuth is not null && shellLauncher is not null;
 
-    public bool SupportsEmbeddedBrowser => false;
+    public bool SupportsEmbeddedBrowser => embeddedYouTubeAuth is not null;
 
     public bool SupportsTokenValidation => true;
 
@@ -35,9 +36,11 @@ public sealed class YouTubeAccountLogin(
         webChatLoginDialog is not null ? PlatformWebChatDescriptors.YouTube : null;
 
     public PlatformOAuthMethodDescriptor OAuthMethod => new(
-        "Системный браузер",
-        "Вход в аккаунт откроется в системном браузере: Google блокирует OAuth во встроенном окне.",
-        SupportsEmbeddedBrowser: false,
+        SupportsEmbeddedBrowser ? "Встроенный или системный браузер" : "Системный браузер",
+        SupportsEmbeddedBrowser
+            ? "По умолчанию используется встроенное окно – удобно для нескольких аккаунтов, веб-чат привязывается сразу. Если Google отклонит встроенное окно, включите системный браузер."
+            : "Вход в аккаунт откроется в системном браузере с выбором аккаунта Google.",
+        SupportsEmbeddedBrowser,
         SupportsSystemBrowser: true);
 
     public IReadOnlyList<string> GetDefaultScopes(PlatformAuthRole role) =>
@@ -90,7 +93,27 @@ public sealed class YouTubeAccountLogin(
                 ? [.. request.Scopes]
                 : [.. YouTubeScopes.RequiredFor(primaryRole)];
 
-        var flow = await youtubeOAuth.StartOAuthFlowToDraftAsync(
+        YouTubeOAuthFlowResult? flow = null;
+        if (!request.UseSystemBrowser && embeddedYouTubeAuth is not null)
+        {
+            var embedded = await embeddedYouTubeAuth.AuthorizeAsync(
+                new(primaryRole, settings.ClientId, secret, scopes, combined),
+                cancellationToken);
+            if (embedded.Outcome != EmbeddedYouTubeAuthOutcome.Completed || embedded.Flow is null)
+            {
+                var severity = embedded.Outcome switch
+                {
+                    EmbeddedYouTubeAuthOutcome.Failed => StatusSeverity.Error,
+                    EmbeddedYouTubeAuthOutcome.Unavailable => StatusSeverity.Warning,
+                    _ => StatusSeverity.Info,
+                };
+                return new(embedded.Message, severity, []);
+            }
+
+            flow = embedded.Flow;
+        }
+
+        flow ??= await youtubeOAuth.StartOAuthFlowToDraftAsync(
             primaryRole,
             settings.ClientId,
             secret,
@@ -119,6 +142,11 @@ public sealed class YouTubeAccountLogin(
         var now = timeProvider.GetUtcNow();
         var grantedScopes = flow.Scopes ?? [];
         var existingAccounts = accountsStore.ListAccounts();
+        var existingBrowserProfileName = existingAccounts
+            .FirstOrDefault(a => string.Equals(a.Key.AccountId, id, StringComparison.Ordinal))
+            ?.Authorizations
+            .Select(static g => g.ChatBrowserProfile?.ProfileName)
+            .FirstOrDefault(static profile => !string.IsNullOrWhiteSpace(profile));
         List<(PlatformAuthRole Role, string ContextId, string Label, YouTubeAccountSettings Account)> entriesToSave = [];
         List<PlatformAuthRole> missingRoles = [];
 
@@ -139,6 +167,10 @@ public sealed class YouTubeAccountLogin(
                 request.PreferDefaultContextWhenEmpty);
             var account = new YouTubeAccountSettings();
             flow.ApplyTo(account, now);
+            if (string.IsNullOrWhiteSpace(account.BrowserProfileName) && !string.IsNullOrWhiteSpace(existingBrowserProfileName))
+            {
+                account.BrowserProfileName = existingBrowserProfileName;
+            }
             entriesToSave.Add((targetRole, contextId, name, account));
         }
 

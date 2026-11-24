@@ -6,7 +6,7 @@ using PoproshaykaBot.Wpf.Infrastructure;
 
 namespace PoproshaykaBot.Wpf.ViewModels.Settings;
 
-public sealed class YouTubeAccountAuthAdapter : IPlatformAccountAuthAdapter
+public sealed class YouTubeAccountAuthAdapter : IPlatformAccountAuthAdapter, IEmbeddedAccountAuthAdapter
 {
     private static readonly PlatformAccountDisplayOptions YouTubeDisplayOptions = new(
         ShowsRolePurposeHint: true,
@@ -20,6 +20,7 @@ public sealed class YouTubeAccountAuthAdapter : IPlatformAccountAuthAdapter
     private readonly IYouTubeOAuthService _oauthService;
     private readonly Func<string> _getClientId;
     private readonly Func<string> _getClientSecret;
+    private readonly IEmbeddedYouTubeAuthDialog? _embeddedAuth;
 
     private YouTubeAccountSettings _draft = new();
 
@@ -27,7 +28,8 @@ public sealed class YouTubeAccountAuthAdapter : IPlatformAccountAuthAdapter
         PlatformAuthRole role,
         IYouTubeOAuthService oauthService,
         Func<string> getClientId,
-        Func<string> getClientSecret)
+        Func<string> getClientSecret,
+        IEmbeddedYouTubeAuthDialog? embeddedAuth = null)
     {
         ArgumentNullException.ThrowIfNull(oauthService);
         ArgumentNullException.ThrowIfNull(getClientId);
@@ -37,7 +39,16 @@ public sealed class YouTubeAccountAuthAdapter : IPlatformAccountAuthAdapter
         _oauthService = oauthService;
         _getClientId = getClientId;
         _getClientSecret = getClientSecret;
+        _embeddedAuth = embeddedAuth;
     }
+
+    public bool SupportsEmbeddedAuth => _embeddedAuth is not null;
+
+    public string EmbeddedAuthorizeButtonText => _role switch
+    {
+        PlatformAuthRole.Broadcaster => "Авторизовать стримера в приложении",
+        _ => "Авторизовать бота в приложении",
+    };
 
     public string PlatformKey => "YouTube";
 
@@ -104,6 +115,7 @@ public sealed class YouTubeAccountAuthAdapter : IPlatformAccountAuthAdapter
         youtubeTarget.RefreshToken = _draft.RefreshToken;
         youtubeTarget.ChannelId = _draft.ChannelId;
         youtubeTarget.ChannelTitle = _draft.ChannelTitle;
+        youtubeTarget.BrowserProfileName = _draft.BrowserProfileName;
         youtubeTarget.Scopes = [.._draft.Scopes];
         youtubeTarget.StoredScopes = [.._draft.StoredScopes];
         youtubeTarget.AccessTokenExpiresAt = _draft.AccessTokenExpiresAt;
@@ -133,6 +145,7 @@ public sealed class YouTubeAccountAuthAdapter : IPlatformAccountAuthAdapter
         _draft.RefreshToken = refreshToken;
         _draft.ChannelId = string.Empty;
         _draft.ChannelTitle = string.Empty;
+        _draft.BrowserProfileName = null;
         _draft.AccessTokenExpiresAt = null;
         _draft.StoredScopes = [];
     }
@@ -143,6 +156,7 @@ public sealed class YouTubeAccountAuthAdapter : IPlatformAccountAuthAdapter
         _draft.RefreshToken = string.Empty;
         _draft.ChannelId = string.Empty;
         _draft.ChannelTitle = string.Empty;
+        _draft.BrowserProfileName = null;
         _draft.StoredScopes = [];
         _draft.AccessTokenExpiresAt = null;
     }
@@ -191,6 +205,54 @@ public sealed class YouTubeAccountAuthAdapter : IPlatformAccountAuthAdapter
             IsWarning: false,
             StatusMessage: statusMessage,
             RaiseSettingChanged: true);
+    }
+
+    public bool TryPrepareEmbeddedAuthorization(out string? statusError)
+    {
+        if (string.IsNullOrWhiteSpace(_getClientId().Trim()))
+        {
+            statusError = "Сначала заполните Client ID Desktop-клиента в блоке «Google-проект».";
+            return false;
+        }
+
+        statusError = null;
+        return true;
+    }
+
+    public async Task<PlatformAuthFlowOutcome> StartEmbeddedAuthorizationAsync(
+        string scopesText,
+        DateTimeOffset now,
+        CancellationToken ct)
+    {
+        if (_embeddedAuth is null)
+        {
+            return new(false, true, "Встроенный вход YouTube недоступен.");
+        }
+
+        var clientId = _getClientId().Trim();
+        var clientSecret = _getClientSecret().Trim();
+        var request = new EmbeddedYouTubeAuthRequest(_role, clientId, clientSecret, _draft.Scopes);
+        var result = await _embeddedAuth.AuthorizeAsync(request, ct);
+
+        if (result is { Outcome: EmbeddedYouTubeAuthOutcome.Completed, Flow: { } flow }
+            && !string.IsNullOrEmpty(flow.AccessToken))
+        {
+            flow.ApplyTo(_draft, now);
+            var statusMessage = string.IsNullOrWhiteSpace(flow.RefreshToken)
+                ? "Вход выполнен без refresh-токена (Google не выдал его повторно). Сохраните настройки."
+                : $"Вход выполнен для канала {flow.ChannelTitle}. Нажмите «Сохранить», чтобы применить.";
+
+            return new(
+                Succeeded: true,
+                IsWarning: false,
+                StatusMessage: statusMessage,
+                RaiseSettingChanged: true);
+        }
+
+        return new(
+            Succeeded: false,
+            IsWarning: result.Outcome != EmbeddedYouTubeAuthOutcome.Failed,
+            StatusMessage: result.Message);
     }
 
     public string? FormatSafeError(Exception exception)

@@ -247,7 +247,7 @@
                            FontWeight="{DynamicResource Font.Weight.SemiBold}"
                            FontSize="{DynamicResource Font.Size.S}"
                            Margin="0,0,0,6" />
-                <TextBlock Text="1. Включите YouTube Data API v3 и создайте OAuth-клиент строго типа «Desktop app» (клиент «Web application» не примет локальный возврат 127.0.0.1 и встроенный вход Google заблокирует)."
+                <TextBlock Text="1. Включите YouTube Data API v3 и создайте OAuth-клиент строго типа «Desktop app» (клиент «Web application» не примет локальный возврат 127.0.0.1)."
                            Foreground="{DynamicResource Fg.Muted}"
                            FontSize="{DynamicResource Font.Size.S}"
                            TextWrapping="Wrap"

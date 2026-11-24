@@ -14,14 +14,14 @@ public partial class EmbeddedTwitchAuthWindow : Window
 {
     private const int MonitorDefaultToNearest = 2;
 
-    private readonly EmbeddedTwitchAuthDialogViewModel _viewModel;
+    private readonly IEmbeddedOAuthWindowViewModel _viewModel;
     private readonly CancellationTokenSource _lifetime = new();
     private readonly WebViewThemeBackground _themeBackground;
 
     private bool _initialized;
     private bool _tornDown;
 
-    public EmbeddedTwitchAuthWindow(EmbeddedTwitchAuthDialogViewModel viewModel)
+    public EmbeddedTwitchAuthWindow(IEmbeddedOAuthWindowViewModel viewModel)
     {
         InitializeComponent();
 
@@ -219,7 +219,7 @@ public partial class EmbeddedTwitchAuthWindow : Window
         if (WebView.CoreWebView2 is { } core)
         {
             core.NewWindowRequested -= OnNewWindowRequested;
-            if (_viewModel.Result.Outcome != EmbeddedTwitchAuthOutcome.Completed)
+            if (!_viewModel.ShouldKeepBrowserProfile)
             {
                 core.Profile.Delete();
             }

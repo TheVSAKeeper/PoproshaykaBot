@@ -124,7 +124,7 @@ public sealed partial class PlatformOAuthAccountViewModel : ObservableObject, ID
         var display = _adapter.DisplayOptions;
         Capabilities = new(
             SupportsEditableScopes: _adapter is IEditableScopesAccountAuthAdapter,
-            SupportsEmbeddedAuth: _adapter is IEmbeddedAccountAuthAdapter,
+            SupportsEmbeddedAuth: _adapter is IEmbeddedAccountAuthAdapter { SupportsEmbeddedAuth: true },
             SupportsTokenValidation: _adapter is ITokenMaintenanceAccountAuthAdapter,
             SupportsManualTokenRefresh: _adapter is ITokenMaintenanceAccountAuthAdapter,
             ShowsRolePurposeHint: display.ShowsRolePurposeHint,

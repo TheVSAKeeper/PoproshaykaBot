@@ -23,7 +23,8 @@ internal static class PlatformAccountLoginDefaults
         TimeProvider? timeProvider = null,
         IEmbeddedTwitchAuthDialog? embeddedTwitchAuth = null,
         IPlatformWebChatLoginDialog? webChatLoginDialog = null,
-        IEventBus? eventBus = null)
+        IEventBus? eventBus = null,
+        IEmbeddedYouTubeAuthDialog? embeddedYouTubeAuth = null)
     {
         var logins = (accountLogins ?? []).ToDictionary(static login => login.Platform);
         var clock = timeProvider ?? TimeProvider.System;
@@ -52,7 +53,8 @@ internal static class PlatformAccountLoginDefaults
                 shellLauncher,
                 clock,
                 webChatLoginDialog,
-                eventBus);
+                eventBus,
+                embeddedYouTubeAuth: embeddedYouTubeAuth);
         }
 
         return logins;

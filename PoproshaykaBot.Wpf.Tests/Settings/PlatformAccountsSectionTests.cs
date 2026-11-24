@@ -1107,6 +1107,79 @@ public sealed class PlatformAccountsSectionTests
         });
     }
 
+    [Test]
+    public async Task YouTube_embedded_login_binds_web_chat_in_one_step_and_falls_back_to_system_browser_when_toggled()
+    {
+        var catalog = new ChannelCatalogStore(filePath: Path.Combine(_dir.FullName, "ch-yt-emb.json"));
+        var ytSettings = new YouTubeSettingsStore(filePath: Path.Combine(_dir.FullName, "yts-yt-emb.json"));
+        ytSettings.Save(new() { ClientId = "yt-cid" });
+        var ytStore = new YouTubeAccountsStore(filePath: Path.Combine(_dir.FullName, "yta-yt-emb.json"));
+        ytStore.SaveClientSecret("yt-sec");
+
+        var embeddedProfile = Guid.NewGuid().ToString("N");
+        var webProfile = Guid.NewGuid().ToString("N");
+        var embeddedYt = new FakeEmbeddedYouTubeAuthDialog(
+            new YouTubeOAuthFlowResult("yt-emb-at", "yt-emb-rt", [.. YouTubeScopes.CombinedDefault], "UC_EMB_1", "YT Embedded", 3600)
+                { BrowserProfileName = embeddedProfile });
+        var ytOAuth = new FakeYouTubeOAuthService
+        {
+            NextFlowResult = new YouTubeOAuthFlowResult("yt-sys-at", "yt-sys-rt", [.. YouTubeScopes.CombinedDefault], "UC_SYS_2", "YT System", 3600),
+        };
+        var webChat = new FakeWebChatLoginDialog(_ => PlatformWebChatLoginResult.Completed(webProfile));
+
+        using var vm = new PlatformAccountsSectionViewModel(
+            catalog,
+            youtubeAccountsStore: ytStore,
+            youtubeOAuth: ytOAuth,
+            youtubeSettingsStore: ytSettings,
+            shellLauncher: DispatchProxy.Create<IShellLauncher, TrueProxy>(),
+            dialogService: DispatchProxy.Create<IDialogService, TrueProxy>(),
+            webChatLoginDialog: webChat,
+            embeddedYouTubeAuth: embeddedYt);
+        vm.SelectedPlatform = StreamingPlatform.YouTube;
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(vm.SupportsBrowserToggle, Is.True);
+            Assert.That(vm.HasOAuthMethodHint, Is.False);
+            Assert.That(vm.BrowserToggleHint, Does.Contain("Google"));
+            Assert.That(vm.BrowserToggleHint, Does.Contain("системный браузер"));
+        });
+
+        await vm.AuthorizeCombinedCommand.ExecuteAsync(null);
+        Assert.Multiple(() =>
+        {
+            Assert.That(embeddedYt.CallCount, Is.EqualTo(1));
+            Assert.That(webChat.CallCount, Is.Zero);
+            Assert.That(vm.Accounts.Single(a => a.AccountId == "UC_EMB_1").HasWebChatSession, Is.True);
+            Assert.That(ytStore.LoadBot().BrowserProfileName, Is.EqualTo(embeddedProfile));
+        });
+
+        vm.UseSystemBrowser = true;
+        await vm.AuthorizeCombinedCommand.ExecuteAsync(null);
+        Assert.Multiple(() =>
+        {
+            Assert.That(embeddedYt.CallCount, Is.EqualTo(1));
+            Assert.That(webChat.CallCount, Is.EqualTo(1));
+            Assert.That(webChat.LastRequest?.AccountId, Is.EqualTo("UC_SYS_2"));
+            Assert.That(vm.Accounts.Single(a => a.AccountId == "UC_SYS_2").HasWebChatSession, Is.True);
+        });
+    }
+
+    private sealed class FakeEmbeddedYouTubeAuthDialog(YouTubeOAuthFlowResult flow) : IEmbeddedYouTubeAuthDialog
+    {
+        public int CallCount { get; private set; }
+
+        public Task<EmbeddedYouTubeAuthResult> AuthorizeAsync(
+            EmbeddedYouTubeAuthRequest request,
+            CancellationToken cancellationToken = default)
+        {
+            CallCount++;
+            cancellationToken.ThrowIfCancellationRequested();
+            return Task.FromResult(EmbeddedYouTubeAuthResult.Completed(flow));
+        }
+    }
+
     private sealed class UnpersistedAccountLogin(
         StreamingPlatform platform,
         string accountId,

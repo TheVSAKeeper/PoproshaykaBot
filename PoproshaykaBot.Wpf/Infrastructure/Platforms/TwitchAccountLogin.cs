@@ -39,7 +39,9 @@ public sealed class TwitchAccountLogin(
 
     public PlatformOAuthMethodDescriptor OAuthMethod => new(
         SupportsEmbeddedBrowser ? "Встроенный или системный браузер" : "Системный браузер",
-        "Можно войти во встроенном окне приложения или через системный браузер.",
+        SupportsEmbeddedBrowser
+            ? "По умолчанию используется встроенное окно, где веб-чат привязывается сразу."
+            : "Вход в аккаунт откроется в системном браузере.",
         SupportsEmbeddedBrowser,
         SupportsSystemBrowser: true);
 
@@ -167,7 +169,7 @@ public sealed class TwitchAccountLogin(
                 request.PreferDefaultContextWhenEmpty);
             var account = new TwitchAccountSettings();
             flow.ApplyTo(account, now);
-            if (!string.IsNullOrWhiteSpace(existingBrowserProfileName))
+            if (string.IsNullOrWhiteSpace(account.BrowserProfileName) && !string.IsNullOrWhiteSpace(existingBrowserProfileName))
             {
                 account.BrowserProfileName = existingBrowserProfileName;
             }

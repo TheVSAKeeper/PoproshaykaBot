@@ -104,7 +104,8 @@ public sealed partial class MultistreamPlatformSetupDialogViewModel : Observable
         IEventBus? eventBus = null,
         TimeProvider? timeProvider = null,
         IEnumerable<IPlatformAccountDirectory>? accountDirectories = null,
-        IEnumerable<IPlatformAccountLogin>? accountLogins = null)
+        IEnumerable<IPlatformAccountLogin>? accountLogins = null,
+        IEmbeddedYouTubeAuthDialog? embeddedYouTubeAuth = null)
     {
         ArgumentNullException.ThrowIfNull(catalogStore);
         ArgumentNullException.ThrowIfNull(adapters);
@@ -131,7 +132,8 @@ public sealed partial class MultistreamPlatformSetupDialogViewModel : Observable
             shellLauncher,
             timeProvider,
             embeddedTwitchAuth,
-            eventBus: eventBus);
+            eventBus: eventBus,
+            embeddedYouTubeAuth: embeddedYouTubeAuth);
     }
 
     public event EventHandler<bool>? RequestClose;

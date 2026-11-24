@@ -9,7 +9,7 @@ using System.Net.Http;
 
 namespace PoproshaykaBot.Wpf.ViewModels.Dialogs;
 
-public sealed partial class EmbeddedTwitchAuthDialogViewModel : ObservableObject, IDisposable
+public sealed partial class EmbeddedTwitchAuthDialogViewModel : ObservableObject, IEmbeddedOAuthWindowViewModel, IDisposable
 {
     private const string WebView2RuntimeDownloadUrl = "https://go.microsoft.com/fwlink/p/?LinkId=2124703";
 
@@ -72,6 +72,8 @@ public sealed partial class EmbeddedTwitchAuthDialogViewModel : ObservableObject
     public string UserDataFolder => WebView2UserDataFolders.ResolveTwitchAccounts();
 
     public string BrowserProfileName { get; private set; } = string.Empty;
+
+    public bool ShouldKeepBrowserProfile => Result.Outcome == EmbeddedTwitchAuthOutcome.Completed;
 
     public void Configure(EmbeddedTwitchAuthRequest request)
     {

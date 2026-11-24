@@ -7,6 +7,7 @@ using PoproshaykaBot.Core.Platforms.Auth;
 using PoproshaykaBot.Core.YouTube;
 using PoproshaykaBot.Core.YouTube.Auth;
 using PoproshaykaBot.Core.YouTube.Quota;
+using PoproshaykaBot.Wpf.Infrastructure;
 using System.Globalization;
 
 namespace PoproshaykaBot.Wpf.ViewModels.Settings;
@@ -47,12 +48,13 @@ public sealed partial class YouTubeSettingsSectionViewModel : ObservableObject, 
         ILoggerFactory loggerFactory,
         IYouTubeQuotaGovernor? quotaGovernor = null,
         IYouTubeChatDiagnostics? chatDiagnostics = null,
-        IYouTubeMonitorDiagnostics? monitorDiagnostics = null)
+        IYouTubeMonitorDiagnostics? monitorDiagnostics = null,
+        IEmbeddedYouTubeAuthDialog? embeddedYouTubeAuth = null)
     {
         var accountLogger = loggerFactory.CreateLogger<PlatformOAuthAccountViewModel>();
 
         Bot = new(
-            new YouTubeAccountAuthAdapter(PlatformAuthRole.Bot, oauthService, () => ClientId, () => ClientSecret),
+            new YouTubeAccountAuthAdapter(PlatformAuthRole.Bot, oauthService, () => ClientId, () => ClientSecret, embeddedYouTubeAuth),
             dialogService,
             shellLauncher,
             uiDispatcher,
@@ -60,7 +62,7 @@ public sealed partial class YouTubeSettingsSectionViewModel : ObservableObject, 
             accountLogger);
 
         Broadcaster = new(
-            new YouTubeAccountAuthAdapter(PlatformAuthRole.Broadcaster, oauthService, () => ClientId, () => ClientSecret),
+            new YouTubeAccountAuthAdapter(PlatformAuthRole.Broadcaster, oauthService, () => ClientId, () => ClientSecret, embeddedYouTubeAuth),
             dialogService,
             shellLauncher,
             uiDispatcher,
