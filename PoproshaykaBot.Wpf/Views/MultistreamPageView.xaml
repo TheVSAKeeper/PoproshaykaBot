@@ -229,6 +229,7 @@
             </Grid.RowDefinitions>
 
             <ScrollViewer x:Name="MasterPane"
+                          AutomationProperties.Name="Список площадок"
                           HorizontalScrollBarVisibility="Disabled">
                 <ScrollViewer.Style>
                     <Style TargetType="ScrollViewer" BasedOn="{StaticResource OverlayScrollViewerStyle}">
@@ -624,6 +625,7 @@
             </ScrollViewer>
 
             <ScrollViewer x:Name="DetailScroll"
+                          AutomationProperties.Name="Параметры площадки"
                           RequestBringIntoView="SuppressNavigationAutoScroll"
                           HorizontalScrollBarVisibility="Disabled">
                 <ScrollViewer.Style>
@@ -1048,6 +1050,7 @@
                                                FontWeight="{DynamicResource Font.Weight.SemiBold}"
                                                VerticalAlignment="Center" />
                                     <TextBlock Text="· Профили трансляции, рассылка, автозапуск и группы каналов"
+                                               ToolTip="Профили трансляции, рассылка, автозапуск и группы каналов"
                                                Foreground="{DynamicResource Fg.Muted}"
                                                FontSize="{DynamicResource Font.Size.S}"
                                                TextTrimming="CharacterEllipsis"

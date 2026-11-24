@@ -6,8 +6,42 @@ namespace PoproshaykaBot.Wpf.Infrastructure;
 
 public static class WebView2EnvironmentFactory
 {
+    internal const string DefaultBrowserArguments = "--disk-cache-size=52428800 --media-cache-size=26214400";
+
     private const int MaxAttempts = 10;
     private const int RetryDelayMs = 600;
+
+    internal static CoreWebView2EnvironmentOptions CreateEnvironmentOptions()
+    {
+        return new CoreWebView2EnvironmentOptions
+        {
+            AdditionalBrowserArguments = DefaultBrowserArguments,
+        };
+    }
+
+    internal static void TryDeleteProfileDirectory(string? userDataFolder, string? profileName, ILogger? logger = null)
+    {
+        if (string.IsNullOrWhiteSpace(userDataFolder) || string.IsNullOrWhiteSpace(profileName))
+        {
+            return;
+        }
+
+        try
+        {
+            var profilePath = Path.Combine(userDataFolder, "EBWebView", profileName);
+            if (Directory.Exists(profilePath))
+            {
+                Directory.Delete(profilePath, recursive: true);
+            }
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            if (logger is not null && logger.IsEnabled(LogLevel.Debug))
+            {
+                logger.LogDebug(exception, "Не удалось удалить временный каталог профиля WebView2 {ProfileName}", profileName);
+            }
+        }
+    }
 
     public static async Task<CoreWebView2Environment> CreateAsync(
         string userDataFolder,
@@ -28,7 +62,8 @@ public static class WebView2EnvironmentFactory
 
             try
             {
-                return await CoreWebView2Environment.CreateAsync(null, userDataFolder).ConfigureAwait(true);
+                return await CoreWebView2Environment.CreateAsync(null, userDataFolder, CreateEnvironmentOptions())
+                    .ConfigureAwait(true);
             }
             catch (Exception exception) when (attempt < MaxAttempts && exception is not WebView2RuntimeNotFoundException)
             {

@@ -46,6 +46,7 @@
         </StackPanel>
 
         <ScrollViewer Grid.Row="1"
+                      AutomationProperties.Name="Настройка площадки"
                       VerticalScrollBarVisibility="Auto"
                       HorizontalScrollBarVisibility="Disabled"
                       MaxHeight="420">

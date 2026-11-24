@@ -646,6 +646,7 @@
                     Padding="16,12"
                     Visibility="{Binding HasUsers, Converter={StaticResource BoolToVisibility}}">
                 <ScrollViewer x:Name="OuterInspectorScroll"
+                              AutomationProperties.Name="Карточка пользователя"
                               HorizontalScrollBarVisibility="Disabled">
                     <ScrollViewer.Style>
                         <Style TargetType="ScrollViewer">
@@ -668,6 +669,7 @@
 
                         <ScrollViewer x:Name="ProfileStatsScroll"
                                       Grid.Row="0"
+                                      AutomationProperties.Name="Статистика профиля пользователя"
                                       HorizontalScrollBarVisibility="Disabled"
                                       Visibility="{Binding HasSelectedRow, Converter={StaticResource BoolToVisibility}}">
                             <ScrollViewer.Style>

@@ -216,16 +216,25 @@ public partial class EmbeddedTwitchAuthWindow : Window
         _themeBackground.Detach();
         _lifetime.Cancel();
 
+        var shouldDeleteProfile = !_viewModel.ShouldKeepBrowserProfile;
+        var userDataFolder = _viewModel.UserDataFolder;
+        var profileName = _viewModel.BrowserProfileName;
+
         if (WebView.CoreWebView2 is { } core)
         {
             core.NewWindowRequested -= OnNewWindowRequested;
-            if (!_viewModel.ShouldKeepBrowserProfile)
+            if (shouldDeleteProfile)
             {
                 core.Profile.Delete();
             }
         }
 
         WebView.Dispose();
+        if (shouldDeleteProfile)
+        {
+            WebView2EnvironmentFactory.TryDeleteProfileDirectory(userDataFolder, profileName, _viewModel.Logger);
+        }
+
         _lifetime.Dispose();
     }
 

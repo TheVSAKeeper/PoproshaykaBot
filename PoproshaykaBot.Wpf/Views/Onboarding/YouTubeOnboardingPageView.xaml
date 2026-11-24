@@ -9,7 +9,8 @@
              d:DesignHeight="520"
              d:DesignWidth="688">
 
-    <ScrollViewer VerticalScrollBarVisibility="Auto"
+    <ScrollViewer AutomationProperties.Name="Подключение YouTube"
+                  VerticalScrollBarVisibility="Auto"
                   HorizontalScrollBarVisibility="Disabled">
         <StackPanel Margin="20,18">
             <TextBlock Text="Подключите YouTube, если хотите читать и отправлять сообщения в чате YouTube-трансляций вместе с Twitch. Если используете только Twitch, просто нажмите «Далее →»."

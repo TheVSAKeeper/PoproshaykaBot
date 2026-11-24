@@ -5,6 +5,7 @@ using PoproshaykaBot.Core.Obs;
 using PoproshaykaBot.Core.Settings;
 using PoproshaykaBot.Core.Settings.Obs;
 using System.Collections.ObjectModel;
+using System.ComponentModel;
 using System.Globalization;
 using PoproshaykaBot.Wpf.Bootstrap;
 using System.Windows;
@@ -93,6 +94,18 @@ public sealed partial class ObsIntegrationSectionViewModel : ObservableObject, I
     [ObservableProperty]
     private string _overlayUrl = string.Empty;
 
+    [ObservableProperty]
+    private bool _hasMissingDashboardSources;
+
+    [ObservableProperty]
+    private string _missingDashboardSourcesWarning = string.Empty;
+
+    [ObservableProperty]
+    private bool _hasMissingChatRefreshSources;
+
+    [ObservableProperty]
+    private string _missingChatRefreshSourcesWarning = string.Empty;
+
     public ObsIntegrationSectionViewModel(
         ObsIntegrationService obsIntegration,
         SettingsManager settingsManager,
@@ -132,8 +145,9 @@ public sealed partial class ObsIntegrationSectionViewModel : ObservableObject, I
         Width = settings.Width;
         Height = settings.Height;
 
-        PopulateSourceItems(DashboardSources, [], settings.GetDashboardSourceNames());
-        PopulateSourceItems(ChatRefreshSources, [], settings.ChatRefreshSources);
+        PopulateSourceItems(DashboardSources, [], settings.GetDashboardSourceNames(), hasLoadedFromObs: false);
+        PopulateSourceItems(ChatRefreshSources, [], settings.ChatRefreshSources, hasLoadedFromObs: false);
+        UpdateMissingSourcesWarnings();
 
         OverlayUrl = BuildOverlayUrl();
         SetStatus("● Не проверено", StatusSeverity.None);
@@ -331,6 +345,8 @@ public sealed partial class ObsIntegrationSectionViewModel : ObservableObject, I
 
     public void Dispose()
     {
+        UnsubscribeSourceItems(DashboardSources);
+        UnsubscribeSourceItems(ChatRefreshSources);
     }
 
     private bool CanOperateAlways() => !IsBusy;
@@ -395,8 +411,9 @@ public sealed partial class ObsIntegrationSectionViewModel : ObservableObject, I
                 SceneName = scenes[0];
             }
 
-            PopulateSourceItems(DashboardSources, inputNames, ReadCheckedSources(DashboardSources));
-            PopulateSourceItems(ChatRefreshSources, browserSourceNames, ReadCheckedSources(ChatRefreshSources));
+            PopulateSourceItems(DashboardSources, inputNames, ReadCheckedSources(DashboardSources), hasLoadedFromObs: true);
+            PopulateSourceItems(ChatRefreshSources, browserSourceNames, ReadCheckedSources(ChatRefreshSources), hasLoadedFromObs: true);
+            UpdateMissingSourcesWarnings();
         }
         finally
         {
@@ -404,30 +421,82 @@ public sealed partial class ObsIntegrationSectionViewModel : ObservableObject, I
         }
     }
 
-    private static void PopulateSourceItems(
+    private void PopulateSourceItems(
         ObservableCollection<ObsSourceItemViewModel> collection,
         IReadOnlyList<string> allNames,
-        IReadOnlyList<string> selectedNames)
+        IReadOnlyList<string> selectedNames,
+        bool hasLoadedFromObs)
     {
+        var available = allNames
+            .Select(n => n?.Trim() ?? string.Empty)
+            .Where(n => n.Length > 0)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
         var selected = selectedNames
             .Select(n => n?.Trim() ?? string.Empty)
             .Where(n => n.Length > 0)
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
-        var merged = allNames
-            .Select(n => n?.Trim() ?? string.Empty)
-            .Where(n => n.Length > 0)
+        var merged = available
             .Concat(selected)
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .OrderBy(n => n, StringComparer.OrdinalIgnoreCase)
             .ToList();
 
+        UnsubscribeSourceItems(collection);
         collection.Clear();
 
         foreach (var name in merged)
         {
-            collection.Add(new ObsSourceItemViewModel(name, selected.Contains(name)));
+            var isMissingInObs = hasLoadedFromObs && !available.Contains(name);
+            var item = new ObsSourceItemViewModel(name, selected.Contains(name), isMissingInObs);
+            item.PropertyChanged += OnSourceItemPropertyChanged;
+            collection.Add(item);
         }
+    }
+
+    private void UnsubscribeSourceItems(IEnumerable<ObsSourceItemViewModel> items)
+    {
+        foreach (var item in items)
+        {
+            item.PropertyChanged -= OnSourceItemPropertyChanged;
+        }
+    }
+
+    private void OnSourceItemPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(ObsSourceItemViewModel.IsChecked))
+        {
+            UpdateMissingSourcesWarnings();
+        }
+    }
+
+    private void UpdateMissingSourcesWarnings()
+    {
+        var dashboardWarning = FormatMissingSourcesWarning(DashboardSources);
+        MissingDashboardSourcesWarning = dashboardWarning;
+        HasMissingDashboardSources = dashboardWarning.Length > 0;
+
+        var chatWarning = FormatMissingSourcesWarning(ChatRefreshSources);
+        MissingChatRefreshSourcesWarning = chatWarning;
+        HasMissingChatRefreshSources = chatWarning.Length > 0;
+    }
+
+    private static string FormatMissingSourcesWarning(IEnumerable<ObsSourceItemViewModel> items)
+    {
+        var missing = items
+            .Where(i => i.IsChecked && i.IsMissingInObs)
+            .Select(i => i.Name)
+            .ToArray();
+
+        if (missing.Length == 0)
+        {
+            return string.Empty;
+        }
+
+        return missing.Length == 1
+            ? $"Источник «{missing[0]}» не найден в OBS – снимите отметку или проверьте имя в OBS."
+            : $"Источники не найдены в OBS: {string.Join(", ", missing.Select(name => $"«{name}»"))} – снимите отметку или проверьте имена в OBS.";
     }
 
     private static IReadOnlyList<string> ReadCheckedSources(IEnumerable<ObsSourceItemViewModel> items)

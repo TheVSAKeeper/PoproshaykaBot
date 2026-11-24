@@ -61,6 +61,7 @@
                                 <TextBlock Grid.Row="0"
                                            Grid.Column="0"
                                            Text="{Binding Title}"
+                                           ToolTip="{Binding Title}"
                                            TextTrimming="CharacterEllipsis"
                                            Foreground="{DynamicResource Fg.Primary}">
                                     <TextBlock.Style>

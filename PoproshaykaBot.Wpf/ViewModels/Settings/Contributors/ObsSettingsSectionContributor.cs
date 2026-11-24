@@ -20,6 +20,10 @@ public sealed class ObsSettingsSectionContributor : ISettingsSectionContributor
         nameof(ObsIntegrationSectionViewModel.StatusText),
         nameof(ObsIntegrationSectionViewModel.StatusSeverity),
         nameof(ObsIntegrationSectionViewModel.OverlayUrl),
+        nameof(ObsIntegrationSectionViewModel.HasMissingDashboardSources),
+        nameof(ObsIntegrationSectionViewModel.MissingDashboardSourcesWarning),
+        nameof(ObsIntegrationSectionViewModel.HasMissingChatRefreshSources),
+        nameof(ObsIntegrationSectionViewModel.MissingChatRefreshSourcesWarning),
         nameof(ObsChatSettingsSectionViewModel.IsFlowTheme),
         "HasErrors",
     };

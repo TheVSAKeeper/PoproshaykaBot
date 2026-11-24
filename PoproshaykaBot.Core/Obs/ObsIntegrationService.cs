@@ -38,6 +38,11 @@ public sealed class ObsIntegrationService(
             new(4, nameof(LogChatSourceRefreshRejected)),
             "OBS отклонил жёсткий refresh для источника {SourceName}: возможно, источник не Browser Source или не существует");
 
+    private static readonly Action<ILogger, string, Exception?> LogChatSourceMissingInObs =
+        LoggerMessage.Define<string>(LogLevel.Warning,
+            new(5, nameof(LogChatSourceMissingInObs)),
+            "Источник чата «{SourceName}» не найден в OBS – проверьте список в настройках OBS");
+
     private readonly SemaphoreSlim _operationGate = new(1, 1);
 
     private readonly ObsMultistreamOutputsClient _multistreamClient = new(client, logger);
@@ -162,8 +167,7 @@ public sealed class ObsIntegrationService(
             return
             [
                 .. inputs
-                    .Where(input => string.Equals(input.Kind, BrowserSourceInputKind, StringComparison.OrdinalIgnoreCase)
-                                    || string.Equals(input.UnversionedKind, BrowserSourceInputKind, StringComparison.OrdinalIgnoreCase))
+                    .Where(IsBrowserSourceInput)
                     .Select(input => input.Name)
                     .Order(StringComparer.OrdinalIgnoreCase),
             ];
@@ -193,9 +197,21 @@ public sealed class ObsIntegrationService(
             using var cts = CreateTimeoutToken(cancellationToken);
             await EnsureConnectedAsync(settings, cts.Token).ConfigureAwait(false);
 
+            var inputs = await GetInputListAsync(cts.Token).ConfigureAwait(false);
+            var browserSources = inputs
+                .Where(IsBrowserSourceInput)
+                .Select(input => input.Name)
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
             var refreshed = 0;
             foreach (var sourceName in sourceNames)
             {
+                if (!browserSources.Contains(sourceName))
+                {
+                    LogChatSourceMissingInObs(logger, sourceName, null);
+                    continue;
+                }
+
                 try
                 {
                     await client.SendRequestAsync("PressInputPropertiesButton",
@@ -557,6 +573,12 @@ public sealed class ObsIntegrationService(
                && value.TryGetInt64(out var parsed)
             ? parsed
             : null;
+    }
+
+    private static bool IsBrowserSourceInput(ObsInputInfo input)
+    {
+        return string.Equals(input.Kind, BrowserSourceInputKind, StringComparison.OrdinalIgnoreCase)
+               || string.Equals(input.UnversionedKind, BrowserSourceInputKind, StringComparison.OrdinalIgnoreCase);
     }
 
     private static bool IsMicrophoneInputKind(string kind)

@@ -287,18 +287,27 @@ public partial class EmbeddedPlatformChatLoginWindow : Window
         _themeBackground.Detach();
         _lifetime.Cancel();
 
+        var shouldDeleteProfile = _viewModel.Result.Outcome != PlatformWebChatLoginOutcome.Completed;
+        var userDataFolder = _viewModel.Descriptor.UserDataFolder;
+        var profileName = _viewModel.BrowserProfileName;
+
         if (WebView.CoreWebView2 is { } core)
         {
             core.NewWindowRequested -= OnNewWindowRequested;
             core.NavigationCompleted -= OnNavigationCompleted;
             core.SourceChanged -= OnSourceChanged;
-            if (_viewModel.Result.Outcome != PlatformWebChatLoginOutcome.Completed)
+            if (shouldDeleteProfile)
             {
                 core.Profile.Delete();
             }
         }
 
         WebView.Dispose();
+        if (shouldDeleteProfile)
+        {
+            WebView2EnvironmentFactory.TryDeleteProfileDirectory(userDataFolder, profileName, _viewModel.Logger);
+        }
+
         _lifetime.Dispose();
     }
 

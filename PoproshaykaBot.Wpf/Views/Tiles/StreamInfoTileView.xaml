@@ -159,6 +159,7 @@
                            Text="{Binding DetailLabel, Mode=OneWay}" />
                 <TextBlock Foreground="{DynamicResource Fg.Secondary}"
                            TextTrimming="CharacterEllipsis"
+                           ToolTip="{Binding DetailValue, Mode=OneWay}"
                            Text="{Binding DetailValue, Mode=OneWay}" />
             </StackPanel>
 

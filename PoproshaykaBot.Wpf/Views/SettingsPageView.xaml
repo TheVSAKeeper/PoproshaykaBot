@@ -191,6 +191,7 @@
 
             <ScrollViewer x:Name="SectionScroll"
                           Grid.Column="1"
+                          AutomationProperties.Name="Разделы настроек"
                           VerticalScrollBarVisibility="Auto"
                           HorizontalScrollBarVisibility="Disabled"
                           Margin="16,0,0,0"

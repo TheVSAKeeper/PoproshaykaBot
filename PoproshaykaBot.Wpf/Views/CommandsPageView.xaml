@@ -403,6 +403,7 @@
 
                     <ScrollViewer x:Name="TableScroll"
                                   Grid.Row="2"
+                                  AutomationProperties.Name="Таблица команд"
                                   HorizontalScrollBarVisibility="Auto"
                                   VerticalScrollBarVisibility="Disabled"
                                   Focusable="False">
@@ -471,7 +472,8 @@
                     Padding="16"
                     Visibility="{Binding HasCommands, Converter={StaticResource BoolToVisibility}}">
                 <Grid>
-                    <ScrollViewer VerticalScrollBarVisibility="Auto"
+                    <ScrollViewer AutomationProperties.Name="Параметры выбранной команды"
+                                  VerticalScrollBarVisibility="Auto"
                                   HorizontalScrollBarVisibility="Disabled"
                                   Visibility="{Binding HasSelectedRow, Converter={StaticResource BoolToVisibility}}">
                         <StackPanel>

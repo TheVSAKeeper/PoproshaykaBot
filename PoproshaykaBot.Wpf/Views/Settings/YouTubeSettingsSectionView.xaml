@@ -72,6 +72,7 @@
         <TextBlock Text="{Binding QuotaBudgetError}"
                    Foreground="{DynamicResource State.ErrorText}"
                    FontSize="{DynamicResource Font.Size.S}"
+                   TextWrapping="Wrap"
                    Visibility="{Binding HasQuotaBudgetError, Converter={StaticResource BoolToVisibility}}"
                    Margin="0,-6,0,10" />
 
@@ -156,6 +157,7 @@
                                            Foreground="{DynamicResource Fg.Primary}"
                                            FontWeight="{DynamicResource Font.Weight.SemiBold}"
                                            FontSize="{DynamicResource Font.Size.S}"
+                                           TextWrapping="Wrap"
                                            VerticalAlignment="Center" />
                                 <TextBlock Grid.Column="1"
                                            Text="{Binding QuotaStatus.BreakdownText}"
@@ -194,6 +196,7 @@
                                                        Foreground="{DynamicResource Fg.Primary}"
                                                        FontWeight="{DynamicResource Font.Weight.SemiBold}"
                                                        FontSize="{DynamicResource Font.Size.S}"
+                                                       TextWrapping="Wrap"
                                                        Margin="12,0,0,0"
                                                        VerticalAlignment="Center" />
                                         </Grid>
@@ -246,6 +249,7 @@
                            Foreground="{DynamicResource Fg.Primary}"
                            FontWeight="{DynamicResource Font.Weight.SemiBold}"
                            FontSize="{DynamicResource Font.Size.S}"
+                           TextWrapping="Wrap"
                            Margin="0,0,0,6" />
                 <TextBlock Text="1. Включите YouTube Data API v3 и создайте OAuth-клиент строго типа «Desktop app» (клиент «Web application» не примет локальный возврат 127.0.0.1)."
                            Foreground="{DynamicResource Fg.Muted}"

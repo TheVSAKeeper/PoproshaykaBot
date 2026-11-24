@@ -1,5 +1,6 @@
 ﻿using Microsoft.Extensions.Logging;
 using Microsoft.Web.WebView2.Core;
+using Microsoft.Web.WebView2.Wpf;
 using PoproshaykaBot.Wpf.Infrastructure;
 using PoproshaykaBot.Wpf.ViewModels.Tiles;
 using System.ComponentModel;
@@ -12,9 +13,11 @@ namespace PoproshaykaBot.Wpf.Views.Tiles;
 public partial class ChatOverlayPreviewTileView : UserControl, IView<ChatOverlayPreviewTileViewModel>
 {
     private readonly CancellationTokenSource _lifetime = new();
-    private readonly WebViewThemeBackground _themeBackground;
+    private WebViewThemeBackground _themeBackground;
 
-    private bool _initialized;
+    private CancellationTokenSource? _browserCts;
+    private int _browserGeneration;
+    private bool _initializing;
     private bool _disposed;
     private ChatOverlayPreviewTileViewModel? _viewModel;
 
@@ -23,26 +26,35 @@ public partial class ChatOverlayPreviewTileView : UserControl, IView<ChatOverlay
         InitializeComponent();
         Loaded += OnLoaded;
         Unloaded += OnUnloaded;
+        IsVisibleChanged += OnIsVisibleChanged;
         Dispatcher.ShutdownStarted += OnShutdownStarted;
         _themeBackground = WebViewThemeBackground.Attach(WebView);
     }
 
-    private async void OnLoaded(object sender, RoutedEventArgs e)
+    private void OnLoaded(object sender, RoutedEventArgs e)
     {
-        if (_initialized || _disposed)
+        if (_disposed)
         {
             return;
         }
 
-        if (DataContext is not ChatOverlayPreviewTileViewModel viewModel)
+        if (_viewModel is null && DataContext is ChatOverlayPreviewTileViewModel viewModel)
+        {
+            _viewModel = viewModel;
+            _viewModel.PropertyChanged += OnViewModelPropertyChanged;
+        }
+
+        UpdateBrowserForVisibility();
+    }
+
+    private void OnIsVisibleChanged(object sender, DependencyPropertyChangedEventArgs e)
+    {
+        if (_disposed || !IsLoaded)
         {
             return;
         }
 
-        _initialized = true;
-        _viewModel = viewModel;
-
-        await InitializeWebViewAsync(viewModel);
+        UpdateBrowserForVisibility();
     }
 
     private void OnUnloaded(object sender, RoutedEventArgs e)
@@ -74,10 +86,13 @@ public partial class ChatOverlayPreviewTileView : UserControl, IView<ChatOverlay
         }
 
         _disposed = true;
+        _browserGeneration++;
         Loaded -= OnLoaded;
         Unloaded -= OnUnloaded;
+        IsVisibleChanged -= OnIsVisibleChanged;
         Dispatcher.ShutdownStarted -= OnShutdownStarted;
         _themeBackground.Detach();
+        CancelBrowserInitialization();
         _lifetime.Cancel();
 
         if (_viewModel is not null)
@@ -89,47 +104,154 @@ public partial class ChatOverlayPreviewTileView : UserControl, IView<ChatOverlay
         _lifetime.Dispose();
     }
 
-    private async Task InitializeWebViewAsync(ChatOverlayPreviewTileViewModel viewModel)
+    private void UpdateBrowserForVisibility()
     {
-        if (App.IsGallery)
+        if (_disposed || _viewModel is not { } viewModel)
+        {
+            return;
+        }
+
+        if (IsVisible)
+        {
+            if (!_initializing && WebView.CoreWebView2 is null && !viewModel.HasError)
+            {
+                _ = InitializeWebViewAsync(viewModel);
+            }
+
+            return;
+        }
+
+        if (!viewModel.IsLayoutEditing
+            && !viewModel.IsModalDialogOpen
+            && (_initializing || WebView.CoreWebView2 is not null))
+        {
+            UnloadBrowser();
+        }
+    }
+
+    private void UnloadBrowser()
+    {
+        _browserGeneration++;
+        _initializing = false;
+        CancelBrowserInitialization();
+        ReplaceBrowser();
+    }
+
+    private void ReplaceBrowser()
+    {
+        if (_disposed || WebView.Parent is not Grid host)
+        {
+            return;
+        }
+
+        var replacement = new WebView2 { Style = WebView.Style, Name = WebView.Name };
+        var index = host.Children.IndexOf(WebView);
+        host.Children.RemoveAt(index);
+        UnregisterName(WebView.Name);
+        RegisterName(replacement.Name, replacement);
+        _themeBackground.Detach();
+        var previous = WebView;
+        WebView = replacement;
+        _themeBackground = WebViewThemeBackground.Attach(replacement);
+        previous.Dispose();
+        host.Children.Insert(index, replacement);
+    }
+
+    private void CancelBrowserInitialization()
+    {
+        if (_browserCts is null)
         {
             return;
         }
 
         try
         {
+            _browserCts.Cancel();
+        }
+        catch (ObjectDisposedException)
+        {
+        }
+
+        _browserCts.Dispose();
+        _browserCts = null;
+    }
+
+    private async Task InitializeWebViewAsync(ChatOverlayPreviewTileViewModel viewModel)
+    {
+        if (App.IsGallery || _disposed || !IsVisible)
+        {
+            return;
+        }
+
+        CancelBrowserInitialization();
+        var cts = CancellationTokenSource.CreateLinkedTokenSource(_lifetime.Token);
+        _browserCts = cts;
+        var generation = _browserGeneration;
+        _initializing = true;
+
+        try
+        {
             var environment = await WebView2EnvironmentFactory.CreateAsync(
                 viewModel.UserDataFolder,
                 viewModel.Logger,
-                _lifetime.Token);
+                cts.Token);
 
-            if (_disposed)
+            if (_disposed || generation != _browserGeneration || !IsVisible)
             {
                 return;
             }
 
             await WebView.EnsureCoreWebView2Async(environment);
 
-            if (_disposed)
+            if (_disposed || generation != _browserGeneration)
             {
                 return;
             }
 
+            if (!IsVisible)
+            {
+                if (!viewModel.IsLayoutEditing && !viewModel.IsModalDialogOpen)
+                {
+                    UnloadBrowser();
+                }
+
+                return;
+            }
+
             WebView.CoreWebView2.Navigate(viewModel.CurrentUrl);
-            viewModel.PropertyChanged += OnViewModelPropertyChanged;
         }
         catch (OperationCanceledException)
         {
         }
         catch (WebView2RuntimeNotFoundException exception)
         {
-            viewModel.Logger.LogError(exception, "WebView2 Runtime не установлен");
-            viewModel.ShowRuntimeMissingError();
+            if (generation == _browserGeneration && !_disposed)
+            {
+                viewModel.Logger.LogError(exception, "WebView2 Runtime не установлен");
+                viewModel.ShowRuntimeMissingError();
+            }
         }
         catch (Exception exception)
         {
-            viewModel.Logger.LogError(exception, "Ошибка инициализации WebView2 превью оверлея");
-            viewModel.ShowGenericError();
+            if (generation == _browserGeneration && !_disposed)
+            {
+                viewModel.Logger.LogError(exception, "Ошибка инициализации WebView2 превью оверлея");
+                viewModel.ShowGenericError();
+            }
+        }
+        finally
+        {
+            if (generation == _browserGeneration)
+            {
+                _initializing = false;
+            }
+
+            if (ReferenceEquals(_browserCts, cts))
+            {
+                _browserCts = null;
+            }
+
+            cts.Dispose();
         }
     }
 

@@ -1420,7 +1420,8 @@
                 Margin="0,0,0,8"
                 MaxHeight="{Binding SummaryStripMaxHeight, RelativeSource={RelativeSource AncestorType=views:StreamHistoryPageView}}"
                 Visibility="{Binding IsSummaryOpen, Converter={StaticResource BoolToVisibility}}">
-            <ScrollViewer VerticalScrollBarVisibility="Auto"
+            <ScrollViewer AutomationProperties.Name="Сводка и список стримов"
+                          VerticalScrollBarVisibility="Auto"
                           HorizontalScrollBarVisibility="Disabled">
                 <Grid Margin="12,10,12,10">
                     <Grid.RowDefinitions>
@@ -1996,6 +1997,7 @@
 
                 <ScrollViewer x:Name="DetailBodyScroll"
                               Grid.Row="1"
+                              AutomationProperties.Name="Детали выбранного стрима"
                               VerticalScrollBarVisibility="Auto"
                               HorizontalScrollBarVisibility="Disabled">
                     <Grid>

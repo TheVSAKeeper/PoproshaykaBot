@@ -220,7 +220,8 @@
                     <Border x:Name="TileBody"
                             Padding="14,10,14,14"
                             Visibility="{Binding IsCollapsed, Converter={StaticResource InverseBoolToVisibility}}">
-                    <ScrollViewer HorizontalScrollBarVisibility="Disabled">
+                    <ScrollViewer HorizontalScrollBarVisibility="Disabled"
+                                  AutomationProperties.Name="{Binding Title, StringFormat='Содержимое плитки «{0}»'}">
                         <ScrollViewer.Style>
                             <Style TargetType="ScrollViewer">
                                 <Setter Property="VerticalScrollBarVisibility"
@@ -447,6 +448,7 @@
                 Visibility="{Binding HasTiles, Converter={StaticResource BoolToVisibility}}">
             <DockPanel LastChildFill="True">
                 <ScrollViewer x:Name="BandsScroll"
+                              AutomationProperties.Name="Сетка плиток дашборда"
                               HorizontalScrollBarVisibility="Disabled"
                               VerticalScrollBarVisibility="Disabled">
                     <Grid x:Name="BandsGrid" />

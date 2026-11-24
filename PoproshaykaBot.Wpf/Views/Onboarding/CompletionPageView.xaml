@@ -9,7 +9,8 @@
              d:DesignHeight="420"
              d:DesignWidth="688">
 
-    <ScrollViewer VerticalScrollBarVisibility="Auto"
+    <ScrollViewer AutomationProperties.Name="Завершение настройки"
+                  VerticalScrollBarVisibility="Auto"
                   HorizontalScrollBarVisibility="Disabled">
         <StackPanel Margin="20,18">
 

@@ -56,6 +56,7 @@
                    Grid.Column="1"
                    Style="{StaticResource Value}"
                    Text="{Binding StatusText}"
+                   TextWrapping="Wrap"
                    FontSize="{DynamicResource Font.Size.M}"
                    FontWeight="SemiBold"
                    keepshell:SeverityBrushBehavior.Foreground="{Binding StatusSeverity}" />
@@ -67,6 +68,7 @@
         <TextBlock Grid.Row="1"
                    Grid.Column="1"
                    Style="{StaticResource Value}"
+                   TextWrapping="Wrap"
                    Text="{Binding ModeText}" />
 
         <TextBlock Grid.Row="2"

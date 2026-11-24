@@ -293,6 +293,14 @@ public sealed class ObsIntegrationServiceTests
     public async Task RefreshConfiguredChatSourcesAsyncSendsRefreshForEachConfiguredSourceAsync()
     {
         _client.EnqueueResponse("GetVersion", """{"obsVersion":"31.0.0","obsWebSocketVersion":"5.5.2"}""");
+        _client.EnqueueResponse("GetInputList", """
+                                                {
+                                                  "inputs": [
+                                                    {"inputName": "Chat Overlay", "inputKind": "browser_source", "unversionedInputKind": "browser_source"},
+                                                    {"inputName": "Secondary Chat", "inputKind": "browser_source", "unversionedInputKind": "browser_source"}
+                                                  ]
+                                                }
+                                                """);
 
         var refreshed = await _service.RefreshConfiguredChatSourcesAsync(new()
         {
@@ -318,9 +326,45 @@ public sealed class ObsIntegrationServiceTests
     }
 
     [Test]
+    public async Task RefreshConfiguredChatSourcesAsyncSkipsMissingAndNonBrowserSourcesWithoutSendingPressButtonAsync()
+    {
+        _client.EnqueueResponse("GetVersion", """{"obsVersion":"31.0.0","obsWebSocketVersion":"5.5.2"}""");
+        _client.EnqueueResponse("GetInputList", """
+                                                {
+                                                  "inputs": [
+                                                    {"inputName": "Chat Overlay", "inputKind": "browser_source", "unversionedInputKind": "browser_source"},
+                                                    {"inputName": "Mic/Aux", "inputKind": "wasapi_input_capture", "unversionedInputKind": "wasapi_input_capture"}
+                                                  ]
+                                                }
+                                                """);
+
+        var refreshed = await _service.RefreshConfiguredChatSourcesAsync(new()
+        {
+            Enabled = true,
+            ChatRefreshSources = ["Чатик попрошайка", "Mic/Aux", "Chat Overlay"],
+        }, CancellationToken.None);
+
+        Assert.That(refreshed, Is.EqualTo(1));
+
+        var refreshRequests = _client.Requests
+            .Where(request => string.Equals(request.RequestType, "PressInputPropertiesButton", StringComparison.Ordinal))
+            .Select(request => request.RequestData!.Value.GetProperty("inputName").GetString())
+            .ToArray();
+
+        Assert.That(refreshRequests, Is.EqualTo(["Chat Overlay"]));
+    }
+
+    [Test]
     public async Task RefreshConfiguredChatSourcesAsyncFallsBackToSourceNameWhenListEmptyAsync()
     {
         _client.EnqueueResponse("GetVersion", """{"obsVersion":"31.0.0","obsWebSocketVersion":"5.5.2"}""");
+        _client.EnqueueResponse("GetInputList", """
+                                                {
+                                                  "inputs": [
+                                                    {"inputName": "PoproshaykaBot Chat", "inputKind": "browser_source", "unversionedInputKind": "browser_source"}
+                                                  ]
+                                                }
+                                                """);
 
         var refreshed = await _service.RefreshConfiguredChatSourcesAsync(new()
         {

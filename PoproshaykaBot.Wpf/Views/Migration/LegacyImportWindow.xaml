@@ -257,6 +257,7 @@
             </ItemsControl>
 
             <ScrollViewer MaxHeight="160"
+                          AutomationProperties.Name="Ошибки переноса данных"
                           VerticalScrollBarVisibility="Auto"
                           Margin="0,8,0,0">
                 <ItemsControl ItemsSource="{Binding ResultFailures}">

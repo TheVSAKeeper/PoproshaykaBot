@@ -33,6 +33,7 @@ public partial class ChatDisplayTileView : UserControl, IView<ChatDisplayTileVie
         InitializeComponent();
         Loaded += OnLoaded;
         Unloaded += OnUnloaded;
+        IsVisibleChanged += OnIsVisibleChanged;
         Dispatcher.ShutdownStarted += OnShutdownStarted;
         ThemeManager.Changed += OnThemeChanged;
         _themeBackground = WebViewThemeBackground.Attach(WebView);
@@ -63,25 +64,50 @@ public partial class ChatDisplayTileView : UserControl, IView<ChatDisplayTileVie
 
     private async void OnLoaded(object sender, RoutedEventArgs e)
     {
-        if (_initialized || _disposed)
+        if (_disposed)
         {
             return;
         }
 
-        if (DataContext is not ChatDisplayTileViewModel viewModel)
+        if (!_initialized)
+        {
+            if (DataContext is not ChatDisplayTileViewModel viewModel)
+            {
+                return;
+            }
+
+            _initialized = true;
+            _viewModel = viewModel;
+            _viewModel.SetDarkTheme(ThemeManager.Current?.IsDark == true);
+            _viewModel.OpenRequested += OnOpenRequested;
+            _viewModel.ResetSessionRequested += OnResetSessionRequested;
+            _viewModel.ResetPaneSessionRequested += OnResetPaneSessionRequested;
+            _viewModel.ClutterScriptChanged += OnClutterScriptChanged;
+        }
+
+        if (IsVisible)
+        {
+            await Task.WhenAll(OpenChatAsync(WebView), OpenChatAsync(PlatformWebView));
+        }
+    }
+
+    private void OnIsVisibleChanged(object sender, DependencyPropertyChangedEventArgs e)
+    {
+        if (_disposed || !IsLoaded || !_initialized || _viewModel is not { } viewModel)
         {
             return;
         }
 
-        _initialized = true;
-        _viewModel = viewModel;
-        _viewModel.SetDarkTheme(ThemeManager.Current?.IsDark == true);
-        _viewModel.OpenRequested += OnOpenRequested;
-        _viewModel.ResetSessionRequested += OnResetSessionRequested;
-        _viewModel.ResetPaneSessionRequested += OnResetPaneSessionRequested;
-        _viewModel.ClutterScriptChanged += OnClutterScriptChanged;
+        if (IsVisible)
+        {
+            ResumeAndOpenVisibleBrowsers();
+            return;
+        }
 
-        await Task.WhenAll(OpenChatAsync(WebView), OpenChatAsync(PlatformWebView));
+        if (!viewModel.IsLayoutEditing && !viewModel.IsModalDialogOpen)
+        {
+            _ = SuspendBrowsersAsync();
+        }
     }
 
     private void OnUnloaded(object sender, RoutedEventArgs e)
@@ -120,6 +146,7 @@ public partial class ChatDisplayTileView : UserControl, IView<ChatDisplayTileVie
         _disposed = true;
         Loaded -= OnLoaded;
         Unloaded -= OnUnloaded;
+        IsVisibleChanged -= OnIsVisibleChanged;
         Dispatcher.ShutdownStarted -= OnShutdownStarted;
         ThemeManager.Changed -= OnThemeChanged;
         _themeBackground.Detach();
@@ -137,6 +164,71 @@ public partial class ChatDisplayTileView : UserControl, IView<ChatDisplayTileVie
         ReleaseBrowser(WebView);
         ReleaseBrowser(PlatformWebView);
         _lifetime.Dispose();
+    }
+
+    private void ResumeAndOpenVisibleBrowsers()
+    {
+        foreach (var browser in new[] { WebView, PlatformWebView })
+        {
+            if (!IsCurrentBrowser(browser))
+            {
+                continue;
+            }
+
+            var state = StateFor(browser);
+            if (browser.CoreWebView2 is { } core && (state.IsSuspended || core.IsSuspended))
+            {
+                core.Resume();
+                state.IsSuspended = false;
+            }
+
+            if (state.Initialization is null || state.PendingOpen)
+            {
+                var reload = state.PendingReload;
+                state.PendingOpen = false;
+                state.PendingReload = false;
+                _ = OpenChatAsync(browser, reload);
+            }
+        }
+    }
+
+    private async Task SuspendBrowsersAsync()
+    {
+        foreach (var browser in new[] { WebView, PlatformWebView })
+        {
+            if (!IsCurrentBrowser(browser) || IsVisible || browser.CoreWebView2 is not { } core)
+            {
+                continue;
+            }
+
+            if (_viewModel is { IsLayoutEditing: true } or { IsModalDialogOpen: true })
+            {
+                return;
+            }
+
+            try
+            {
+                var suspended = await core.TrySuspendAsync();
+                if (!IsCurrentBrowser(browser) || !ReferenceEquals(browser.CoreWebView2, core))
+                {
+                    continue;
+                }
+
+                if (IsVisible)
+                {
+                    core.Resume();
+                    StateFor(browser).IsSuspended = false;
+                }
+                else if (suspended)
+                {
+                    StateFor(browser).IsSuspended = true;
+                }
+            }
+            catch (Exception exception) when (exception is not OperationCanceledException)
+            {
+                _viewModel?.Logger.LogDebug(exception, "Не удалось приостановить WebView2 чата трансляции");
+            }
+        }
     }
 
     private void ReleaseBrowser(WebView2 browser)
@@ -163,11 +255,20 @@ public partial class ChatDisplayTileView : UserControl, IView<ChatDisplayTileVie
         if (!pane.IsShown)
         {
             state.OpenRequest++;
+            state.PendingOpen = false;
+            state.PendingReload = false;
             if (state.Initialization is not null || browser.CoreWebView2 is not null)
             {
                 _ = ReplaceBrowser(browser);
             }
 
+            return;
+        }
+
+        if (!IsVisible)
+        {
+            state.PendingOpen = true;
+            state.PendingReload |= reload;
             return;
         }
 
@@ -213,6 +314,24 @@ public partial class ChatDisplayTileView : UserControl, IView<ChatDisplayTileVie
             if (!IsCurrentBrowser(browser) || request != state.OpenRequest || browser.CoreWebView2 is not { } core)
             {
                 return;
+            }
+
+            if (!IsVisible)
+            {
+                state.PendingOpen = true;
+                state.PendingReload |= reload;
+                if (!viewModel.IsLayoutEditing && !viewModel.IsModalDialogOpen)
+                {
+                    _ = SuspendBrowsersAsync();
+                }
+
+                return;
+            }
+
+            if (state.IsSuspended || core.IsSuspended)
+            {
+                core.Resume();
+                state.IsSuspended = false;
             }
 
             if (reload || !state.Navigation.CanReuse(uri))
@@ -652,6 +771,9 @@ public partial class ChatDisplayTileView : UserControl, IView<ChatDisplayTileVie
         public (string DataFolder, string? ProfileName)? Session { get; set; }
         public int OpenRequest { get; set; }
         public Task? Initialization { get; set; }
+        public bool IsSuspended { get; set; }
+        public bool PendingOpen { get; set; }
+        public bool PendingReload { get; set; }
         public ChatBrowserNavigation Navigation { get; } = new();
     }
 }
