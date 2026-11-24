@@ -13,7 +13,7 @@ internal sealed class YouTubeRestLiveChatSendClient(
     IYouTubeQuotaGovernor quotaGovernor)
     : IYouTubeLiveChatSendClient
 {
-    public const int InsertQuotaCost = 20;
+    public const int InsertQuotaCost = YouTubeQuotaCosts.ChatSendUnits;
 
     private const string InsertUri = "youtube/v3/liveChat/messages?part=snippet";
     private const string TextMessageEventType = "textMessageEvent";

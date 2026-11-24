@@ -11,9 +11,12 @@ public sealed class EmbeddedTwitchAuthDialog(
     IServiceScopeFactory scopeFactory,
     ILogger<EmbeddedTwitchAuthDialog> logger) : IEmbeddedTwitchAuthDialog
 {
-    public Task<EmbeddedTwitchAuthResult> AuthorizeAsync(EmbeddedTwitchAuthRequest request)
+    public Task<EmbeddedTwitchAuthResult> AuthorizeAsync(
+        EmbeddedTwitchAuthRequest request,
+        CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(request);
+        cancellationToken.ThrowIfCancellationRequested();
 
         if (App.IsHeadless)
         {
@@ -32,7 +35,19 @@ public sealed class EmbeddedTwitchAuthDialog(
             Owner = DialogOwner.Resolve(),
         };
 
+        using var registration = cancellationToken.Register(() =>
+        {
+            _ = window.Dispatcher.BeginInvoke(() =>
+            {
+                if (window.IsLoaded)
+                {
+                    window.Close();
+                }
+            });
+        });
+
         window.ShowDialog();
+        cancellationToken.ThrowIfCancellationRequested();
 
         return Task.FromResult(viewModel.Result);
     }

@@ -105,6 +105,7 @@ public class YouTubeQuotaStoreTests
     [TestCase("null")]
     [TestCase("""{"schemaVersion":99,"projects":{}}""")]
     [TestCase("""{"schemaVersion":1,"projects":{"p":{"pacificDate":"2026-11-15","dailyBudget":10000,"committedUnits":-5,"botCommittedUnits":0,"broadcasterCommittedUnits":0,"exhaustedByServer":false}}}""")]
+    [TestCase("""{"schemaVersion":1,"projects":{"p":{"pacificDate":"2026-11-15","dailyBudget":10000,"committedUnits":10,"botCommittedUnits":10,"broadcasterCommittedUnits":0,"exhaustedByServer":false,"categoryUnits":{"ChatSend":20}}}}""")]
     public void Corrupt_File_Creates_Invalid_Backup_And_Never_Overwrites_Original(string corruptContent)
     {
         File.WriteAllText(_quotaPath, corruptContent);

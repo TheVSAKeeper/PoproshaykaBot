@@ -155,7 +155,8 @@ public sealed class ChatPipelineHandler :
                                      liveStream?.Id,
                                      broadcastId,
                                      liveStream?.StartedAt ?? default,
-                                     chatMessage.ChatSessionId) == true;
+                                     chatMessage.ChatSessionId,
+                                     chatMessage.Channel) == true;
 
         var isFirstSeen = !chatMessage.IsBot
                           && !@event.IsReplacement

@@ -2,5 +2,5 @@
 
 public interface IEmbeddedTwitchAuthDialog
 {
-    Task<EmbeddedTwitchAuthResult> AuthorizeAsync(EmbeddedTwitchAuthRequest request);
+    Task<EmbeddedTwitchAuthResult> AuthorizeAsync(EmbeddedTwitchAuthRequest request, CancellationToken cancellationToken = default);
 }

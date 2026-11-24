@@ -483,8 +483,11 @@ public sealed class StreamStatusManagerMultiContextTests
         helix.GetStreamsAsync(Arg.Any<IEnumerable<string>>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult<IReadOnlyList<HelixStreamInfo>>([]));
 
+        EventSubAsyncHandler<EventSubSessionWelcomeArgs>? welcomeHandler = null;
         var eventSub = Substitute.For<ITwitchEventSubClient>();
         eventSub.SessionId.Returns("session-1");
+        eventSub.When(x => x.OnSessionWelcome += Arg.Any<EventSubAsyncHandler<EventSubSessionWelcomeArgs>>())
+            .Do(call => welcomeHandler += call.Arg<EventSubAsyncHandler<EventSubSessionWelcomeArgs>>());
 
         var broadcasterId = Substitute.For<IBroadcasterIdProvider>();
         broadcasterId.GetAsync(Arg.Any<CancellationToken>()).Returns(Task.FromResult<string?>("177128531"));
@@ -512,27 +515,22 @@ public sealed class StreamStatusManagerMultiContextTests
             auth);
 
         await manager.StartAsync(new Progress<string>(_ => { }), CancellationToken.None);
+        Assert.That(welcomeHandler, Is.Not.Null);
 
-        eventSub.OnSessionWelcome += Raise.Event<EventSubAsyncHandler<EventSubSessionWelcomeArgs>>(
-            new EventSubSessionWelcomeArgs("session-1", 10),
-            CancellationToken.None);
-
+        var firstTask = welcomeHandler!(new EventSubSessionWelcomeArgs("session-1", 10), CancellationToken.None);
         await firstEntered.Task.WaitAsync(TimeSpan.FromSeconds(3));
 
-        eventSub.OnSessionWelcome += Raise.Event<EventSubAsyncHandler<EventSubSessionWelcomeArgs>>(
-            new EventSubSessionWelcomeArgs("session-1", 10),
-            CancellationToken.None);
+        var secondTask = welcomeHandler!(new EventSubSessionWelcomeArgs("session-1", 10), CancellationToken.None);
 
-        await Task.Delay(100);
-        Assert.That(Volatile.Read(ref maxInFlight), Is.EqualTo(1));
+        Assert.Multiple(() =>
+        {
+            Assert.That(secondTask.IsCompleted, Is.False);
+            Assert.That(Volatile.Read(ref totalCalls), Is.EqualTo(1));
+            Assert.That(Volatile.Read(ref maxInFlight), Is.EqualTo(1));
+        });
 
         releaseFirst.TrySetResult();
-
-        var deadline = DateTime.UtcNow.AddSeconds(3);
-        while (Volatile.Read(ref totalCalls) < 4 && DateTime.UtcNow < deadline)
-        {
-            await Task.Delay(20);
-        }
+        await Task.WhenAll(firstTask, secondTask).WaitAsync(TimeSpan.FromSeconds(5));
 
         Assert.Multiple(() =>
         {

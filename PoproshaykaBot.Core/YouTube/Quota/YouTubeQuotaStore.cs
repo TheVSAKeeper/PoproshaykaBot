@@ -381,12 +381,20 @@ internal sealed class YouTubeQuotaStore(
 
             if (record.CategoryUnits is not null)
             {
+                long categorySum = 0;
                 foreach (var (categoryName, categoryValue) in record.CategoryUnits)
                 {
                     if (string.IsNullOrWhiteSpace(categoryName) || categoryValue < 0)
                     {
                         return false;
                     }
+
+                    categorySum += categoryValue;
+                }
+
+                if (categorySum > record.CommittedUnits)
+                {
+                    return false;
                 }
             }
 

@@ -934,14 +934,24 @@ public sealed class PlatformAccountsSectionTests
         }
     }
 
-    private sealed class FakeWebChatLoginDialog(Func<PlatformWebChatLoginRequest, PlatformWebChatLoginResult> handler) : IPlatformWebChatLoginDialog
+    private sealed class FakeWebChatLoginDialog(Func<PlatformWebChatLoginRequest, Task<PlatformWebChatLoginResult>> asyncHandler) : IPlatformWebChatLoginDialog
     {
-        public FakeWebChatLoginDialog(PlatformWebChatLoginResult result)
-            : this(_ => result)
+        public FakeWebChatLoginDialog(Func<PlatformWebChatLoginRequest, PlatformWebChatLoginResult> handler)
+            : this(req => Task.FromResult(handler(req)))
         {
         }
 
-        public Func<PlatformWebChatLoginRequest, PlatformWebChatLoginResult> Handler { get; set; } = handler;
+        public FakeWebChatLoginDialog(PlatformWebChatLoginResult result)
+            : this(_ => Task.FromResult(result))
+        {
+        }
+
+        public Func<PlatformWebChatLoginRequest, Task<PlatformWebChatLoginResult>> AsyncHandler { get; set; } = asyncHandler;
+
+        public Func<PlatformWebChatLoginRequest, PlatformWebChatLoginResult> Handler
+        {
+            set => AsyncHandler = req => Task.FromResult(value(req));
+        }
 
         public PlatformWebChatLoginRequest? LastRequest { get; private set; }
 
@@ -951,19 +961,184 @@ public sealed class PlatformAccountsSectionTests
         {
             LastRequest = request;
             CallCount++;
-            return Task.FromResult(Handler(request));
+            return AsyncHandler(request);
         }
     }
 
-    private sealed class FakeEmbeddedTwitchAuth(Func<EmbeddedTwitchAuthRequest, EmbeddedTwitchAuthResult> handler) : IEmbeddedTwitchAuthDialog
+    private sealed class FakeEmbeddedTwitchAuth(Func<EmbeddedTwitchAuthRequest, CancellationToken, Task<EmbeddedTwitchAuthResult>> asyncHandler) : IEmbeddedTwitchAuthDialog
     {
+        public FakeEmbeddedTwitchAuth(Func<EmbeddedTwitchAuthRequest, EmbeddedTwitchAuthResult> handler)
+            : this((req, _) => Task.FromResult(handler(req)))
+        {
+        }
+
         public EmbeddedTwitchAuthRequest? LastRequest { get; private set; }
 
-        public Task<EmbeddedTwitchAuthResult> AuthorizeAsync(EmbeddedTwitchAuthRequest request)
+        public CancellationToken LastCancellationToken { get; private set; }
+
+        public Task<EmbeddedTwitchAuthResult> AuthorizeAsync(EmbeddedTwitchAuthRequest request, CancellationToken cancellationToken = default)
         {
             LastRequest = request;
-            return Task.FromResult(handler(request));
+            LastCancellationToken = cancellationToken;
+            return asyncHandler(request, cancellationToken);
         }
+    }
+
+    [Test]
+    public async Task CancelAuthorizationCommand_cancels_embedded_twitch_auth()
+    {
+        var catalog = new ChannelCatalogStore(filePath: Path.Combine(_dir.FullName, "ch-emb-cancel.json"));
+        var accountsStore = new AccountsStore(filePath: Path.Combine(_dir.FullName, "acc-emb-cancel.json"));
+        var settings = new SettingsManager(NullLogger<SettingsManager>.Instance, Path.Combine(_dir.FullName, "set-emb-cancel.json"));
+        settings.Mutate(s =>
+        {
+            s.Twitch.ClientId = "cid";
+            s.Twitch.ClientSecret = "sec";
+        });
+
+        var started = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var embedded = new FakeEmbeddedTwitchAuth(async (_, ct) =>
+        {
+            started.TrySetResult();
+            await Task.Delay(Timeout.InfiniteTimeSpan, ct);
+            throw new InvalidOperationException("unreachable");
+        });
+
+        using var vm = new PlatformAccountsSectionViewModel(
+            catalog,
+            twitchAccountsStore: accountsStore,
+            settingsManager: settings,
+            twitchOAuth: new FakeTwitchOAuthService(),
+            shellLauncher: DispatchProxy.Create<IShellLauncher, TrueProxy>(),
+            dialogService: DispatchProxy.Create<IDialogService, TrueProxy>(),
+            embeddedTwitchAuth: embedded);
+        vm.SelectedPlatform = StreamingPlatform.Twitch;
+        vm.UseSystemBrowser = false;
+
+        var authTask = vm.AuthorizeCombinedCommand.ExecuteAsync(null);
+        await started.Task;
+
+        vm.CancelAuthorizationCommand.Execute(null);
+        await authTask;
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(embedded.LastCancellationToken.IsCancellationRequested, Is.True);
+            Assert.That(vm.IsAuthorizing, Is.False);
+            Assert.That(vm.StatusNotice, Is.EqualTo("Вход отменён."));
+        });
+    }
+
+    [Test]
+    public async Task PostLoginWebChat_when_platform_switches_mid_dialog_does_not_overwrite_new_platform_notice()
+    {
+        var catalog = new ChannelCatalogStore(filePath: Path.Combine(_dir.FullName, "ch-webchat-switch.json"));
+        var ytSettings = new YouTubeSettingsStore(filePath: Path.Combine(_dir.FullName, "yts-webchat-switch.json"));
+        ytSettings.Save(new() { ClientId = "yt-cid" });
+        var ytStore = new YouTubeAccountsStore(filePath: Path.Combine(_dir.FullName, "yta-webchat-switch.json"));
+        ytStore.SaveClientSecret("yt-sec");
+
+        var webChatStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var releaseWebChat = new TaskCompletionSource<PlatformWebChatLoginResult>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var webChat = new FakeWebChatLoginDialog(async _ =>
+        {
+            webChatStarted.TrySetResult();
+            return await releaseWebChat.Task;
+        });
+
+        using var vm = new PlatformAccountsSectionViewModel(
+            catalog,
+            youtubeAccountsStore: ytStore,
+            youtubeOAuth: new FakeYouTubeOAuthService(),
+            youtubeSettingsStore: ytSettings,
+            shellLauncher: DispatchProxy.Create<IShellLauncher, TrueProxy>(),
+            dialogService: DispatchProxy.Create<IDialogService, TrueProxy>(),
+            webChatLoginDialog: webChat);
+        vm.SelectedPlatform = StreamingPlatform.YouTube;
+        vm.ConnectWebChatAfterLogin = true;
+
+        var authTask = vm.AuthorizeCombinedCommand.ExecuteAsync(null);
+        await webChatStarted.Task;
+
+        vm.SelectedPlatform = StreamingPlatform.Twitch;
+        Assert.That(vm.StatusNotice, Is.Null.Or.Empty);
+
+        releaseWebChat.TrySetResult(PlatformWebChatLoginResult.Completed("yt-profile-1"));
+        await authTask;
+
+        Assert.That(vm.SelectedPlatform, Is.EqualTo(StreamingPlatform.Twitch));
+        Assert.That(vm.StatusNotice, Is.Null.Or.Empty);
+    }
+
+    [Test]
+    public async Task PostLoginWebChat_is_skipped_when_oauth_persistence_is_unconfirmed()
+    {
+        var catalog = new ChannelCatalogStore(filePath: Path.Combine(_dir.FullName, "ch-unpersisted.json"));
+        var ytSettings = new YouTubeSettingsStore(filePath: Path.Combine(_dir.FullName, "yts-unpersisted.json"));
+        ytSettings.Save(new() { ClientId = "yt-cid" });
+        var ytStore = new YouTubeAccountsStore(filePath: Path.Combine(_dir.FullName, "yta-unpersisted.json"));
+        ytStore.SaveClientSecret("yt-sec");
+        ytStore.UpsertContexts([(PlatformAuthRole.Bot, AuthContextIds.Default, "MyYT", new YouTubeAccountSettings
+        {
+            AccessToken = "old",
+            RefreshToken = "old-r",
+            ChannelId = "UC_99",
+            ChannelTitle = "MyYT",
+        })]);
+
+        var webChat = new FakeWebChatLoginDialog(PlatformWebChatLoginResult.Completed("yt-profile-1"));
+        var stubLogin = new UnpersistedAccountLogin(StreamingPlatform.YouTube, "UC_99", "MyYT", webChat);
+
+        using var vm = new PlatformAccountsSectionViewModel(
+            catalog,
+            youtubeAccountsStore: ytStore,
+            youtubeSettingsStore: ytSettings,
+            accountLogins: [stubLogin]);
+        vm.SelectedPlatform = StreamingPlatform.YouTube;
+        vm.ConnectWebChatAfterLogin = true;
+
+        await vm.AuthorizeBotCommand.ExecuteAsync(null);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(webChat.CallCount, Is.EqualTo(0));
+            Assert.That(vm.StatusNotice, Is.EqualTo("Не удалось подтвердить запись авторизации на диске."));
+            Assert.That(vm.StatusNoticeSeverity, Is.EqualTo(StatusSeverity.Warning));
+        });
+    }
+
+    private sealed class UnpersistedAccountLogin(
+        StreamingPlatform platform,
+        string accountId,
+        string label,
+        IPlatformWebChatLoginDialog webChatDialog) : IPlatformAccountLogin
+    {
+        public StreamingPlatform Platform => platform;
+        public bool CanAuthorize => true;
+        public bool SupportsEmbeddedBrowser => false;
+        public bool SupportsTokenValidation => false;
+        public bool SupportsEditableScopes => false;
+        public PlatformWebChatLoginDescriptor? WebChatDescriptor => PlatformWebChatDescriptors.YouTube;
+        public PlatformOAuthMethodDescriptor OAuthMethod => new("Системный браузер", "Вход в браузере", false, true);
+        public IReadOnlyList<string> GetDefaultScopes(PlatformAuthRole role) => [];
+        public string[] MergeRequestedScopes(PlatformAuthRole role, IReadOnlyCollection<string> configuredScopes) => [.. configuredScopes];
+        public Task<PlatformAccountLoginResult> AuthorizeAsync(PlatformAccountLoginRequest request, CancellationToken cancellationToken = default) =>
+            Task.FromResult(new PlatformAccountLoginResult(
+                "Запись не подтверждена.",
+                StatusSeverity.Warning,
+                [new AuthContextSummary("yt-bot-unwritten", PlatformAuthRole.Bot, label, accountId, label, true, false)]));
+        public Task<PlatformTokenValidationResult> ValidateTokenAsync(PlatformAuthRole role, string accessToken, CancellationToken ct = default) =>
+            throw new NotSupportedException();
+        public Task<PlatformTokenRefreshResult> RefreshTokenAsync(PlatformAuthRole role, string contextId, string refreshToken, CancellationToken ct = default) =>
+            throw new NotSupportedException();
+        public PlatformManualEditResult SaveManualEdits(PlatformAuthRole role, string contextId, PlatformManualTokenEdits edits) =>
+            throw new NotSupportedException();
+        public async Task<PlatformWebChatSignInResult> SignInWebChatAsync(string id, string name)
+        {
+            var r = await webChatDialog.SignInAsync(new(PlatformWebChatDescriptors.YouTube, id, name));
+            return new(r.Outcome, r.BrowserProfileName, true, r.Message, StatusSeverity.Success);
+        }
+        public void ResetRetryState(PlatformAuthRole role, string contextId) { }
     }
 
     public class TrueProxy : DispatchProxy

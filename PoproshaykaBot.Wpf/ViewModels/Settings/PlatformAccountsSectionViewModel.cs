@@ -466,6 +466,7 @@ public sealed partial class PlatformAccountsSectionViewModel : ObservableObject,
 
         string? authorizedAccountId = null;
         var succeeded = false;
+        var persistenceConfirmed = false;
         try
         {
             var outcome = await AuthorizeWithAdapterAsync(login, combined, role, targetAccountId, preferredContextId, customScopes, cts.Token);
@@ -475,6 +476,7 @@ public sealed partial class PlatformAccountsSectionViewModel : ObservableObject,
             }
 
             succeeded = outcome.Succeeded;
+            persistenceConfirmed = outcome.PersistenceConfirmed;
             authorizedAccountId = outcome.AccountId;
             if (succeeded)
             {
@@ -508,7 +510,7 @@ public sealed partial class PlatformAccountsSectionViewModel : ObservableObject,
             cts.Dispose();
         }
 
-        if (!succeeded || _disposed || cts.IsCancellationRequested || !ConnectWebChatAfterLogin || !login.SupportsWebChatSignIn
+        if (!succeeded || !persistenceConfirmed || _disposed || cts.IsCancellationRequested || !ConnectWebChatAfterLogin || !login.SupportsWebChatSignIn
             || SelectedPlatform != platform || string.IsNullOrWhiteSpace(authorizedAccountId))
         {
             return;
@@ -521,7 +523,7 @@ public sealed partial class PlatformAccountsSectionViewModel : ObservableObject,
         }
     }
 
-    private async Task<(bool Succeeded, string? AccountId)> AuthorizeWithAdapterAsync(
+    private async Task<(bool Succeeded, bool PersistenceConfirmed, string? AccountId)> AuthorizeWithAdapterAsync(
         IPlatformAccountLogin login,
         bool combined,
         PlatformAuthRole role,
@@ -540,7 +542,7 @@ public sealed partial class PlatformAccountsSectionViewModel : ObservableObject,
 
         if (cancellationToken.IsCancellationRequested || _disposed)
         {
-            return (false, null);
+            return (false, false, null);
         }
 
         foreach (var grant in result.ChangedAuthorizations)
@@ -557,11 +559,11 @@ public sealed partial class PlatformAccountsSectionViewModel : ObservableObject,
             grant.SubjectId is not null && IsAuthorizationPersisted(login.Platform, grant.Role, grant.ContextId, grant.SubjectId)))
         {
             SetNotice("Не удалось подтвердить запись авторизации на диске.", StatusSeverity.Warning);
-            return (true, accountId);
+            return (true, false, accountId);
         }
 
         SetNotice(result.Message, result.Severity);
-        return (result.ChangedAuthorizations.Count > 0, accountId);
+        return (result.ChangedAuthorizations.Count > 0, result.ChangedAuthorizations.Count > 0, accountId);
     }
 
     private Task SignInWebChatAsync(PlatformAccountCardViewModel card) =>
@@ -582,16 +584,25 @@ public sealed partial class PlatformAccountsSectionViewModel : ObservableObject,
         catch (Exception exception)
         {
             _logger?.LogWarning(exception, "Ошибка открытия окна веб-чата для {Platform} {AccountId}", card.Platform, card.AccountId);
-            SetNotice(
-                fromPostLogin
-                    ? $"Аккаунт «{card.DisplayName}» сохранён, но не удалось открыть окно веб-чата."
-                    : "Не удалось открыть окно входа в веб-чат.",
-                StatusSeverity.Warning);
+            if (!_disposed && SelectedPlatform == card.Platform)
+            {
+                SetNotice(
+                    fromPostLogin
+                        ? $"Аккаунт «{card.DisplayName}» сохранён, но не удалось открыть окно веб-чата."
+                        : "Не удалось открыть окно входа в веб-чат.",
+                    StatusSeverity.Warning);
+            }
+
             return;
         }
 
         if (result.Outcome != PlatformWebChatLoginOutcome.Completed)
         {
+            if (_disposed || SelectedPlatform != card.Platform)
+            {
+                return;
+            }
+
             if (fromPostLogin)
             {
                 if (result.Outcome == PlatformWebChatLoginOutcome.Canceled)
@@ -615,6 +626,11 @@ public sealed partial class PlatformAccountsSectionViewModel : ObservableObject,
         PublishAccountRefreshed(card);
         RefreshIfPlatform(card.Platform);
         AccountsChanged?.Invoke(this, card.Platform);
+        if (_disposed || SelectedPlatform != card.Platform)
+        {
+            return;
+        }
+
         if (fromPostLogin && result.Persisted)
         {
             SetNotice($"Аккаунт «{card.DisplayName}» и веб-чат подключены.", StatusSeverity.Success);

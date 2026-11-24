@@ -263,4 +263,68 @@ public sealed class ChatHistoryPipelineIsolationTests
         Assert.That(received, Has.Count.EqualTo(1));
         Assert.That(received[0].IsFirstTime, Is.False);
     }
+
+    [Test]
+    public async Task LiveMessage_WithSameUserInOtherChannelWithoutChannelId_RemainsFirstTime()
+    {
+        var bus = new InMemoryEventBus(NullLogger<InMemoryEventBus>.Instance);
+        var settingsManager = new SettingsManager(NullLogger<SettingsManager>.Instance, Path.Combine(_directory.FullName, "settings.json"));
+        var obsChatStore = new ObsChatStore(bus, NullLogger<ObsChatStore>.Instance, Path.Combine(_directory.FullName, "obs-chat.json"));
+        var chatSettingsStore = new ChatSettingsStore(settingsManager, null, Path.Combine(_directory.FullName, "chat.json"));
+        var commandSettingsStore = new CommandSettingsStore(null, Path.Combine(_directory.FullName, "commands.json"));
+
+        var streamStart = DateTime.UtcNow.AddMinutes(-20);
+        var fakePlatform = new FakeServerHistoryPlatform();
+        fakePlatform.StreamStatus.CurrentStatus.Returns(StreamStatus.Online);
+        fakePlatform.StreamStatus.CurrentStream.Returns(new StreamInfo
+        {
+            Id = "stream-current",
+            Title = "Live",
+            GameName = "Game",
+            ViewerCount = 10,
+            StartedAt = streamStart,
+        });
+        fakePlatform.Decorations.ExtractEmotes(Arg.Any<ChatMessage>(), Arg.Any<int>()).Returns([]);
+        fakePlatform.Decorations.ExtractBadgeUrls(Arg.Any<IReadOnlyList<(string SetId, string BadgeId)>>(), Arg.Any<int>())
+            .Returns(new Dictionary<string, string>(StringComparer.Ordinal));
+
+        var registry = new ChatPlatformRegistry([fakePlatform]);
+        var audienceTracker = new AudienceTracker(settingsManager);
+        var processor = new ChatCommandProcessor([], commandSettingsStore, new CommandUsageRepository(TimeProvider.System), NullLogger<ChatCommandProcessor>.Instance, platformRegistry: registry);
+        using var historyManager = new ChatHistoryManager(settingsManager, bus, chatSettingsStore);
+        using var pipeline = new ChatPipelineHandler(
+            registry,
+            new PlatformChannelRegistry(),
+            settingsManager,
+            obsChatStore,
+            commandSettingsStore,
+            audienceTracker,
+            processor,
+            new CommandResponseTracker(TimeProvider.System),
+            bus,
+            NullLogger<ChatPipelineHandler>.Instance,
+            chatHistoryManager: historyManager);
+
+        historyManager.AddMessage(new ChatMessageData
+        {
+            Platform = StreamingPlatform.YouTube,
+            Channel = "OtherChannel",
+            ChannelId = null,
+            MessageId = "other-channel-msg",
+            Timestamp = streamStart.AddMinutes(5),
+            UserId = "u-shared",
+            DisplayName = "SharedUser",
+            Message = "привет в другом канале",
+        }, "OtherChannel");
+
+        var received = new List<ChatMessageReceived>();
+        using var sub = bus.Subscribe<ChatMessageReceived>(e => received.Add(e));
+
+        await bus.PublishAsync(new RawChatMessageReceived(
+            new ChatMessage(StreamingPlatform.YouTube, "CurrentChannel", "live-curr", "u-shared", "shareduser", "SharedUser", "привет тут", [], [], false, false, false, false, ChannelId: "UC-current"),
+            DateTimeOffset.UtcNow));
+
+        Assert.That(received, Has.Count.EqualTo(1));
+        Assert.That(received[0].IsFirstTime, Is.True);
+    }
 }

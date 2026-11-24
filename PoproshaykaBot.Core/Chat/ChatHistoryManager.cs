@@ -75,7 +75,8 @@ public sealed class ChatHistoryManager : IDisposable
         string? streamId,
         Guid? broadcastId,
         DateTime streamStartedAt,
-        string? chatSessionId = null)
+        string? chatSessionId = null,
+        string? channelName = null)
     {
         if (string.IsNullOrWhiteSpace(userId))
         {
@@ -83,6 +84,7 @@ public sealed class ChatHistoryManager : IDisposable
         }
 
         var normalizedChannelId = string.IsNullOrWhiteSpace(channelId) ? null : channelId.Trim();
+        var normalizedChannelName = string.IsNullOrWhiteSpace(channelName) ? null : channelName.Trim();
         var normalizedSessionId = string.IsNullOrWhiteSpace(chatSessionId) ? null : chatSessionId.Trim();
         var startedAtUtc = streamStartedAt != default
             ? DateTime.SpecifyKind(streamStartedAt, DateTimeKind.Utc)
@@ -97,9 +99,25 @@ public sealed class ChatHistoryManager : IDisposable
                     continue;
                 }
 
-                if (normalizedChannelId is not null
-                    && !string.IsNullOrWhiteSpace(scope.ChannelId)
-                    && !string.Equals(scope.ChannelId, normalizedChannelId, StringComparison.Ordinal))
+                if (normalizedChannelId is not null)
+                {
+                    if (!string.IsNullOrWhiteSpace(scope.ChannelId))
+                    {
+                        if (!string.Equals(scope.ChannelId, normalizedChannelId, StringComparison.Ordinal))
+                        {
+                            continue;
+                        }
+                    }
+                    else if (normalizedChannelName is null
+                        || string.IsNullOrWhiteSpace(scope.ChannelName)
+                        || !string.Equals(scope.ChannelName, normalizedChannelName, StringComparison.OrdinalIgnoreCase))
+                    {
+                        continue;
+                    }
+                }
+                else if (normalizedChannelName is not null
+                    && !string.IsNullOrWhiteSpace(scope.ChannelName)
+                    && !string.Equals(scope.ChannelName, normalizedChannelName, StringComparison.OrdinalIgnoreCase))
                 {
                     continue;
                 }

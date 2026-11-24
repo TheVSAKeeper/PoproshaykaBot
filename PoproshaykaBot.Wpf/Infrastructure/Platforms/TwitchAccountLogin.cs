@@ -95,7 +95,8 @@ public sealed class TwitchAccountLogin(
                 clientSecret,
                 scopes,
                 redirectUri,
-                CheckBroadcasterChannel: false));
+                CheckBroadcasterChannel: false),
+                cancellationToken);
             if (embedded.Outcome != EmbeddedTwitchAuthOutcome.Completed || embedded.Flow is null)
             {
                 var severity = embedded.Outcome switch

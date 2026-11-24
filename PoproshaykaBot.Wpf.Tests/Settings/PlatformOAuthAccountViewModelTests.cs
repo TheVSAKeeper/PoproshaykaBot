@@ -370,7 +370,7 @@ public sealed class PlatformOAuthAccountViewModelTests
 
     private sealed class StubEmbeddedTwitchAuthDialog : IEmbeddedTwitchAuthDialog
     {
-        public Task<EmbeddedTwitchAuthResult> AuthorizeAsync(EmbeddedTwitchAuthRequest request)
+        public Task<EmbeddedTwitchAuthResult> AuthorizeAsync(EmbeddedTwitchAuthRequest request, CancellationToken cancellationToken = default)
         {
             return Task.FromResult(EmbeddedTwitchAuthResult.Canceled("Отменено"));
         }

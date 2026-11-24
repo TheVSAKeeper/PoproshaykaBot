@@ -191,8 +191,8 @@ public sealed partial class YouTubeQuotaStatusViewModel : ObservableObject, IDis
         ChatReadTransportText = FormatChatReadTransport(chatStatus);
         MonitoringTransportText = FormatMonitoringTransport(monitorStatus);
         ChatSendTransportText = monitorStatus is { Enabled: false }
-            ? "YouTube Data API (20 ед. за сообщение; сейчас YouTube отключён)"
-            : "YouTube Data API (20 ед. за сообщение); при работе без ответов бота квота не тратится";
+            ? $"YouTube Data API ({YouTubeQuotaCosts.ChatSendUnits} ед. за сообщение; сейчас YouTube отключён)"
+            : $"YouTube Data API ({YouTubeQuotaCosts.ChatSendUnits} ед. за сообщение); при работе без ответов бота квота не тратится";
     }
 
     internal static string FormatChatReadTransport(YouTubeChatStatus? status)
@@ -205,8 +205,8 @@ public sealed partial class YouTubeQuotaStatusViewModel : ObservableObject, IDis
         return status.Transport switch
         {
             YouTubeChatTransport.InnerTube => "InnerTube (без расхода квоты)",
-            YouTubeChatTransport.GrpcStream => "YouTube Data API (gRPC, ~5 ед./запрос)",
-            YouTubeChatTransport.RestPolling => "YouTube Data API (REST, 5 ед./запрос)",
+            YouTubeChatTransport.GrpcStream => $"YouTube Data API (gRPC, ~{YouTubeQuotaCosts.ChatReadUnits} ед./запрос)",
+            YouTubeChatTransport.RestPolling => $"YouTube Data API (REST, {YouTubeQuotaCosts.ChatReadUnits} ед./запрос)",
             _ => status.Issue switch
             {
                 ChatReadIssue.MissingBotAuth => "не подключён – нужна авторизация бота",
@@ -233,8 +233,8 @@ public sealed partial class YouTubeQuotaStatusViewModel : ObservableObject, IDis
         return status.Transport switch
         {
             YouTubeMonitoringTransport.InnerTubeDiscovery => "InnerTube (0 ед. квоты)",
-            YouTubeMonitoringTransport.HybridInnerTubeAndDataApi => "InnerTube (0 ед.) + Data API для метаданных (1 ед./мин)",
-            YouTubeMonitoringTransport.DataApi => "YouTube Data API (1 ед./запрос)",
+            YouTubeMonitoringTransport.HybridInnerTubeAndDataApi => $"InnerTube (0 ед.) + Data API для метаданных ({YouTubeQuotaCosts.MonitoringPollUnits} ед./мин)",
+            YouTubeMonitoringTransport.DataApi => $"YouTube Data API ({YouTubeQuotaCosts.MonitoringPollUnits} ед./запрос)",
             _ => status.Issue switch
             {
                 YouTubeMonitorIssue.MissingBroadcasterAuth => "не запущен – нужна авторизация стримера",

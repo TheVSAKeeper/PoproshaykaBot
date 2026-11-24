@@ -223,7 +223,7 @@ public sealed class TwitchAccountAuthAdapter :
             string.IsNullOrWhiteSpace(credentials.RedirectUri) ? null : credentials.RedirectUri,
             true);
 
-        var result = await _embeddedAuth.AuthorizeAsync(request);
+        var result = await _embeddedAuth.AuthorizeAsync(request, ct);
 
         if (result is { Outcome: EmbeddedTwitchAuthOutcome.Completed, Flow: { } flow }
             && !string.IsNullOrEmpty(flow.AccessToken))

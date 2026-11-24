@@ -77,16 +77,18 @@ public sealed class BotLifecycleAutomationHandler :
         }
 
         var snapshot = monitor.GetSnapshot(@event.NewChannel);
+        var isAvailableOnline = snapshot.Status == StreamStatus.Online
+            && snapshot.Availability != ChannelMonitoringAvailability.Unavailable;
         BotLifecyclePhase phase;
 
         lock (_stateLock)
         {
             var state = GetOrCreateStateLocked(@event.Platform);
-            state.IsStreamOnline = snapshot.Status == StreamStatus.Online;
+            state.IsStreamOnline = isAvailableOnline;
             phase = state.Phase;
         }
 
-        if (snapshot.Status == StreamStatus.Online)
+        if (isAvailableOnline)
         {
             TryAutoConnect(@event.Platform, @event.NewDisplayName, phase);
         }

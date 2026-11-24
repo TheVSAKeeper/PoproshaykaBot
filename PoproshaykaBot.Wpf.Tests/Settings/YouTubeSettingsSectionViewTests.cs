@@ -115,7 +115,14 @@ public sealed class YouTubeSettingsSectionViewTests
             Assert.That(texts.Any(tb => tb.Text.Contains("Куда уходит квота за сегодня", StringComparison.Ordinal)), Is.True);
             Assert.That(texts.Any(tb => tb.Text == "Отправка в чат"), Is.True);
             Assert.That(texts.Any(tb => tb.Text == "60 ед."), Is.True);
-            Assert.That(texts.All(tb => tb.ActualWidth <= 740.0 + 0.5), Is.True);
+            Assert.That(texts.All(tb =>
+            {
+                var bounds = tb.TransformToAncestor(view).TransformBounds(new Rect(0, 0, tb.ActualWidth, tb.ActualHeight));
+                var fitsView = bounds.Left >= -0.5 && bounds.Right <= 740.0 + 0.5;
+                var parent = VisualTreeHelper.GetParent(tb) as FrameworkElement;
+                var fitsParent = parent is null || parent.ActualWidth <= 0.5 || tb.ActualWidth <= parent.ActualWidth + 0.5;
+                return fitsView && fitsParent;
+            }), Is.True);
         }
     }
 

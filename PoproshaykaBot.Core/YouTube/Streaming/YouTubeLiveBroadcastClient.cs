@@ -17,7 +17,7 @@ internal sealed class YouTubeLiveBroadcastClient(
     ILogger<YouTubeLiveBroadcastClient> logger)
     : IYouTubeLiveBroadcastClient
 {
-    public const int YouTubeQuotaCost = 50;
+    public const int YouTubeQuotaCost = YouTubeQuotaCosts.BroadcastUpdateUnits;
 
     private const int MaxBroadcastPages = 10;
     private const string UpdateOperationName = "liveBroadcasts.update";
@@ -322,7 +322,7 @@ internal sealed class YouTubeLiveBroadcastClient(
         YouTubeQuotaCategory category,
         CancellationToken cancellationToken)
     {
-        if (!quotaGovernor.TryReserve(role, YouTubeQuotaPriority.CriticalReadAndMonitor, 1, out var lease, category))
+        if (!quotaGovernor.TryReserve(role, YouTubeQuotaPriority.CriticalReadAndMonitor, YouTubeQuotaCosts.MonitoringPollUnits, out var lease, category))
         {
             throw new YouTubeApiException(
                 YouTubeApiErrorKind.LocalQuotaBudgetReached,

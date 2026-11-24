@@ -343,18 +343,7 @@ public sealed class StreamStatusManager : IStreamStatus, IPlatformChannelMonitor
                 var previousSnapshot = slot.ToMonitoringSnapshot();
                 if (failedAuthChannelIds.Contains(slot.ChannelId))
                 {
-                    slot.Availability = ChannelMonitoringAvailability.Unavailable;
-                    slot.Reason = MonitoringUnavailableReason.MissingBotAuth;
-                    slot.Detail = "нет авторизации бота";
-                    var failedSnapshot = slot.ToMonitoringSnapshot();
-                    if (HasMonitoringStateChanged(previousSnapshot.Availability, previousSnapshot.Reason, previousSnapshot.Detail,
-                            failedSnapshot.Availability, failedSnapshot.Reason, failedSnapshot.Detail))
-                    {
-                        await _eventBus.PublishAsync(
-                            new ChannelMonitoringStateChanged(StreamingPlatform.Twitch, new ChannelKey(StreamingPlatform.Twitch, slot.ChannelId), failedSnapshot),
-                            CancellationToken.None).ConfigureAwait(false);
-                    }
-
+                    await MarkSlotMissingBotAuthAsync(slot, previousSnapshot).ConfigureAwait(false);
                     continue;
                 }
 
@@ -647,18 +636,7 @@ public sealed class StreamStatusManager : IStreamStatus, IPlatformChannelMonitor
                 var previousSnapshot = slot.ToMonitoringSnapshot();
                 if (failedAuthChannelIds.Contains(slot.ChannelId))
                 {
-                    slot.Availability = ChannelMonitoringAvailability.Unavailable;
-                    slot.Reason = MonitoringUnavailableReason.MissingBotAuth;
-                    slot.Detail = "нет авторизации бота";
-                    var failedSnapshot = slot.ToMonitoringSnapshot();
-                    if (HasMonitoringStateChanged(previousSnapshot.Availability, previousSnapshot.Reason, previousSnapshot.Detail,
-                            failedSnapshot.Availability, failedSnapshot.Reason, failedSnapshot.Detail))
-                    {
-                        await _eventBus.PublishAsync(
-                            new ChannelMonitoringStateChanged(StreamingPlatform.Twitch, new ChannelKey(StreamingPlatform.Twitch, slot.ChannelId), failedSnapshot),
-                            CancellationToken.None).ConfigureAwait(false);
-                    }
-
+                    await MarkSlotMissingBotAuthAsync(slot, previousSnapshot).ConfigureAwait(false);
                     continue;
                 }
 
@@ -1160,6 +1138,21 @@ public sealed class StreamStatusManager : IStreamStatus, IPlatformChannelMonitor
                     new ChannelMonitoringStateChanged(StreamingPlatform.Twitch, new ChannelKey(StreamingPlatform.Twitch, slot.ChannelId), slot.ToMonitoringSnapshot()),
                     CancellationToken.None).ConfigureAwait(false);
             }
+        }
+    }
+
+    private async Task MarkSlotMissingBotAuthAsync(TwitchChannelSlot slot, ChannelMonitoringSnapshot previousSnapshot)
+    {
+        slot.Availability = ChannelMonitoringAvailability.Unavailable;
+        slot.Reason = MonitoringUnavailableReason.MissingBotAuth;
+        slot.Detail = "нет авторизации бота";
+        var failedSnapshot = slot.ToMonitoringSnapshot();
+        if (HasMonitoringStateChanged(previousSnapshot.Availability, previousSnapshot.Reason, previousSnapshot.Detail,
+                failedSnapshot.Availability, failedSnapshot.Reason, failedSnapshot.Detail))
+        {
+            await _eventBus.PublishAsync(
+                new ChannelMonitoringStateChanged(StreamingPlatform.Twitch, new ChannelKey(StreamingPlatform.Twitch, slot.ChannelId), failedSnapshot),
+                CancellationToken.None).ConfigureAwait(false);
         }
     }
 
