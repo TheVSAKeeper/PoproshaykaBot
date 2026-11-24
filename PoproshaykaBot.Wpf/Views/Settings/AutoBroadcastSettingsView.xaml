@@ -48,7 +48,7 @@
             <DockPanel Margin="0,0,0,8">
                 <TextBlock Text="При запуске стрима"
                            Style="{StaticResource Setting.RowLabel}" />
-                <TextBox Text="{Binding StreamStartMessage, Mode=TwoWay}"
+                <TextBox Text="{Binding StreamStartMessage, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                          Style="{StaticResource TextBox.Form}"
                          AutomationProperties.Name="Сообщение при запуске стрима"
                          keepshell:PlaceholderBehavior.Placeholder="{Binding StreamStartMessagePlaceholder}" />
@@ -57,7 +57,7 @@
             <DockPanel Margin="0,0,0,8">
                 <TextBlock Text="При остановке стрима"
                            Style="{StaticResource Setting.RowLabel}" />
-                <TextBox Text="{Binding StreamStopMessage, Mode=TwoWay}"
+                <TextBox Text="{Binding StreamStopMessage, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                          Style="{StaticResource TextBox.Form}"
                          AutomationProperties.Name="Сообщение при остановке стрима"
                          keepshell:PlaceholderBehavior.Placeholder="{Binding StreamStopMessagePlaceholder}" />
@@ -66,7 +66,7 @@
             <DockPanel>
                 <TextBlock Text="Статистика по завершении"
                            Style="{StaticResource MultilineRowLabel}" />
-                <TextBox Text="{Binding StreamEndStatsMessage, Mode=TwoWay}"
+                <TextBox Text="{Binding StreamEndStatsMessage, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                          Style="{StaticResource TextBox.Form}"
                          AutomationProperties.Name="Сообщение со статистикой по завершении стрима"
                          keepshell:PlaceholderBehavior.Placeholder="{Binding StreamEndStatsMessagePlaceholder}"
@@ -88,7 +88,7 @@
         <DockPanel>
             <TextBlock Text="Шаблон сообщения"
                        Style="{StaticResource MultilineRowLabel}" />
-            <TextBox Text="{Binding BroadcastMessageTemplate, Mode=TwoWay}"
+            <TextBox Text="{Binding BroadcastMessageTemplate, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                      Style="{StaticResource TextBox.Form}"
                      AutomationProperties.Name="Шаблон сообщения рассылки"
                      keepshell:PlaceholderBehavior.Placeholder="{Binding BroadcastMessageTemplatePlaceholder}"

@@ -42,6 +42,7 @@ public sealed partial class SettingsPageViewModel : ObservableObject, IPageHeade
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasChanges))]
     [NotifyPropertyChangedFor(nameof(HasDraft))]
+    [NotifyPropertyChangedFor(nameof(HasUnsavedChanges))]
     [NotifyCanExecuteChangedFor(nameof(SaveCommand))]
     private bool _dirty;
 
@@ -231,6 +232,7 @@ public sealed partial class SettingsPageViewModel : ObservableObject, IPageHeade
     {
         OnPropertyChanged(nameof(HasChanges));
         OnPropertyChanged(nameof(HasDraft));
+        OnPropertyChanged(nameof(HasUnsavedChanges));
         SaveCommand.NotifyCanExecuteChanged();
     }
 

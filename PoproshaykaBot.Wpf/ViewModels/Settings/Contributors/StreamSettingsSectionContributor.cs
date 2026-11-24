@@ -133,10 +133,7 @@ public sealed class StreamSettingsSectionContributor : ISettingsSectionContribut
 
         subscription.TrackPropertyChanged(_autoBroadcast, OnPropertyChanged);
         subscription.TrackPropertyChanged(_botLifecycle, OnLifecyclePropertyChanged);
-        foreach (var platform in _botLifecycle.Platforms)
-        {
-            subscription.TrackPropertyChanged(platform, OnLifecyclePropertyChanged);
-        }
+        subscription.TrackCollectionItems(_botLifecycle.Platforms, OnLifecyclePropertyChanged);
         subscription.TrackPropertyChanged(_polls, OnPollsChanged);
 
         return subscription;

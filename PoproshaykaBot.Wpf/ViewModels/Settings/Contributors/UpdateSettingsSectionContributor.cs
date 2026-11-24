@@ -10,8 +10,11 @@ public sealed class UpdateSettingsSectionContributor : ISettingsSectionContribut
 {
     private static readonly HashSet<string> NonDirtyProperties = new(StringComparer.Ordinal)
     {
+        nameof(UpdateSettingsSectionViewModel.IsBusy),
         nameof(UpdateSettingsSectionViewModel.DownloadProgress),
         nameof(UpdateSettingsSectionViewModel.CurrentVersionText),
+        nameof(UpdateSettingsSectionViewModel.StatusText),
+        nameof(UpdateSettingsSectionViewModel.StatusSeverity),
         nameof(UpdateSettingsSectionViewModel.IsFrameworkDependentVisible),
         nameof(UpdateSettingsSectionViewModel.RepositoryHintText),
         nameof(UpdateSettingsSectionViewModel.RepositoryHintSeverity),

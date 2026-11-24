@@ -130,7 +130,8 @@ public sealed class ObsSettingsSectionContributor : ISettingsSectionContributor
                 return;
             }
 
-            if (ReferenceEquals(sender, _obsIntegration) && _obsIntegration.IsAutoPopulating)
+            if (_obsIntegration.IsAutoPopulating
+                && (ReferenceEquals(sender, _obsIntegration) || sender is ObsSourceItemViewModel))
             {
                 return;
             }
@@ -140,6 +141,8 @@ public sealed class ObsSettingsSectionContributor : ISettingsSectionContributor
 
         subscription.TrackPropertyChanged(_obsChat, OnPropertyChanged);
         subscription.TrackPropertyChanged(_obsIntegration, OnPropertyChanged);
+        subscription.TrackCollectionItems(_obsIntegration.DashboardSources, OnPropertyChanged);
+        subscription.TrackCollectionItems(_obsIntegration.ChatRefreshSources, OnPropertyChanged);
 
         return subscription;
     }
