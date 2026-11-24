@@ -1,4 +1,5 @@
-﻿using PoproshaykaBot.Core.Twitch.Helix;
+﻿using PoproshaykaBot.Core.Platforms;
+using PoproshaykaBot.Core.Twitch.Helix;
 using PoproshaykaBot.Core.YouTube.Auth;
 using PoproshaykaBot.Core.YouTube.Client;
 using System.Net.Sockets;
@@ -11,13 +12,40 @@ public static class StreamingErrorMessages
 {
     public static string SafeMessage(Exception exception)
     {
+        return SafeMessage(exception, StreamingPlatform.Twitch);
+    }
+
+    public static string SafeMessage(Exception exception, StreamingPlatform platform)
+    {
+        if (exception is YouTubeApiException ytEx)
+        {
+            return SafeYouTubeMessage(ytEx);
+        }
+
+        if (exception is YouTubeOAuthException ytOAuthEx)
+        {
+            return SafeYouTubeOAuthMessage(ytOAuthEx);
+        }
+
+        if (platform == StreamingPlatform.Twitch)
+        {
+            return exception switch
+            {
+                WebSocketException or SocketException => "соединение с EventSub прервано",
+                JsonException => "некорректный ответ Twitch",
+                _ => HelixErrorMessages.SafeMessage(exception),
+            };
+        }
+
+        var platformName = platform.ToString();
         return exception switch
         {
-            YouTubeApiException ytEx => SafeYouTubeMessage(ytEx),
-            YouTubeOAuthException ytOAuthEx => SafeYouTubeOAuthMessage(ytOAuthEx),
-            WebSocketException or SocketException => "соединение с EventSub прервано",
-            JsonException => "некорректный ответ Twitch",
-            _ => HelixErrorMessages.SafeMessage(exception),
+            OperationCanceledException => "Операция отменена",
+            TimeoutException => $"Превышено время ожидания ответа {platformName}",
+            HttpRequestException or WebSocketException or SocketException => $"Ошибка сети при обращении к {platformName}",
+            UnauthorizedAccessException => $"Ошибка авторизации в {platformName}",
+            JsonException => $"Некорректный ответ {platformName}",
+            _ => $"Ошибка при обращении к {platformName}.",
         };
     }
 

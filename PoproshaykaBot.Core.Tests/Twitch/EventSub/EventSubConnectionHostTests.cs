@@ -341,6 +341,94 @@ public sealed class EventSubConnectionHostTests
     }
 
     [Test]
+    public async Task BotRoleHost_RestartsWebSocket_WhenCatalogReassignsActiveChannelBotContext()
+    {
+        SeedAccessToken(PlatformAuthRole.Bot, "default-bot-token");
+        _accountsStore.Mutate(PlatformAuthRole.Bot, a => a.UserId = "1298214074");
+        _accountsStore.Mutate(PlatformAuthRole.Bot, "tw-bot-107618204", a =>
+        {
+            a.AccessToken = "alt-bot-token";
+            a.UserId = "107618204";
+            a.Login = "thevsakeeper";
+        });
+
+        var catalogPath = Path.Combine(Path.GetTempPath(), $"catalog-{Guid.NewGuid():N}.json");
+        try
+        {
+            var catalog = new ChannelCatalogStore(NullLogger<ChannelCatalogStore>.Instance, catalogPath);
+            catalog.Save(new()
+            {
+                Channels =
+                [
+                    new()
+                    {
+                        Platform = StreamingPlatform.Twitch,
+                        ChannelId = "107618204",
+                        DisplayName = "thevsakeeper",
+                        IsConfigured = true,
+                        MonitoringEnabled = true,
+                        BotAccountId = "1298214074",
+                        BotContextId = "default",
+                        BotVerifiedSubjectId = "1298214074",
+                    },
+                ],
+                Platforms =
+                [
+                    new() { Platform = StreamingPlatform.Twitch, ActiveChannelId = "107618204" },
+                ],
+            });
+
+            var registry = new PlatformChannelRegistry();
+            var target = Substitute.For<PoproshaykaBot.Core.Debugging.ITargetChannelProvider>();
+            target.Current.Returns(new PoproshaykaBot.Core.Debugging.TargetChannelState("thevsakeeper", "thevsakeeper", false, true));
+            var auth = new PoproshaykaBot.Core.Twitch.TwitchChannelAuthorization(_accountsStore, catalog, registry, target);
+
+            var botClient = Substitute.For<ITwitchEventSubClient>();
+            var restarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            var startCount = 0;
+            botClient.StartAsync(Arg.Any<CancellationToken>()).Returns(_ =>
+            {
+                if (Interlocked.Increment(ref startCount) >= 2)
+                {
+                    restarted.TrySetResult();
+                }
+
+                return Task.CompletedTask;
+            });
+
+            await using var botHost = new EventSubConnectionHost(
+                PlatformAuthRole.Bot,
+                botClient,
+                _accountsStore,
+                _eventBus,
+                NullLogger<EventSubConnectionHost>.Instance,
+                auth,
+                catalog);
+
+            await botHost.StartAsync(NullProgress, CancellationToken.None);
+            Assert.That(startCount, Is.EqualTo(1));
+
+            catalog.Mutate(s =>
+            {
+                s.Channels[0].BotAccountId = "107618204";
+                s.Channels[0].BotContextId = "tw-bot-107618204";
+                s.Channels[0].BotVerifiedSubjectId = "107618204";
+            });
+
+            await restarted.Task.WaitAsync(TimeSpan.FromSeconds(3));
+            await botClient.Received(1).StopAsync(Arg.Any<CancellationToken>());
+            await botClient.Received(2).StartAsync(Arg.Any<CancellationToken>());
+        }
+        finally
+        {
+            if (File.Exists(catalogPath))
+            {
+                File.Delete(catalogPath);
+            }
+        }
+    }
+
+    [Test]
     public async Task Disconnect_WithCloseCode4003_StopsAfterMaxAttempts_DespiteSessionWelcome()
     {
         await _host.StartAsync(NullProgress, CancellationToken.None);

@@ -1,6 +1,7 @@
 ﻿using Microsoft.Extensions.Logging.Abstractions;
 using PoproshaykaBot.Core.Debugging;
 using PoproshaykaBot.Core.Infrastructure.Events;
+using PoproshaykaBot.Core.Infrastructure.Events.Streaming;
 using PoproshaykaBot.Core.Platforms;
 using PoproshaykaBot.Core.Platforms.Auth;
 using PoproshaykaBot.Core.Settings;
@@ -161,5 +162,129 @@ public sealed class StreamStatusManagerMultiContextTests
         catalog.EnsureChannelKnown(new ChannelKey(StreamingPlatform.Twitch, "177128531"), "BOBito217");
 
         Assert.That(changedCount, Is.Zero);
+    }
+
+    [Test]
+    public async Task CreateEventSubSubscriptions_PublishesChannelMonitoringStateChanged_WhenSlotRecoversToActive()
+    {
+        var catalog = new ChannelCatalogStore(NullLogger<ChannelCatalogStore>.Instance, Path.Combine(_dir.FullName, "channels.json"));
+        catalog.Save(new()
+        {
+            Channels =
+            [
+                new()
+                {
+                    Platform = StreamingPlatform.Twitch,
+                    ChannelId = "177128531",
+                    DisplayName = "bobito217",
+                    Handle = "bobito217",
+                    IsConfigured = true,
+                    MonitoringEnabled = true,
+                    BotAccountId = "1298214074",
+                    BotContextId = "default",
+                    BotVerifiedSubjectId = "1298214074",
+                },
+            ],
+            Platforms =
+            [
+                new() { Platform = StreamingPlatform.Twitch, ActiveChannelId = "177128531" },
+            ],
+        });
+
+        var subCount = 0;
+        var helix = Substitute.For<ITwitchHelixClient>();
+        helix.CreateEventSubSubscriptionAsync(
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<IReadOnlyDictionary<string, string>>(),
+                Arg.Any<string>(),
+                Arg.Any<CancellationToken>())
+            .Returns(_ => Task.FromResult($"sub-{Interlocked.Increment(ref subCount)}"));
+        helix.GetStreamsAsync(Arg.Any<IEnumerable<string>>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<IReadOnlyList<HelixStreamInfo>>([]));
+
+        var eventSub = Substitute.For<ITwitchEventSubClient>();
+        eventSub.SessionId.Returns("session-1");
+
+        var broadcasterId = Substitute.For<IBroadcasterIdProvider>();
+        broadcasterId.GetAsync(Arg.Any<CancellationToken>()).Returns(Task.FromResult<string?>("177128531"));
+
+        var target = Substitute.For<ITargetChannelProvider>();
+        target.Current.Returns(new TargetChannelState("bobito217", "bobito217", false, true));
+
+        var settings = new SettingsManager(NullLogger<SettingsManager>.Instance, Path.Combine(_dir.FullName, "settings.json"));
+        var bus = new InMemoryEventBus(NullLogger<InMemoryEventBus>.Instance);
+        var stateEvents = new List<ChannelMonitoringStateChanged>();
+        using var sub = bus.Subscribe<ChannelMonitoringStateChanged>(evt =>
+        {
+            lock (stateEvents)
+            {
+                stateEvents.Add(evt);
+            }
+        });
+
+        var registry = new PlatformChannelRegistry();
+        var auth = Substitute.For<IPlatformAuthService>();
+        auth.HasUsableAccessToken(PlatformAuthRole.Bot).Returns(false);
+
+        await using var manager = new StreamStatusManager(
+            eventSub,
+            helix,
+            broadcasterId,
+            target,
+            settings,
+            bus,
+            TimeProvider.System,
+            NullLogger<StreamStatusManager>.Instance,
+            catalog,
+            registry,
+            auth);
+
+        await manager.StartAsync(new Progress<string>(_ => { }), CancellationToken.None);
+
+        eventSub.OnSessionWelcome += Raise.Event<EventSubAsyncHandler<EventSubSessionWelcomeArgs>>(
+            new EventSubSessionWelcomeArgs("session-1", 10),
+            CancellationToken.None);
+
+        var deadline = DateTime.UtcNow.AddSeconds(3);
+        while (DateTime.UtcNow < deadline)
+        {
+            lock (stateEvents)
+            {
+                if (stateEvents.Any(e => e.Snapshot.Availability == ChannelMonitoringAvailability.Unavailable))
+                {
+                    break;
+                }
+            }
+
+            await Task.Delay(20);
+        }
+
+        auth.HasUsableAccessToken(PlatformAuthRole.Bot).Returns(true);
+        eventSub.OnSessionWelcome += Raise.Event<EventSubAsyncHandler<EventSubSessionWelcomeArgs>>(
+            new EventSubSessionWelcomeArgs("session-2", 10),
+            CancellationToken.None);
+
+        deadline = DateTime.UtcNow.AddSeconds(3);
+        while (DateTime.UtcNow < deadline)
+        {
+            lock (stateEvents)
+            {
+                if (stateEvents.Any(e => e.Snapshot.Availability == ChannelMonitoringAvailability.Active))
+                {
+                    break;
+                }
+            }
+
+            await Task.Delay(20);
+        }
+
+        lock (stateEvents)
+        {
+            Assert.That(stateEvents.Select(static e => e.Snapshot.Availability),
+                Does.Contain(ChannelMonitoringAvailability.Unavailable));
+            Assert.That(stateEvents[^1].Snapshot.Availability, Is.EqualTo(ChannelMonitoringAvailability.Active));
+            Assert.That(stateEvents[^1].Snapshot.Reason, Is.EqualTo(MonitoringUnavailableReason.None));
+        }
     }
 }

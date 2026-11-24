@@ -337,7 +337,8 @@ public sealed class StreamStatusManager : IStreamStatus, IPlatformChannelMonitor
                 {
                     var transition = slot.State.ApplyOnlineSnapshot(StreamInfoMapper.MapFromHelix(stream));
                     slot.LastObservedAtUtc = _timeProvider.GetUtcNow();
-                    if (slot.Availability != ChannelMonitoringAvailability.Degraded)
+                    if (slot.Availability != ChannelMonitoringAvailability.Degraded
+                        && slot.Reason != MonitoringUnavailableReason.MissingBotAuth)
                     {
                         slot.Availability = ChannelMonitoringAvailability.Active;
                         slot.Reason = MonitoringUnavailableReason.None;
@@ -347,6 +348,14 @@ public sealed class StreamStatusManager : IStreamStatus, IPlatformChannelMonitor
                     var isInitialBaseline = !slot.BaselinePublished;
                     slot.BaselinePublished = true;
                     var currentSnapshot = slot.ToMonitoringSnapshot(isInitialBaseline);
+
+                    if (HasMonitoringStateChanged(previousSnapshot.Availability, previousSnapshot.Reason, previousSnapshot.Detail,
+                            currentSnapshot.Availability, currentSnapshot.Reason, currentSnapshot.Detail))
+                    {
+                        await _eventBus.PublishAsync(
+                            new ChannelMonitoringStateChanged(StreamingPlatform.Twitch, new ChannelKey(StreamingPlatform.Twitch, slot.ChannelId), currentSnapshot),
+                            CancellationToken.None).ConfigureAwait(false);
+                    }
 
                     if (transition.Transitioned)
                     {
@@ -626,7 +635,8 @@ public sealed class StreamStatusManager : IStreamStatus, IPlatformChannelMonitor
                 }
 
                 slot.LastObservedAtUtc = _timeProvider.GetUtcNow();
-                if (slot.Availability != ChannelMonitoringAvailability.Degraded)
+                if (slot.Availability != ChannelMonitoringAvailability.Degraded
+                    && slot.Reason != MonitoringUnavailableReason.MissingBotAuth)
                 {
                     slot.Availability = ChannelMonitoringAvailability.Active;
                     slot.Reason = MonitoringUnavailableReason.None;
@@ -636,6 +646,14 @@ public sealed class StreamStatusManager : IStreamStatus, IPlatformChannelMonitor
                 var isInitialBaseline = !slot.BaselinePublished;
                 slot.BaselinePublished = true;
                 var currentSnapshot = slot.ToMonitoringSnapshot(isInitialBaseline);
+
+                if (HasMonitoringStateChanged(previousSnapshot.Availability, previousSnapshot.Reason, previousSnapshot.Detail,
+                        currentSnapshot.Availability, currentSnapshot.Reason, currentSnapshot.Detail))
+                {
+                    await _eventBus.PublishAsync(
+                        new ChannelMonitoringStateChanged(StreamingPlatform.Twitch, new ChannelKey(StreamingPlatform.Twitch, slot.ChannelId), currentSnapshot),
+                        CancellationToken.None).ConfigureAwait(false);
+                }
 
                 if (transition.Transitioned)
                 {
@@ -942,6 +960,11 @@ public sealed class StreamStatusManager : IStreamStatus, IPlatformChannelMonitor
             return;
         }
 
+        var previousStates = slots.ToDictionary(
+            static slot => slot.ChannelId,
+            static slot => (slot.Availability, slot.Reason, slot.Detail),
+            StringComparer.Ordinal);
+
         if (_authService is not null)
         {
             foreach (var slot in slots)
@@ -1050,13 +1073,6 @@ public sealed class StreamStatusManager : IStreamStatus, IPlatformChannelMonitor
                 slot.Availability = hitCostOrLimit ? ChannelMonitoringAvailability.Degraded : ChannelMonitoringAvailability.Active;
                 slot.Reason = hitCostOrLimit ? MonitoringUnavailableReason.SubscriptionLimitReached : MonitoringUnavailableReason.None;
                 slot.Detail = hitCostOrLimit ? "превышен лимит подписок EventSub, включён периодический опрос API" : null;
-
-                if (hitCostOrLimit)
-                {
-                    await _eventBus.PublishAsync(
-                        new ChannelMonitoringStateChanged(StreamingPlatform.Twitch, new ChannelKey(StreamingPlatform.Twitch, slot.ChannelId), slot.ToMonitoringSnapshot()),
-                        CancellationToken.None).ConfigureAwait(false);
-                }
             }
             else
             {
@@ -1066,7 +1082,30 @@ public sealed class StreamStatusManager : IStreamStatus, IPlatformChannelMonitor
                 slot.Detail = null;
                 _logger.LogInformation("Все необходимые подписки EventSub успешно созданы для BroadcasterId: {BroadcasterId}", slot.ChannelId);
             }
+
+            if (hitCostOrLimit
+                || !previousStates.TryGetValue(slot.ChannelId, out var previous)
+                || HasMonitoringStateChanged(previous.Availability, previous.Reason, previous.Detail,
+                    slot.Availability, slot.Reason, slot.Detail))
+            {
+                await _eventBus.PublishAsync(
+                    new ChannelMonitoringStateChanged(StreamingPlatform.Twitch, new ChannelKey(StreamingPlatform.Twitch, slot.ChannelId), slot.ToMonitoringSnapshot()),
+                    CancellationToken.None).ConfigureAwait(false);
+            }
         }
+    }
+
+    private static bool HasMonitoringStateChanged(
+        ChannelMonitoringAvailability previousAvailability,
+        MonitoringUnavailableReason previousReason,
+        string? previousDetail,
+        ChannelMonitoringAvailability currentAvailability,
+        MonitoringUnavailableReason currentReason,
+        string? currentDetail)
+    {
+        return previousAvailability != currentAvailability
+            || previousReason != currentReason
+            || !string.Equals(previousDetail, currentDetail, StringComparison.Ordinal);
     }
 
     private async Task<bool> RecordSubscriptionAsync(
