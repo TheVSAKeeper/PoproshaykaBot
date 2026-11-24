@@ -6,9 +6,13 @@ public interface IYouTubeSentMessageTracker
 
     void TrackSent(string messageId, string? liveChatId = null);
 
-    YouTubeInFlightSendScope BeginInFlightSend(string liveChatId);
+    YouTubeInFlightSendScope BeginInFlightSend(string liveChatId) => BeginInFlightSend(liveChatId, expectedNormalizedText: null);
+
+    YouTubeInFlightSendScope BeginInFlightSend(string liveChatId, string? expectedNormalizedText);
 
     long CaptureInFlightWatermark(string liveChatId);
+
+    bool HasInFlightMatchingText(string liveChatId, long watermarkSeq, string normalizedText) => false;
 
     Task WaitUntilCompletedOrMatchedAsync(
         string liveChatId,
@@ -83,7 +87,7 @@ internal sealed class NullYouTubeSentMessageTracker : IYouTubeSentMessageTracker
     {
     }
 
-    public YouTubeInFlightSendScope BeginInFlightSend(string liveChatId) => new();
+    public YouTubeInFlightSendScope BeginInFlightSend(string liveChatId, string? expectedNormalizedText) => new();
 
     public long CaptureInFlightWatermark(string liveChatId) => 0;
 

@@ -809,10 +809,15 @@ public sealed partial class MultistreamPageViewModel : ObservableObject, IPageHe
         PlatformReadinessText = platformEnabled ? "Площадка: включена" : "Площадка: отключена";
         PlatformReadinessSeverity = platformEnabled ? StatusSeverity.Success : StatusSeverity.Warning;
 
-        var (hasBotReady, hasBroadcasterReady) = ResolveAccountReadiness(card);
+        var (hasBotReady, hasBroadcasterReady, hasBroadcasterScopeWarning) = ResolveAccountReadiness(card);
         if (!hasBotReady)
         {
             AccountReadinessText = "Аккаунт: нужен вход бота";
+            AccountReadinessSeverity = StatusSeverity.Warning;
+        }
+        else if (hasBroadcasterScopeWarning)
+        {
+            AccountReadinessText = "Аккаунт: владельцу нужны права записи";
             AccountReadinessSeverity = StatusSeverity.Warning;
         }
         else if (hasBroadcasterReady)
@@ -882,12 +887,12 @@ public sealed partial class MultistreamPageViewModel : ObservableObject, IPageHe
         return card.Status.IsPlatformEnabled;
     }
 
-    private (bool HasBotReady, bool HasBroadcasterReady) ResolveAccountReadiness(MultistreamPlatformCard card)
+    private (bool HasBotReady, bool HasBroadcasterReady, bool HasBroadcasterScopeWarning) ResolveAccountReadiness(MultistreamPlatformCard card)
     {
         var platform = card.Status.Platform;
         if (card.Status.NeedsBotAuthorization)
         {
-            return (false, false);
+            return (false, false, false);
         }
 
         if (Accounts is not null && Accounts.SupportsAccountsFor(platform) && Accounts.SelectedPlatform == platform)
@@ -896,13 +901,30 @@ public sealed partial class MultistreamPageViewModel : ObservableObject, IPageHe
                 account.HasBotRole && account.BotBadgeSeverity is StatusSeverity.Success or StatusSeverity.Info);
             var hasBroadcaster = Accounts.Accounts.Any(static account =>
                 account.HasBroadcasterRole && account.BroadcasterBadgeSeverity is StatusSeverity.Success or StatusSeverity.Info);
-            return (hasBot, hasBroadcaster);
+            var hasBroadcasterScopeWarning = false;
+            if (platform == StreamingPlatform.YouTube)
+            {
+                var activeYouTubeChannel = _catalogStore?.GetActiveChannel(StreamingPlatform.YouTube);
+                var activeBroadcasterId = activeYouTubeChannel?.GetAccountAssignment(PlatformAuthRole.Broadcaster)?.Account.AccountId;
+                var activeBroadcasterContextId = activeYouTubeChannel?.BroadcasterContextId;
+                var relevantAccounts = !string.IsNullOrWhiteSpace(activeBroadcasterId)
+                    ? Accounts.Accounts.Where(a => string.Equals(a.AccountId, activeBroadcasterId, StringComparison.Ordinal))
+                    : Accounts.Accounts;
+
+                hasBroadcasterScopeWarning = relevantAccounts.Any(account =>
+                    account.Grants.Any(grant =>
+                        grant.Role == PlatformAuthRole.Broadcaster
+                        && grant.TokenStatusSeverity == StatusSeverity.Warning
+                        && (string.IsNullOrWhiteSpace(activeBroadcasterContextId)
+                            || string.Equals(grant.ContextId, activeBroadcasterContextId, StringComparison.Ordinal))));
+            }
+            return (hasBot, hasBroadcaster, hasBroadcasterScopeWarning);
         }
 
         var activeChannel = Catalog?.VisibleChannels.FirstOrDefault(static item => item.IsActive)
             ?? Catalog?.VisibleChannels.FirstOrDefault();
         var hasBroadcasterAssigned = activeChannel is not null && activeChannel.Roles[1].HasAssignedAccount;
-        return (true, hasBroadcasterAssigned);
+        return (true, hasBroadcasterAssigned, false);
     }
 
     private (bool HasChannels, bool IsChannelReady, string Text, StatusSeverity Severity) ResolveChannelReadiness(StreamingPlatform platform)

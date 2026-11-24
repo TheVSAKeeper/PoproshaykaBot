@@ -41,6 +41,11 @@ internal interface IYouTubeLiveBroadcastClient
         return ListActiveBroadcastsAsync(cancellationToken);
     }
 
+    Task<IReadOnlyList<YouTubeBroadcastSummary>> ListActiveBroadcastsAsync(
+        PlatformAuthRole role,
+        string? contextId,
+        CancellationToken cancellationToken);
+
     Task<YouTubeVideoLiveSample?> GetVideoLiveSampleAsync(string videoId, CancellationToken cancellationToken);
 
     Task<YouTubeVideoLiveSample?> GetVideoLiveSampleAsync(string videoId, string? contextId, CancellationToken cancellationToken)
@@ -59,6 +64,12 @@ internal interface IYouTubeLiveBroadcastClient
 
     Task<YouTubeBroadcastUpdateResult> UpdateBroadcastMetadataAsync(
         YouTubeBroadcastUpdateRequest request,
+        string? contextId,
+        CancellationToken cancellationToken);
+
+    Task<YouTubeBroadcastUpdateResult> UpdateBroadcastMetadataAsync(
+        YouTubeBroadcastUpdateRequest request,
+        PlatformAuthRole role,
         string? contextId,
         CancellationToken cancellationToken);
 }

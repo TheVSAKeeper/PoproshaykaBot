@@ -132,8 +132,7 @@ internal sealed class YouTubeChannelAdapter(
         }
 
         account = accountsStore.Load(role, normalizedContext);
-        var requiredScopes = YouTubeScopes.RequiredFor(role);
-        if (!requiredScopes.All(req => YouTubeScopes.IsGranted(account, req)))
+        if (!YouTubeScopes.ContainsUsableScopes(role, account.StoredScopes))
         {
             return new(false, account.ChannelId, $"Недостаточно прав (scopes) YouTube для роли {PlatformAuthRoles.Describe(role)}.");
         }

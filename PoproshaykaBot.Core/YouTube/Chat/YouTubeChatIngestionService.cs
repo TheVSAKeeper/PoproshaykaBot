@@ -36,6 +36,7 @@ internal sealed class YouTubeChatIngestionService(
 {
     private const int MaxHeldEchoCandidates = 32;
     private static readonly TimeSpan MaxEchoHoldDuration = TimeSpan.FromSeconds(2);
+    private static readonly TimeSpan MaxMatchingTextEchoHoldDuration = TimeSpan.FromSeconds(35);
     private static readonly TimeSpan WaitingBroadcastInterval = TimeSpan.FromSeconds(30);
     private static readonly TimeSpan MinimumStreamReconnectFloor = TimeSpan.FromSeconds(2);
     private static readonly TimeSpan RapidCloseThreshold = TimeSpan.FromSeconds(3);
@@ -1523,6 +1524,13 @@ internal sealed class YouTubeChatIngestionService(
                 overflowCandidate = _heldCandidates.Dequeue();
             }
 
+            var incomingText = YouTubeChatMessageMapper.NormalizeMessageText(
+                string.IsNullOrWhiteSpace(item.MessageText) ? item.DisplayMessage : item.MessageText);
+            var holdDuration = watermarkSeq > 0
+                && _sentMessageTracker.HasInFlightMatchingText(liveChatId, watermarkSeq, incomingText)
+                ? MaxMatchingTextEchoHoldDuration
+                : MaxEchoHoldDuration;
+
             _heldCandidates.Enqueue(new(
                 liveChatId,
                 item,
@@ -1531,7 +1539,7 @@ internal sealed class YouTubeChatIngestionService(
                 broadcasterChannelId,
                 watermarkSeq,
                 messageTimestampUtc,
-                nowUtc + MaxEchoHoldDuration,
+                nowUtc + holdDuration,
                 origin));
 
             EnsureHoldDrainRunningLocked(ct);

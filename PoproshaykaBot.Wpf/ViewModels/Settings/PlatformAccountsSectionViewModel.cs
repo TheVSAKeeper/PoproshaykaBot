@@ -347,7 +347,7 @@ public sealed partial class PlatformAccountsSectionViewModel : ObservableObject
         catch (Exception exception)
         {
             _logger?.ChannelAuthorizationFailed(platform, role, exception.GetType().Name);
-            SetNotice($"Не удалось подключить аккаунт. {StreamingErrorMessages.SafeMessage(exception)}", StatusSeverity.Error);
+            SetNotice($"Не удалось подключить аккаунт. {StreamingErrorMessages.SafeMessage(exception, platform)}", StatusSeverity.Error);
         }
         finally
         {
@@ -776,7 +776,7 @@ public sealed partial class PlatformAccountsSectionViewModel : ObservableObject
             catch (Exception exception)
             {
                 _logger?.PlatformOAuthValidationFailed(exception, "twitch", grant.Role);
-                grant.SetActionStatus($"Не удалось проверить токен. {StreamingErrorMessages.SafeMessage(exception)}", StatusSeverity.Error);
+                grant.SetActionStatus($"Не удалось проверить токен. {StreamingErrorMessages.SafeMessage(exception, grant.Platform)}", StatusSeverity.Error);
             }
 
             return;
@@ -807,7 +807,7 @@ public sealed partial class PlatformAccountsSectionViewModel : ObservableObject
             catch (Exception exception)
             {
                 _logger?.PlatformOAuthValidationFailed(exception, "youtube", grant.Role);
-                grant.SetActionStatus($"Не удалось проверить токен. {StreamingErrorMessages.SafeMessage(exception)}", StatusSeverity.Error);
+                grant.SetActionStatus($"Не удалось проверить токен. {StreamingErrorMessages.SafeMessage(exception, grant.Platform)}", StatusSeverity.Error);
             }
         }
     }
@@ -889,7 +889,7 @@ public sealed partial class PlatformAccountsSectionViewModel : ObservableObject
         catch (Exception exception)
         {
             _logger?.PlatformOAuthRefreshFailed(exception, grant.Platform.ToString().ToLowerInvariant(), grant.Role);
-            grant.SetActionStatus($"Не удалось обновить токен. {StreamingErrorMessages.SafeMessage(exception)}", StatusSeverity.Error);
+            grant.SetActionStatus($"Не удалось обновить токен. {StreamingErrorMessages.SafeMessage(exception, grant.Platform)}", StatusSeverity.Error);
         }
     }
 
@@ -1051,9 +1051,15 @@ public sealed partial class PlatformAccountsSectionViewModel : ObservableObject
     {
         var hasAccess = !string.IsNullOrWhiteSpace(settings.AccessToken);
         var hasRefresh = !string.IsNullOrWhiteSpace(settings.RefreshToken);
-        var expectedScopes = settings.Scopes;
         var storedScopes = settings.StoredScopes;
-        var scopeMismatch = storedScopes.Length > 0 && !new HashSet<string>(storedScopes, StringComparer.Ordinal).SetEquals(expectedScopes);
+        var missingYouTubeRequired = platform == StreamingPlatform.YouTube
+            && storedScopes.Length > 0
+            && !YouTubeScopes.ContainsRequiredScopes(role, storedScopes);
+        var expectedScopes = missingYouTubeRequired
+            ? [.. YouTubeScopes.RequiredFor(role)]
+            : settings.Scopes;
+        var scopeMismatch = missingYouTubeRequired
+            || (storedScopes.Length > 0 && !new HashSet<string>(storedScopes, StringComparer.Ordinal).SetEquals(expectedScopes));
 
         var (statusText, severity) = DescribeTokenStatus(hasAccess, hasRefresh, scopeMismatch, settings.AccessTokenExpiresAt, now);
         var expiryText = settings.AccessTokenExpiresAt is { } expiresAt
@@ -1083,7 +1089,7 @@ public sealed partial class PlatformAccountsSectionViewModel : ObservableObject
             removeRoleAsync: RemoveGrantRoleAsync)
         {
             CanRemove = _accountDirectories[platform].CanRemove,
-            Permissions = DescribePermissions(permissions, channels, accountId, role, contextId, storedScopes,
+            Permissions = DescribePermissions(platform, permissions, channels, accountId, role, contextId, storedScopes,
                 hasAccess, hasRefresh, scopeMismatch, settings.AccessTokenExpiresAt, now),
         };
 
@@ -1096,6 +1102,7 @@ public sealed partial class PlatformAccountsSectionViewModel : ObservableObject
     }
 
     private static IReadOnlyList<AccountPermissionStatus> DescribePermissions(
+        StreamingPlatform platform,
         IReadOnlyList<PlatformAccountOperation> permissions, IReadOnlyList<ChannelCatalogEntry> channels,
         string accountId, PlatformAuthRole role, string contextId, string[] scopes,
         bool hasAccess, bool hasRefresh, bool scopeMismatch, DateTimeOffset? expiresAt, DateTimeOffset now)
@@ -1107,7 +1114,11 @@ public sealed partial class PlatformAccountsSectionViewModel : ObservableObject
                 && string.Equals(assignment.ContextId, contextId, StringComparison.Ordinal))
             .ToArray();
         var granted = scopes.ToHashSet(StringComparer.Ordinal);
-        var sessionStatus = scopeMismatch || (!hasRefresh && (!hasAccess || expiresAt <= now))
+        var treatMismatchAsSessionFailure = scopeMismatch
+            && !(platform == StreamingPlatform.YouTube
+                && role == PlatformAuthRole.Broadcaster
+                && YouTubeScopes.ContainsUsableScopes(role, granted));
+        var sessionStatus = treatMismatchAsSessionFailure || (!hasRefresh && (!hasAccess || expiresAt <= now))
             ? ("Нужен вход", StatusSeverity.Warning)
             : !hasAccess || expiresAt <= now
                 ? ("Токен нужно обновить", StatusSeverity.Info)
@@ -1122,7 +1133,7 @@ public sealed partial class PlatformAccountsSectionViewModel : ObservableObject
                 {
                     (message, severity) = ("Выданные права не подтверждены", StatusSeverity.Info);
                 }
-                else if (!permission.RequiredScopes.All(granted.Contains))
+                else if (!permission.RequiredScopes.All(required => IsScopeSatisfied(platform, granted, required)))
                 {
                     (message, severity) = ("Не хватает прав", StatusSeverity.Warning);
                 }
@@ -1149,6 +1160,13 @@ public sealed partial class PlatformAccountsSectionViewModel : ObservableObject
         }
 
         return result;
+    }
+
+    private static bool IsScopeSatisfied(StreamingPlatform platform, HashSet<string> granted, string required)
+    {
+        return platform == StreamingPlatform.YouTube
+            ? YouTubeScopes.IsScopeSatisfied(granted, required)
+            : granted.Contains(required);
     }
 
     private static (string Text, StatusSeverity Severity) DescribeTokenStatus(

@@ -280,6 +280,95 @@ public sealed class MultistreamBroadcastProfileTests
     }
 
     [Test]
+    public async Task YouTubeBroadcastProfileApplier_FallsBack_To_SameChannel_Bot_With_ForceSsl_When_Broadcaster_Is_ReadOnly()
+    {
+        _catalogStore.Save(new ChannelsSettings
+        {
+            Channels =
+            [
+                new ChannelCatalogEntry
+                {
+                    Platform = StreamingPlatform.YouTube,
+                    ChannelId = "UC_MAIN",
+                    DisplayName = "Main YT",
+                    IsConfigured = true,
+                    BotContextId = "yt-bot-ctx",
+                    BroadcasterContextId = "yt-broadcaster-ctx",
+                },
+            ],
+            Platforms =
+            [
+                new PlatformChannelRoutingSettings
+                {
+                    Platform = StreamingPlatform.YouTube,
+                    ActiveChannelId = "UC_MAIN",
+                },
+            ],
+        });
+
+        SeedYouTubeBroadcaster("yt-broadcaster-ctx", "ro-token", [YouTubeScopes.ReadOnly]);
+        _youtubeAccountsStore.Mutate(PlatformAuthRole.Bot, "yt-bot-ctx", account =>
+        {
+            account.AccessToken = "bot-rw-token";
+            account.StoredScopes = [YouTubeScopes.ForceSsl];
+            account.ChannelId = "UC_MAIN";
+            account.ChannelTitle = "Main YT";
+        });
+
+        var scheduledStart = new DateTimeOffset(2026, 11, 20, 17, 0, 0, TimeSpan.Zero);
+        var broadcast = new YouTubeBroadcastSummary(
+            "vid-300",
+            "UC_MAIN",
+            "Main YT",
+            "chat-300",
+            "Старое название",
+            scheduledStart.AddMinutes(5),
+            ScheduledStartTimeUtc: scheduledStart);
+
+        var source = Substitute.For<IYouTubeActiveBroadcastSource>();
+        source.GetActiveBroadcast(new(StreamingPlatform.YouTube, "UC_MAIN")).Returns(broadcast);
+
+        PlatformAuthRole? capturedRole = null;
+        string? capturedContext = null;
+        var client = Substitute.For<IYouTubeLiveBroadcastClient>();
+        client.UpdateBroadcastMetadataAsync(
+                Arg.Any<YouTubeBroadcastUpdateRequest>(),
+                Arg.Do<PlatformAuthRole>(r => capturedRole = r),
+                Arg.Do<string?>(c => capturedContext = c),
+                Arg.Any<CancellationToken>())
+            .Returns(YouTubeBroadcastUpdateResult.Success());
+
+        var applier = new YouTubeBroadcastProfileApplier(
+            _catalogStore,
+            _youtubeAccountsStore,
+            source,
+            client,
+            NullLogger<YouTubeBroadcastProfileApplier>.Instance);
+
+        var result = await applier.ApplyAsync(new BroadcastProfile { Name = "Профиль", Title = "Новое название" }, null, CancellationToken.None);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(result.Succeeded, Is.True);
+            Assert.That(capturedRole, Is.EqualTo(PlatformAuthRole.Bot));
+            Assert.That(capturedContext, Is.EqualTo("yt-bot-ctx"));
+        });
+
+        _youtubeAccountsStore.Mutate(PlatformAuthRole.Bot, "yt-bot-ctx", account =>
+        {
+            account.ChannelId = "UC_OTHER_BOT";
+        });
+
+        var foreignBotResult = await applier.ApplyAsync(new BroadcastProfile { Name = "Профиль", Title = "Новое название" }, null, CancellationToken.None);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(foreignBotResult.Succeeded, Is.False);
+            Assert.That(foreignBotResult.ErrorMessage, Does.Contain("youtube.force-ssl"));
+        });
+    }
+
+    [Test]
     public async Task BroadcastProfilesManager_ApplyAsync_TwitchAndYouTube_FullSuccess_And_PartialFailure()
     {
         var manager = CreateManager();

@@ -48,7 +48,7 @@ public sealed class YouTubeAccountAuthAdapter : IPlatformAccountAuthAdapter
     public string RolePurposeHint => _role switch
     {
         PlatformAuthRole.Bot => "Требует право youtube.force-ssl (чтение и отправка сообщений в чат трансляции).",
-        PlatformAuthRole.Broadcaster => "Требует право youtube.readonly (чтение параметров канала и активной трансляции).",
+        PlatformAuthRole.Broadcaster => "Требует право youtube.force-ssl (чтение параметров канала и обновление названия и описания трансляции).",
         _ => string.Empty,
     };
 

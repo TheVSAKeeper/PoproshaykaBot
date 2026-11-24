@@ -38,18 +38,47 @@ internal sealed class YouTubeSentMessageTracker : IYouTubeSentMessageTracker
         }
     }
 
-    public YouTubeInFlightSendScope BeginInFlightSend(string liveChatId)
+    public YouTubeInFlightSendScope BeginInFlightSend(string liveChatId) => BeginInFlightSend(liveChatId, expectedNormalizedText: null);
+
+    public YouTubeInFlightSendScope BeginInFlightSend(string liveChatId, string? expectedNormalizedText)
     {
         if (string.IsNullOrWhiteSpace(liveChatId))
         {
             return new();
         }
 
+        var normalizedText = string.IsNullOrWhiteSpace(expectedNormalizedText)
+            ? null
+            : expectedNormalizedText.Trim();
+
         lock (_sync)
         {
             var seq = ++_nextSequence;
-            _inFlight.Add(new(liveChatId, seq));
+            _inFlight.Add(new(liveChatId, seq, normalizedText));
             return new(this, liveChatId, seq);
+        }
+    }
+
+    public bool HasInFlightMatchingText(string liveChatId, long watermarkSeq, string normalizedText)
+    {
+        if (string.IsNullOrWhiteSpace(liveChatId) || watermarkSeq <= 0 || string.IsNullOrWhiteSpace(normalizedText))
+        {
+            return false;
+        }
+
+        lock (_sync)
+        {
+            foreach (var entry in _inFlight)
+            {
+                if (string.Equals(entry.LiveChatId, liveChatId, StringComparison.Ordinal)
+                    && entry.Sequence <= watermarkSeq
+                    && string.Equals(entry.NormalizedText, normalizedText, StringComparison.Ordinal))
+                {
+                    return true;
+                }
+            }
+
+            return false;
         }
     }
 
@@ -212,7 +241,7 @@ internal sealed class YouTubeSentMessageTracker : IYouTubeSentMessageTracker
         }
     }
 
-    private readonly record struct InFlightEntry(string LiveChatId, long Sequence);
+    private readonly record struct InFlightEntry(string LiveChatId, long Sequence, string? NormalizedText);
 
     private sealed record Waiter(
         string LiveChatId,

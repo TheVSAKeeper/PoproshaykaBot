@@ -25,6 +25,7 @@ using PoproshaykaBot.Core.Statistics;
 using PoproshaykaBot.Core.Streaming;
 using PoproshaykaBot.Core.Streaming.Switching;
 using PoproshaykaBot.Core.Update;
+using PoproshaykaBot.Core.YouTube.Auth;
 using PoproshaykaBot.Core.Dashboard;
 using PoproshaykaBot.Wpf.Bootstrap;
 using PoproshaykaBot.Wpf.Infrastructure;
@@ -518,7 +519,9 @@ public sealed class BotAutomation(
 
                         var grantedSet = new HashSet<string>(grantedScopes, StringComparer.OrdinalIgnoreCase);
                         var missingScopes = requiredScopes
-                            .Where(scope => !grantedSet.Contains(scope))
+                            .Where(scope => !(directory.Platform == StreamingPlatform.YouTube
+                                ? YouTubeScopes.IsScopeSatisfied(grantedSet, scope)
+                                : grantedSet.Contains(scope)))
                             .ToArray();
 
                         bool? persistedVerified = verifyPersisted

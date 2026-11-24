@@ -202,7 +202,7 @@ public sealed class YouTubeOAuthServiceTests
                       "access_token": "draft-access",
                       "refresh_token": "draft-refresh",
                       "expires_in": 1800,
-                      "scope": "https://www.googleapis.com/auth/youtube.readonly"
+                      "scope": "https://www.googleapis.com/auth/youtube.force-ssl"
                     }
                     """);
             }
@@ -231,7 +231,7 @@ public sealed class YouTubeOAuthServiceTests
         {
             Assert.That(draft.AccessToken, Is.EqualTo("draft-access"));
             Assert.That(draft.ChannelId, Is.EqualTo("UCcaster"));
-            Assert.That(draft.Scopes, Is.EqualTo(new[] { YouTubeScopes.ReadOnly }));
+            Assert.That(draft.Scopes, Is.EqualTo(new[] { YouTubeScopes.ForceSsl }));
             Assert.That(_accountsStore.LoadBroadcaster().AccessToken, Is.Empty);
         }
 
@@ -597,6 +597,23 @@ public sealed class YouTubeOAuthServiceTests
         }
     }
 
+    [Test]
+    public async Task GetAccessTokenAsync_WhenBroadcasterHasLegacyReadOnlyScope_KeepsTokenUsable()
+    {
+        _accountsStore.Mutate(PlatformAuthRole.Broadcaster, account =>
+        {
+            account.AccessToken = "legacy-readonly-token";
+            account.RefreshToken = "legacy-refresh";
+            account.AccessTokenExpiresAt = _clock.UtcNow.AddHours(1);
+            account.Scopes = [YouTubeScopes.ReadOnly];
+            account.StoredScopes = [YouTubeScopes.ReadOnly];
+        });
+
+        var token = await _service.GetAccessTokenAsync(PlatformAuthRole.Broadcaster);
+
+        Assert.That(token, Is.EqualTo("legacy-readonly-token"));
+    }
+
     [TestCase("accessNotConfigured", true)]
     [TestCase("quotaExceeded", false)]
     [TestCase("youtubeSignupRequired", true)]
@@ -656,6 +673,21 @@ public sealed class YouTubeOAuthServiceTests
         await cts.CancelAsync();
         Assert.CatchAsync<OperationCanceledException>(async () => await first);
         Assert.CatchAsync<OperationCanceledException>(async () => await second);
+    }
+
+    [Test]
+    public void YouTubeScopes_IsScopeSatisfied_TreatsForceSslAsSatisfyingReadOnly()
+    {
+        var forceSslOnly = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { YouTubeScopes.ForceSsl };
+        var readOnlyOnly = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { YouTubeScopes.ReadOnly };
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(YouTubeScopes.IsScopeSatisfied(forceSslOnly, YouTubeScopes.ForceSsl), Is.True);
+            Assert.That(YouTubeScopes.IsScopeSatisfied(forceSslOnly, YouTubeScopes.ReadOnly), Is.True);
+            Assert.That(YouTubeScopes.IsScopeSatisfied(readOnlyOnly, YouTubeScopes.ReadOnly), Is.True);
+            Assert.That(YouTubeScopes.IsScopeSatisfied(readOnlyOnly, YouTubeScopes.ForceSsl), Is.False);
+        }
     }
 
     private static HttpResponseMessage MakeJson(HttpStatusCode status, string body)

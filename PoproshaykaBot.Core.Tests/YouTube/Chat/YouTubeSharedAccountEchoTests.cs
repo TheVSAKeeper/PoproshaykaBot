@@ -248,6 +248,64 @@ public class YouTubeSharedAccountEchoTests
     }
 
     [Test]
+    public async Task SharedAccount_SlowInsert_WithMatchingText_HoldsPast2s_And_MarksIsBotTrue()
+    {
+        var manualPublished = new TaskCompletionSource<RawChatMessageReceived>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var echoPublished = new TaskCompletionSource<RawChatMessageReceived>(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var sub = _eventBus.Subscribe<RawChatMessageReceived>(e =>
+        {
+            if (e.Message.Id == "manual-during-slow-insert")
+            {
+                manualPublished.TrySetResult(e);
+            }
+            else if (e.Message.Id == "slow-echo-2")
+            {
+                echoPublished.TrySetResult(e);
+            }
+        });
+
+        const string sentText = "Дай деняк, 2 раз прошу. https://bob217.ru/donate/";
+        var pollingClient = new StubStreamClient((_, pageToken) =>
+            pageToken is null
+                ? [new YouTubeLiveChatBatch(
+                    [
+                        TextItem("manual-during-slow-insert", BroadcasterId, "SharedChannel", isOwner: true, _clock.GetUtcNow().AddSeconds(1), "ручное сообщение"),
+                        TextItem("slow-echo-2", BroadcasterId, "SharedChannel", isOwner: true, _clock.GetUtcNow().AddSeconds(2), sentText),
+                    ],
+                    "tok-1",
+                    TimeSpan.FromSeconds(5),
+                    null)]
+                : []);
+
+        using var ingestion = CreateIngestion(pollingClient);
+
+        using (var scope = _sentTracker.BeginInFlightSend("chat-1", YouTubeChatMessageMapper.NormalizeMessageText(sentText)))
+        {
+            await ingestion.RunSingleIterationAsync(CancellationToken.None);
+
+            for (var i = 0; i < 10 && !manualPublished.Task.IsCompleted; i++)
+            {
+                _clock.Advance(TimeSpan.FromMilliseconds(500));
+                await Task.Delay(10);
+            }
+
+            var manualResult = await manualPublished.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            Assert.That(manualResult.Message.IsBot, Is.False);
+
+            _clock.Advance(TimeSpan.FromSeconds(10));
+            await Task.Delay(25);
+            Assert.That(echoPublished.Task.IsCompleted, Is.False, "Сообщение с совпавшим текстом in-flight отправки должно удерживаться дольше 2 с");
+
+            scope.CompleteConfirmed("slow-echo-2");
+        }
+
+        var echoResult = await echoPublished.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        await ingestion.StopAsync(new Progress<string>(), CancellationToken.None);
+
+        Assert.That(echoResult.Message.IsBot, Is.True);
+    }
+
+    [Test]
     public async Task SharedAccount_Broadcast_Switch_Drops_Held_Candidates_Without_Publishing()
     {
         var received = new ConcurrentQueue<RawChatMessageReceived>();

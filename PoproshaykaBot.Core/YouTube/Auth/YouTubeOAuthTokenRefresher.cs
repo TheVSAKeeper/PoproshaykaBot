@@ -151,7 +151,7 @@ public sealed class YouTubeOAuthTokenRefresher : IDisposable
         public bool AreStoredScopesValid(PlatformAuthRole role, YouTubeAccountSettings account)
         {
             return YouTubeScopes.SetEquals(account.StoredScopes, account.Scopes)
-                && YouTubeScopes.RequiredFor(role).All(required => YouTubeScopes.IsGranted(account, required));
+                && YouTubeScopes.ContainsUsableScopes(role, account.StoredScopes);
         }
 
         public Task HandleScopeMismatchAsync(PlatformAuthRole role, YouTubeAccountSettings accountSnapshot, CancellationToken ct)

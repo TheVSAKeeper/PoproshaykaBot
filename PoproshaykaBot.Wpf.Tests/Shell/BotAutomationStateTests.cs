@@ -285,6 +285,68 @@ public sealed class BotAutomationStateTests
         Assert.Throws<InvalidOperationException>(() => automation.GetDiagnostics());
     }
 
+    [Test]
+    public void GetAccountsReadiness_YouTubeBroadcaster_ForceSslSatisfiesReadOnlyScope()
+    {
+        var tempDir = Path.Combine(Path.GetTempPath(), $"bot-automation-yt-readiness-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(tempDir);
+        try
+        {
+            var storePath = Path.Combine(tempDir, "youtube-accounts.json");
+            var store = new PoproshaykaBot.Core.Settings.Stores.YouTubeAccountsStore(filePath: storePath);
+            store.Mutate(PoproshaykaBot.Core.Platforms.Auth.PlatformAuthRole.Broadcaster, "yt-broadcaster-full", account =>
+            {
+                account.ChannelId = "UCfull";
+                account.ChannelTitle = "FullChannel";
+                account.AccessToken = "access-full";
+                account.RefreshToken = "refresh-full";
+                account.AccessTokenExpiresAt = DateTimeOffset.UtcNow.AddHours(1);
+                account.StoredScopes = [PoproshaykaBot.Core.YouTube.Auth.YouTubeScopes.ForceSsl];
+            });
+            store.Mutate(PoproshaykaBot.Core.Platforms.Auth.PlatformAuthRole.Broadcaster, "yt-broadcaster-ro", account =>
+            {
+                account.ChannelId = "UCro";
+                account.ChannelTitle = "ReadOnlyChannel";
+                account.AccessToken = "access-ro";
+                account.RefreshToken = "refresh-ro";
+                account.AccessTokenExpiresAt = DateTimeOffset.UtcNow.AddHours(1);
+                account.StoredScopes = [PoproshaykaBot.Core.YouTube.Auth.YouTubeScopes.ReadOnly];
+            });
+
+            var automation = new BotAutomation(
+                new FakeBotConnectionController(),
+                new FakeTargetChannelProvider(new("poproshayka", "poproshayka", false, true)),
+                new FakeStreamStatus(StreamStatus.Offline, null),
+                new FakeHttpServerStatus(false, null),
+                new FakeObsSceneController(ObsConnectionSnapshot.Disconnected()),
+                new FakeSettingsManager(8080),
+                NullLogger<BotAutomation>.Instance,
+                accountDirectories: [store]);
+
+            var readiness = automation.GetAccountsReadiness();
+            var ytRoles = readiness.Platforms
+                .Single(p => p.Platform == PoproshaykaBot.Core.Platforms.StreamingPlatform.YouTube)
+                .Accounts
+                .SelectMany(a => a.Roles)
+                .ToDictionary(r => r.ContextId);
+
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(ytRoles["yt-broadcaster-full"].MissingScopes, Is.Empty);
+                Assert.That(
+                    ytRoles["yt-broadcaster-ro"].MissingScopes,
+                    Is.EqualTo(new[] { PoproshaykaBot.Core.YouTube.Auth.YouTubeScopes.ForceSsl }));
+            }
+        }
+        finally
+        {
+            if (Directory.Exists(tempDir))
+            {
+                Directory.Delete(tempDir, recursive: true);
+            }
+        }
+    }
+
     private sealed class FakePlatformChannelMonitor(
         PoproshaykaBot.Core.Platforms.StreamingPlatform platform,
         IReadOnlyList<PoproshaykaBot.Core.Platforms.ChannelMonitoringSnapshot> snapshots)

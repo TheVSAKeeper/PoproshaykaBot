@@ -22,6 +22,7 @@ public sealed class YouTubeAccountsStore : RoleAccountsStoreBase<YouTubeAccounts
     private static readonly PlatformAccountOperation[] BroadcasterPermissions =
     [
         new("Чтение данных эфира", true, YouTubeScopes.ReadOnly),
+        new("Обновление названия и описания эфира", true, YouTubeScopes.ForceSsl),
     ];
 
     public override IReadOnlyList<PlatformAccountOperation> GetPermissions(PlatformAuthRole role) =>

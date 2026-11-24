@@ -112,7 +112,7 @@ public class YouTubeChatMessageMapperTests
 
         public void TrackSent(string messageId, string? liveChatId = null) => _ids.Add(messageId);
 
-        public YouTubeInFlightSendScope BeginInFlightSend(string liveChatId) => new();
+        public YouTubeInFlightSendScope BeginInFlightSend(string liveChatId, string? expectedNormalizedText) => new();
 
         public long CaptureInFlightWatermark(string liveChatId) => 0;
 

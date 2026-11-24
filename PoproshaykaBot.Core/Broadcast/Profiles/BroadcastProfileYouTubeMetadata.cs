@@ -128,11 +128,59 @@ public static class YouTubeBroadcastWriteAccess
         return accountsStore.LoadBroadcaster();
     }
 
+    public static YouTubeAccountSettings? ResolveWriteAccount(
+        ChannelCatalogStore? catalogStore,
+        YouTubeAccountsStore? accountsStore,
+        out PlatformAuthRole role,
+        out string? contextId,
+        out ChannelCatalogEntry? activeChannel)
+    {
+        var broadcaster = ResolveBroadcasterAccount(catalogStore, accountsStore, out var broadcasterContextId, out activeChannel);
+        if (HasUsableCredentials(broadcaster) && HasWriteScope(broadcaster))
+        {
+            role = PlatformAuthRole.Broadcaster;
+            contextId = broadcasterContextId;
+            return broadcaster;
+        }
+
+        if (accountsStore is not null)
+        {
+            var botContextId = activeChannel?.BotContextId;
+            YouTubeAccountSettings? botAccount;
+            if (!string.IsNullOrWhiteSpace(botContextId))
+            {
+                accountsStore.TryLoadContext(PlatformAuthRole.Bot, botContextId, out botAccount);
+            }
+            else
+            {
+                botAccount = accountsStore.LoadBot();
+            }
+
+            var targetChannelId = !string.IsNullOrWhiteSpace(activeChannel?.ChannelId)
+                ? activeChannel.ChannelId.Trim()
+                : broadcaster?.ChannelId?.Trim();
+
+            if (HasUsableCredentials(botAccount)
+                && HasWriteScope(botAccount)
+                && !string.IsNullOrWhiteSpace(targetChannelId)
+                && string.Equals(botAccount!.ChannelId?.Trim(), targetChannelId, StringComparison.Ordinal))
+            {
+                role = PlatformAuthRole.Bot;
+                contextId = botContextId;
+                return botAccount;
+            }
+        }
+
+        role = PlatformAuthRole.Broadcaster;
+        contextId = broadcasterContextId;
+        return broadcaster;
+    }
+
     public static bool CanUpdateBroadcastMetadata(
         ChannelCatalogStore? catalogStore,
         YouTubeAccountsStore? accountsStore)
     {
-        var account = ResolveBroadcasterAccount(catalogStore, accountsStore, out _, out _);
+        var account = ResolveWriteAccount(catalogStore, accountsStore, out _, out _, out _);
         return HasUsableCredentials(account) && HasWriteScope(account);
     }
 }

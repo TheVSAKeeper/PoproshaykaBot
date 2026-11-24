@@ -1,6 +1,7 @@
 ﻿using Microsoft.Extensions.Logging;
 using PoproshaykaBot.Core.Chat;
 using PoproshaykaBot.Core.Platforms;
+using PoproshaykaBot.Core.Platforms.Auth;
 using PoproshaykaBot.Core.Settings;
 using PoproshaykaBot.Core.Settings.Stores;
 using PoproshaykaBot.Core.YouTube.Client;
@@ -29,9 +30,10 @@ internal sealed class YouTubeBroadcastProfileApplier(
     {
         ArgumentNullException.ThrowIfNull(profile);
 
-        var account = YouTubeBroadcastWriteAccess.ResolveBroadcasterAccount(
+        var account = YouTubeBroadcastWriteAccess.ResolveWriteAccount(
             channelCatalogStore,
             accountsStore,
+            out var authRole,
             out var contextId,
             out var activeChannel);
 
@@ -47,7 +49,7 @@ internal sealed class YouTubeBroadcastProfileApplier(
             return new(StreamingPlatform.YouTube, false, MissingWriteScopeMessage);
         }
 
-        var (broadcast, discoveryError) = await ResolveActiveBroadcastAsync(activeChannel, contextId, cancellationToken)
+        var (broadcast, discoveryError) = await ResolveActiveBroadcastAsync(activeChannel, authRole, contextId, cancellationToken)
             .ConfigureAwait(false);
 
         if (discoveryError is not null)
@@ -89,9 +91,13 @@ internal sealed class YouTubeBroadcastProfileApplier(
             broadcast.ScheduledStartTimeUtc,
             normalized?.PrivacyStatus);
 
-        var updateResult = await broadcastClient
-            .UpdateBroadcastMetadataAsync(request, contextId, cancellationToken)
-            .ConfigureAwait(false);
+        var updateResult = authRole == PlatformAuthRole.Broadcaster
+            ? await broadcastClient
+                .UpdateBroadcastMetadataAsync(request, contextId, cancellationToken)
+                .ConfigureAwait(false)
+            : await broadcastClient
+                .UpdateBroadcastMetadataAsync(request, authRole, contextId, cancellationToken)
+                .ConfigureAwait(false);
 
         if (updateResult.IsSuccess)
         {
@@ -119,6 +125,7 @@ internal sealed class YouTubeBroadcastProfileApplier(
 
     private async Task<(YouTubeBroadcastSummary? Broadcast, string? ErrorMessage)> ResolveActiveBroadcastAsync(
         ChannelCatalogEntry? activeChannel,
+        PlatformAuthRole authRole,
         string? contextId,
         CancellationToken cancellationToken)
     {
@@ -134,9 +141,13 @@ internal sealed class YouTubeBroadcastProfileApplier(
 
         try
         {
-            var broadcasts = await broadcastClient
-                .ListActiveBroadcastsAsync(contextId, cancellationToken)
-                .ConfigureAwait(false);
+            var broadcasts = authRole == PlatformAuthRole.Broadcaster
+                ? await broadcastClient
+                    .ListActiveBroadcastsAsync(contextId, cancellationToken)
+                    .ConfigureAwait(false)
+                : await broadcastClient
+                    .ListActiveBroadcastsAsync(authRole, contextId, cancellationToken)
+                    .ConfigureAwait(false);
 
             var matched = SelectBroadcast(broadcasts, cached, activeChannel);
             return (matched ?? cached, null);

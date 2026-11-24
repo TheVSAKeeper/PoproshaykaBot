@@ -14,13 +14,12 @@ public static class YouTubeScopes
 
     public static readonly IReadOnlyList<string> BroadcasterRequired =
     [
-        ReadOnly,
+        ForceSsl,
     ];
 
     public static readonly IReadOnlyList<string> CombinedDefault =
     [
-        .. BotRequired,
-        .. BroadcasterRequired,
+        .. BotRequired.Concat(BroadcasterRequired).Distinct(StringComparer.Ordinal),
     ];
 
     public static IReadOnlyList<string> RequiredFor(PlatformAuthRole role)
@@ -46,6 +45,33 @@ public static class YouTubeScopes
 
         var grantedSet = new HashSet<string>(grantedScopes, StringComparer.Ordinal);
         return RequiredFor(role).All(grantedSet.Contains);
+    }
+
+    public static bool ContainsUsableScopes(PlatformAuthRole role, IEnumerable<string> grantedScopes)
+    {
+        ArgumentNullException.ThrowIfNull(grantedScopes);
+
+        var grantedSet = new HashSet<string>(grantedScopes, StringComparer.Ordinal);
+        if (RequiredFor(role).All(grantedSet.Contains))
+        {
+            return true;
+        }
+
+        return role == PlatformAuthRole.Broadcaster
+            && grantedSet.Contains(ReadOnly);
+    }
+
+    public static bool IsScopeSatisfied(IReadOnlySet<string> grantedScopes, string requiredScope)
+    {
+        ArgumentNullException.ThrowIfNull(grantedScopes);
+
+        if (grantedScopes.Contains(requiredScope))
+        {
+            return true;
+        }
+
+        return string.Equals(requiredScope, ReadOnly, StringComparison.OrdinalIgnoreCase)
+            && grantedScopes.Contains(ForceSsl);
     }
 
     public static bool SetEquals(IEnumerable<string> left, IEnumerable<string> right)

@@ -53,7 +53,15 @@ internal sealed class YouTubeLiveBroadcastClient(
         return ListActiveBroadcastsAsync(PlatformAuthRequestOptions.CurrentContextId, cancellationToken);
     }
 
-    public async Task<IReadOnlyList<YouTubeBroadcastSummary>> ListActiveBroadcastsAsync(string? contextId, CancellationToken cancellationToken)
+    public Task<IReadOnlyList<YouTubeBroadcastSummary>> ListActiveBroadcastsAsync(string? contextId, CancellationToken cancellationToken)
+    {
+        return ListActiveBroadcastsAsync(PlatformAuthRole.Broadcaster, contextId, cancellationToken);
+    }
+
+    public async Task<IReadOnlyList<YouTubeBroadcastSummary>> ListActiveBroadcastsAsync(
+        PlatformAuthRole role,
+        string? contextId,
+        CancellationToken cancellationToken)
     {
         using var _ = PlatformAuthRequestOptions.UseContext(contextId);
         var results = new List<YouTubeBroadcastSummary>();
@@ -68,7 +76,7 @@ internal sealed class YouTubeLiveBroadcastClient(
                 uri += $"&pageToken={Uri.EscapeDataString(pageToken)}";
             }
 
-            var json = await SendAuthorizedGetAsync(PlatformAuthRole.Broadcaster, uri, "liveBroadcasts.list", cancellationToken).ConfigureAwait(false);
+            var json = await SendAuthorizedGetAsync(role, uri, "liveBroadcasts.list", cancellationToken).ConfigureAwait(false);
             var dto = DeserializeResponse<LiveBroadcastsListResponseDto>(json, "liveBroadcasts.list");
 
             if (dto?.Items is not null)
@@ -147,8 +155,17 @@ internal sealed class YouTubeLiveBroadcastClient(
             HasLiveStreamingDetails: item.LiveStreamingDetails is not null);
     }
 
+    public Task<YouTubeBroadcastUpdateResult> UpdateBroadcastMetadataAsync(
+        YouTubeBroadcastUpdateRequest request,
+        string? contextId,
+        CancellationToken cancellationToken)
+    {
+        return UpdateBroadcastMetadataAsync(request, PlatformAuthRole.Broadcaster, contextId, cancellationToken);
+    }
+
     public async Task<YouTubeBroadcastUpdateResult> UpdateBroadcastMetadataAsync(
         YouTubeBroadcastUpdateRequest request,
+        PlatformAuthRole role,
         string? contextId,
         CancellationToken cancellationToken)
     {
@@ -163,16 +180,20 @@ internal sealed class YouTubeLiveBroadcastClient(
             throw new ArgumentException("Title is required.", nameof(request));
         }
 
-        if (!quotaGovernor.TryReserve(PlatformAuthRole.Broadcaster, YouTubeQuotaPriority.CriticalReadAndMonitor, YouTubeQuotaCost, out var lease))
+        if (!quotaGovernor.TryReserve(role, YouTubeQuotaPriority.CriticalReadAndMonitor, YouTubeQuotaCost, out var lease))
         {
             return YouTubeBroadcastUpdateResult.Failure(
                 YouTubeApiErrorKind.LocalQuotaBudgetReached,
                 "Исчерпан локальный бюджет квоты YouTube API");
         }
 
+        var clientName = role == PlatformAuthRole.Bot
+            ? YouTubeEndpoints.BotApiHttpClient
+            : YouTubeEndpoints.BroadcasterApiHttpClient;
+
         using var _ = PlatformAuthRequestOptions.UseContext(contextId);
         using (lease)
-        using (var client = httpClientFactory.CreateClient(YouTubeEndpoints.BroadcasterApiHttpClient))
+        using (var client = httpClientFactory.CreateClient(clientName))
         {
             var privacyStatus = YouTubeBroadcastPrivacyStatus.Normalize(request.PrivacyStatus);
             var relativeUri = string.IsNullOrWhiteSpace(privacyStatus)

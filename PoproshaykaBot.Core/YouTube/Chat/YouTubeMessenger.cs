@@ -538,7 +538,9 @@ internal sealed class YouTubeMessenger(
                 return status;
             }
 
-            using var inFlightScope = sentMessageTracker.BeginInFlightSend(item.TargetLiveChatId);
+            using var inFlightScope = sentMessageTracker.BeginInFlightSend(
+                item.TargetLiveChatId,
+                YouTubeChatMessageMapper.NormalizeMessageText(chunk));
 
             try
             {
