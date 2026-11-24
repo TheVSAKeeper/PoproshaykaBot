@@ -78,7 +78,6 @@ public sealed partial class MultistreamPageViewModel : ObservableObject, IPageHe
     private readonly IReadOnlyDictionary<StreamingPlatform, IReadOnlyList<SettingsSectionBlockDescriptor>> _platformSettings;
     private readonly IDialogService? _dialogService;
     private readonly IServiceScopeFactory? _scopeFactory;
-    private readonly YouTubeSettingsStore? _youtubeSettingsStore;
     private readonly ChannelCatalogStore? _catalogStore;
     private MultistreamSection _requestedSection;
 
@@ -162,7 +161,6 @@ public sealed partial class MultistreamPageViewModel : ObservableObject, IPageHe
         Accounts = accounts;
         _dialogService = dialogService;
         _scopeFactory = scopeFactory;
-        _youtubeSettingsStore = youtubeSettingsStore;
         _catalogStore = catalogStore;
 
         Settings.PropertyChanged += OnSettingsPropertyChanged;
@@ -863,28 +861,14 @@ public sealed partial class MultistreamPageViewModel : ObservableObject, IPageHe
         NotifyWizardCommandsCanExecuteChanged();
     }
 
-    private bool ResolvePlatformEnabled(MultistreamPlatformCard card)
+    private static bool ResolvePlatformEnabled(MultistreamPlatformCard card)
     {
-        var platform = card.Status.Platform;
-        if (platform == StreamingPlatform.Twitch)
+        if (card.Controls is not null)
         {
-            return true;
+            return !card.Controls.RequiresCardSetup;
         }
 
-        if (platform == StreamingPlatform.YouTube)
-        {
-            if (card.Controls is not null)
-            {
-                return !card.Controls.RequiresCardSetup;
-            }
-
-            if (_youtubeSettingsStore is not null)
-            {
-                return _youtubeSettingsStore.Load().Enabled;
-            }
-        }
-
-        return card.Status.IsPlatformEnabled;
+        return card.Status.Source.IsEnabled;
     }
 
     private (bool HasBotReady, bool HasBroadcasterReady, bool HasBroadcasterScopeWarning) ResolveAccountReadiness(MultistreamPlatformCard card)
@@ -901,23 +885,20 @@ public sealed partial class MultistreamPageViewModel : ObservableObject, IPageHe
                 account.HasBotRole && account.BotBadgeSeverity is StatusSeverity.Success or StatusSeverity.Info);
             var hasBroadcaster = Accounts.Accounts.Any(static account =>
                 account.HasBroadcasterRole && account.BroadcasterBadgeSeverity is StatusSeverity.Success or StatusSeverity.Info);
-            var hasBroadcasterScopeWarning = false;
-            if (platform == StreamingPlatform.YouTube)
-            {
-                var activeYouTubeChannel = _catalogStore?.GetActiveChannel(StreamingPlatform.YouTube);
-                var activeBroadcasterId = activeYouTubeChannel?.GetAccountAssignment(PlatformAuthRole.Broadcaster)?.Account.AccountId;
-                var activeBroadcasterContextId = activeYouTubeChannel?.BroadcasterContextId;
-                var relevantAccounts = !string.IsNullOrWhiteSpace(activeBroadcasterId)
-                    ? Accounts.Accounts.Where(a => string.Equals(a.AccountId, activeBroadcasterId, StringComparison.Ordinal))
-                    : Accounts.Accounts;
+            var activePlatformChannel = _catalogStore?.GetActiveChannel(platform);
+            var activeBroadcasterId = activePlatformChannel?.GetAccountAssignment(PlatformAuthRole.Broadcaster)?.Account.AccountId;
+            var activeBroadcasterContextId = activePlatformChannel?.BroadcasterContextId;
+            var relevantAccounts = !string.IsNullOrWhiteSpace(activeBroadcasterId)
+                ? Accounts.Accounts.Where(a => string.Equals(a.AccountId, activeBroadcasterId, StringComparison.Ordinal))
+                : Accounts.Accounts;
 
-                hasBroadcasterScopeWarning = relevantAccounts.Any(account =>
-                    account.Grants.Any(grant =>
-                        grant.Role == PlatformAuthRole.Broadcaster
-                        && grant.TokenStatusSeverity == StatusSeverity.Warning
-                        && (string.IsNullOrWhiteSpace(activeBroadcasterContextId)
-                            || string.Equals(grant.ContextId, activeBroadcasterContextId, StringComparison.Ordinal))));
-            }
+            var hasBroadcasterScopeWarning = relevantAccounts.Any(account =>
+                account.Grants.Any(grant =>
+                    grant.Role == PlatformAuthRole.Broadcaster
+                    && grant.TokenStatusSeverity == StatusSeverity.Warning
+                    && (string.IsNullOrWhiteSpace(activeBroadcasterContextId)
+                        || string.Equals(grant.ContextId, activeBroadcasterContextId, StringComparison.Ordinal))));
+
             return (hasBot, hasBroadcaster, hasBroadcasterScopeWarning);
         }
 

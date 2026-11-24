@@ -1,146 +1,111 @@
-﻿using Microsoft.Extensions.Logging;
+﻿using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using PoproshaykaBot.Core.Debugging;
 using PoproshaykaBot.Core.Platforms.Auth;
 using PoproshaykaBot.Core.Settings;
 using PoproshaykaBot.Core.Settings.Stores;
-using PoproshaykaBot.Core.YouTube.Auth;
-using PoproshaykaBot.Core.YouTube.Streaming;
+using PoproshaykaBot.Core.Twitch;
+using PoproshaykaBot.Core.YouTube;
 
 namespace PoproshaykaBot.Core.Platforms;
 
-public sealed class ChannelCatalogReconciler(
-    ChannelCatalogStore catalogStore,
-    SettingsManager settingsManager,
-    AccountsStore twitchAccountsStore,
-    YouTubeSettingsStore youtubeSettingsStore,
-    YouTubeAccountsStore youtubeAccountsStore,
-    ITargetChannelProvider targetChannelProvider,
-    ILogger<ChannelCatalogReconciler> logger)
+public sealed class ChannelCatalogReconciler
 {
+    private readonly ChannelCatalogStore _catalogStore;
+    private readonly IReadOnlyList<IPlatformChannelSeedProvider> _seedProviders;
+    private readonly Dictionary<StreamingPlatform, IPlatformChannelSeedProvider> _providersByPlatform;
+    private readonly ILogger<ChannelCatalogReconciler> _logger;
+
+    [ActivatorUtilitiesConstructor]
+    public ChannelCatalogReconciler(
+        ChannelCatalogStore catalogStore,
+        IEnumerable<IPlatformChannelSeedProvider> seedProviders,
+        ILogger<ChannelCatalogReconciler> logger)
+    {
+        ArgumentNullException.ThrowIfNull(catalogStore);
+        ArgumentNullException.ThrowIfNull(seedProviders);
+        ArgumentNullException.ThrowIfNull(logger);
+
+        _catalogStore = catalogStore;
+        _seedProviders = seedProviders.ToArray();
+        _providersByPlatform = _seedProviders.ToDictionary(static provider => provider.Platform);
+        _logger = logger;
+    }
+
+    public ChannelCatalogReconciler(
+        ChannelCatalogStore catalogStore,
+        SettingsManager settingsManager,
+        AccountsStore twitchAccountsStore,
+        YouTubeSettingsStore youtubeSettingsStore,
+        YouTubeAccountsStore youtubeAccountsStore,
+        ITargetChannelProvider targetChannelProvider,
+        ILogger<ChannelCatalogReconciler> logger)
+        : this(
+            catalogStore,
+            [
+                new TwitchChannelSeedProvider(settingsManager, twitchAccountsStore, targetChannelProvider),
+                new YouTubeChannelSeedProvider(youtubeSettingsStore, youtubeAccountsStore),
+            ],
+            logger)
+    {
+    }
+
     public void ReconcileStartup()
     {
-        ReconcileTwitchFromLegacy();
-        ReconcileYouTubeFromLegacy();
+        foreach (var provider in _seedProviders)
+        {
+            ReconcilePlatform(provider.Platform);
+        }
     }
 
-    public void ReconcileTwitchFromLegacy()
+    public void ReconcilePlatform(StreamingPlatform platform)
     {
-        var twitchChannel = settingsManager.Current.Twitch.Channel?.Trim();
-        if (string.IsNullOrWhiteSpace(twitchChannel))
+        if (!_providersByPlatform.TryGetValue(platform, out var provider))
         {
             return;
         }
 
-        var existingConfigured = catalogStore.GetConfiguredChannels(StreamingPlatform.Twitch);
+        var existingConfigured = _catalogStore.GetConfiguredChannels(platform);
         if (existingConfigured.Count > 0)
         {
             return;
         }
 
-        var broadcaster = twitchAccountsStore.Load(PlatformAuthRole.Broadcaster);
-        if (string.IsNullOrWhiteSpace(broadcaster.UserId)
-            || !string.Equals(broadcaster.Login, twitchChannel, StringComparison.OrdinalIgnoreCase))
+        if (provider.TryCreateSeed() is not { } seed)
         {
             return;
         }
 
         SeedChannel(
-            StreamingPlatform.Twitch,
-            broadcaster.UserId.Trim(),
-            broadcaster.Login,
-            broadcaster.Login,
-            $"https://twitch.tv/{broadcaster.Login}",
-            monitoringEnabled: true,
-            broadcasterSubjectId: broadcaster.UserId.Trim(),
-            botSubjectId: twitchAccountsStore.Load(PlatformAuthRole.Bot).UserId);
-    }
-
-    public void ReconcileYouTubeFromLegacy()
-    {
-        var existingConfigured = catalogStore.GetConfiguredChannels(StreamingPlatform.YouTube);
-        if (existingConfigured.Count > 0)
-        {
-            return;
-        }
-
-        var ytSettings = youtubeSettingsStore.Load();
-        var broadcaster = youtubeAccountsStore.Load(PlatformAuthRole.Broadcaster);
-        var rawInput = ytSettings.Channel?.Trim();
-        string? channelId = null;
-        var handle = string.Empty;
-
-        if (!string.IsNullOrWhiteSpace(rawInput) && YouTubeTargetChannelResolver.TryExtractDirectChannelId(rawInput, out var directId))
-        {
-            channelId = directId;
-            handle = rawInput;
-        }
-        else if (string.IsNullOrWhiteSpace(rawInput) && !string.IsNullOrWhiteSpace(broadcaster.ChannelId))
-        {
-            channelId = broadcaster.ChannelId.Trim();
-            handle = broadcaster.ChannelTitle ?? string.Empty;
-        }
-
-        if (string.IsNullOrWhiteSpace(channelId))
-        {
-            return;
-        }
-
-        var displayName = !string.IsNullOrWhiteSpace(broadcaster.ChannelTitle)
-            && string.Equals(broadcaster.ChannelId, channelId, StringComparison.Ordinal)
-            ? broadcaster.ChannelTitle
-            : (!string.IsNullOrWhiteSpace(handle) ? handle : channelId);
-
-        SeedChannel(
-            StreamingPlatform.YouTube,
-            channelId,
-            displayName,
-            handle,
-            $"https://youtube.com/channel/{channelId}",
-            monitoringEnabled: ytSettings.Enabled,
-            broadcasterSubjectId: string.Equals(broadcaster.ChannelId, channelId, StringComparison.Ordinal) ? channelId : null,
-            botSubjectId: youtubeAccountsStore.Load(PlatformAuthRole.Bot).ChannelId);
+            seed.Platform,
+            seed.ChannelId,
+            seed.DisplayName,
+            seed.Handle,
+            seed.Url,
+            seed.MonitoringEnabled,
+            seed.BroadcasterSubjectId,
+            seed.BotSubjectId);
     }
 
     public void MirrorActiveChannelToLegacySettings(ChannelCatalogEntry entry)
     {
         ArgumentNullException.ThrowIfNull(entry);
 
-        if (entry.Platform == StreamingPlatform.Twitch)
+        if (_providersByPlatform.TryGetValue(entry.Platform, out var provider))
         {
-            if (targetChannelProvider.Current.IsDebugSession)
-            {
-                return;
-            }
-
-            var targetLogin = !string.IsNullOrWhiteSpace(entry.Handle) ? entry.Handle : entry.DisplayName;
-            if (!string.IsNullOrWhiteSpace(targetLogin)
-                && !string.Equals(settingsManager.Current.Twitch.Channel, targetLogin, StringComparison.OrdinalIgnoreCase))
-            {
-                settingsManager.Mutate(settings => settings.Twitch.Channel = targetLogin);
-            }
-
-            return;
-        }
-
-        if (entry.Platform == StreamingPlatform.YouTube)
-        {
-            var current = youtubeSettingsStore.Load();
-            if (!string.Equals(current.Channel, entry.ChannelId, StringComparison.Ordinal))
-            {
-                youtubeSettingsStore.Mutate(settings => settings.Channel = entry.ChannelId);
-            }
+            provider.MirrorActiveChannel(entry);
         }
     }
 
     public ChannelCatalogEntry? ResolveActiveEntry(StreamingPlatform platform)
     {
-        var configured = catalogStore.GetConfiguredChannels(platform);
+        var configured = _catalogStore.GetConfiguredChannels(platform);
         if (configured.Count == 0)
         {
             return null;
         }
 
-        var routing = catalogStore.GetPlatformSettings(platform);
+        var routing = _catalogStore.GetPlatformSettings(platform);
         if (!string.IsNullOrWhiteSpace(routing.ActiveChannelId))
         {
             var match = configured.FirstOrDefault(c => string.Equals(c.ChannelId, routing.ActiveChannelId, StringComparison.Ordinal));
@@ -163,7 +128,7 @@ public sealed class ChannelCatalogReconciler(
         string? broadcasterSubjectId,
         string? botSubjectId)
     {
-        catalogStore.Mutate(settings =>
+        _catalogStore.Mutate(settings =>
         {
             var entry = settings.Channels.FirstOrDefault(c =>
                 c.Platform == platform && string.Equals(c.ChannelId, channelId, StringComparison.Ordinal));
@@ -225,7 +190,7 @@ public sealed class ChannelCatalogReconciler(
             }
         });
 
-        logger.LogInformation("Каталог каналов: перенесён канал {Platform} {ChannelId} ({DisplayName}) из прежних настроек",
+        _logger.LogInformation("Каталог каналов: перенесён канал {Platform} {ChannelId} ({DisplayName}) из прежних настроек",
             platform,
             channelId,
             displayName);

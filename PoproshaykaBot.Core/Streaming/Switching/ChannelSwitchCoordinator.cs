@@ -1041,7 +1041,7 @@ public sealed class ChannelSwitchCoordinator :
 
     private bool IsBlockedByDebugSession(StreamingPlatform platform)
     {
-        return platform == StreamingPlatform.Twitch && _targetChannelProvider.Current.IsDebugSession;
+        return platform == _targetChannelProvider.DebugPlatform && _targetChannelProvider.Current.IsDebugSession;
     }
 
     private PlatformSwitchSlot GetSlot(StreamingPlatform platform)

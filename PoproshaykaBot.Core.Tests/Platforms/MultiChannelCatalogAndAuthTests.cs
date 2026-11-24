@@ -217,7 +217,7 @@ public sealed class MultiChannelCatalogAndAuthTests
             BroadcasterVerifiedSubjectId = "tw-b",
         }));
 
-        reconciler.ReconcileTwitchFromLegacy();
+        reconciler.ReconcilePlatform(StreamingPlatform.Twitch);
         Assert.That(catalog.GetConfiguredChannels(StreamingPlatform.Twitch).Select(c => c.ChannelId),
             Is.EquivalentTo(new[] { "tw-a", "tw-b" }));
         Assert.That(twitchAccounts.Load(PlatformAuthRole.Broadcaster).Login, Is.EqualTo("originA"));

@@ -1,4 +1,11 @@
-﻿namespace PoproshaykaBot.Core.Diagnostics;
+﻿using PoproshaykaBot.Core.Platforms;
+
+namespace PoproshaykaBot.Core.Diagnostics;
+
+public sealed record PlatformChatDiagnostics(
+    StreamingPlatform Platform,
+    string DisplayName,
+    ChatConnectionStatus? Status);
 
 public sealed record DiagnosticsSnapshot(
     DateTimeOffset CapturedAt,
@@ -13,4 +20,5 @@ public sealed record DiagnosticsSnapshot(
     YouTubeMonitoringStatus? YouTubeMonitoring = null,
     YouTubeChatStatus? YouTubeChat = null,
     YouTubeQuotaStatus? YouTubeQuota = null,
-    string? ActiveBroadcastSaveError = null);
+    string? ActiveBroadcastSaveError = null,
+    IReadOnlyList<PlatformChatDiagnostics>? PlatformChats = null);

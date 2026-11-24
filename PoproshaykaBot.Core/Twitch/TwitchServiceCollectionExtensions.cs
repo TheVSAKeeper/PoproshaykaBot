@@ -2,7 +2,9 @@
 using PoproshaykaBot.Core.Infrastructure.Diagnostics;
 using PoproshaykaBot.Core.Platforms;
 using PoproshaykaBot.Core.Platforms.Auth;
+using PoproshaykaBot.Core.Settings;
 using PoproshaykaBot.Core.Settings.Stores;
+using PoproshaykaBot.Core.Statistics;
 using PoproshaykaBot.Core.Twitch.Auth;
 using PoproshaykaBot.Core.Twitch.EventSub;
 using PoproshaykaBot.Core.Twitch.Helix;
@@ -58,6 +60,10 @@ public static class TwitchServiceCollectionExtensions
         services.AddSingleton<IBroadcasterIdProvider, BroadcasterIdProvider>();
         services.AddSingleton<IOnboardingChannelValidator, OnboardingChannelValidator>();
         services.AddSingleton<IPlatformChannelAdapter, TwitchChannelAdapter>();
+        services.AddSingleton<IPlatformChannelSeedProvider, TwitchChannelSeedProvider>();
+        services.AddSingleton<IPlatformChannelIdentitySource>(static provider => new TwitchChannelIdentitySource(
+            provider.GetService<AccountsStore>(),
+            provider.GetService<SettingsManager>()));
 
         services.AddSingleton<ISettingsSnapshotContributor>(static provider => new DelegateSettingsSnapshotContributor(() =>
         {

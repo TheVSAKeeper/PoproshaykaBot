@@ -251,7 +251,8 @@ public sealed partial class UserStatisticsPageViewModel : ObservableObject, IPag
 
     public ObservableCollection<UserStatisticsRowViewModel> Users => _rows;
 
-    public IReadOnlyList<PlatformFilterOption> PlatformOptions => PlatformFilterOption.AllOptions;
+    public IReadOnlyList<PlatformFilterOption> PlatformOptions =>
+        field ??= PlatformFilterOption.ForRegistry(_platformRegistry);
 
     public ObservableCollection<UserStatisticsSliceOption> SliceOptions => _sliceOptions;
 
@@ -491,7 +492,7 @@ public sealed partial class UserStatisticsPageViewModel : ObservableObject, IPag
         try
         {
             SelectedPlatformFilter = value.Slice.Kind == StatisticsSliceKind.Platform && value.Slice.Platform is { } platform
-                ? PlatformFilterOption.AllOptions.FirstOrDefault(o => o.Platform == platform) ?? PlatformFilterOption.All
+                ? PlatformOptions.FirstOrDefault(o => o.Platform == platform) ?? PlatformFilterOption.All
                 : PlatformFilterOption.All;
         }
         finally
@@ -1159,7 +1160,7 @@ public sealed partial class UserStatisticsPageViewModel : ObservableObject, IPag
             }
         }
 
-        foreach (var platformOption in PlatformFilterOption.AllOptions)
+        foreach (var platformOption in PlatformOptions)
         {
             if (platformOption.Platform is not { } platform)
             {
@@ -1189,7 +1190,7 @@ public sealed partial class UserStatisticsPageViewModel : ObservableObject, IPag
                 ?? _sliceOptions[0];
             SelectedSliceOption = matched;
             SelectedPlatformFilter = matched.Slice.Kind == StatisticsSliceKind.Platform && matched.Slice.Platform is { } selectedPlatform
-                ? PlatformFilterOption.AllOptions.FirstOrDefault(o => o.Platform == selectedPlatform) ?? PlatformFilterOption.All
+                ? PlatformOptions.FirstOrDefault(o => o.Platform == selectedPlatform) ?? PlatformFilterOption.All
                 : PlatformFilterOption.All;
         }
         finally

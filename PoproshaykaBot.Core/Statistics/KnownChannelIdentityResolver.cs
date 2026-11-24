@@ -1,18 +1,16 @@
 ﻿using PoproshaykaBot.Core.Platforms;
-using PoproshaykaBot.Core.Platforms.Auth;
 using PoproshaykaBot.Core.Settings;
 using PoproshaykaBot.Core.Settings.Stores;
-using PoproshaykaBot.Core.YouTube.Streaming;
+using PoproshaykaBot.Core.Twitch;
+using PoproshaykaBot.Core.YouTube;
 
 namespace PoproshaykaBot.Core.Statistics;
 
 internal sealed class KnownChannelIdentityResolver
 {
     private readonly ChannelCatalogStore? _channelCatalogStore;
-    private readonly AccountsStore? _twitchAccountsStore;
-    private readonly YouTubeAccountsStore? _youtubeAccountsStore;
-    private readonly SettingsManager? _settingsManager;
-    private readonly YouTubeSettingsStore? _youtubeSettingsStore;
+    private readonly IReadOnlyList<IPlatformChannelIdentitySource> _identitySources;
+    private readonly Dictionary<StreamingPlatform, IPlatformChannelIdentitySource> _sourcesByPlatform;
 
     public KnownChannelIdentityResolver(
         ChannelCatalogStore? channelCatalogStore = null,
@@ -20,12 +18,19 @@ internal sealed class KnownChannelIdentityResolver
         YouTubeAccountsStore? youtubeAccountsStore = null,
         SettingsManager? settingsManager = null,
         YouTubeSettingsStore? youtubeSettingsStore = null)
+        : this(
+            channelCatalogStore,
+            BuildLegacySources(twitchAccountsStore, youtubeAccountsStore, settingsManager, youtubeSettingsStore))
+    {
+    }
+
+    public KnownChannelIdentityResolver(
+        ChannelCatalogStore? channelCatalogStore,
+        IEnumerable<IPlatformChannelIdentitySource>? identitySources)
     {
         _channelCatalogStore = channelCatalogStore;
-        _twitchAccountsStore = twitchAccountsStore;
-        _youtubeAccountsStore = youtubeAccountsStore;
-        _settingsManager = settingsManager;
-        _youtubeSettingsStore = youtubeSettingsStore;
+        _identitySources = identitySources?.ToArray() ?? [];
+        _sourcesByPlatform = _identitySources.ToDictionary(static source => source.Platform);
     }
 
     public ChannelIdentitySnapshot BuildSnapshot(
@@ -57,27 +62,22 @@ internal sealed class KnownChannelIdentityResolver
             }
         }
 
-        if (_twitchAccountsStore is not null)
+        foreach (var source in _identitySources)
         {
-            var broadcaster = _twitchAccountsStore.Load(PlatformAuthRole.Broadcaster);
-            if (!string.IsNullOrWhiteSpace(broadcaster.UserId))
+            source.CollectKnownChannels((channelId, aliases) =>
             {
-                var id = broadcaster.UserId.Trim();
-                knownChannels.Add(new(StreamingPlatform.Twitch, id));
-                RegisterAlias(map, ambiguous, StreamingPlatform.Twitch, broadcaster.Login, id);
-            }
-        }
+                if (string.IsNullOrWhiteSpace(channelId))
+                {
+                    return;
+                }
 
-        if (_youtubeAccountsStore is not null)
-        {
-            var broadcaster = _youtubeAccountsStore.Load(PlatformAuthRole.Broadcaster);
-            if (!string.IsNullOrWhiteSpace(broadcaster.ChannelId))
-            {
-                var id = broadcaster.ChannelId.Trim();
-                knownChannels.Add(new(StreamingPlatform.YouTube, id));
-                RegisterAlias(map, ambiguous, StreamingPlatform.YouTube, id, id);
-                RegisterAlias(map, ambiguous, StreamingPlatform.YouTube, broadcaster.ChannelTitle, id);
-            }
+                var trimmedId = channelId.Trim();
+                knownChannels.Add(new(source.Platform, trimmedId));
+                foreach (var alias in aliases)
+                {
+                    RegisterAlias(map, ambiguous, source.Platform, alias, trimmedId);
+                }
+            });
         }
 
         if (history is not null)
@@ -117,35 +117,42 @@ internal sealed class KnownChannelIdentityResolver
 
         var hasUnresolvedConfigured = new HashSet<StreamingPlatform>();
 
-        if (_settingsManager is not null)
+        foreach (var source in _identitySources)
         {
-            var twitchChannel = _settingsManager.Current.Twitch.Channel;
             CheckConfiguredChannel(
-                StreamingPlatform.Twitch,
-                twitchChannel,
+                source,
+                source.GetConfiguredChannelRaw(),
                 map,
                 ambiguous,
                 knownChannels,
                 hasUnresolvedConfigured);
         }
 
-        if (_youtubeSettingsStore is not null)
-        {
-            var youtubeChannel = _youtubeSettingsStore.Load().Channel;
-            CheckConfiguredChannel(
-                StreamingPlatform.YouTube,
-                youtubeChannel,
-                map,
-                ambiguous,
-                knownChannels,
-                hasUnresolvedConfigured);
-        }
-
-        return new(map, ambiguous, knownChannels, hasUnresolvedConfigured);
+        return new(map, ambiguous, knownChannels, hasUnresolvedConfigured, _sourcesByPlatform);
     }
 
-    private static void CheckConfiguredChannel(
-        StreamingPlatform platform,
+    private static IReadOnlyList<IPlatformChannelIdentitySource> BuildLegacySources(
+        AccountsStore? twitchAccountsStore,
+        YouTubeAccountsStore? youtubeAccountsStore,
+        SettingsManager? settingsManager,
+        YouTubeSettingsStore? youtubeSettingsStore)
+    {
+        var list = new List<IPlatformChannelIdentitySource>(2);
+        if (twitchAccountsStore is not null || settingsManager is not null)
+        {
+            list.Add(new TwitchChannelIdentitySource(twitchAccountsStore, settingsManager));
+        }
+
+        if (youtubeAccountsStore is not null || youtubeSettingsStore is not null)
+        {
+            list.Add(new YouTubeChannelIdentitySource(youtubeAccountsStore, youtubeSettingsStore));
+        }
+
+        return list;
+    }
+
+    private void CheckConfiguredChannel(
+        IPlatformChannelIdentitySource source,
         string? rawChannel,
         Dictionary<(StreamingPlatform Platform, string Alias), string> map,
         HashSet<(StreamingPlatform Platform, string Alias)> ambiguous,
@@ -157,10 +164,10 @@ internal sealed class KnownChannelIdentityResolver
             return;
         }
 
-        if (platform == StreamingPlatform.YouTube
-            && YouTubeTargetChannelResolver.TryExtractDirectChannelId(rawChannel, out var directId))
+        var platform = source.Platform;
+        if (source.TryExtractDirectChannelId(rawChannel, out var directId))
         {
-            knownChannels.Add(new(StreamingPlatform.YouTube, directId));
+            knownChannels.Add(new(platform, directId));
             return;
         }
 
@@ -174,7 +181,7 @@ internal sealed class KnownChannelIdentityResolver
         knownChannels.Add(new(platform, resolvedId));
     }
 
-    private static void RegisterAlias(
+    private void RegisterAlias(
         Dictionary<(StreamingPlatform Platform, string Alias), string> map,
         HashSet<(StreamingPlatform Platform, string Alias)> ambiguous,
         StreamingPlatform platform,
@@ -201,27 +208,35 @@ internal sealed class KnownChannelIdentityResolver
         map[(platform, normalized)] = channelId;
     }
 
-    internal static string? NormalizeAlias(StreamingPlatform platform, string? rawAlias)
+    internal string? NormalizeAlias(StreamingPlatform platform, string? rawAlias)
+    {
+        return NormalizeAlias(_sourcesByPlatform, platform, rawAlias);
+    }
+
+    private static string? NormalizeAlias(
+        IReadOnlyDictionary<StreamingPlatform, IPlatformChannelIdentitySource> sourcesByPlatform,
+        StreamingPlatform platform,
+        string? rawAlias)
     {
         if (string.IsNullOrWhiteSpace(rawAlias))
         {
             return null;
         }
 
-        var trimmed = rawAlias.Trim();
-        if (platform == StreamingPlatform.YouTube && YouTubeTargetChannelResolver.NormalizeHandle(trimmed) is { } handle)
+        if (sourcesByPlatform.TryGetValue(platform, out var source))
         {
-            return handle.TrimStart('@').ToLowerInvariant();
+            return source.NormalizeAlias(rawAlias);
         }
 
-        return trimmed.TrimStart('@').ToLowerInvariant();
+        return rawAlias.Trim().TrimStart('@').ToLowerInvariant();
     }
 
     internal sealed class ChannelIdentitySnapshot(
         Dictionary<(StreamingPlatform Platform, string Alias), string> map,
         HashSet<(StreamingPlatform Platform, string Alias)> ambiguous,
         HashSet<ChannelKey> knownChannels,
-        HashSet<StreamingPlatform> hasUnresolvedConfigured)
+        HashSet<StreamingPlatform> hasUnresolvedConfigured,
+        IReadOnlyDictionary<StreamingPlatform, IPlatformChannelIdentitySource> sourcesByPlatform)
     {
         public ChannelKey? Resolve(StreamingPlatform platform, string? channelId, string? channelName)
         {
@@ -240,13 +255,13 @@ internal sealed class KnownChannelIdentityResolver
                 return null;
             }
 
-            if (platform == StreamingPlatform.YouTube
-                && YouTubeTargetChannelResolver.TryExtractDirectChannelId(channelName, out var directId))
+            if (sourcesByPlatform.TryGetValue(platform, out var source)
+                && source.TryExtractDirectChannelId(channelName, out var directId))
             {
-                return new ChannelKey(StreamingPlatform.YouTube, directId);
+                return new ChannelKey(platform, directId);
             }
 
-            var normalized = NormalizeAlias(platform, channelName);
+            var normalized = NormalizeAlias(sourcesByPlatform, platform, channelName);
             if (normalized is null || ambiguous.Contains((platform, normalized)))
             {
                 return null;

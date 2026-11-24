@@ -23,7 +23,7 @@ public sealed partial class StreamInfoTileViewModel : DashboardTileViewModel, ID
     private readonly ILogger<StreamInfoTileViewModel> _logger;
     private readonly List<IDisposable> _subs = [];
     private readonly IUiDispatcher _uiDispatcher;
-    private readonly YouTubeSettingsStore? _youtubeSettingsStore;
+    private readonly IReadOnlyList<IPlatformEnablementSource> _enablementSources;
     private readonly ChannelCatalogStore? _catalogStore;
     private readonly Dictionary<StreamingPlatform, IPlatformChannelMonitor> _monitorsByPlatform = [];
     private readonly Dictionary<ChannelKey, ChannelMonitoringSnapshot> _monitoringSnapshots = [];
@@ -32,12 +32,12 @@ public sealed partial class StreamInfoTileViewModel : DashboardTileViewModel, ID
     private readonly ToolbarItemViewModel _switchPlatformToolbarItem;
     private ToolbarItemViewModel _openChannelToolbarItem;
     private bool _refreshTimerRunning;
-    private bool _hasMultipleYouTubeBroadcasts;
+    private readonly HashSet<StreamingPlatform> _multipleBroadcastsPlatforms = [];
     private StreamInfo? _currentStreamInfo;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasMultipleBroadcastsNotice), nameof(SelectedPlatformName))]
-    private StreamingPlatform _selectedPlatform = StreamingPlatform.Twitch;
+    private StreamingPlatform _selectedPlatform;
 
     [ObservableProperty]
     private bool _hasMultiplePlatforms;
@@ -99,7 +99,8 @@ public sealed partial class StreamInfoTileViewModel : DashboardTileViewModel, ID
         IShellLauncher shellLauncher,
         YouTubeSettingsStore? youtubeSettingsStore = null,
         ChannelCatalogStore? catalogStore = null,
-        IEnumerable<IPlatformChannelMonitor>? channelMonitors = null)
+        IEnumerable<IPlatformChannelMonitor>? channelMonitors = null,
+        IEnumerable<IPlatformEnablementSource>? enablementSources = null)
         : base("stream-info", "Информация о стриме", maxWidth: 420, maxHeight: 320, minHeight: 194)
     {
         ArgumentNullException.ThrowIfNull(platformRegistry);
@@ -112,7 +113,7 @@ public sealed partial class StreamInfoTileViewModel : DashboardTileViewModel, ID
         _platformSelection = new TilePlatformSelection(platformRegistry);
         _logger = logger;
         _uiDispatcher = uiDispatcher;
-        _youtubeSettingsStore = youtubeSettingsStore;
+        _enablementSources = MergeEnablementSources(enablementSources, youtubeSettingsStore);
         _catalogStore = catalogStore;
         _shellLauncher = shellLauncher;
 
@@ -162,9 +163,9 @@ public sealed partial class StreamInfoTileViewModel : DashboardTileViewModel, ID
         _subs.Add(bus.SubscribeOnUi<ActiveChannelChanged>(_ => OnPlatformStateChanged()));
         _subs.Add(bus.SubscribeOnUi<ChannelMonitoringStateChanged>(OnChannelMonitoringStateChanged));
 
-        if (_youtubeSettingsStore is not null)
+        foreach (var source in _enablementSources)
         {
-            _youtubeSettingsStore.Changed += OnYouTubeSettingsChanged;
+            source.Changed += OnEnablementSourceChanged;
         }
 
         if (_catalogStore is not null)
@@ -184,8 +185,7 @@ public sealed partial class StreamInfoTileViewModel : DashboardTileViewModel, ID
     public bool HasActiveChannel => !string.IsNullOrWhiteSpace(ActiveChannelDisplayName);
 
     public bool HasMultipleBroadcastsNotice =>
-        SelectedPlatform == StreamingPlatform.YouTube
-        && _hasMultipleYouTubeBroadcasts;
+        _multipleBroadcastsPlatforms.Contains(SelectedPlatform);
 
     [RelayCommand]
     private void SwitchPlatform()
@@ -251,9 +251,30 @@ public sealed partial class StreamInfoTileViewModel : DashboardTileViewModel, ID
         ApplyCurrentStatus();
     }
 
-    private void OnYouTubeSettingsChanged()
+    private void OnEnablementSourceChanged()
     {
         _uiDispatcher.Invoke(OnPlatformStateChanged);
+    }
+
+    private static IReadOnlyList<IPlatformEnablementSource> MergeEnablementSources(
+        IEnumerable<IPlatformEnablementSource>? enablementSources,
+        IPlatformEnablementSource? fallbackSource)
+    {
+        var map = new Dictionary<StreamingPlatform, IPlatformEnablementSource>();
+        if (enablementSources is not null)
+        {
+            foreach (var source in enablementSources)
+            {
+                map[source.Platform] = source;
+            }
+        }
+
+        if (fallbackSource is not null && !map.ContainsKey(fallbackSource.Platform))
+        {
+            map[fallbackSource.Platform] = fallbackSource;
+        }
+
+        return [.. map.Values];
     }
 
     private void OnCatalogChanged(object? sender, EventArgs e)
@@ -274,7 +295,7 @@ public sealed partial class StreamInfoTileViewModel : DashboardTileViewModel, ID
     {
         if (activeChanged.ActiveBroadcast is not null)
         {
-            _hasMultipleYouTubeBroadcasts = false;
+            _multipleBroadcastsPlatforms.Remove(activeChanged.Platform);
             OnPropertyChanged(nameof(HasMultipleBroadcastsNotice));
         }
 
@@ -283,7 +304,15 @@ public sealed partial class StreamInfoTileViewModel : DashboardTileViewModel, ID
 
     private void OnYouTubeMultipleBroadcastsDetected(YouTubeMultipleBroadcastsDetected detectedEvent)
     {
-        _hasMultipleYouTubeBroadcasts = detectedEvent.Candidates.Count > 1;
+        if (detectedEvent.Candidates.Count > 1)
+        {
+            _multipleBroadcastsPlatforms.Add(detectedEvent.Platform);
+        }
+        else
+        {
+            _multipleBroadcastsPlatforms.Remove(detectedEvent.Platform);
+        }
+
         OnPropertyChanged(nameof(HasMultipleBroadcastsNotice));
     }
 
@@ -299,7 +328,7 @@ public sealed partial class StreamInfoTileViewModel : DashboardTileViewModel, ID
 
         if (platform is null || !platform.IsEnabled)
         {
-            _hasMultipleYouTubeBroadcasts = false;
+            _multipleBroadcastsPlatforms.Remove(SelectedPlatform);
         }
 
         if (platform is null)
@@ -352,9 +381,9 @@ public sealed partial class StreamInfoTileViewModel : DashboardTileViewModel, ID
             Uptime = TimeSpan.Zero;
             _openChannelToolbarItem.IsVisible = false;
 
-            if (Status == StreamStatus.Offline && SelectedPlatform == StreamingPlatform.YouTube)
+            if (Status == StreamStatus.Offline)
             {
-                _hasMultipleYouTubeBroadcasts = false;
+                _multipleBroadcastsPlatforms.Remove(SelectedPlatform);
             }
         }
 
@@ -469,9 +498,9 @@ public sealed partial class StreamInfoTileViewModel : DashboardTileViewModel, ID
 
     public void Dispose()
     {
-        if (_youtubeSettingsStore is not null)
+        foreach (var source in _enablementSources)
         {
-            _youtubeSettingsStore.Changed -= OnYouTubeSettingsChanged;
+            source.Changed -= OnEnablementSourceChanged;
         }
 
         if (_catalogStore is not null)

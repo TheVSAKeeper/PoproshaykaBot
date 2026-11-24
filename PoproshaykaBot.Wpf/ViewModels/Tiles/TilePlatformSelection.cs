@@ -17,9 +17,9 @@ public sealed class TilePlatformSelection
         Refresh();
     }
 
-    public IReadOnlyList<StreamingPlatform> AvailablePlatforms { get; private set; } = [StreamingPlatform.Twitch];
+    public IReadOnlyList<StreamingPlatform> AvailablePlatforms { get; private set; } = [];
 
-    public StreamingPlatform SelectedPlatform { get; private set; } = StreamingPlatform.Twitch;
+    public StreamingPlatform SelectedPlatform { get; private set; }
 
     public bool HasMultiplePlatforms => AvailablePlatforms.Count > 1;
 
@@ -41,13 +41,17 @@ public sealed class TilePlatformSelection
             }
         }
 
-        if (available.Count == 0)
+        if (available.Count == 0 && platforms.Count > 0)
         {
-            var first = platforms.Count > 0 ? platforms[0].Id : StreamingPlatform.Twitch;
-            available.Add(first);
+            available.Add(platforms[0].Id);
         }
 
         AvailablePlatforms = available;
+        if (available.Count == 0)
+        {
+            SelectedPlatform = default;
+            return SelectedPlatform != previousSelected;
+        }
 
         var selectedAvailable = AvailablePlatforms.Contains(SelectedPlatform);
         if (!selectedAvailable)

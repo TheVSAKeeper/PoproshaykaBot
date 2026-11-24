@@ -76,7 +76,7 @@ public sealed record ChatHistoryScope
 
         var channelName = !string.IsNullOrWhiteSpace(message.Channel) ? message.Channel : fallbackChannel;
         var channelId = !string.IsNullOrWhiteSpace(message.ChannelId) ? message.ChannelId : channelName;
-        var sessionScopeId = message.Platform == StreamingPlatform.YouTube ? message.ChatSessionId : null;
+        var sessionScopeId = message.ChatSessionId;
 
         return new(message.Platform, channelId, sessionScopeId, channelName);
     }

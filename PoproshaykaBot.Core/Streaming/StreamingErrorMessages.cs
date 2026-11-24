@@ -37,7 +37,7 @@ public static class StreamingErrorMessages
             };
         }
 
-        var platformName = platform.ToString();
+        var platformName = PlatformDisplayNames.Get(platform);
         return exception switch
         {
             OperationCanceledException => "Операция отменена",

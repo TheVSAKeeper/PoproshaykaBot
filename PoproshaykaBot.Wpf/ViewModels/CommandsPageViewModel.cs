@@ -108,8 +108,7 @@ public sealed partial class CommandsPageViewModel : ObservableObject, IPageHeade
         _platformRegistry = platformRegistry;
         _logger = logger;
 
-        CommandScopes = [GeneralScope, .. (platformRegistry?.All.Select(platform =>
-            new PlatformFilterOption(platform.Id, platform.DisplayName)) ?? PlatformFilterOption.AllOptions.Skip(1))];
+        CommandScopes = PlatformFilterOption.ForRegistry(platformRegistry, GeneralScope);
 
         var byName = StringComparer.Create(UiCulture.Russian, ignoreCase: true);
         var capabilities = CapabilitiesFor(ProbePlatform);
@@ -179,7 +178,8 @@ public sealed partial class CommandsPageViewModel : ObservableObject, IPageHeade
     public string? ParametersHeading => IsPlatformScope && Parameters is { } parameters
         ? $"{parameters.Heading} · общие для площадок" : Parameters?.Heading;
 
-    private StreamingPlatform ProbePlatform => CommandScope.Platform ?? StreamingPlatform.Twitch;
+    private StreamingPlatform ProbePlatform =>
+        CommandScope.Platform ?? (_platformRegistry?.All is { Count: > 0 } all ? all[0].Id : StreamingPlatform.Twitch);
 
     public string PageTitle => "Команды";
 
@@ -330,16 +330,20 @@ public sealed partial class CommandsPageViewModel : ObservableObject, IPageHeade
 
     partial void OnCommandScopeChanged(PlatformFilterOption value)
     {
-        var platform = value.Platform ?? StreamingPlatform.Twitch;
+        var platform = value.Platform ?? ProbePlatform;
         var capabilities = CapabilitiesFor(platform);
         var settings = _settingsStore.Load();
+
+        var probePlatformDisplayName = value.Platform is { } scopedPlatform
+            ? PlatformVisuals.GetDisplayName(scopedPlatform, _platformRegistry)
+            : null;
 
         foreach (var row in _allRows)
         {
             row.ApplyPlatformEnablement(value.Platform is { } id ? settings.ReadPlatformEnabled(row.Canonical, id) : null);
             if (_commands.TryGetValue(row.Canonical, out var command))
             {
-                row.UpdateCodeAvailability(ProbeCodeLevel(command, platform, capabilities), platform);
+                row.UpdateCodeAvailability(ProbeCodeLevel(command, platform, capabilities), value.Platform, probePlatformDisplayName);
             }
         }
 
@@ -644,7 +648,7 @@ public sealed partial class CommandsPageViewModel : ObservableObject, IPageHeade
 
     private void RefreshWhisperNotice()
     {
-        if (ProbePlatform != StreamingPlatform.Twitch)
+        if (!CapabilitiesFor(ProbePlatform).HasFlag(PlatformCapabilities.Whisper))
         {
             WhisperNotice = null;
             return;

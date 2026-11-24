@@ -28,10 +28,7 @@ public static class StatisticsServiceCollectionExtensions
 
         services.AddSingleton(sp => new KnownChannelIdentityResolver(
             sp.GetService<ChannelCatalogStore>(),
-            sp.GetService<AccountsStore>(),
-            sp.GetService<YouTubeAccountsStore>(),
-            sp.GetService<SettingsManager>(),
-            sp.GetService<YouTubeSettingsStore>()));
+            sp.GetServices<IPlatformChannelIdentitySource>()));
 
         services.AddSingleton(sp => new LegacyUserStatisticsMigrator(
             sp.GetRequiredService<StatisticsFileStore>(),

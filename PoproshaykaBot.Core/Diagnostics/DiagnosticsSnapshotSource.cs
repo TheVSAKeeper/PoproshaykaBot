@@ -38,7 +38,8 @@ public sealed class DiagnosticsSnapshotSource(
     IYouTubeMonitorDiagnostics? youtubeMonitor = null,
     IYouTubeChatDiagnostics? youtubeChat = null,
     IYouTubeQuotaGovernor? youtubeQuota = null,
-    ObsIntegrationStore? obsIntegrationStore = null)
+    ObsIntegrationStore? obsIntegrationStore = null,
+    IChatPlatformRegistry? platformRegistry = null)
 {
     public DiagnosticsSnapshot Capture()
     {
@@ -70,7 +71,8 @@ public sealed class DiagnosticsSnapshotSource(
             youtubeMonitor is null ? null : Read(nameof(YouTubeMonitoringStatus), youtubeMonitor.CaptureDiagnostics),
             youtubeChat is null ? null : Read(nameof(YouTubeChatStatus), youtubeChat.CaptureDiagnostics),
             youtubeQuota is null ? null : Read(nameof(YouTubeQuotaStatus), youtubeQuota.CaptureDiagnostics),
-            activeBroadcastStore is null ? null : Read(nameof(ActiveBroadcastStore), () => activeBroadcastStore.LastSaveError));
+            activeBroadcastStore is null ? null : Read(nameof(ActiveBroadcastStore), () => activeBroadcastStore.LastSaveError),
+            CapturePlatformChats());
     }
 
     private static ConnectionState ToConnectionState(StreamMonitoringStatus? status)
@@ -112,6 +114,21 @@ public sealed class DiagnosticsSnapshotSource(
             logger.LogWarning(exception, "Диагностика: источник {Source} не отдал данные", source);
             return null;
         }
+    }
+
+    private IReadOnlyList<PlatformChatDiagnostics>? CapturePlatformChats()
+    {
+        if (platformRegistry is null)
+        {
+            return null;
+        }
+
+        return platformRegistry.All
+            .Select(platform => new PlatformChatDiagnostics(
+                platform.Id,
+                platform.DisplayName,
+                Read($"Chat ({platform.DisplayName})", () => platform.CaptureChatStatus(botConnection.GetPhase(platform.Id)))))
+            .ToArray();
     }
 
     private ChatConnectionStatus CaptureChat()

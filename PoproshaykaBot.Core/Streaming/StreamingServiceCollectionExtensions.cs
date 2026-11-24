@@ -37,7 +37,10 @@ public static class StreamingServiceCollectionExtensions
             StreamingPlatform.Twitch,
             (sp, _) => sp.GetRequiredService<StreamStatusManager>());
         services.TryAddSingleton<PlatformChannelRegistry>();
-        services.TryAddSingleton<ChannelCatalogReconciler>();
+        services.TryAddSingleton(sp => new ChannelCatalogReconciler(
+            sp.GetRequiredService<ChannelCatalogStore>(),
+            sp.GetServices<IPlatformChannelSeedProvider>(),
+            sp.GetRequiredService<ILogger<ChannelCatalogReconciler>>()));
         services.TryAddSingleton<ChannelSwitchCoordinator>();
         services.TryAddSingleton<IChannelSwitchCoordinator>(sp => sp.GetRequiredService<ChannelSwitchCoordinator>());
         services.TryAddEnumerable(ServiceDescriptor.Singleton<IAppLifetimeComponent, ChannelCatalogStartupLifetimeComponent>());

@@ -28,7 +28,7 @@ public sealed partial class MultistreamTileViewModel : DashboardTileViewModel, I
     public const string TileTypeId = "multistream";
 
     private readonly ChannelCatalogStore _catalog;
-    private readonly YouTubeSettingsStore _youtubeSettings;
+    private readonly IReadOnlyDictionary<StreamingPlatform, IPlatformEnablementSource> _enablementSources;
     private readonly BotConnectionManager _connectionManager;
     private readonly IPlatformAuthRegistry _authorization;
     private readonly IUiDispatcher _dispatcher;
@@ -69,14 +69,15 @@ public sealed partial class MultistreamTileViewModel : DashboardTileViewModel, I
         IEnumerable<IPlatformChannelMonitor> monitors,
         IEventBus bus,
         IUiDispatcher dispatcher,
-        YouTubeSettingsStore youtubeSettings,
+        YouTubeSettingsStore? youtubeSettings = null,
         IChannelSwitchCoordinator? switchCoordinator = null,
         ITargetChannelProvider? targetChannelProvider = null,
-        ILogger<MultistreamTileViewModel>? logger = null)
+        ILogger<MultistreamTileViewModel>? logger = null,
+        IEnumerable<IPlatformEnablementSource>? enablementSources = null)
         : base(TileTypeId, "Мультистрим", maxWidth: 500, minWidth: 280, minHeight: 324)
     {
         _catalog = catalog;
-        _youtubeSettings = youtubeSettings;
+        _enablementSources = BuildEnablementSources(enablementSources, youtubeSettings);
         _connectionManager = connectionManager;
         _authorization = authorization;
         _dispatcher = dispatcher;
@@ -106,7 +107,10 @@ public sealed partial class MultistreamTileViewModel : DashboardTileViewModel, I
             bus.SubscribeOnUi<PlatformAuthorizationRefreshed>(_ => RefreshVisible()),
         ];
         _catalog.Changed += OnCatalogChanged;
-        _youtubeSettings.Changed += OnYouTubeSettingsChanged;
+        foreach (var source in _enablementSources.Values)
+        {
+            source.Changed += OnEnablementSourceChanged;
+        }
         Refresh();
     }
 
@@ -180,7 +184,10 @@ public sealed partial class MultistreamTileViewModel : DashboardTileViewModel, I
         _disposeCts.Dispose();
         _timer.Stop();
         _catalog.Changed -= OnCatalogChanged;
-        _youtubeSettings.Changed -= OnYouTubeSettingsChanged;
+        foreach (var source in _enablementSources.Values)
+        {
+            source.Changed -= OnEnablementSourceChanged;
+        }
 
         foreach (var subscription in _subscriptions)
         {
@@ -190,7 +197,28 @@ public sealed partial class MultistreamTileViewModel : DashboardTileViewModel, I
 
     private void OnCatalogChanged(object? sender, EventArgs e) => _dispatcher.Invoke(RefreshVisible);
 
-    private void OnYouTubeSettingsChanged() => _dispatcher.Invoke(RefreshVisible);
+    private void OnEnablementSourceChanged() => _dispatcher.Invoke(RefreshVisible);
+
+    private static IReadOnlyDictionary<StreamingPlatform, IPlatformEnablementSource> BuildEnablementSources(
+        IEnumerable<IPlatformEnablementSource>? enablementSources,
+        IPlatformEnablementSource? fallbackSource)
+    {
+        var map = new Dictionary<StreamingPlatform, IPlatformEnablementSource>();
+        if (enablementSources is not null)
+        {
+            foreach (var source in enablementSources)
+            {
+                map[source.Platform] = source;
+            }
+        }
+
+        if (fallbackSource is not null && !map.ContainsKey(fallbackSource.Platform))
+        {
+            map[fallbackSource.Platform] = fallbackSource;
+        }
+
+        return map;
+    }
 
     private void OnChannelSelectionRequested(StreamingPlatform platform, MultistreamChannelOption target)
     {
@@ -374,7 +402,7 @@ public sealed partial class MultistreamTileViewModel : DashboardTileViewModel, I
 
     private void Refresh()
     {
-        var isTwitchDebugSession = _targetChannelProvider?.Current.IsDebugSession == true;
+        var isDebugSession = _targetChannelProvider?.Current.IsDebugSession == true;
         foreach (var row in Rows)
         {
             var platform = row.Source;
@@ -383,8 +411,11 @@ public sealed partial class MultistreamTileViewModel : DashboardTileViewModel, I
             var channelCount = configured.Count;
             var phase = _connectionManager.GetPhase(platform.Id);
             var enabled = platform.IsEnabled;
-            var blockedByDebug = !enabled && platform.Id == StreamingPlatform.YouTube && _youtubeSettings.Load().Enabled;
-            var isSwitchBlockedByDebug = blockedByDebug || (platform.Id == StreamingPlatform.Twitch && isTwitchDebugSession);
+            var enabledInSettings = _enablementSources.TryGetValue(platform.Id, out var enablementSource)
+                && enablementSource.IsEnabledInSettings;
+            var blockedByDebug = !enabled && enabledInSettings;
+            var isSwitchBlockedByDebug = blockedByDebug
+                || (isDebugSession && _targetChannelProvider is not null && platform.Id == _targetChannelProvider.DebugPlatform);
             var chat = platform.CaptureChatStatus(phase);
             _monitors.TryGetValue(platform.Id, out var monitor);
             var monitoring = active is not null && monitor is not null

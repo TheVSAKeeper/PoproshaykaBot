@@ -231,7 +231,8 @@ public sealed partial class StreamHistoryPageViewModel : ObservableObject, IPage
         GameBoxArtProvider boxArt,
         IEventBus eventBus,
         StatisticsPreload? preload = null,
-        ChannelCatalogStore? channelCatalog = null)
+        ChannelCatalogStore? channelCatalog = null,
+        IChatPlatformRegistry? platformRegistry = null)
     {
         _historyStore = historyStore;
         _userStatistics = userStatistics;
@@ -239,6 +240,7 @@ public sealed partial class StreamHistoryPageViewModel : ObservableObject, IPage
         _boxArt = boxArt;
         _preload = preload;
         _channelCatalog = channelCatalog;
+        PlatformOptions = PlatformFilterOption.ForRegistry(platformRegistry);
 
         _trendMetric = NormalizeMetric(settings.GetEnum(SettingsKeys.StreamTrendMetric, StreamTrendMetric.PeakViewers));
         _trendLength = NormalizeLength(settings.GetInt(SettingsKeys.StreamTrendLength, DefaultTrendLength));
@@ -309,7 +311,7 @@ public sealed partial class StreamHistoryPageViewModel : ObservableObject, IPage
 
     public ObservableCollection<StreamSessionPlatformBreakdownViewModel> DetailPlatformBreakdown { get; } = [];
 
-    public IReadOnlyList<PlatformFilterOption> PlatformOptions => PlatformFilterOption.AllOptions;
+    public IReadOnlyList<PlatformFilterOption> PlatformOptions { get; }
     public RangeObservableCollection<StreamCategoryRowViewModel> TopCategories { get; } = [];
     public RangeObservableCollection<StreamRecordCardViewModel> Records { get; } = [];
     public ObservableCollection<StreamTrendOptionViewModel> MetricOptions { get; } = [];

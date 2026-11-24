@@ -30,7 +30,10 @@ public sealed partial class StreamMonitoringViewModel : ObservableObject, IDispo
         _platformRegistry = platformRegistry;
 
         var groups = platformRegistry.All
-            .Select(static platform => new PlatformMonitoringGroupViewModel(platform.Id, platform.DisplayName))
+            .Select(static platform => new PlatformMonitoringGroupViewModel(
+                platform.Id,
+                platform.DisplayName,
+                !platform.Capabilities.HasFlag(PlatformCapabilities.ChannelMetadataEdit)))
             .ToArray();
 
         Groups = groups;
@@ -74,9 +77,9 @@ public sealed partial class StreamMonitoringViewModel : ObservableObject, IDispo
 
     private void RefreshVisibility()
     {
-
         var visibleCount = 0;
-        var hasNonTwitchVisible = false;
+        var hasSecondaryVisible = false;
+        var primaryPlatform = Groups.Count > 0 ? Groups[0].Platform : (StreamingPlatform?)null;
 
         foreach (var item in Groups)
         {
@@ -87,28 +90,33 @@ public sealed partial class StreamMonitoringViewModel : ObservableObject, IDispo
 
             visibleCount++;
 
-            if (item.Platform != StreamingPlatform.Twitch)
+            if (Groups.Count > 1 && item.Platform != primaryPlatform)
             {
-                hasNonTwitchVisible = true;
+                hasSecondaryVisible = true;
             }
         }
 
         IsVisible = visibleCount > 0;
-        ShowPlatformIcons = visibleCount > 1 || hasNonTwitchVisible;
+        ShowPlatformIcons = visibleCount > 1 || hasSecondaryVisible;
     }
 }
 
 public sealed partial class PlatformMonitoringGroupViewModel : ObservableObject
 {
     private readonly Dictionary<ChannelKey, ChannelMonitoringSnapshot> _channelSnapshots = [];
+    private readonly bool _singleActiveRole;
 
     [ObservableProperty]
     private bool _isVisible;
 
-    public PlatformMonitoringGroupViewModel(StreamingPlatform platform, string displayName)
+    public PlatformMonitoringGroupViewModel(
+        StreamingPlatform platform,
+        string displayName,
+        bool singleActiveRole = false)
     {
         Platform = platform;
         DisplayName = displayName;
+        _singleActiveRole = singleActiveRole;
     }
 
     public StreamingPlatform Platform { get; }
@@ -134,19 +142,19 @@ public sealed partial class PlatformMonitoringGroupViewModel : ObservableObject
         };
 
         var other = role == PlatformAuthRole.Broadcaster ? Bot : Broadcaster;
-        var suppressSupersededYouTubeDisconnect = Platform == StreamingPlatform.YouTube
+        var suppressSupersededDisconnect = _singleActiveRole
             && status == StreamMonitoringStatus.Disconnected
             && other.IsReported
             && other.Severity != StatusSeverity.None;
 
-        if ((resetWhenDisconnected || suppressSupersededYouTubeDisconnect) && status == StreamMonitoringStatus.Disconnected)
+        if ((resetWhenDisconnected || suppressSupersededDisconnect) && status == StreamMonitoringStatus.Disconnected)
         {
             indicator.Reset();
         }
         else
         {
             indicator.Apply(status, detail);
-            if (Platform == StreamingPlatform.YouTube && status != StreamMonitoringStatus.Disconnected)
+            if (_singleActiveRole && status != StreamMonitoringStatus.Disconnected)
             {
                 other.Reset();
             }

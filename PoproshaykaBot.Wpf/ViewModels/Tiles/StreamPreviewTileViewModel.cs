@@ -32,7 +32,7 @@ public sealed partial class StreamPreviewTileViewModel : DashboardTileViewModel,
     private readonly TilePlatformSelection _platformSelection;
     private readonly ILogger<StreamPreviewTileViewModel> _logger;
     private readonly IUiDispatcher _uiDispatcher;
-    private readonly YouTubeSettingsStore? _youtubeSettingsStore;
+    private readonly IReadOnlyList<IPlatformEnablementSource> _enablementSources;
     private readonly IUiTimer _refreshTimer;
     private readonly ToolbarItemViewModel _switchPlatformToolbarItem;
     private readonly List<IDisposable> _subs = [];
@@ -44,7 +44,7 @@ public sealed partial class StreamPreviewTileViewModel : DashboardTileViewModel,
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(SelectedPlatformName))]
-    private StreamingPlatform _selectedPlatform = StreamingPlatform.Twitch;
+    private StreamingPlatform _selectedPlatform;
 
     [ObservableProperty]
     private bool _hasMultiplePlatforms;
@@ -69,7 +69,8 @@ public sealed partial class StreamPreviewTileViewModel : DashboardTileViewModel,
         IEventBus bus,
         ILogger<StreamPreviewTileViewModel> logger,
         IUiDispatcher uiDispatcher,
-        YouTubeSettingsStore? youtubeSettingsStore = null)
+        YouTubeSettingsStore? youtubeSettingsStore = null,
+        IEnumerable<IPlatformEnablementSource>? enablementSources = null)
         : base("stream-preview", "Превью стрима", maxHeight: 280)
     {
         ArgumentNullException.ThrowIfNull(platformRegistry);
@@ -80,7 +81,7 @@ public sealed partial class StreamPreviewTileViewModel : DashboardTileViewModel,
         _platformSelection = new TilePlatformSelection(platformRegistry);
         _logger = logger;
         _uiDispatcher = uiDispatcher;
-        _youtubeSettingsStore = youtubeSettingsStore;
+        _enablementSources = MergeEnablementSources(enablementSources, youtubeSettingsStore);
         _refreshTimer = uiDispatcher.CreateTimer(AutoRefreshInterval, OnRefreshTimerTick);
 
         _switchPlatformToolbarItem = new ToolbarItemViewModel(
@@ -104,9 +105,9 @@ public sealed partial class StreamPreviewTileViewModel : DashboardTileViewModel,
         _subs.Add(bus.SubscribeOnUi<PlatformConnectionChanged>(_ => OnPlatformStateChanged()));
         _subs.Add(bus.SubscribeOnUi<YouTubeActiveBroadcastChanged>(_ => OnPlatformStateChanged()));
 
-        if (_youtubeSettingsStore is not null)
+        foreach (var source in _enablementSources)
         {
-            _youtubeSettingsStore.Changed += OnYouTubeSettingsChanged;
+            source.Changed += OnEnablementSourceChanged;
         }
 
         ApplyCurrentStatus();
@@ -165,16 +166,37 @@ public sealed partial class StreamPreviewTileViewModel : DashboardTileViewModel,
         }
     }
 
-    private void OnYouTubeSettingsChanged()
+    private void OnEnablementSourceChanged()
     {
         _uiDispatcher.Invoke(OnPlatformStateChanged);
     }
 
+    private static IReadOnlyList<IPlatformEnablementSource> MergeEnablementSources(
+        IEnumerable<IPlatformEnablementSource>? enablementSources,
+        IPlatformEnablementSource? fallbackSource)
+    {
+        var map = new Dictionary<StreamingPlatform, IPlatformEnablementSource>();
+        if (enablementSources is not null)
+        {
+            foreach (var source in enablementSources)
+            {
+                map[source.Platform] = source;
+            }
+        }
+
+        if (fallbackSource is not null && !map.ContainsKey(fallbackSource.Platform))
+        {
+            map[fallbackSource.Platform] = fallbackSource;
+        }
+
+        return [.. map.Values];
+    }
+
     public void Dispose()
     {
-        if (_youtubeSettingsStore is not null)
+        foreach (var source in _enablementSources)
         {
-            _youtubeSettingsStore.Changed -= OnYouTubeSettingsChanged;
+            source.Changed -= OnEnablementSourceChanged;
         }
 
         foreach (var sub in _subs)

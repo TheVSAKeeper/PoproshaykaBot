@@ -9,7 +9,22 @@ public sealed record PlatformFilterOption(StreamingPlatform? Platform, string La
     public static IReadOnlyList<PlatformFilterOption> AllOptions { get; } =
     [
         All,
-        new(StreamingPlatform.Twitch, PlatformVisuals.GetDisplayName(StreamingPlatform.Twitch)),
-        new(StreamingPlatform.YouTube, PlatformVisuals.GetDisplayName(StreamingPlatform.YouTube)),
+        .. PlatformVisuals.OrderedPlatforms.Select(static platform =>
+            new PlatformFilterOption(platform, PlatformVisuals.GetDisplayName(platform))),
     ];
+
+    public static IReadOnlyList<PlatformFilterOption> ForRegistry(
+        IChatPlatformRegistry? registry,
+        PlatformFilterOption? firstOption = null)
+    {
+        var head = firstOption ?? All;
+        if (registry is null)
+        {
+            return firstOption is null
+                ? AllOptions
+                : [head, .. AllOptions.Skip(1)];
+        }
+
+        return [head, .. registry.All.Select(static platform => new PlatformFilterOption(platform.Id, platform.DisplayName))];
+    }
 }

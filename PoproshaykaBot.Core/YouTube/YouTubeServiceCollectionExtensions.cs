@@ -96,6 +96,12 @@ public static class YouTubeServiceCollectionExtensions
         services.AddSingleton<IPlatformBroadcastProfileApplier>(
             static provider => provider.GetRequiredService<YouTubeBroadcastProfileApplier>());
         services.AddSingleton<IPlatformChannelAdapter, YouTubeChannelAdapter>();
+        services.AddSingleton<IPlatformChannelSeedProvider, YouTubeChannelSeedProvider>();
+        services.AddSingleton<IPlatformChannelIdentitySource>(static provider => new YouTubeChannelIdentitySource(
+            provider.GetService<YouTubeAccountsStore>(),
+            provider.GetService<YouTubeSettingsStore>()));
+        services.AddSingleton<IPlatformEnablementSource>(
+            static provider => provider.GetRequiredService<YouTubeSettingsStore>());
         services.AddKeyedSingleton<IStreamStatus>(
             StreamingPlatform.YouTube,
             static (provider, _) => provider.GetRequiredService<YouTubeStreamMonitor>());

@@ -10,7 +10,8 @@ namespace PoproshaykaBot.Wpf.ViewModels;
 public sealed partial class CommandRowViewModel : ObservableObject
 {
     private bool _applying;
-    private StreamingPlatform _probePlatform = StreamingPlatform.Twitch;
+    private StreamingPlatform? _probePlatform;
+    private string? _probePlatformDisplayName;
     private bool? _platformEnabled;
 
     [ObservableProperty]
@@ -116,8 +117,8 @@ public sealed partial class CommandRowViewModel : ObservableObject
 
     public bool IsClosedByCode => CodeLevel is null;
 
-    public string CodeAccessText => IsClosedByCode && _probePlatform != StreamingPlatform.Twitch
-        ? $"Недоступна ({PlatformVisuals.GetDisplayName(_probePlatform)})"
+    public string CodeAccessText => IsClosedByCode && _probePlatform is { } platform
+        ? $"Недоступна ({_probePlatformDisplayName ?? PlatformVisuals.GetDisplayName(platform)})"
         : CommandAccessOption.DescribeSource(CodeLevel);
 
     public CommandAccessLevel EffectiveAccessLevel => CodeLevel is { } code
@@ -138,9 +139,9 @@ public sealed partial class CommandRowViewModel : ObservableObject
         {
             if (IsClosedByCode)
             {
-                return _probePlatform == StreamingPlatform.Twitch
-                    ? "Никто"
-                    : $"Недоступна ({PlatformVisuals.GetDisplayName(_probePlatform)})";
+                return _probePlatform is { } platform
+                    ? $"Недоступна ({_probePlatformDisplayName ?? PlatformVisuals.GetDisplayName(platform)})"
+                    : "Никто";
             }
 
             var level = CommandAccessOption.Describe(EffectiveAccessLevel);
@@ -161,9 +162,9 @@ public sealed partial class CommandRowViewModel : ObservableObject
         get
         {
             var basic = IsClosedByCode
-                ? (_probePlatform == StreamingPlatform.Twitch
-                    ? "Команда не отвечает ни зрителю, ни стримеру"
-                    : $"Команда не поддерживается на площадке {PlatformVisuals.GetDisplayName(_probePlatform)}")
+                ? (_probePlatform is { } platform
+                    ? $"Команда не поддерживается на площадке {_probePlatformDisplayName ?? PlatformVisuals.GetDisplayName(platform)}"
+                    : "Команда не отвечает ни зрителю, ни стримеру")
                 : EffectiveAccessLevel switch
                 {
                     CommandAccessLevel.Broadcaster => "Команду вызывает только владелец канала",
@@ -177,9 +178,10 @@ public sealed partial class CommandRowViewModel : ObservableObject
         }
     }
 
-    public void UpdateCodeAvailability(CommandAccessLevel? codeLevel, StreamingPlatform probePlatform)
+    public void UpdateCodeAvailability(CommandAccessLevel? codeLevel, StreamingPlatform? probePlatform, string? probePlatformDisplayName = null)
     {
         _probePlatform = probePlatform;
+        _probePlatformDisplayName = probePlatformDisplayName;
         CodeLevel = codeLevel;
         OnPropertyChanged(nameof(CodeAccessText));
         OnPropertyChanged(nameof(AccessText));

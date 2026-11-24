@@ -14,16 +14,42 @@ public sealed class ChatDiagnosticsCardViewModel(DiagnosticsSnapshotPublisher pu
         ArgumentNullException.ThrowIfNull(snapshot);
 
         var rows = new List<DiagnosticsCardRow>();
-        var state = AddChatRows(rows, "Twitch", snapshot.Chat, snapshot.CapturedAt);
+        var state = DiagnosticsCardState.Unknown;
+        var hasState = false;
+
+        if (snapshot.PlatformChats is { Count: > 0 } platformChats)
+        {
+            foreach (var entry in platformChats)
+            {
+                var platformState = AddChatRows(rows, entry.DisplayName, entry.Status, snapshot.CapturedAt);
+                state = CombineState(state, platformState, hasState);
+                hasState = true;
+            }
+
+            return new(state, rows);
+        }
+
+        state = AddChatRows(rows, "Twitch", snapshot.Chat, snapshot.CapturedAt);
         if (snapshot.YouTubeChat is { } youtubeChat)
         {
             var youtubeState = AddChatRows(rows, "YouTube", youtubeChat.ToChatConnectionStatus(), snapshot.CapturedAt);
-            state = state == DiagnosticsCardState.Unknown
-                ? youtubeState
-                : youtubeState == DiagnosticsCardState.Unknown ? state : DiagnosticsFormat.Worst(state, youtubeState);
+            state = CombineState(state, youtubeState, hasExistingState: true);
         }
 
         return new(state, rows);
+    }
+
+    private static DiagnosticsCardState CombineState(
+        DiagnosticsCardState current,
+        DiagnosticsCardState incoming,
+        bool hasExistingState)
+    {
+        if (!hasExistingState || current == DiagnosticsCardState.Unknown)
+        {
+            return incoming;
+        }
+
+        return incoming == DiagnosticsCardState.Unknown ? current : DiagnosticsFormat.Worst(current, incoming);
     }
 
     private static DiagnosticsCardState AddChatRows(

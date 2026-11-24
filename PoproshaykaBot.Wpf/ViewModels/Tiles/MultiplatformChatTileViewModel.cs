@@ -89,9 +89,7 @@ public sealed partial class MultiplatformChatTileViewModel : DashboardTileViewMo
         _uiDispatcher = uiDispatcher;
         _uiSettings = uiSettings;
         _broadcastHistoryStore = broadcastHistoryStore;
-        PlatformOptions = platformRegistry is null
-            ? PlatformFilterOption.AllOptions
-            : [PlatformFilterOption.All, .. platformRegistry.All.Select(static platform => new PlatformFilterOption(platform.Id, platform.DisplayName))];
+        PlatformOptions = PlatformFilterOption.ForRegistry(platformRegistry);
 
         _feedFontSize = LoadFontSize();
         _isCompactMode = LoadBool(SettingsKeys.ChatFeedCompactMode, defaultValue: false);

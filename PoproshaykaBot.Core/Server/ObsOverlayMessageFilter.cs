@@ -54,7 +54,7 @@ internal static class ObsOverlayMessageFilter
                 return false;
             }
 
-            if (entry.Platform == StreamingPlatform.YouTube && !string.IsNullOrWhiteSpace(entry.ChatSessionId))
+            if (!string.IsNullOrWhiteSpace(entry.ChatSessionId))
             {
                 return false;
             }

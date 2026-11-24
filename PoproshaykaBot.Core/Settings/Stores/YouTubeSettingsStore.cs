@@ -1,11 +1,12 @@
 ﻿using Microsoft.Extensions.Logging;
 using PoproshaykaBot.Core.Infrastructure;
+using PoproshaykaBot.Core.Platforms;
 using PoproshaykaBot.Core.Settings.Migrations.LegacyImport;
 using PoproshaykaBot.Core.YouTube;
 
 namespace PoproshaykaBot.Core.Settings.Stores;
 
-public sealed class YouTubeSettingsStore
+public sealed class YouTubeSettingsStore : IPlatformEnablementSource
 {
     private readonly JsonStore<YouTubeSettings> _store;
 
@@ -36,6 +37,10 @@ public sealed class YouTubeSettingsStore
     }
 
     public event Action? Changed;
+
+    StreamingPlatform IPlatformEnablementSource.Platform => StreamingPlatform.YouTube;
+
+    bool IPlatformEnablementSource.IsEnabledInSettings => Load().Enabled;
 
     public YouTubeSettings Load()
     {
