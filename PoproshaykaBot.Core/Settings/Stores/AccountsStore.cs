@@ -127,6 +127,11 @@ public sealed class AccountsStore : RoleAccountsStoreBase<AccountsStore.Accounts
             ? new(WebView2UserDataFolders.ResolveTwitchAccounts(), profileId.ToString("N"))
             : null;
 
+    public override bool SupportsChatBrowserProfile => true;
+
+    protected override void SetChatBrowserProfileName(TwitchAccountSettings account, string? profileName) =>
+        account.BrowserProfileName = profileName;
+
     protected override void CopyAccountFields(TwitchAccountSettings source, TwitchAccountSettings target)
     {
         base.CopyAccountFields(source, target);

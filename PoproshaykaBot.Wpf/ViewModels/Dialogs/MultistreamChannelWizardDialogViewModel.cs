@@ -55,17 +55,10 @@ public sealed partial class MultistreamChannelWizardDialogViewModel : Observable
 
     private readonly ChannelCatalogStore _catalogStore;
     private readonly IReadOnlyDictionary<StreamingPlatform, IPlatformChannelAdapter> _adapters;
-    private readonly AccountsStore _twitchAccountsStore;
-    private readonly YouTubeAccountsStore _youtubeAccountsStore;
-    private readonly YouTubeSettingsStore? _youtubeSettingsStore;
-    private readonly SettingsManager? _settingsManager;
-    private readonly ITwitchOAuthService? _twitchOAuth;
-    private readonly IYouTubeOAuthService? _youtubeOAuth;
-    private readonly IEmbeddedTwitchAuthDialog? _embeddedTwitchAuth;
-    private readonly IShellLauncher? _shellLauncher;
+    private readonly IReadOnlyDictionary<StreamingPlatform, IPlatformAccountDirectory> _accountDirectories;
+    private readonly IReadOnlyDictionary<StreamingPlatform, IPlatformAccountLogin> _accountLogins;
     private readonly IChatPlatformRegistry? _platformRegistry;
     private readonly IEventBus? _eventBus;
-    private readonly TimeProvider _timeProvider;
     private readonly ILogger<MultistreamChannelWizardDialogViewModel>? _logger;
 
     private string _targetChannelHandle = string.Empty;
@@ -156,7 +149,9 @@ public sealed partial class MultistreamChannelWizardDialogViewModel : Observable
         IChatPlatformRegistry? platformRegistry = null,
         IEventBus? eventBus = null,
         TimeProvider? timeProvider = null,
-        ILogger<MultistreamChannelWizardDialogViewModel>? logger = null)
+        ILogger<MultistreamChannelWizardDialogViewModel>? logger = null,
+        IEnumerable<IPlatformAccountDirectory>? accountDirectories = null,
+        IEnumerable<IPlatformAccountLogin>? accountLogins = null)
     {
         ArgumentNullException.ThrowIfNull(catalogStore);
         ArgumentNullException.ThrowIfNull(adapters);
@@ -165,17 +160,22 @@ public sealed partial class MultistreamChannelWizardDialogViewModel : Observable
 
         _catalogStore = catalogStore;
         _adapters = adapters.ToDictionary(static adapter => adapter.Platform);
-        _twitchAccountsStore = twitchAccountsStore;
-        _youtubeAccountsStore = youtubeAccountsStore;
-        _youtubeSettingsStore = youtubeSettingsStore;
-        _settingsManager = settingsManager;
-        _twitchOAuth = twitchOAuth;
-        _youtubeOAuth = youtubeOAuth;
-        _embeddedTwitchAuth = embeddedTwitchAuth;
-        _shellLauncher = shellLauncher;
+        _accountDirectories = PlatformAccountLoginDefaults.BuildDirectories(
+            accountDirectories, twitchAccountsStore, youtubeAccountsStore);
+        _accountLogins = PlatformAccountLoginDefaults.Build(
+            accountLogins,
+            settingsManager,
+            twitchAccountsStore,
+            twitchOAuth,
+            youtubeSettingsStore,
+            youtubeAccountsStore,
+            youtubeOAuth,
+            shellLauncher,
+            timeProvider,
+            embeddedTwitchAuth,
+            eventBus: eventBus);
         _platformRegistry = platformRegistry;
         _eventBus = eventBus;
-        _timeProvider = timeProvider ?? TimeProvider.System;
         _logger = logger;
     }
 
@@ -221,9 +221,7 @@ public sealed partial class MultistreamChannelWizardDialogViewModel : Observable
 
     public bool HasAnyAccount => BotAccountOptions.Count > 1 || BroadcasterAccountOptions.Count > 1;
 
-    public bool CanAuthorize => _shellLauncher is not null
-        && ((Platform == StreamingPlatform.Twitch && _twitchOAuth is not null)
-            || (Platform == StreamingPlatform.YouTube && _youtubeOAuth is not null && _youtubeSettingsStore is not null));
+    public bool CanAuthorize => _accountLogins.GetValueOrDefault(Platform)?.CanAuthorize == true;
 
     public bool HasStepNotice => !string.IsNullOrWhiteSpace(StepNotice);
 
@@ -402,12 +400,35 @@ public sealed partial class MultistreamChannelWizardDialogViewModel : Observable
 
         try
         {
-            authOutcome = Platform switch
+            if (_accountLogins.TryGetValue(Platform, out var login))
             {
-                StreamingPlatform.Twitch => await AuthorizeTwitchCombinedAsync().ConfigureAwait(true),
-                StreamingPlatform.YouTube => await AuthorizeYouTubeCombinedAsync().ConfigureAwait(true),
-                _ => null,
-            };
+                var result = await login.AuthorizeAsync(new(PlatformAuthRoles.Active, null, null, [], false)).ConfigureAwait(true);
+                if (result.ChangedAuthorizations.Count > 0)
+                {
+                    foreach (var grant in result.ChangedAuthorizations)
+                    {
+                        PublishAuthorizationRefreshed(Platform, grant.Role, grant.ContextId);
+                    }
+
+                    var directory = _accountDirectories.GetValueOrDefault(Platform);
+                    var accountId = result.ChangedAuthorizations
+                        .Select(static g => g.SubjectId)
+                        .FirstOrDefault(static id => !string.IsNullOrWhiteSpace(id));
+                    var persisted = directory is not null
+                        && !string.IsNullOrWhiteSpace(accountId)
+                        && result.ChangedAuthorizations.All(grant =>
+                            grant.SubjectId is not null
+                            && directory.VerifyPersistedAuthorization(grant.Role, grant.ContextId, grant.SubjectId));
+                    if (!string.IsNullOrWhiteSpace(accountId))
+                    {
+                        authOutcome = new(accountId, persisted);
+                    }
+                }
+                else
+                {
+                    SetStepNotice(result.Message, result.Severity);
+                }
+            }
         }
         catch (OperationCanceledException)
         {
@@ -796,178 +817,14 @@ public sealed partial class MultistreamChannelWizardDialogViewModel : Observable
 
     private IReadOnlyList<PlatformAccount> ListPlatformAccounts(StreamingPlatform platform)
     {
-        var accounts = _adapters.GetValueOrDefault(platform)?.ListAccounts() ?? (platform switch
-        {
-            StreamingPlatform.Twitch => _twitchAccountsStore.ListAccounts(),
-            StreamingPlatform.YouTube => _youtubeAccountsStore.ListAccounts(),
-            _ => [],
-        });
+        var accounts = _adapters.GetValueOrDefault(platform)?.ListAccounts()
+            ?? _accountDirectories.GetValueOrDefault(platform)?.ListAccounts()
+            ?? [];
 
         return [.. accounts.Where(account => account.Key.Platform == platform)];
     }
 
-    private async Task<AuthorizationSaveOutcome?> AuthorizeTwitchCombinedAsync()
-    {
-        if (_twitchOAuth is null || _shellLauncher is null)
-        {
-            return null;
-        }
-
-        var twitchSettings = _settingsManager?.Current.Twitch;
-        var clientId = twitchSettings?.ClientId ?? string.Empty;
-        var clientSecret = twitchSettings?.ClientSecret ?? string.Empty;
-        var redirectUri = twitchSettings?.RedirectUri;
-        if (_settingsManager is not null && (string.IsNullOrWhiteSpace(clientId) || string.IsNullOrWhiteSpace(clientSecret)))
-        {
-            SetStepNotice("Заполните и сохраните ключи приложения Twitch во вкладке «Параметры и доступ».", StatusSeverity.Warning);
-            return null;
-        }
-
-        string[] scopes = [.. TwitchScopes.CombinedDefault];
-        OAuthFlowResult? flow = null;
-        if (_embeddedTwitchAuth is not null)
-        {
-            var embedded = await _embeddedTwitchAuth.AuthorizeAsync(new(
-                PlatformAuthRole.Bot, clientId, clientSecret, scopes, redirectUri ?? string.Empty, CheckBroadcasterChannel: false)).ConfigureAwait(true);
-            if (embedded.Outcome is EmbeddedTwitchAuthOutcome.Canceled or EmbeddedTwitchAuthOutcome.Failed)
-            {
-                SetStepNotice(embedded.Message, embedded.Outcome == EmbeddedTwitchAuthOutcome.Failed ? StatusSeverity.Error : StatusSeverity.Info);
-                return null;
-            }
-
-            flow = embedded.Flow;
-        }
-
-        flow ??= await _twitchOAuth.StartOAuthFlowToDraftAsync(
-            PlatformAuthRole.Bot, clientId, clientSecret, scopes, redirectUri, url => _shellLauncher.Open(url), checkBroadcasterChannel: false).ConfigureAwait(true);
-
-        if (string.IsNullOrWhiteSpace(flow.UserId))
-        {
-            SetStepNotice("Twitch не сообщил идентификатор аккаунта.", StatusSeverity.Error);
-            return null;
-        }
-
-        var userId = flow.UserId.Trim();
-        var now = _timeProvider.GetUtcNow();
-        var grantedScopes = flow.Scopes ?? [];
-        List<(PlatformAuthRole Role, string ContextId, string Label, TwitchAccountSettings Account)> entries = [];
-        foreach (var role in PlatformAuthRoles.Active)
-        {
-            var required = role == PlatformAuthRole.Bot ? TwitchScopes.BotRequired : TwitchScopes.BroadcasterRequired;
-            if (!required.All(scope => grantedScopes.Contains(scope, StringComparer.Ordinal)))
-            {
-                continue;
-            }
-
-            var contextId = ResolveContextForSave(StreamingPlatform.Twitch, role, userId);
-            var account = new TwitchAccountSettings();
-            flow.ApplyTo(account, now);
-            entries.Add((role, contextId, flow.Login, account));
-        }
-
-        if (entries.Count == 0)
-        {
-            SetStepNotice("Twitch не выдал обязательные права.", StatusSeverity.Warning);
-            return null;
-        }
-
-        var written = _twitchAccountsStore.UpsertContexts(entries);
-        foreach (var saved in entries)
-        {
-            _twitchOAuth.ResetRetryState(saved.Role, saved.ContextId);
-            PublishAuthorizationRefreshed(StreamingPlatform.Twitch, saved.Role, saved.ContextId);
-        }
-
-        var persisted = written && entries.All(entry =>
-            _twitchAccountsStore.VerifyPersistedAuthorization(entry.Role, entry.ContextId, userId));
-        return new(userId, persisted);
-    }
-
-    private async Task<AuthorizationSaveOutcome?> AuthorizeYouTubeCombinedAsync()
-    {
-        if (_youtubeOAuth is null || _youtubeSettingsStore is null || _shellLauncher is null)
-        {
-            return null;
-        }
-
-        var settings = _youtubeSettingsStore.Load();
-        var secret = _youtubeAccountsStore.LoadClientSecret();
-        if (string.IsNullOrWhiteSpace(settings.ClientId) || string.IsNullOrWhiteSpace(secret))
-        {
-            SetStepNotice("Заполните и сохраните ключи Google-проекта во вкладке «Параметры и доступ».", StatusSeverity.Warning);
-            return null;
-        }
-
-        var flow = await _youtubeOAuth.StartOAuthFlowToDraftAsync(
-            PlatformAuthRole.Bot, settings.ClientId, secret, [.. YouTubeScopes.CombinedDefault], url => _shellLauncher.Open(url)).ConfigureAwait(true);
-        if (string.IsNullOrWhiteSpace(flow.ChannelId))
-        {
-            SetStepNotice("YouTube не сообщил идентификатор авторизованного канала.", StatusSeverity.Error);
-            return null;
-        }
-
-        var channelId = flow.ChannelId.Trim();
-        var name = string.IsNullOrWhiteSpace(flow.ChannelTitle) ? channelId : flow.ChannelTitle;
-        var now = _timeProvider.GetUtcNow();
-        var grantedScopes = flow.Scopes ?? [];
-        List<(PlatformAuthRole Role, string ContextId, string Label, YouTubeAccountSettings Account)> entries = [];
-        foreach (var role in PlatformAuthRoles.Active)
-        {
-            if (!YouTubeScopes.ContainsRequiredScopes(role, grantedScopes))
-            {
-                continue;
-            }
-
-            var contextId = ResolveContextForSave(StreamingPlatform.YouTube, role, channelId);
-            var account = new YouTubeAccountSettings();
-            flow.ApplyTo(account, now);
-            entries.Add((role, contextId, name, account));
-        }
-
-        if (entries.Count == 0)
-        {
-            SetStepNotice("YouTube не выдал обязательные права.", StatusSeverity.Warning);
-            return null;
-        }
-
-        var written = _youtubeAccountsStore.UpsertContexts(entries);
-        foreach (var saved in entries)
-        {
-            _youtubeOAuth.ResetRetryState(saved.Role, saved.ContextId);
-            PublishAuthorizationRefreshed(StreamingPlatform.YouTube, saved.Role, saved.ContextId);
-        }
-
-        var persisted = written && entries.All(entry =>
-            _youtubeAccountsStore.VerifyPersistedAuthorization(entry.Role, entry.ContextId, channelId));
-        return new(channelId, persisted);
-    }
-
     private readonly record struct AuthorizationSaveOutcome(string AccountId, bool Persisted);
-
-    private string ResolveContextForSave(StreamingPlatform platform, PlatformAuthRole role, string accountId)
-    {
-        var accounts = ListPlatformAccounts(platform);
-        var existing = accounts
-            .FirstOrDefault(account => string.Equals(account.Key.AccountId, accountId, StringComparison.Ordinal))
-            ?.Authorizations
-            .FirstOrDefault(grant => grant.Role == role)
-            ?.ContextId;
-        if (!string.IsNullOrWhiteSpace(existing))
-        {
-            return AuthContextIds.Normalize(existing);
-        }
-
-        var hasAnyDefaultForRole = accounts
-            .SelectMany(static account => account.Authorizations)
-            .Any(grant => grant.Role == role && grant.IsDefault && grant.HasToken);
-        if (!hasAnyDefaultForRole)
-        {
-            return AuthContextIds.Default;
-        }
-
-        var prefix = platform == StreamingPlatform.Twitch ? "tw" : "yt";
-        return $"{prefix}-{role.ToString().ToLowerInvariant()}-{accountId}";
-    }
 
     private void PublishAuthorizationRefreshed(StreamingPlatform platform, PlatformAuthRole role, string contextId)
     {

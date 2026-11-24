@@ -19,6 +19,10 @@ public interface IPlatformAccountDirectory
 
     (IReadOnlyList<string> RemovedContextIds, bool Written) RemoveAccountRole(string accountId, PlatformAuthRole role) =>
         ([], false);
+
+    bool SupportsChatBrowserProfile => false;
+
+    bool SetChatBrowserProfile(string accountId, string? profileName) => false;
 }
 
 public sealed record PlatformAccountOperation(string Name, bool IsChannelScoped, params string[] RequiredScopes);

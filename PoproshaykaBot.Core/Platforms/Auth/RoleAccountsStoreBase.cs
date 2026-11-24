@@ -131,6 +131,49 @@ public abstract class RoleAccountsStoreBase<TFile, TAccount> : IPlatformAccountD
 
     public abstract (IReadOnlyList<string> RemovedContextIds, bool Written) RemoveAccountRole(string accountId, PlatformAuthRole role);
 
+    public virtual bool SupportsChatBrowserProfile => false;
+
+    public bool SetChatBrowserProfile(string accountId, string? profileName)
+    {
+        if (!SupportsChatBrowserProfile || string.IsNullOrWhiteSpace(accountId))
+        {
+            return false;
+        }
+
+        var normalizedId = accountId.Trim();
+        var normalizedProfile = string.IsNullOrWhiteSpace(profileName) ? null : profileName.Trim();
+        if (normalizedProfile is not null && !Guid.TryParseExact(normalizedProfile, "N", out _))
+        {
+            throw new ArgumentException("Имя профиля браузера должно быть 32-символьным идентификатором.", nameof(profileName));
+        }
+
+        var updated = false;
+        var written = _store.Mutate(state =>
+        {
+            foreach (var role in PlatformAuthRoles.Active)
+            {
+                if (GetAccount(state, role) is { } defaultAccount
+                    && string.Equals(GetSubjectId(defaultAccount)?.Trim(), normalizedId, StringComparison.Ordinal))
+                {
+                    SetChatBrowserProfileName(defaultAccount, normalizedProfile);
+                    updated = true;
+                }
+            }
+
+            foreach (var context in GetContexts(state))
+            {
+                if (context.Account is not null
+                    && string.Equals(GetSubjectId(context.Account)?.Trim(), normalizedId, StringComparison.Ordinal))
+                {
+                    SetChatBrowserProfileName(context.Account, normalizedProfile);
+                    updated = true;
+                }
+            }
+        });
+
+        return updated && written;
+    }
+
     private IReadOnlyList<AuthContextSummary> ListContexts(TFile state, PlatformAuthRole role)
     {
         var defaultAccount = TakeAccount(state, role, null);
@@ -633,6 +676,10 @@ public abstract class RoleAccountsStoreBase<TFile, TAccount> : IPlatformAccountD
     protected virtual string? GetDisplayLabel(TAccount account) => null;
 
     protected virtual PlatformChatBrowserProfile? GetChatBrowserProfile(TAccount account) => null;
+
+    protected virtual void SetChatBrowserProfileName(TAccount account, string? profileName)
+    {
+    }
 
     protected virtual void CopyAccountFields(TAccount source, TAccount target)
     {

@@ -14,9 +14,10 @@ using PoproshaykaBot.Core.Platforms.Auth;
 using PoproshaykaBot.Core.Settings;
 using PoproshaykaBot.Core.Settings.Stores;
 using PoproshaykaBot.Core.Streaming;
-using PoproshaykaBot.Wpf.Infrastructure;
-using PoproshaykaBot.Wpf.Bootstrap;
 using PoproshaykaBot.Core.Twitch.Auth;
+using PoproshaykaBot.Wpf.Bootstrap;
+using PoproshaykaBot.Wpf.Infrastructure;
+using PoproshaykaBot.Wpf.Infrastructure.Platforms;
 using PoproshaykaBot.Wpf.ViewModels.Dialogs;
 
 namespace PoproshaykaBot.Wpf.ViewModels.Tiles;
@@ -29,23 +30,24 @@ public sealed partial class ChatDisplayTileViewModel : DashboardTileViewModel, I
     private readonly IDialogService _dialogService;
     private readonly IChatPlatformRegistry? _platformRegistry;
     private readonly IReadOnlyDictionary<StreamingPlatform, IPlatformAccountDirectory> _accountDirectories;
+    private readonly IReadOnlyDictionary<StreamingPlatform, IPlatformAccountLogin> _accountLogins;
     private readonly YouTubeSettingsStore? _youtubeSettingsStore;
-    private readonly YouTubeAccountsStore? _youtubeAccountsStore;
-    private readonly IEmbeddedYouTubeChatLoginDialog? _youtubeChatLogin;
+    private readonly IPlatformWebChatLoginDialog? _webChatLogin;
     private readonly IUiDispatcher? _uiDispatcher;
     private readonly List<IDisposable> _subscriptions = [];
+    private readonly StreamingPlatform _primaryPlatform;
 
     private readonly ToolbarItemViewModel _reloadAction;
     private readonly ToolbarItemViewModel _resetZoomAction;
     private readonly ToolbarItemViewModel _resetSessionAction;
     private readonly ToolbarItemViewModel _blockersAction;
-
     private readonly ToolbarItemViewModel _openInBrowserAction;
 
     [ObservableProperty]
     private ChatDisplayMode _selectedMode;
 
     private PlatformAuthRole _chatDisplayAccount;
+    private bool _isDarkTheme;
 
     [ObservableProperty]
     private double _zoomFactor;
@@ -63,32 +65,26 @@ public sealed partial class ChatDisplayTileViewModel : DashboardTileViewModel, I
         IUiDispatcher? uiDispatcher = null,
         ISettingsStore? uiSettings = null,
         IEnumerable<IPlatformAccountDirectory>? accountDirectories = null,
-        IEmbeddedYouTubeChatLoginDialog? youtubeChatLogin = null,
-        YouTubeAccountsStore? youtubeAccountsStore = null)
+        IPlatformWebChatLoginDialog? webChatLogin = null,
+        IEnumerable<IPlatformAccountLogin>? accountLogins = null)
         : base("twitch-chat", "Чат трансляции", minWidth: 280, minHeight: 234)
     {
         _targetChannelProvider = targetChannelProvider;
         _uiSettings = uiSettings;
-        TwitchChat = new(shellLauncher, platformRegistry, uiSettings);
-        PlatformChat = new(shellLauncher, platformRegistry, uiSettings);
-        TwitchChat.ChatAccountChanged += () => OpenRequested?.Invoke(TwitchChat, false);
-        PlatformChat.ChatAccountChanged += () => OpenRequested?.Invoke(PlatformChat, false);
+        PrimaryChat = new(shellLauncher, platformRegistry, uiSettings);
+        SecondaryChat = new(shellLauncher, platformRegistry, uiSettings);
+        PrimaryChat.ChatAccountChanged += () => OpenRequested?.Invoke(PrimaryChat, false);
+        SecondaryChat.ChatAccountChanged += () => OpenRequested?.Invoke(SecondaryChat, false);
         _dialogService = dialogService;
         _store = store;
         _platformRegistry = platformRegistry;
         _accountDirectories = (accountDirectories ?? []).ToDictionary(static directory => directory.Platform);
+        _accountLogins = (accountLogins ?? []).ToDictionary(static login => login.Platform);
         _youtubeSettingsStore = youtubeSettingsStore;
-        _youtubeAccountsStore = youtubeAccountsStore;
-        _youtubeChatLogin = youtubeChatLogin;
+        _webChatLogin = webChatLogin;
         _uiDispatcher = uiDispatcher;
+        _isDarkTheme = ThemeManager.Current?.IsDark == true;
         Logger = logger;
-
-        if (_youtubeChatLogin is not null && _youtubeAccountsStore is not null)
-        {
-            PlatformChat.SetBrowserSessionHandlers(
-                SignInYouTubeBrowserAsync,
-                (accountId, accountLabel) => ResetPlatformSessionRequested?.Invoke(accountId, accountLabel));
-        }
 
         var twitch = settings.Current.Twitch;
         _chatDisplayAccount = twitch.ChatDisplayAccount;
@@ -96,20 +92,24 @@ public sealed partial class ChatDisplayTileViewModel : DashboardTileViewModel, I
         if (platformRegistry is not null)
         {
             modes.AddRange(platformRegistry.All.Select(platform =>
-                new ChatDisplayMode(platform.Id, ChatDisplayLayout.Single, platform.DisplayName)));
+                new ChatDisplayMode(platform.Id, ChatDisplayLayout.Single, platform.DisplayName, platform.Id)));
         }
 
         if (modes.Count == 0)
         {
-            modes.Add(new(StreamingPlatform.Twitch, ChatDisplayLayout.Single, "Twitch"));
+            modes.Add(new(StreamingPlatform.Twitch, ChatDisplayLayout.Single, "Twitch", StreamingPlatform.Twitch));
         }
 
-        if (modes.Any(mode => mode.Platform == StreamingPlatform.Twitch))
+        _primaryPlatform = modes[0].Platform;
+        var singleModes = modes.ToArray();
+        for (var i = 0; i < singleModes.Length; i++)
         {
-            foreach (var other in modes.Where(mode => mode.Platform != StreamingPlatform.Twitch).ToArray())
+            for (var j = i + 1; j < singleModes.Length; j++)
             {
-                modes.Add(new(other.Platform, ChatDisplayLayout.Columns, $"Twitch и {other.Label} в две колонки"));
-                modes.Add(new(other.Platform, ChatDisplayLayout.Rows, $"Twitch и {other.Label} в две строки"));
+                var first = singleModes[i];
+                var second = singleModes[j];
+                modes.Add(new(second.Platform, ChatDisplayLayout.Columns, $"{first.Label} и {second.Label} в две колонки", first.Platform));
+                modes.Add(new(second.Platform, ChatDisplayLayout.Rows, $"{first.Label} и {second.Label} в две строки", first.Platform));
             }
         }
 
@@ -125,7 +125,8 @@ public sealed partial class ChatDisplayTileViewModel : DashboardTileViewModel, I
         _subscriptions.Add(bus.SubscribeOnUi<YouTubeActiveBroadcastChanged>(_ => RefreshChat()));
         _subscriptions.Add(bus.SubscribeOnUi<PlatformAuthorizationRefreshed>(change =>
         {
-            if (change.Platform == SelectedMode.Platform || (SelectedMode.IsSplit && change.Platform == StreamingPlatform.Twitch))
+            if (change.Platform == SelectedMode.Platform
+                || (SelectedMode.IsSplit && change.Platform == SelectedMode.EffectivePrimaryPlatform))
             {
                 RefreshChat();
             }
@@ -135,10 +136,10 @@ public sealed partial class ChatDisplayTileViewModel : DashboardTileViewModel, I
 
         _reloadAction = new(PackIconLucideKind.RefreshCw, ReloadCommand, "Перезагрузить страницу чата");
         _resetZoomAction = new(PackIconLucideKind.Scaling, ResetZoomCommand, "Сбросить масштаб к значению по умолчанию");
-        _resetSessionAction = new(PackIconLucideKind.Trash2, ResetSessionCommand, "Очистить куки и кэш активного аккаунта (бот или стример)");
+        _resetSessionAction = new(PackIconLucideKind.Trash2, ResetSessionCommand, "Очистить куки и кэш сеанса просмотра");
         _blockersAction = new(PackIconLucideKind.Ban, EditBlockersCommand, "Блокировка баннеров: скрыть лишние элементы чата");
-
         _openInBrowserAction = new(PackIconLucideKind.ExternalLink, OpenInBrowserCommand, "Открыть текущую страницу в системном браузере");
+
         HeaderActions.Add(_reloadAction);
         HeaderActions.Add(_resetZoomAction);
         HeaderActions.Add(_openInBrowserAction);
@@ -156,7 +157,7 @@ public sealed partial class ChatDisplayTileViewModel : DashboardTileViewModel, I
 
     public event Action? ResetSessionRequested;
 
-    public event Action<string, string>? ResetPlatformSessionRequested;
+    public event Action<ChatDisplayPaneViewModel, string, string>? ResetPaneSessionRequested;
 
     public event Action? ClutterScriptChanged;
 
@@ -168,15 +169,18 @@ public sealed partial class ChatDisplayTileViewModel : DashboardTileViewModel, I
 
     public ILogger Logger { get; }
 
-    public string UserDataFolder => WebView2UserDataFolders.Resolve(_chatDisplayAccount);
-
     public IReadOnlyList<ChatDisplayMode> Modes { get; }
 
-    public ChatDisplayPaneViewModel TwitchChat { get; }
+    public ChatDisplayPaneViewModel PrimaryChat { get; }
 
-    public ChatDisplayPaneViewModel PlatformChat { get; }
+    public ChatDisplayPaneViewModel SecondaryChat { get; }
 
     public bool HasMultiplePlatforms => Modes.Count > 1;
+
+    public string GetDefaultUserDataFolder(ChatDisplayPaneViewModel pane) =>
+        pane.Platform == StreamingPlatform.Twitch
+            ? WebView2UserDataFolders.Resolve(_chatDisplayAccount)
+            : AppPaths.Combine("WebView2", $"chat-{pane.Platform.ToString().ToLowerInvariant()}");
 
     public void Dispose()
     {
@@ -188,6 +192,26 @@ public sealed partial class ChatDisplayTileViewModel : DashboardTileViewModel, I
         foreach (var subscription in _subscriptions)
         {
             subscription.Dispose();
+        }
+    }
+
+    internal void SetDarkTheme(bool isDarkTheme)
+    {
+        if (_isDarkTheme == isDarkTheme)
+        {
+            return;
+        }
+
+        _isDarkTheme = isDarkTheme;
+        RefreshChat();
+        if (PrimaryChat is { IsShown: true, AppliesPreferredColorScheme: true })
+        {
+            OpenRequested?.Invoke(PrimaryChat, true);
+        }
+
+        if (SecondaryChat is { IsShown: true, AppliesPreferredColorScheme: true })
+        {
+            OpenRequested?.Invoke(SecondaryChat, true);
         }
     }
 
@@ -203,15 +227,9 @@ public sealed partial class ChatDisplayTileViewModel : DashboardTileViewModel, I
         }
     }
 
-    public string BuildHideClutterScript()
-    {
-        return _store.BuildHideClutterScript();
-    }
+    public string BuildHideClutterScript() => _store.BuildHideClutterScript();
 
-    partial void OnZoomFactorChanged(double value)
-    {
-        _store.SaveZoom(value);
-    }
+    partial void OnZoomFactorChanged(double value) => _store.SaveZoom(value);
 
     partial void OnSelectedModeChanged(ChatDisplayMode value)
     {
@@ -219,75 +237,112 @@ public sealed partial class ChatDisplayTileViewModel : DashboardTileViewModel, I
         _uiSettings?.SetValue(SettingsKeys.ChatTileDisplayMode, value.SettingsValue);
     }
 
-    private static Uri? BuildChannelUri(string? channel)
-    {
-        var trimmed = channel?.Trim();
-
-        return string.IsNullOrEmpty(trimmed)
-            ? null
-            : new Uri($"https://www.twitch.tv/popout/{Uri.EscapeDataString(trimmed)}/chat?popout=");
-    }
-
-    private static string ResolveAccountLabel(PlatformAuthRole role)
-    {
-        return role == PlatformAuthRole.Broadcaster ? "стримера" : "бота";
-    }
+    private static string ResolveAccountLabel(PlatformAuthRole role) =>
+        role == PlatformAuthRole.Broadcaster ? "стримера" : "бота";
 
     private void OnChatDisplaySettingsChanged(ChatDisplaySettingsChanged @event)
     {
         var legacyProfileChanged = @event.ChatDisplayAccount != _chatDisplayAccount;
         _chatDisplayAccount = @event.ChatDisplayAccount;
         RefreshChat();
-        if (legacyProfileChanged && TwitchChat.IsShown && TwitchChat.SelectedAccount?.BrowserProfile is null)
+        if (legacyProfileChanged && PrimaryChat.IsShown && PrimaryChat.SelectedAccount?.BrowserProfile is null)
         {
-            OpenRequested?.Invoke(TwitchChat, true);
+            OpenRequested?.Invoke(PrimaryChat, true);
         }
     }
 
     private void RefreshChat()
     {
         var mode = SelectedMode;
-        var twitchShown = mode.Platform == StreamingPlatform.Twitch || mode.IsSplit;
-        var twitchUri = BuildChannelUri(_targetChannelProvider.Current.Login);
-        var twitchChanged = TwitchChat.SetTarget(StreamingPlatform.Twitch, twitchUri, twitchUri, twitchShown);
-        if (twitchShown)
-        {
-            TwitchChat.SetAccounts(_accountDirectories.GetValueOrDefault(TwitchChat.Platform), null, $"Сеанс {ResolveAccountLabel(_chatDisplayAccount)}");
-        }
+        var primaryShown = mode.Platform == _primaryPlatform || mode.IsSplit;
+        var primaryPlatform = mode.IsSplit ? mode.EffectivePrimaryPlatform : _primaryPlatform;
+        var primaryChanged = RefreshPane(PrimaryChat, primaryPlatform, primaryShown);
 
-        var platformShown = mode.Platform != StreamingPlatform.Twitch;
-        var platform = platformShown ? _platformRegistry?.Find(mode.Platform) : null;
-        var stream = platform?.StreamStatus is { CurrentStatus: StreamStatus.Online } status ? status.CurrentStream : null;
-        var uri = stream is not null ? ParseWebUri(platform?.BuildNativeChatUrl(stream)) : null;
-        var platformChanged = PlatformChat.SetTarget(mode.Platform, uri, ParseWebUri(platform?.BuildStreamUrl(stream)), platformShown);
-        if (platformShown)
-        {
-            PlatformChat.SetAccounts(_accountDirectories.GetValueOrDefault(PlatformChat.Platform), stream?.Id, "Просмотр чата");
-        }
+        var secondaryShown = mode.Platform != _primaryPlatform || mode.IsSplit;
+        var secondaryChanged = RefreshPane(SecondaryChat, mode.Platform, secondaryShown);
 
-        _resetZoomAction.IsVisible = twitchShown || platformShown;
-        _resetSessionAction.IsVisible = twitchShown;
-        _blockersAction.IsVisible = twitchShown;
+        var primaryObj = primaryShown ? _platformRegistry?.Find(primaryPlatform) : null;
+        var secondaryObj = secondaryShown ? _platformRegistry?.Find(mode.Platform) : null;
+        var supportsClutter = (primaryShown && (primaryObj?.SupportsChatClutterBlocking ?? false))
+            || (secondaryShown && (secondaryObj?.SupportsChatClutterBlocking ?? false));
+
+        _resetZoomAction.IsVisible = primaryShown || secondaryShown;
+        _resetSessionAction.IsVisible = primaryShown || secondaryShown;
+        _blockersAction.IsVisible = supportsClutter;
         _openInBrowserAction.IsVisible = !mode.IsSplit;
         UpdateWebViewActions();
-        if (twitchChanged)
+
+        if (primaryChanged)
         {
-            OpenRequested?.Invoke(TwitchChat, false);
+            OpenRequested?.Invoke(PrimaryChat, false);
         }
 
-        if (platformChanged)
+        if (secondaryChanged)
         {
-            OpenRequested?.Invoke(PlatformChat, false);
+            OpenRequested?.Invoke(SecondaryChat, false);
         }
+    }
+
+    private bool RefreshPane(ChatDisplayPaneViewModel pane, StreamingPlatform platformId, bool shown)
+    {
+        var platform = shown ? _platformRegistry?.Find(platformId) : null;
+        var stream = platform?.StreamStatus is { CurrentStatus: StreamStatus.Online } status ? status.CurrentStream : null;
+        Uri? chatUri = null;
+        if (shown && platform is not null)
+        {
+            var url = platform.RequiresOnlineStreamForNativeChat && stream is null
+                ? null
+                : platform.BuildNativeChatUrl(stream, _targetChannelProvider.Current.Login, _isDarkTheme);
+            chatUri = ParseWebUri(url);
+        }
+
+        var externalUri = ParseWebUri(platform?.BuildStreamUrl(stream)) ?? (platform is null ? chatUri : null);
+        var supportsClutter = platform?.SupportsChatClutterBlocking ?? false;
+        var appliesTheme = platform?.AppliesPreferredColorScheme ?? false;
+        var heading = platform?.NativeChatUnavailableHeading ?? "Чат эфира недоступен";
+        var description = platform?.NativeChatUnavailableDescription ?? "Чат появится, когда у выбранного канала начнётся эфир с доступным чатом.";
+
+        var changed = pane.SetTarget(platformId, chatUri, externalUri, shown, supportsClutter, appliesTheme, heading, description);
+        if (shown)
+        {
+            var directory = _accountDirectories.GetValueOrDefault(platformId);
+            var canSignIn = CanSignInWebChat(platformId, directory);
+            pane.SetBrowserSessionHandlers(
+                canSignIn,
+                (accountId, accountLabel) => SignInBrowserAsync(pane, accountId, accountLabel),
+                (accountId, accountLabel) => ResetPaneSessionRequested?.Invoke(pane, accountId, accountLabel));
+
+            var defaultLabel = platform?.RequiresOnlineStreamForNativeChat == false
+                ? $"Сеанс {ResolveAccountLabel(_chatDisplayAccount)}"
+                : "Просмотр чата";
+            pane.SetAccounts(directory, defaultLabel);
+        }
+
+        return changed;
+    }
+
+    private bool CanSignInWebChat(StreamingPlatform platform, IPlatformAccountDirectory? directory)
+    {
+        if (directory is not { SupportsChatBrowserProfile: true })
+        {
+            return false;
+        }
+
+        if (_accountLogins.TryGetValue(platform, out var login))
+        {
+            return login.SupportsWebChatSignIn;
+        }
+
+        return _webChatLogin is not null && PlatformWebChatDescriptors.ForPlatform(platform) is not null;
     }
 
     internal void UpdateWebViewActions()
     {
-        var twitchReady = TwitchChat is { IsShown: true, RuntimeMissing: false, ChannelUri: not null };
-        var platformReady = PlatformChat is { IsShown: true, RuntimeMissing: false, ChannelUri: not null };
-        _reloadAction.IsEnabled = twitchReady || platformReady;
-        _resetZoomAction.IsEnabled = twitchReady || platformReady;
-        _resetSessionAction.IsEnabled = twitchReady;
+        var primaryReady = PrimaryChat is { IsShown: true, RuntimeMissing: false, ChannelUri: not null };
+        var secondaryReady = SecondaryChat is { IsShown: true, RuntimeMissing: false, ChannelUri: not null };
+        _reloadAction.IsEnabled = primaryReady || secondaryReady;
+        _resetZoomAction.IsEnabled = primaryReady || secondaryReady;
+        _resetSessionAction.IsEnabled = primaryReady || secondaryReady;
     }
 
     private static Uri? ParseWebUri(string? value) => Uri.TryCreate(value, UriKind.Absolute, out var uri)
@@ -299,85 +354,136 @@ public sealed partial class ChatDisplayTileViewModel : DashboardTileViewModel, I
     [RelayCommand]
     private void Reload()
     {
-        if (TwitchChat is { IsShown: true, ChannelUri: not null })
+        if (PrimaryChat is { IsShown: true, ChannelUri: not null })
         {
-            OpenRequested?.Invoke(TwitchChat, true);
+            OpenRequested?.Invoke(PrimaryChat, true);
         }
 
-        if (PlatformChat is { IsShown: true, ChannelUri: not null })
+        if (SecondaryChat is { IsShown: true, ChannelUri: not null })
         {
-            OpenRequested?.Invoke(PlatformChat, true);
+            OpenRequested?.Invoke(SecondaryChat, true);
         }
     }
 
     [RelayCommand]
-    private void ResetZoom()
-    {
-        ZoomFactor = ChatDisplayStore.DefaultZoom;
-    }
+    private void ResetZoom() => ZoomFactor = ChatDisplayStore.DefaultZoom;
 
     [RelayCommand]
-    private void ResetSession()
-    {
-        ResetSessionRequested?.Invoke();
-    }
+    private void ResetSession() => ResetSessionRequested?.Invoke();
 
-    private async Task SignInYouTubeBrowserAsync(string accountId, string accountLabel)
+    private async Task SignInBrowserAsync(ChatDisplayPaneViewModel pane, string accountId, string accountLabel)
     {
-        if (_youtubeChatLogin is null || _youtubeAccountsStore is null)
+        var platform = pane.Platform;
+        if (_accountLogins.TryGetValue(platform, out var login) && login.SupportsWebChatSignIn)
+        {
+            var loginResult = await login.SignInWebChatAsync(accountId, accountLabel);
+            if (loginResult.Outcome != PlatformWebChatLoginOutcome.Completed
+                || string.IsNullOrWhiteSpace(loginResult.BrowserProfileName))
+            {
+                if (!string.IsNullOrWhiteSpace(loginResult.Message))
+                {
+                    pane.StatusNotice = loginResult.Message;
+                }
+
+                return;
+            }
+
+            if (!loginResult.Persisted)
+            {
+                Logger.LogWarning("Не удалось сохранить веб-профиль чата {Platform} для {AccountId} на диск", pane.DisplayName, accountId);
+                _dialogService.Error(
+                    "Ошибка сохранения",
+                    $"Вход выполнен, но не удалось записать веб-профиль {pane.DisplayName} на диск. После перезапуска привязка может сброситься. Подробности – в логах.");
+                pane.StatusNotice = $"Не удалось сохранить веб-профиль {pane.DisplayName} на диск";
+            }
+
+            RefreshChat();
+            OpenRequested?.Invoke(pane, true);
+            return;
+        }
+
+        if (_webChatLogin is null
+            || PlatformWebChatDescriptors.ForPlatform(platform) is not { } descriptor
+            || !_accountDirectories.TryGetValue(platform, out var directory)
+            || !directory.SupportsChatBrowserProfile)
         {
             return;
         }
 
-        var result = await _youtubeChatLogin.SignInAsync(new(accountId, accountLabel));
-        if (result.Outcome != EmbeddedYouTubeChatLoginOutcome.Completed
+        var result = await _webChatLogin.SignInAsync(new(descriptor, accountId, accountLabel));
+        if (result.Outcome != PlatformWebChatLoginOutcome.Completed
             || string.IsNullOrWhiteSpace(result.BrowserProfileName))
         {
             if (!string.IsNullOrWhiteSpace(result.Message))
             {
-                PlatformChat.MessageStatus = result.Message;
+                pane.StatusNotice = result.Message;
             }
 
             return;
         }
 
-        var written = _youtubeAccountsStore.SetBrowserProfile(accountId, result.BrowserProfileName);
+        bool written;
+        try
+        {
+            written = directory.SetChatBrowserProfile(accountId, result.BrowserProfileName);
+        }
+        catch (Exception exception)
+        {
+            Logger.LogWarning(exception, "Ошибка сохранения веб-профиля чата {Platform} для {AccountId}", pane.DisplayName, accountId);
+            written = false;
+        }
+
         if (!written)
         {
-            Logger.LogWarning("Не удалось сохранить веб-профиль чата YouTube для {AccountId} на диск", accountId);
+            Logger.LogWarning("Не удалось сохранить веб-профиль чата {Platform} для {AccountId} на диск", pane.DisplayName, accountId);
             _dialogService.Error(
                 "Ошибка сохранения",
-                "Вход выполнен, но не удалось записать веб-профиль YouTube на диск. После перезапуска привязка может сброситься. Подробности – в логах.");
-            PlatformChat.MessageStatus = "Не удалось сохранить веб-профиль YouTube на диск";
+                $"Вход выполнен, но не удалось записать веб-профиль {pane.DisplayName} на диск. После перезапуска привязка может сброситься. Подробности – в логах.");
+            pane.StatusNotice = $"Не удалось сохранить веб-профиль {pane.DisplayName} на диск";
         }
 
         RefreshChat();
-        OpenRequested?.Invoke(PlatformChat, true);
+        OpenRequested?.Invoke(pane, true);
     }
 
-    internal void CompletePlatformSessionReset(string accountId)
+    internal void CompletePaneSessionReset(ChatDisplayPaneViewModel pane, string accountId) =>
+        CompletePaneSessionReset(pane, pane.Platform, accountId);
+
+    internal void CompletePaneSessionReset(ChatDisplayPaneViewModel pane, StreamingPlatform targetPlatform, string accountId)
     {
-        if (_youtubeAccountsStore is not null && !string.IsNullOrWhiteSpace(accountId))
+        if (_accountDirectories.TryGetValue(targetPlatform, out var directory)
+            && directory.SupportsChatBrowserProfile
+            && !string.IsNullOrWhiteSpace(accountId))
         {
-            var written = _youtubeAccountsStore.SetBrowserProfile(accountId, null);
+            bool written;
+            try
+            {
+                written = directory.SetChatBrowserProfile(accountId, null);
+            }
+            catch (Exception exception)
+            {
+                Logger.LogWarning(exception, "Ошибка сброса веб-профиля чата {Platform} для {AccountId}", targetPlatform, accountId);
+                written = false;
+            }
+
             if (!written)
             {
-                Logger.LogWarning("Не удалось сохранить сброс веб-профиля чата YouTube для {AccountId} на диск", accountId);
+                Logger.LogWarning("Не удалось сохранить сброс веб-профиля чата {Platform} для {AccountId} на диск", targetPlatform, accountId);
                 _dialogService.Error(
                     "Ошибка сохранения",
-                    "Куки очищены, но не удалось сохранить сброс привязки профиля YouTube на диск. После перезапуска профиль может вернуться. Подробности – в логах.");
-                PlatformChat.MessageStatus = "Не удалось сохранить сброс веб-профиля YouTube на диск";
+                    $"Куки очищены, но не удалось сохранить сброс привязки профиля {pane.DisplayName} на диск. После перезапуска профиль может вернуться. Подробности – в логах.");
+                pane.StatusNotice = $"Не удалось сохранить сброс веб-профиля {pane.DisplayName} на диск";
             }
         }
 
         RefreshChat();
-        OpenRequested?.Invoke(PlatformChat, true);
+        OpenRequested?.Invoke(pane, true);
     }
 
     [RelayCommand]
     private void OpenInBrowser()
     {
-        var pane = TwitchChat.IsShown ? TwitchChat : PlatformChat;
+        var pane = PrimaryChat.IsShown ? PrimaryChat : SecondaryChat;
         pane.OpenInBrowserCommand.Execute(null);
     }
 

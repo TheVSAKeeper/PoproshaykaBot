@@ -87,10 +87,10 @@ public sealed class PlatformAccountsSectionTests
         var uiSettings = new MemorySettings();
         var shell = DispatchProxy.Create<IShellLauncher, TrueProxy>();
         var pane = new ChatDisplayPaneViewModel(shell, null, uiSettings);
-        pane.SetAccounts(reopened, null, "Сеанс браузера");
+        pane.SetAccounts(reopened, "Сеанс браузера");
         pane.SelectedAccount = pane.AccountChoices.Single(option => option.Id == "777");
         var restoredPane = new ChatDisplayPaneViewModel(shell, null, uiSettings);
-        restoredPane.SetAccounts(reopened, null, "Сеанс браузера");
+        restoredPane.SetAccounts(reopened, "Сеанс браузера");
 
         Assert.Multiple(() =>
         {
@@ -139,7 +139,7 @@ public sealed class PlatformAccountsSectionTests
         var card = viewModel.Accounts.Single();
         var pane = new ChatDisplayPaneViewModel(DispatchProxy.Create<IShellLauncher, TrueProxy>(), null);
         pane.SetTarget(adapter.Platform, new Uri("https://example.test/chat"), null, shown: true);
-        pane.SetAccounts(adapter, null, "Просмотр чата");
+        pane.SetAccounts(adapter, "Просмотр чата");
         Assert.Multiple(() =>
         {
             Assert.That(viewModel.SupportsAccounts, Is.True);
@@ -497,6 +497,93 @@ public sealed class PlatformAccountsSectionTests
             Assert.That(ytGrant.ActionStatusSeverity, Is.EqualTo(StatusSeverity.Success));
             Assert.That(ytGrant.ActionStatusText, Does.Contain("YTChan"));
         });
+    }
+
+    [TestCase(StreamingPlatform.Twitch)]
+    [TestCase(StreamingPlatform.YouTube)]
+    public async Task Account_card_displays_api_and_web_chat_statuses_and_toggles_web_session_uniformly(StreamingPlatform platform)
+    {
+        var catalog = new ChannelCatalogStore(filePath: Path.Combine(_dir.FullName, $"ch-web-{platform}.json"));
+        var twPath = Path.Combine(_dir.FullName, $"tw-web-{platform}.json");
+        var ytPath = Path.Combine(_dir.FullName, $"yt-web-{platform}.json");
+        var twStore = new AccountsStore(filePath: twPath);
+        twStore.SaveAll(
+            new TwitchAccountSettings { UserId = "tw-1", Login = "twuser", AccessToken = "tw-a", RefreshToken = "tw-r", Scopes = [.. TwitchScopes.BotRequired], StoredScopes = [.. TwitchScopes.BotRequired] },
+            new TwitchAccountSettings());
+        var settings = new SettingsManager(NullLogger<SettingsManager>.Instance, Path.Combine(_dir.FullName, $"set-web-{platform}.json"));
+        var ytSettings = new YouTubeSettingsStore(filePath: Path.Combine(_dir.FullName, $"yts-web-{platform}.json"));
+        var ytStore = new YouTubeAccountsStore(filePath: ytPath);
+        ytStore.SaveAll(
+            "yt-sec",
+            new YouTubeAccountSettings { ChannelId = "yt-1", ChannelTitle = "YTUser", AccessToken = "yt-a", RefreshToken = "yt-r", Scopes = [.. YouTubeScopes.BotRequired], StoredScopes = [.. YouTubeScopes.BotRequired] },
+            new YouTubeAccountSettings());
+
+        var profileId = Guid.NewGuid().ToString("N");
+        var webChatLogin = new FakeWebChatLoginDialog(PlatformWebChatLoginResult.Completed(profileId));
+        var bus = new InMemoryEventBus(NullLogger<InMemoryEventBus>.Instance);
+        var refreshedCount = 0;
+        using var sub = bus.Subscribe<PlatformAuthorizationRefreshed>(_ => refreshedCount++);
+
+        var vm = new PlatformAccountsSectionViewModel(
+            catalog,
+            twitchAccountsStore: twStore,
+            youtubeAccountsStore: ytStore,
+            twitchOAuth: new FakeTwitchOAuthService(),
+            youtubeOAuth: new FakeYouTubeOAuthService(),
+            settingsManager: settings,
+            youtubeSettingsStore: ytSettings,
+            shellLauncher: DispatchProxy.Create<IShellLauncher, TrueProxy>(),
+            dialogService: DispatchProxy.Create<IDialogService, TrueProxy>(),
+            eventBus: bus,
+            webChatLoginDialog: webChatLogin)
+        {
+            SelectedPlatform = platform,
+        };
+        vm.Load();
+
+        var card = vm.Accounts.Single();
+        Assert.Multiple(() =>
+        {
+            Assert.That(card.AuthMethods, Has.Count.EqualTo(2));
+            Assert.That(card.ApiAuthMethod.Title, Is.EqualTo("API / OAuth"));
+            Assert.That(card.WebChatMethod?.Title, Is.EqualTo("Веб-чат"));
+            Assert.That(card.WebChatStatusText, Is.EqualTo("Веб-чат: не подключён"));
+            Assert.That(card.CanSignInWebChat, Is.True);
+            Assert.That(card.CanResetWebChat, Is.False);
+        });
+
+        await card.SignInWebChatCommand.ExecuteAsync(null);
+        var afterSignIn = vm.Accounts.Single();
+        Assert.Multiple(() =>
+        {
+            Assert.That(webChatLogin.LastRequest?.Descriptor.Platform, Is.EqualTo(platform));
+            Assert.That(afterSignIn.WebChatStatusText, Is.EqualTo("Веб-чат: подключён"));
+            Assert.That(afterSignIn.CanSignInWebChat, Is.False);
+            Assert.That(afterSignIn.CanResetWebChat, Is.True);
+            Assert.That(refreshedCount, Is.GreaterThanOrEqualTo(1));
+        });
+
+        var countBeforeReset = refreshedCount;
+        await afterSignIn.ResetWebChatCommand.ExecuteAsync(null);
+        var afterReset = vm.Accounts.Single();
+        Assert.Multiple(() =>
+        {
+            Assert.That(afterReset.WebChatStatusText, Is.EqualTo("Веб-чат: не подключён"));
+            Assert.That(afterReset.CanSignInWebChat, Is.True);
+            Assert.That(afterReset.CanResetWebChat, Is.False);
+            Assert.That(refreshedCount, Is.GreaterThan(countBeforeReset));
+        });
+    }
+
+    private sealed class FakeWebChatLoginDialog(PlatformWebChatLoginResult result) : IPlatformWebChatLoginDialog
+    {
+        public PlatformWebChatLoginRequest? LastRequest { get; private set; }
+
+        public Task<PlatformWebChatLoginResult> SignInAsync(PlatformWebChatLoginRequest request)
+        {
+            LastRequest = request;
+            return Task.FromResult(result);
+        }
     }
 
     private sealed class FakeEmbeddedTwitchAuth(Func<EmbeddedTwitchAuthRequest, EmbeddedTwitchAuthResult> handler) : IEmbeddedTwitchAuthDialog

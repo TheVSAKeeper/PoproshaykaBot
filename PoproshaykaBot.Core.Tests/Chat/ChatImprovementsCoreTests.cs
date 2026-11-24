@@ -12,6 +12,7 @@ using PoproshaykaBot.Core.Settings;
 using PoproshaykaBot.Core.Settings.Chat;
 using PoproshaykaBot.Core.Settings.Stores;
 using PoproshaykaBot.Core.Streaming;
+using PoproshaykaBot.Core.Twitch.Auth;
 using PoproshaykaBot.Core.Twitch.Chat;
 using PoproshaykaBot.Core.YouTube.Auth;
 using PoproshaykaBot.Core.YouTube.Streaming;
@@ -278,6 +279,47 @@ public sealed class ChatImprovementsCoreTests
 
         reloaded.SetBrowserProfile("UC1", null);
         var afterReset = new YouTubeAccountsStore(NullLogger<YouTubeAccountsStore>.Instance, path).ListAccounts();
+        Assert.That(afterReset[0].Authorizations.All(a => a.ChatBrowserProfile is null), Is.True);
+    }
+
+    [Test]
+    public void AccountsStore_SetChatBrowserProfile_SyncsAcrossRolesAndPersists()
+    {
+        var path = Path.Combine(_tempDir, "twitch-accounts.json");
+        var store = new AccountsStore(NullLogger<AccountsStore>.Instance, path);
+        store.UpsertContexts(
+        [
+            (PlatformAuthRole.Broadcaster, "default", "streamer1", new TwitchAccountSettings
+            {
+                AccessToken = "tok-b",
+                UserId = "1001",
+                Login = "streamer1",
+            }),
+            (PlatformAuthRole.Bot, "tw-bot-1001", "streamer1", new TwitchAccountSettings
+            {
+                AccessToken = "tok-bot",
+                UserId = "1001",
+                Login = "streamer1",
+            }),
+        ]);
+
+        var profileId = Guid.NewGuid().ToString("N");
+        IPlatformAccountDirectory directory = store;
+        var written = directory.SetChatBrowserProfile("1001", profileId);
+
+        var reloaded = new AccountsStore(NullLogger<AccountsStore>.Instance, path);
+        var accounts = reloaded.ListAccounts();
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(directory.SupportsChatBrowserProfile, Is.True);
+            Assert.That(written, Is.True);
+            Assert.That(accounts, Has.Count.EqualTo(1));
+            Assert.That(accounts[0].Authorizations.All(a => a.ChatBrowserProfile?.ProfileName == profileId), Is.True);
+        }
+
+        reloaded.SetChatBrowserProfile("1001", null);
+        var afterReset = new AccountsStore(NullLogger<AccountsStore>.Instance, path).ListAccounts();
         Assert.That(afterReset[0].Authorizations.All(a => a.ChatBrowserProfile is null), Is.True);
     }
 

@@ -161,8 +161,8 @@ public sealed class WebViewTileModalHidingTests
 
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(viewModel.PlatformChat.ChannelUri?.Query, Is.EqualTo("?v=selected-video"));
-            Assert.That(viewModel.PlatformChat.ExternalUri?.AbsolutePath, Is.EqualTo("/watch"));
+            Assert.That(viewModel.SecondaryChat.ChannelUri?.Query, Is.EqualTo("?v=selected-video"));
+            Assert.That(viewModel.SecondaryChat.ExternalUri?.AbsolutePath, Is.EqualTo("/watch"));
             Assert.That(twitchBrowser.Visibility, Is.EqualTo(Visibility.Collapsed));
             Assert.That(youtubeBrowser.Visibility, Is.EqualTo(Visibility.Visible));
         }
@@ -179,9 +179,9 @@ public sealed class WebViewTileModalHidingTests
 
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(viewModel.PlatformChat.ChannelUri, Is.Null);
-            Assert.That(viewModel.PlatformChat.ExternalUri?.AbsolutePath, Is.EqualTo("/@channel"));
-            Assert.That(viewModel.PlatformChat.HasFallback, Is.True);
+            Assert.That(viewModel.SecondaryChat.ChannelUri, Is.Null);
+            Assert.That(viewModel.SecondaryChat.ExternalUri?.AbsolutePath, Is.EqualTo("/@channel"));
+            Assert.That(viewModel.SecondaryChat.HasFallback, Is.True);
             Assert.That(youtubeBrowser.Visibility, Is.EqualTo(Visibility.Collapsed));
         }
     }
@@ -198,11 +198,11 @@ public sealed class WebViewTileModalHidingTests
         var viewModel = (ChatDisplayTileViewModel)CreateViewModel(Tile.Chat, registry, settings);
         SelectMode(viewModel, StreamingPlatform.YouTube);
 
-        Assert.That(viewModel.PlatformChat.ExternalUri, Is.Null);
+        Assert.That(viewModel.PrimaryChat.ExternalUri, Is.Null);
         settings.Mutate(current => current.Channel = "@new-channel");
 
-        Assert.That(viewModel.PlatformChat.ExternalUri?.AbsolutePath, Is.EqualTo("/@new-channel"));
-        Assert.That(viewModel.PlatformChat.FallbackActionCommand, Is.Not.Null);
+        Assert.That(viewModel.PrimaryChat.ExternalUri?.AbsolutePath, Is.EqualTo("/@new-channel"));
+        Assert.That(viewModel.PrimaryChat.FallbackActionCommand, Is.Not.Null);
     }
 
     [TestCase(ChatDisplayLayout.Columns)]
@@ -241,7 +241,7 @@ public sealed class WebViewTileModalHidingTests
         Layout(view);
         Assert.That(new[] { twitch.Visibility, youtube.Visibility }, Is.All.EqualTo(Visibility.Collapsed));
         model.IsModalDialogOpen = false;
-        model.PlatformChat.ShowGenericFallback();
+        model.SecondaryChat.ShowGenericFallback();
         Layout(view);
         Assert.That(twitch.Visibility, Is.EqualTo(Visibility.Visible));
         Assert.That(youtube.Visibility, Is.EqualTo(Visibility.Collapsed));
@@ -250,7 +250,7 @@ public sealed class WebViewTileModalHidingTests
         var restored = (ChatDisplayTileViewModel)CreateViewModel(Tile.Chat, registry, uiSettings: settings);
         Assert.That(restored.SelectedMode, Is.EqualTo(model.SelectedMode));
         SelectMode(restored, StreamingPlatform.Twitch);
-        Assert.That(restored.PlatformChat.IsShown, Is.False);
+        Assert.That(restored.SecondaryChat.IsShown, Is.False);
     }
 
     [Test]
@@ -314,8 +314,8 @@ public sealed class WebViewTileModalHidingTests
 
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(viewModel.TwitchChat.IsShown, Is.False);
-            Assert.That(viewModel.PlatformChat.IsShown, Is.True);
+            Assert.That(viewModel.PrimaryChat.IsShown, Is.False);
+            Assert.That(viewModel.SecondaryChat.IsShown, Is.True);
             Assert.That(resetZoomAction.IsVisible, Is.True);
             Assert.That(resetZoomAction.IsEnabled, Is.True);
             Assert.That(zoomBinding, Is.Not.Null);
@@ -350,7 +350,7 @@ public sealed class WebViewTileModalHidingTests
 
     [TestCase("Light")]
     [TestCase("Dark")]
-    public void Сплит_вмещает_площадку_и_аккаунт_в_одну_строку_и_отправляет_от_имени_YouTube(string theme)
+    public void Сплит_вмещает_площадку_и_аккаунт_в_одну_строку_и_без_панели_API(string theme)
     {
         var twitch = new AccountsStore(filePath: Path.Combine(_directory.FullName, "accounts.json"));
         twitch.UpsertContext(PlatformAuthRole.Bot, "sample", "alice", new TwitchAccountSettings
@@ -362,15 +362,15 @@ public sealed class WebViewTileModalHidingTests
         {
             ChannelId = "yt-user", ChannelTitle = "Bob on YouTube", AccessToken = "fixture",
         });
-        var sender = new FakeAccountMessenger();
         var registry = new ChatPlatformRegistry([
             new FakeChatPlatform(StreamingPlatform.Twitch, "Twitch", new FakeStreamStatus()),
-            new FakeChatPlatform(StreamingPlatform.YouTube, "YouTube", new FakeStreamStatus()) { AccountMessenger = sender },
+            new FakeChatPlatform(StreamingPlatform.YouTube, "YouTube", new FakeStreamStatus()),
         ]);
-        var model = (ChatDisplayTileViewModel)CreateViewModel(Tile.Chat, registry, accountDirectories: [twitch, youtube]);
+        var model = (ChatDisplayTileViewModel)CreateViewModel(Tile.Chat, registry, accountDirectories: [twitch, youtube],
+            webChatLogin: new StubWebChatLogin(PoproshaykaBot.Wpf.Infrastructure.PlatformWebChatLoginResult.Canceled()));
         SelectMode(model, StreamingPlatform.YouTube, ChatDisplayLayout.Rows);
-        model.TwitchChat.SelectedAccount = model.TwitchChat.AccountChoices.Single(option => option.Id == "tw-user");
-        model.PlatformChat.SelectedAccount = model.PlatformChat.AccountChoices.Single(option => option.Id == "yt-user");
+        model.PrimaryChat.SelectedAccount = model.PrimaryChat.AccountChoices.Single(option => option.Id == "tw-user");
+        model.SecondaryChat.SelectedAccount = model.SecondaryChat.AccountChoices.Single(option => option.Id == "yt-user");
         var view = CreateView(Tile.Chat, model);
         view.Resources.MergedDictionaries.Add(new ResourceDictionary
         {
@@ -384,64 +384,77 @@ public sealed class WebViewTileModalHidingTests
         {
             Assert.That(pickers, Has.Length.EqualTo(2));
             Assert.That(pickers.Select(picker => picker.ActualHeight), Is.All.InRange(12.0, 26.0));
-            Assert.That(model.PlatformChat.ShowMessageInput, Is.True);
+            Assert.That(typeof(ChatDisplayPaneViewModel).GetProperty("ShowMessageInput"), Is.Null);
+            Assert.That(typeof(ChatDisplayPaneViewModel).GetProperty("SendMessageCommand"), Is.Null);
+            Assert.That(model.SecondaryChat.SelectedAccount!.Label, Is.EqualTo("Bob on YouTube (бот)"));
+            Assert.That(model.SecondaryChat.CanSignInBrowser, Is.True);
         });
-        model.PlatformChat.Message = "sample message";
-        Assert.That(model.PlatformChat.SelectedAccount!.Label, Is.EqualTo("Bob on YouTube (бот)"));
-        model.PlatformChat.SendMessageCommand.ExecuteAsync(null).GetAwaiter().GetResult();
-        Assert.That(sender.LastSend, Is.EqualTo(("yt-user", "selected-video", "sample message")));
-        Assert.That(model.PlatformChat.MessageStatus, Is.EqualTo("Сообщение отправлено"));
         TestResources.CaptureAccountLayout(view, $"chat-{theme}", 380, 460);
     }
 
     [Test]
-    public void Отказ_YouTube_в_авторизации_виден_в_плитке_и_сохраняет_сообщение()
+    public async Task Плитка_показывает_Twitch_аккаунт_без_профиля_и_единообразно_сбрасывает_веб_сессию()
     {
-        var youtube = new YouTubeAccountsStore(filePath: Path.Combine(_directory.FullName, "youtube-accounts.json"));
+        var twitchPath = Path.Combine(_directory.FullName, "twitch-accounts.json");
+        var twitch = new AccountsStore(filePath: twitchPath);
+        twitch.UpsertContext(PlatformAuthRole.Bot, "sample", "alice", new TwitchAccountSettings
+        {
+            Login = "alice", UserId = "tw-user", AccessToken = "fixture",
+        });
+        var youtubePath = Path.Combine(_directory.FullName, "youtube-accounts.json");
+        var youtube = new YouTubeAccountsStore(filePath: youtubePath);
         youtube.UpsertContext(PlatformAuthRole.Bot, "sample", "Bob on YouTube", new YouTubeAccountSettings
         {
             ChannelId = "yt-user", ChannelTitle = "Bob on YouTube", AccessToken = "fixture",
         });
-        var sender = new FakeAccountMessenger { Status = ChatDeliveryStatus.AuthorizationRequired };
-        var registry = new ChatPlatformRegistry([
-            new FakeChatPlatform(StreamingPlatform.YouTube, "YouTube", new FakeStreamStatus()) { AccountMessenger = sender },
-        ]);
-        var model = (ChatDisplayTileViewModel)CreateViewModel(Tile.Chat, registry, accountDirectories: [youtube]);
-        SelectMode(model, StreamingPlatform.YouTube);
-        model.PlatformChat.SelectedAccount = model.PlatformChat.AccountChoices.Single(option => option.Id == "yt-user");
-        model.PlatformChat.Message = "sample message";
-        model.PlatformChat.SendMessageCommand.ExecuteAsync(null).GetAwaiter().GetResult();
 
+        var registry = new ChatPlatformRegistry([
+            new FakeChatPlatform(StreamingPlatform.Twitch, "Twitch", new FakeStreamStatus()),
+            new FakeChatPlatform(StreamingPlatform.YouTube, "YouTube", new FakeStreamStatus()),
+        ]);
+        var profileId = Guid.NewGuid().ToString("N");
+        var model = (ChatDisplayTileViewModel)CreateViewModel(
+            Tile.Chat,
+            registry,
+            accountDirectories: [twitch, youtube],
+            webChatLogin: new StubWebChatLogin(PoproshaykaBot.Wpf.Infrastructure.PlatformWebChatLoginResult.Completed(profileId)));
+
+        var twOption = model.PrimaryChat.AccountChoices.SingleOrDefault(o => o.Id == "tw-user");
+        Assert.That(twOption, Is.Not.Null);
+        model.PrimaryChat.SelectedAccount = twOption;
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(model.PrimaryChat.CanSignInBrowser, Is.True);
+            Assert.That(model.PrimaryChat.CanResetBrowserSession, Is.False);
+        }
+
+        await model.PrimaryChat.SignInBrowserCommand.ExecuteAsync(null);
         Assert.Multiple(() =>
         {
-            Assert.That(model.PlatformChat.Message, Is.EqualTo("sample message"));
-            Assert.That(model.PlatformChat.MessageStatus, Is.EqualTo("Авторизуйте аккаунт YouTube заново"));
+            Assert.That(model.PrimaryChat.CanSignInBrowser, Is.False);
+            Assert.That(model.PrimaryChat.CanResetBrowserSession, Is.True);
+            Assert.That(
+                new AccountsStore(filePath: twitchPath).ListAccounts().Single().Authorizations.Single().ChatBrowserProfile?.ProfileName,
+                Is.EqualTo(profileId));
         });
-    }
 
-    [Test]
-    public void Исключение_при_отправке_в_YouTube_не_роняет_плитку_и_обновляет_статус()
-    {
-        var youtube = new YouTubeAccountsStore(filePath: Path.Combine(_directory.FullName, "youtube-accounts-err.json"));
-        youtube.UpsertContext(PlatformAuthRole.Bot, "sample", "Bob on YouTube", new YouTubeAccountSettings
+        var resetRequestedAccountId = string.Empty;
+        model.ResetPaneSessionRequested += (pane, accountId, _) =>
         {
-            ChannelId = "yt-user", ChannelTitle = "Bob on YouTube", AccessToken = "fixture",
-        });
-        var sender = new FakeAccountMessenger { ExceptionToThrow = new InvalidOperationException("boom") };
-        var registry = new ChatPlatformRegistry([
-            new FakeChatPlatform(StreamingPlatform.YouTube, "YouTube", new FakeStreamStatus()) { AccountMessenger = sender },
-        ]);
-        var model = (ChatDisplayTileViewModel)CreateViewModel(Tile.Chat, registry, accountDirectories: [youtube]);
-        SelectMode(model, StreamingPlatform.YouTube);
-        model.PlatformChat.SelectedAccount = model.PlatformChat.AccountChoices.Single(option => option.Id == "yt-user");
-        model.PlatformChat.Message = "sample message";
+            resetRequestedAccountId = accountId;
+            model.CompletePaneSessionReset(pane, pane.Platform, accountId);
+        };
 
-        Assert.DoesNotThrow(() => model.PlatformChat.SendMessageCommand.ExecuteAsync(null).GetAwaiter().GetResult());
-
+        model.PrimaryChat.ResetBrowserSessionCommand.Execute(null);
         Assert.Multiple(() =>
         {
-            Assert.That(model.PlatformChat.Message, Is.EqualTo("sample message"));
-            Assert.That(model.PlatformChat.MessageStatus, Is.EqualTo("Не удалось отправить сообщение"));
+            Assert.That(resetRequestedAccountId, Is.EqualTo("tw-user"));
+            Assert.That(model.PrimaryChat.CanSignInBrowser, Is.True);
+            Assert.That(model.PrimaryChat.CanResetBrowserSession, Is.False);
+            Assert.That(
+                new AccountsStore(filePath: twitchPath).ListAccounts().Single().Authorizations.Single().ChatBrowserProfile,
+                Is.Null);
         });
     }
 
@@ -498,9 +511,12 @@ public sealed class WebViewTileModalHidingTests
 
     private DashboardTileViewModel CreateViewModel(Tile tile, IChatPlatformRegistry? platformRegistry = null,
         YouTubeSettingsStore? youtubeSettings = null, ISettingsStore? uiSettings = null,
-        IEnumerable<IPlatformAccountDirectory>? accountDirectories = null)
+        IEnumerable<IPlatformAccountDirectory>? accountDirectories = null,
+        PoproshaykaBot.Wpf.Infrastructure.IPlatformWebChatLoginDialog? webChatLogin = null)
     {
         var settings = new SettingsManager(NullLogger<SettingsManager>.Instance, Path.Combine(_directory.FullName, "settings.json"));
+
+        var effectiveRegistry = platformRegistry ?? new ChatPlatformRegistry([new FakeTwitchPlatform()]);
 
         DashboardTileViewModel viewModel = tile switch
         {
@@ -510,8 +526,8 @@ public sealed class WebViewTileModalHidingTests
                 new FakeShellLauncher(),
                 new FakeDialogService(),
                 new InMemoryEventBus(NullLogger<InMemoryEventBus>.Instance),
-                new ChatDisplayStore(NullLogger<ChatDisplayStore>.Instance, _directory.FullName), platformRegistry, youtubeSettings,
-                uiSettings: uiSettings, accountDirectories: accountDirectories),
+                new ChatDisplayStore(NullLogger<ChatDisplayStore>.Instance, _directory.FullName), effectiveRegistry, youtubeSettings,
+                uiSettings: uiSettings, accountDirectories: accountDirectories, webChatLogin: webChatLogin),
             Tile.OverlayPreview => new ChatOverlayPreviewTileViewModel(settings, NullLogger<ChatOverlayPreviewTileViewModel>.Instance),
             _ => throw new ArgumentOutOfRangeException(nameof(tile)),
         };
@@ -519,6 +535,40 @@ public sealed class WebViewTileModalHidingTests
         _disposable = viewModel as IDisposable;
 
         return viewModel;
+    }
+
+    private sealed class FakeTwitchPlatform : IChatPlatform
+    {
+        public StreamingPlatform Id => StreamingPlatform.Twitch;
+
+        public string DisplayName => "Twitch";
+
+        public PlatformCapabilities Capabilities => PlatformCapabilities.None;
+
+        public bool IsEnabled => true;
+
+        public bool IsConnected => false;
+
+        public IStreamStatus StreamStatus { get; } = new FakeStreamStatus();
+
+        public IPlatformMessenger Messenger => throw new NotSupportedException();
+
+        public bool RequiresOnlineStreamForNativeChat => false;
+
+        public bool SupportsChatClutterBlocking => true;
+
+        public string? BuildNativeChatUrl(StreamInfo? stream, string? targetChannelLogin, bool isDarkTheme) =>
+            string.IsNullOrWhiteSpace(targetChannelLogin)
+                ? null
+                : $"https://www.twitch.tv/popout/{Uri.EscapeDataString(targetChannelLogin.Trim())}/chat?popout=";
+    }
+
+    private sealed class StubWebChatLogin(PoproshaykaBot.Wpf.Infrastructure.PlatformWebChatLoginResult result)
+        : PoproshaykaBot.Wpf.Infrastructure.IPlatformWebChatLoginDialog
+    {
+        public Task<PoproshaykaBot.Wpf.Infrastructure.PlatformWebChatLoginResult> SignInAsync(
+            PoproshaykaBot.Wpf.Infrastructure.PlatformWebChatLoginRequest request) =>
+            Task.FromResult(result);
     }
 
     private sealed class FakeDialogService : IDialogService
@@ -574,30 +624,9 @@ public sealed class WebViewTileModalHidingTests
         public bool IsConnected => false;
         public IStreamStatus StreamStatus => status;
         public IPlatformMessenger Messenger => throw new NotSupportedException();
-        public IChatAccountMessenger? AccountMessenger { get; init; }
         public string BuildNativeChatUrl(StreamInfo stream) => $"https://www.youtube.com/live_chat?v={stream.Id}";
         public string BuildStreamUrl(StreamInfo? stream = null) => stream is { } info
             ? $"https://www.youtube.com/watch?v={info.Id}" : offlineUrl is not null ? offlineUrl() : "https://www.youtube.com/@channel";
-    }
-
-    private sealed class FakeAccountMessenger : IChatAccountMessenger
-    {
-        public (string AccountId, string StreamId, string Text)? LastSend { get; private set; }
-        public ChatDeliveryStatus Status { get; init; } = ChatDeliveryStatus.Sent;
-        public Exception? ExceptionToThrow { get; init; }
-
-        public bool CanSendAs(ChatSenderAccount account) => account.Role == PlatformAuthRole.Bot;
-
-        public Task<ChatAccountSendResult> SendAsAsync(ChatSenderAccount account, string streamId, string text)
-        {
-            LastSend = (account.AccountId, streamId, text);
-            if (ExceptionToThrow is not null)
-            {
-                return Task.FromException<ChatAccountSendResult>(ExceptionToThrow);
-            }
-
-            return Task.FromResult(new ChatAccountSendResult(ChatEnqueueResult.Queued, Status, Status == ChatDeliveryStatus.Sent ? 1 : 0));
-        }
     }
 
     private sealed class FakeShellLauncher : IShellLauncher

@@ -10,18 +10,18 @@ using System.Windows.Media;
 
 namespace PoproshaykaBot.Wpf.Views.Dialogs;
 
-public partial class EmbeddedYouTubeChatLoginWindow : Window
+public partial class EmbeddedPlatformChatLoginWindow : Window
 {
     private const int MonitorDefaultToNearest = 2;
 
-    private readonly EmbeddedYouTubeChatLoginDialogViewModel _viewModel;
+    private readonly EmbeddedPlatformChatLoginDialogViewModel _viewModel;
     private readonly CancellationTokenSource _lifetime = new();
     private readonly WebViewThemeBackground _themeBackground;
 
     private bool _initialized;
     private bool _tornDown;
 
-    public EmbeddedYouTubeChatLoginWindow(EmbeddedYouTubeChatLoginDialogViewModel viewModel)
+    public EmbeddedPlatformChatLoginWindow(EmbeddedPlatformChatLoginDialogViewModel viewModel)
     {
         InitializeComponent();
 
@@ -79,15 +79,6 @@ public partial class EmbeddedYouTubeChatLoginWindow : Window
         }
     }
 
-    private static readonly HashSet<string> YouTubeAuthCookieNames = new(StringComparer.Ordinal)
-    {
-        "SAPISID",
-        "__Secure-3PAPISID",
-        "SID",
-        "SSID",
-        "HSID",
-    };
-
     private static void OnNewWindowRequested(object? sender, CoreWebView2NewWindowRequestedEventArgs e)
     {
         if (sender is not CoreWebView2 core)
@@ -119,6 +110,8 @@ public partial class EmbeddedYouTubeChatLoginWindow : Window
         }
     }
 
+    private int _cookieCheckVersion;
+
     private async Task RefreshSignedInStateAsync(CoreWebView2 core)
     {
         if (_tornDown || !ReferenceEquals(core, WebView.CoreWebView2))
@@ -126,41 +119,55 @@ public partial class EmbeddedYouTubeChatLoginWindow : Window
             return;
         }
 
+        var checkVersion = ++_cookieCheckVersion;
+        var descriptor = _viewModel.Descriptor;
         try
         {
-            if (!IsYouTubePage(core.Source))
+            if (!IsAllowedPlatformPage(core.Source, descriptor.AllowedHosts))
             {
                 _viewModel.SetSignedIn(false);
                 return;
             }
 
-            var cookies = await core.CookieManager.GetCookiesAsync("https://www.youtube.com");
-            if (_tornDown || !ReferenceEquals(core, WebView.CoreWebView2))
+            var cookies = await core.CookieManager.GetCookiesAsync(descriptor.CookieTargetUrl);
+            if (_tornDown || !ReferenceEquals(core, WebView.CoreWebView2) || checkVersion != _cookieCheckVersion)
             {
                 return;
             }
 
-            var signedIn = cookies.Any(static cookie =>
-                YouTubeAuthCookieNames.Contains(cookie.Name)
+            var authCookies = descriptor.AuthCookieNames;
+            var signedIn = cookies.Any(cookie =>
+                authCookies.Contains(cookie.Name, StringComparer.Ordinal)
                 && !string.IsNullOrWhiteSpace(cookie.Value));
 
             _viewModel.SetSignedIn(signedIn);
         }
         catch (Exception exception)
         {
-            _viewModel.Logger.LogDebug(exception, "Не удалось проверить состояние входа YouTube в WebView2");
+            if (_viewModel.Logger.IsEnabled(LogLevel.Debug))
+            {
+                _viewModel.Logger.LogDebug(exception, "Не удалось проверить состояние входа веб-чата {Platform} в WebView2", descriptor.PlatformDisplayName);
+            }
         }
     }
 
-    private static bool IsYouTubePage(string? url)
+    private static bool IsAllowedPlatformPage(string? url, IReadOnlyList<string> allowedHosts)
     {
         if (!Uri.TryCreate(url, UriKind.Absolute, out var uri))
         {
             return false;
         }
 
-        return uri.Host.Equals("youtube.com", StringComparison.OrdinalIgnoreCase)
-            || uri.Host.EndsWith(".youtube.com", StringComparison.OrdinalIgnoreCase);
+        foreach (var host in allowedHosts)
+        {
+            if (uri.Host.Equals(host, StringComparison.OrdinalIgnoreCase)
+                || uri.Host.EndsWith("." + host, StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private async void OnLoaded(object sender, RoutedEventArgs e)
@@ -178,15 +185,16 @@ public partial class EmbeddedYouTubeChatLoginWindow : Window
         }
 
         _viewModel.SetBrowserReady();
-        WebView.CoreWebView2.Navigate(EmbeddedYouTubeChatLoginDialogViewModel.StartUrl);
+        WebView.CoreWebView2.Navigate(_viewModel.Descriptor.StartUrl);
     }
 
     private async Task<bool> TryInitializeWebViewAsync()
     {
+        var descriptor = _viewModel.Descriptor;
         try
         {
             var environment = await WebView2EnvironmentFactory.CreateAsync(
-                _viewModel.UserDataFolder,
+                descriptor.UserDataFolder,
                 _viewModel.Logger,
                 _lifetime.Token);
 
@@ -222,14 +230,14 @@ public partial class EmbeddedYouTubeChatLoginWindow : Window
         }
         catch (WebView2RuntimeNotFoundException exception)
         {
-            _viewModel.Logger.LogWarning(exception, "WebView2 Runtime не найден при открытии встроенного входа YouTube");
+            _viewModel.Logger.LogWarning(exception, "WebView2 Runtime не найден при открытии встроенного входа {Platform}", descriptor.PlatformDisplayName);
             _viewModel.ShowRuntimeMissing();
 
             return false;
         }
         catch (Exception exception)
         {
-            _viewModel.Logger.LogError(exception, "Ошибка инициализации WebView2 для встроенного входа YouTube");
+            _viewModel.Logger.LogError(exception, "Ошибка инициализации WebView2 для встроенного входа {Platform}", descriptor.PlatformDisplayName);
             _viewModel.ShowInitializationFailure();
 
             return false;
@@ -284,7 +292,7 @@ public partial class EmbeddedYouTubeChatLoginWindow : Window
             core.NewWindowRequested -= OnNewWindowRequested;
             core.NavigationCompleted -= OnNavigationCompleted;
             core.SourceChanged -= OnSourceChanged;
-            if (_viewModel.Result.Outcome != EmbeddedYouTubeChatLoginOutcome.Completed)
+            if (_viewModel.Result.Outcome != PlatformWebChatLoginOutcome.Completed)
             {
                 core.Profile.Delete();
             }

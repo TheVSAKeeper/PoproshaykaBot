@@ -3,24 +3,24 @@ using CommunityToolkit.Mvvm.Input;
 using KeepShell.Services;
 using KeepShell.ViewModels;
 using Microsoft.Extensions.Logging;
-using PoproshaykaBot.Core.Twitch.Auth;
 using PoproshaykaBot.Wpf.Infrastructure;
 
 namespace PoproshaykaBot.Wpf.ViewModels.Dialogs;
 
-public sealed partial class EmbeddedYouTubeChatLoginDialogViewModel(
+public sealed partial class EmbeddedPlatformChatLoginDialogViewModel(
     IShellLauncher shellLauncher,
-    ILogger<EmbeddedYouTubeChatLoginDialogViewModel> logger) : ObservableObject
+    ILogger<EmbeddedPlatformChatLoginDialogViewModel> logger) : ObservableObject
 {
-    public const string StartUrl = "https://accounts.google.com/ServiceLogin?service=youtube&continue=https%3A%2F%2Fwww.youtube.com%2F";
-
     private const string RuntimeDownloadUrl = "https://go.microsoft.com/fwlink/p/?LinkId=2124703";
 
     [ObservableProperty]
-    private string _title = "Вход в YouTube";
+    private string _title = "Вход в веб-чат";
 
     [ObservableProperty]
-    private string _statusMessage = "Войдите в нужный аккаунт Google и выберите канал YouTube, затем нажмите «Готово».";
+    private string _closeButtonName = "Закрыть окно входа";
+
+    [ObservableProperty]
+    private string _statusMessage = "Войдите в аккаунт и нажмите «Готово».";
 
     [ObservableProperty]
     private StatusSeverity _statusSeverity = StatusSeverity.Info;
@@ -50,20 +50,22 @@ public sealed partial class EmbeddedYouTubeChatLoginDialogViewModel(
 
     public ILogger Logger { get; } = logger;
 
-    public string UserDataFolder => WebView2UserDataFolders.ResolveYouTubeAccounts();
+    public PlatformWebChatLoginDescriptor Descriptor { get; private set; } = PlatformWebChatDescriptors.YouTube;
 
     public string BrowserProfileName { get; private set; } = Guid.NewGuid().ToString("N");
 
-    public EmbeddedYouTubeChatLoginResult Result { get; private set; } = EmbeddedYouTubeChatLoginResult.Canceled();
+    public PlatformWebChatLoginResult Result { get; private set; } = PlatformWebChatLoginResult.Canceled();
 
     public event EventHandler? CloseRequested;
 
-    public void Configure(EmbeddedYouTubeChatLoginRequest request)
+    public void Configure(PlatformWebChatLoginRequest request)
     {
         ArgumentNullException.ThrowIfNull(request);
+        ArgumentNullException.ThrowIfNull(request.Descriptor);
 
+        Descriptor = request.Descriptor;
         BrowserProfileName = Guid.NewGuid().ToString("N");
-        Result = EmbeddedYouTubeChatLoginResult.Canceled();
+        Result = PlatformWebChatLoginResult.Canceled();
         HasError = false;
         IsBrowserReady = false;
         IsSignedIn = false;
@@ -73,8 +75,9 @@ public sealed partial class EmbeddedYouTubeChatLoginDialogViewModel(
 
         var label = string.IsNullOrWhiteSpace(request.AccountLabel) ? request.AccountId : request.AccountLabel.Trim();
         _accountDisplayLabel = label;
-        Title = $"Вход в YouTube – {label}";
-        StatusMessage = $"Войдите в Google для «{label}» и дождитесь загрузки YouTube – после входа кнопка «Готово» станет активной.";
+        Title = $"Вход в {Descriptor.PlatformDisplayName} – {label}";
+        CloseButtonName = $"Закрыть окно входа {Descriptor.PlatformDisplayName}";
+        StatusMessage = string.Format(Descriptor.ReadyInstructionTemplate, label);
         StatusSeverity = StatusSeverity.Info;
     }
 
@@ -98,12 +101,12 @@ public sealed partial class EmbeddedYouTubeChatLoginDialogViewModel(
         IsSignedIn = signedIn;
         if (signedIn)
         {
-            StatusMessage = $"Вход в YouTube выполнен. Выберите нужный канал для «{_accountDisplayLabel}» и нажмите «Готово».";
+            StatusMessage = string.Format(Descriptor.SignedInInstructionTemplate, _accountDisplayLabel);
             StatusSeverity = StatusSeverity.Success;
         }
         else
         {
-            StatusMessage = $"Войдите в Google для «{_accountDisplayLabel}» и дождитесь загрузки YouTube – после входа кнопка «Готово» станет активной.";
+            StatusMessage = string.Format(Descriptor.ReadyInstructionTemplate, _accountDisplayLabel);
             StatusSeverity = StatusSeverity.Info;
         }
     }
@@ -115,10 +118,10 @@ public sealed partial class EmbeddedYouTubeChatLoginDialogViewModel(
         IsSignedIn = false;
         CanDownloadRuntime = true;
         ErrorHeading = "Требуется Microsoft Edge WebView2 Runtime";
-        ErrorDescription = "Установите его для встроенного входа в YouTube либо отправляйте сообщения через API.";
+        ErrorDescription = $"Установите его для встроенного входа в веб-чат {Descriptor.PlatformDisplayName}.";
         StatusMessage = "WebView2 Runtime не найден.";
         StatusSeverity = StatusSeverity.Warning;
-        Result = EmbeddedYouTubeChatLoginResult.Unavailable("WebView2 Runtime не установлен.");
+        Result = PlatformWebChatLoginResult.Unavailable("WebView2 Runtime не установлен.");
     }
 
     public void ShowInitializationFailure()
@@ -128,17 +131,17 @@ public sealed partial class EmbeddedYouTubeChatLoginDialogViewModel(
         IsSignedIn = false;
         CanDownloadRuntime = false;
         ErrorHeading = "Не удалось открыть встроенный браузер";
-        ErrorDescription = "Попробуйте повторить вход позже либо используйте отправку через API. Подробности – в журнале.";
+        ErrorDescription = "Попробуйте повторить вход позже. Подробности – в журнале.";
         StatusMessage = "Ошибка инициализации встроенного браузера.";
         StatusSeverity = StatusSeverity.Error;
-        Result = EmbeddedYouTubeChatLoginResult.Failed("Не удалось открыть встроенный браузер для входа в YouTube.");
+        Result = PlatformWebChatLoginResult.Failed($"Не удалось открыть встроенный браузер для входа в {Descriptor.PlatformDisplayName}.");
     }
 
     public void Cancel()
     {
-        if (Result.Outcome == EmbeddedYouTubeChatLoginOutcome.None)
+        if (Result.Outcome == PlatformWebChatLoginOutcome.None)
         {
-            Result = EmbeddedYouTubeChatLoginResult.Canceled();
+            Result = PlatformWebChatLoginResult.Canceled();
         }
     }
 
@@ -147,16 +150,16 @@ public sealed partial class EmbeddedYouTubeChatLoginDialogViewModel(
     [RelayCommand(CanExecute = nameof(CanConfirm))]
     private void Confirm()
     {
-        Result = EmbeddedYouTubeChatLoginResult.Completed(BrowserProfileName);
+        Result = PlatformWebChatLoginResult.Completed(BrowserProfileName);
         CloseRequested?.Invoke(this, EventArgs.Empty);
     }
 
     [RelayCommand]
     private void CloseDialog()
     {
-        if (Result.Outcome != EmbeddedYouTubeChatLoginOutcome.Completed)
+        if (Result.Outcome == PlatformWebChatLoginOutcome.None)
         {
-            Result = EmbeddedYouTubeChatLoginResult.Canceled();
+            Result = PlatformWebChatLoginResult.Canceled();
         }
 
         CloseRequested?.Invoke(this, EventArgs.Empty);

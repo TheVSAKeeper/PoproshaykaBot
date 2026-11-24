@@ -1,10 +1,8 @@
 ﻿using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using KeepShell.Services;
-using PoproshaykaBot.Core.Chat;
 using PoproshaykaBot.Core.Platforms;
 using PoproshaykaBot.Core.Platforms.Auth;
-using PoproshaykaBot.Core.Twitch.Chat;
 using PoproshaykaBot.Wpf.Bootstrap;
 using PoproshaykaBot.Wpf.Infrastructure.Platforms;
 using System.Windows.Input;
@@ -14,29 +12,23 @@ namespace PoproshaykaBot.Wpf.ViewModels.Tiles;
 public sealed partial class ChatDisplayPaneViewModel(
     IShellLauncher shellLauncher, IChatPlatformRegistry? platformRegistry, ISettingsStore? uiSettings = null) : ObservableObject
 {
-    private IChatAccountMessenger? _accountMessenger;
     private Func<string, string, Task>? _signInBrowserAsync;
     private Action<string, string>? _resetBrowserSession;
-    private string? _streamId;
+    private bool _supportsWebChatLogin;
     private bool _updatingAccounts;
     private StreamingPlatform? _accountsPlatform;
-    private int _messageContextVersion;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasAccountChoices))]
     private IReadOnlyList<ChatDisplayAccountOption> _accountChoices = [];
 
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(ShowMessageInput), nameof(CanSignInBrowser), nameof(CanResetBrowserSession))]
-    [NotifyCanExecuteChangedFor(nameof(SendMessageCommand), nameof(SignInBrowserCommand), nameof(ResetBrowserSessionCommand))]
+    [NotifyPropertyChangedFor(nameof(CanSignInBrowser), nameof(CanResetBrowserSession))]
+    [NotifyCanExecuteChangedFor(nameof(SignInBrowserCommand), nameof(ResetBrowserSessionCommand))]
     private ChatDisplayAccountOption? _selectedAccount;
 
     [ObservableProperty]
-    [NotifyCanExecuteChangedFor(nameof(SendMessageCommand))]
-    private string _message = string.Empty;
-
-    [ObservableProperty]
-    private string? _messageStatus;
+    private string? _statusNotice;
 
     [ObservableProperty]
     private bool _isShown;
@@ -65,18 +57,17 @@ public sealed partial class ChatDisplayPaneViewModel(
 
     public string DisplayName => PlatformVisuals.GetDisplayName(Platform, platformRegistry);
     public Uri? ChannelUri { get; private set; }
+    public bool SupportsClutterBlocking { get; private set; }
+    public bool AppliesPreferredColorScheme { get; private set; }
 
     public bool HasAccountChoices => AccountChoices.Count > 1;
 
-    public bool ShowMessageInput => _streamId is not null && SelectedAccount?.Sender is not null
-        && SelectedAccount.BrowserProfile is null;
-
-    public bool CanSignInBrowser => Platform == StreamingPlatform.YouTube
+    public bool CanSignInBrowser => _supportsWebChatLogin
         && !string.IsNullOrWhiteSpace(SelectedAccount?.Id)
         && SelectedAccount.BrowserProfile is null
         && _signInBrowserAsync is not null;
 
-    public bool CanResetBrowserSession => Platform == StreamingPlatform.YouTube
+    public bool CanResetBrowserSession => _supportsWebChatLogin
         && !string.IsNullOrWhiteSpace(SelectedAccount?.Id)
         && SelectedAccount.BrowserProfile is not null
         && _resetBrowserSession is not null;
@@ -84,9 +75,11 @@ public sealed partial class ChatDisplayPaneViewModel(
     internal event Action? ChatAccountChanged;
 
     internal void SetBrowserSessionHandlers(
+        bool supportsWebChatLogin,
         Func<string, string, Task>? signInBrowserAsync,
         Action<string, string>? resetBrowserSession)
     {
+        _supportsWebChatLogin = supportsWebChatLogin;
         _signInBrowserAsync = signInBrowserAsync;
         _resetBrowserSession = resetBrowserSession;
         OnPropertyChanged(nameof(CanSignInBrowser));
@@ -117,21 +110,9 @@ public sealed partial class ChatDisplayPaneViewModel(
         _resetBrowserSession(account.Id, account.Label);
     }
 
-    internal void SetAccounts(IPlatformAccountDirectory? directory, string? streamId, string defaultLabel)
+    internal void SetAccounts(IPlatformAccountDirectory? directory, string defaultLabel)
     {
-        _accountMessenger = platformRegistry?.Find(Platform)?.AccountMessenger;
-        if (_streamId != streamId)
-        {
-            _messageContextVersion++;
-            Message = string.Empty;
-            MessageStatus = null;
-        }
-
-        _streamId = streamId;
-        OnPropertyChanged(nameof(ShowMessageInput));
-        SendMessageCommand.NotifyCanExecuteChanged();
-
-        var options = new List<ChatDisplayAccountOption> { new(string.Empty, defaultLabel, null, null) };
+        var options = new List<ChatDisplayAccountOption> { new(string.Empty, defaultLabel, null) };
         foreach (var account in directory?.ListAccounts() ?? [])
         {
             var authorizations = account.Authorizations.Where(static grant => grant.HasToken).ToArray();
@@ -141,17 +122,8 @@ public sealed partial class ChatDisplayPaneViewModel(
             }
 
             var browserProfile = authorizations.Select(grant => grant.ChatBrowserProfile).FirstOrDefault(profile => profile is not null);
-            var sender = _accountMessenger is { } messenger
-                ? authorizations.Select(grant => new ChatSenderAccount(account.Key.AccountId, grant.Role, grant.ContextId))
-                    .FirstOrDefault(messenger.CanSendAs)
-                : null;
-            if (browserProfile is null && sender is null && Platform != StreamingPlatform.YouTube)
-            {
-                continue;
-            }
-
             var roles = string.Join(", ", authorizations.Select(grant => PlatformAuthRoles.Describe(grant.Role)).Distinct(StringComparer.Ordinal));
-            options.Add(new(account.Key.AccountId, $"{account.DisplayName} ({roles})", browserProfile, sender));
+            options.Add(new(account.Key.AccountId, $"{account.DisplayName} ({roles})", browserProfile));
         }
 
         if (_accountsPlatform == Platform && options.SequenceEqual(AccountChoices))
@@ -192,11 +164,9 @@ public sealed partial class ChatDisplayPaneViewModel(
 
     private void ApplyAccountChange(ChatDisplayAccountOption? previous, ChatDisplayAccountOption? current)
     {
-        if (previous?.Id != current?.Id || previous?.Sender != current?.Sender)
+        if (previous?.Id != current?.Id)
         {
-            _messageContextVersion++;
-            Message = string.Empty;
-            MessageStatus = null;
+            StatusNotice = null;
         }
 
         if (previous?.BrowserProfile != current?.BrowserProfile)
@@ -205,98 +175,29 @@ public sealed partial class ChatDisplayPaneViewModel(
         }
     }
 
-    private bool CanSendMessage() => ShowMessageInput && !string.IsNullOrWhiteSpace(Message);
-
-    [RelayCommand(CanExecute = nameof(CanSendMessage))]
-    private async Task SendMessageAsync()
-    {
-        if (!CanSendMessage() || SelectedAccount?.Sender is not { } sender
-            || _streamId is not { } streamId || _accountMessenger is not { } messenger)
-        {
-            return;
-        }
-
-        var contextVersion = _messageContextVersion;
-        var text = Message;
-        MessageStatus = "Отправка…";
-        ChatAccountSendResult result;
-        try
-        {
-            result = await messenger.SendAsAsync(sender, streamId, text);
-        }
-        catch (OperationCanceledException)
-        {
-            if (contextVersion == _messageContextVersion)
-            {
-                MessageStatus = "Отправка отменена";
-            }
-
-            return;
-        }
-        catch (Exception)
-        {
-            if (contextVersion == _messageContextVersion)
-            {
-                MessageStatus = "Не удалось отправить сообщение";
-            }
-
-            return;
-        }
-
-        if (contextVersion != _messageContextVersion)
-        {
-            return;
-        }
-
-        MessageStatus = result.DeliveryStatus switch
-        {
-            ChatDeliveryStatus.Sent => "Сообщение отправлено",
-            ChatDeliveryStatus.AuthorizationRequired => $"Авторизуйте аккаунт {DisplayName} заново",
-            ChatDeliveryStatus.Rejected => $"{DisplayName} отклонил сообщение",
-            ChatDeliveryStatus.Unconfirmed => "Доставка не подтверждена. Проверьте чат перед повтором",
-            ChatDeliveryStatus.ChatUnavailable => "Чат эфира недоступен",
-            ChatDeliveryStatus.QuotaExhausted => "Квота отправки исчерпана",
-            ChatDeliveryStatus.ObserverMode => "Отправка выключена в режиме наблюдателя",
-            ChatDeliveryStatus.QueueClosed => "Очередь отправки остановлена",
-            _ => DescribeEnqueueResult(result.EnqueueResult),
-        };
-
-        if (result is { DeliveryStatus: not ChatDeliveryStatus.Sent, SentParts: > 0 })
-        {
-            MessageStatus = $"Сообщение отправлено частично. {MessageStatus}";
-        }
-
-        if (result.DeliveryStatus == ChatDeliveryStatus.Sent && Message == text)
-        {
-            Message = string.Empty;
-        }
-    }
-
-    private string DescribeEnqueueResult(ChatEnqueueResult result) =>
-        result switch
-        {
-            ChatEnqueueResult.ObserverMode => "Отправка выключена в режиме наблюдателя",
-            ChatEnqueueResult.QuotaBudgetReached => "Квота отправки исчерпана",
-            ChatEnqueueResult.QueueClosed => $"Подключите {DisplayName}, чтобы отправлять сообщения",
-            ChatEnqueueResult.NotConnected => "Чат эфира недоступен",
-            ChatEnqueueResult.AuthorizationRequired => $"Авторизуйте аккаунт {DisplayName} заново",
-            _ => "Не удалось поставить сообщение в очередь",
-        };
-
     public ICommand? FallbackActionCommand => RuntimeMissing ? OpenRuntimeDownloadCommand
         : ExternalUri is not null ? OpenInBrowserCommand : null;
 
     public string? FallbackActionText => RuntimeMissing ? "Скачать WebView2 Runtime"
         : ExternalUri is not null ? "Открыть в браузере" : null;
 
-    internal bool SetTarget(StreamingPlatform platform, Uri? channelUri, Uri? externalUri, bool shown)
+    internal bool SetTarget(
+        StreamingPlatform platform,
+        Uri? channelUri,
+        Uri? externalUri,
+        bool shown,
+        bool supportsClutterBlocking = false,
+        bool appliesPreferredColorScheme = false,
+        string? unavailableHeading = null,
+        string? unavailableDescription = null)
     {
         ExternalUri = externalUri;
+        SupportsClutterBlocking = supportsClutterBlocking;
+        AppliesPreferredColorScheme = appliesPreferredColorScheme;
         var changed = IsShown != shown || Platform != platform || ChannelUri != channelUri;
         if (changed)
         {
-            _messageContextVersion++;
-            MessageStatus = null;
+            StatusNotice = null;
         }
 
         IsShown = shown;
@@ -308,10 +209,8 @@ public sealed partial class ChatDisplayPaneViewModel(
             RuntimeMissing = false;
             if (channelUri is null)
             {
-                var twitch = platform == StreamingPlatform.Twitch;
-                FallbackHeading = twitch ? "Канал не указан" : "Чат эфира недоступен";
-                FallbackDescription = twitch ? "Укажите канал в настройках Twitch, чтобы открыть чат."
-                    : "Чат появится, когда у выбранного канала начнётся эфир с доступным чатом.";
+                FallbackHeading = unavailableHeading ?? "Чат эфира недоступен";
+                FallbackDescription = unavailableDescription ?? "Чат появится, когда у выбранного канала начнётся эфир с доступным чатом.";
             }
         }
 
@@ -349,4 +248,4 @@ public sealed partial class ChatDisplayPaneViewModel(
 }
 
 public sealed record ChatDisplayAccountOption(
-    string Id, string Label, PlatformChatBrowserProfile? BrowserProfile, ChatSenderAccount? Sender);
+    string Id, string Label, PlatformChatBrowserProfile? BrowserProfile);

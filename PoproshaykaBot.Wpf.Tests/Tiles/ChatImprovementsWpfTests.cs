@@ -68,7 +68,7 @@ internal sealed class ChatImprovementsWpfTests
         var registry = new ChatPlatformRegistry([ytPlatform]);
 
         var profileId = Guid.NewGuid().ToString("N");
-        var loginDialog = new StubYouTubeLoginDialog(EmbeddedYouTubeChatLoginResult.Completed(profileId));
+        var loginDialog = new StubWebChatLoginDialog(PlatformWebChatLoginResult.Completed(profileId));
 
         using var tile = new ChatDisplayTileViewModel(
             settings,
@@ -80,36 +80,40 @@ internal sealed class ChatImprovementsWpfTests
             displayStore,
             platformRegistry: registry,
             accountDirectories: [ytAccounts],
-            youtubeChatLogin: loginDialog,
-            youtubeAccountsStore: ytAccounts);
+            webChatLogin: loginDialog);
 
-        tile.PlatformChat.SelectedAccount = tile.PlatformChat.AccountChoices.Single(o => o.Id == "UC1");
+        tile.PrimaryChat.SelectedAccount = tile.PrimaryChat.AccountChoices.Single(o => o.Id == "UC1");
 
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(tile.PlatformChat.CanSignInBrowser, Is.True);
-            Assert.That(tile.PlatformChat.CanResetBrowserSession, Is.False);
-            Assert.That(tile.PlatformChat.ShowMessageInput, Is.True);
+            Assert.That(tile.PrimaryChat.CanSignInBrowser, Is.True);
+            Assert.That(tile.PrimaryChat.CanResetBrowserSession, Is.False);
         }
 
-        await tile.PlatformChat.SignInBrowserCommand.ExecuteAsync(null);
+        await tile.PrimaryChat.SignInBrowserCommand.ExecuteAsync(null);
 
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(tile.PlatformChat.SelectedAccount?.BrowserProfile?.ProfileName, Is.EqualTo(profileId));
-            Assert.That(tile.PlatformChat.CanSignInBrowser, Is.False);
-            Assert.That(tile.PlatformChat.CanResetBrowserSession, Is.True);
-            Assert.That(tile.PlatformChat.ShowMessageInput, Is.False);
+            Assert.That(tile.PrimaryChat.SelectedAccount?.BrowserProfile?.ProfileName, Is.EqualTo(profileId));
+            Assert.That(tile.PrimaryChat.CanSignInBrowser, Is.False);
+            Assert.That(tile.PrimaryChat.CanResetBrowserSession, Is.True);
         }
 
-        tile.CompletePlatformSessionReset("UC1");
+        var resetRequestedAccountId = string.Empty;
+        tile.ResetPaneSessionRequested += (pane, accountId, _) =>
+        {
+            resetRequestedAccountId = accountId;
+            tile.CompletePaneSessionReset(pane, pane.Platform, accountId);
+        };
+
+        tile.PrimaryChat.ResetBrowserSessionCommand.Execute(null);
 
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(tile.PlatformChat.SelectedAccount?.BrowserProfile, Is.Null);
-            Assert.That(tile.PlatformChat.CanSignInBrowser, Is.True);
-            Assert.That(tile.PlatformChat.CanResetBrowserSession, Is.False);
-            Assert.That(tile.PlatformChat.ShowMessageInput, Is.True);
+            Assert.That(resetRequestedAccountId, Is.EqualTo("UC1"));
+            Assert.That(tile.PrimaryChat.SelectedAccount?.BrowserProfile, Is.Null);
+            Assert.That(tile.PrimaryChat.CanSignInBrowser, Is.True);
+            Assert.That(tile.PrimaryChat.CanResetBrowserSession, Is.False);
         }
     }
 
@@ -218,22 +222,23 @@ internal sealed class ChatImprovementsWpfTests
             displayStore,
             platformRegistry: registry,
             accountDirectories: [ytAccounts],
-            youtubeChatLogin: new StubYouTubeLoginDialog(EmbeddedYouTubeChatLoginResult.Canceled()),
-            youtubeAccountsStore: ytAccounts);
+            webChatLogin: new StubWebChatLoginDialog(PlatformWebChatLoginResult.Canceled()));
 
-        var option = tile.PlatformChat.AccountChoices.SingleOrDefault(o => o.Id == "UCB");
+        var option = tile.PrimaryChat.AccountChoices.SingleOrDefault(o => o.Id == "UCB");
         Assert.That(option, Is.Not.Null);
-        tile.PlatformChat.SelectedAccount = option;
-        Assert.That(tile.PlatformChat.CanSignInBrowser, Is.True);
+        tile.PrimaryChat.SelectedAccount = option;
+        Assert.That(tile.PrimaryChat.CanSignInBrowser, Is.True);
     }
 
-    [Test]
-    public void EmbeddedYouTubeChatLoginDialogViewModel_BlocksConfirmUntilBrowserReadyAndSignedIn()
+    [TestCase(StreamingPlatform.Twitch)]
+    [TestCase(StreamingPlatform.YouTube)]
+    public void EmbeddedPlatformChatLoginDialogViewModel_BlocksConfirmUntilBrowserReadyAndSignedIn(StreamingPlatform platform)
     {
-        var vm = new ViewModels.Dialogs.EmbeddedYouTubeChatLoginDialogViewModel(
+        var descriptor = PlatformWebChatDescriptors.ForPlatform(platform)!;
+        var vm = new ViewModels.Dialogs.EmbeddedPlatformChatLoginDialogViewModel(
             new StubShellLauncher(),
-            NullLogger<ViewModels.Dialogs.EmbeddedYouTubeChatLoginDialogViewModel>.Instance);
-        vm.Configure(new("UC1", "TheVSAKeeper"));
+            NullLogger<ViewModels.Dialogs.EmbeddedPlatformChatLoginDialogViewModel>.Instance);
+        vm.Configure(new(descriptor, "acc1", "TestAccount"));
 
         Assert.That(vm.ConfirmCommand.CanExecute(null), Is.False);
 
@@ -344,9 +349,9 @@ internal sealed class ChatImprovementsWpfTests
         public ChatSettings GetCurrent() => current;
     }
 
-    private sealed class StubYouTubeLoginDialog(EmbeddedYouTubeChatLoginResult result) : IEmbeddedYouTubeChatLoginDialog
+    private sealed class StubWebChatLoginDialog(PlatformWebChatLoginResult result) : IPlatformWebChatLoginDialog
     {
-        public Task<EmbeddedYouTubeChatLoginResult> SignInAsync(EmbeddedYouTubeChatLoginRequest request) => Task.FromResult(result);
+        public Task<PlatformWebChatLoginResult> SignInAsync(PlatformWebChatLoginRequest request) => Task.FromResult(result);
     }
 
     private sealed class StubTargetChannelProvider : ITargetChannelProvider

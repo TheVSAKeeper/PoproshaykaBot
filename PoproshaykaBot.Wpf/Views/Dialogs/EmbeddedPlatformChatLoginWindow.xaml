@@ -1,4 +1,4 @@
-﻿<Window x:Class="PoproshaykaBot.Wpf.Views.Dialogs.EmbeddedYouTubeChatLoginWindow"
+﻿<Window x:Class="PoproshaykaBot.Wpf.Views.Dialogs.EmbeddedPlatformChatLoginWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework"
@@ -10,7 +10,7 @@
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         mc:Ignorable="d"
-        d:DataContext="{d:DesignInstance vm:EmbeddedYouTubeChatLoginDialogViewModel}"
+        d:DataContext="{d:DesignInstance vm:EmbeddedPlatformChatLoginDialogViewModel}"
         Title="{Binding Title}"
         Height="760"
         Width="720"
@@ -69,7 +69,7 @@
                     <Button Style="{StaticResource Chrome.Button.Close}"
                             keepshell:ChromeAction.Action="Close"
                             ToolTip="Закрыть"
-                            AutomationProperties.Name="Закрыть окно входа YouTube">
+                            AutomationProperties.Name="{Binding CloseButtonName}">
                         <Path Data="M 0,0 L 10,10 M 10,0 L 0,10"
                               Style="{StaticResource Chrome.Glyph}" />
                     </Button>

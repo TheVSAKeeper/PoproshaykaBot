@@ -83,6 +83,27 @@ public sealed class TwitchChatPlatform(
         }
     }
 
+    public bool RequiresOnlineStreamForNativeChat => false;
+
+    public bool SupportsChatClutterBlocking => true;
+
+    public string NativeChatUnavailableHeading => "Канал не указан";
+
+    public string NativeChatUnavailableDescription => "Укажите канал в настройках Twitch, чтобы открыть чат.";
+
+    public string? BuildNativeChatUrl(StreamInfo? stream, string? targetChannelLogin, bool isDarkTheme)
+    {
+        var login = !string.IsNullOrWhiteSpace(stream?.UserLogin)
+            ? stream.UserLogin.Trim()
+            : !string.IsNullOrWhiteSpace(targetChannelLogin)
+                ? targetChannelLogin.Trim()
+                : ConfiguredChannel;
+
+        return string.IsNullOrWhiteSpace(login)
+            ? null
+            : $"https://www.twitch.tv/popout/{Uri.EscapeDataString(login)}/chat?popout=";
+    }
+
     public string? BuildStreamUrl(StreamInfo? stream = null)
     {
         var login = !string.IsNullOrWhiteSpace(stream?.UserLogin)

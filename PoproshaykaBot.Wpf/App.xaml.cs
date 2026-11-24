@@ -30,6 +30,7 @@ using PoproshaykaBot.Core.YouTube;
 using PoproshaykaBot.Wpf.Bootstrap;
 using PoproshaykaBot.Wpf.Infrastructure;
 using PoproshaykaBot.Wpf.Infrastructure.Diagnostics;
+using PoproshaykaBot.Wpf.Infrastructure.Platforms;
 using PoproshaykaBot.Wpf.Mcp;
 using PoproshaykaBot.Wpf.ViewModels;
 using PoproshaykaBot.Wpf.ViewModels.Diagnostics;
@@ -654,7 +655,9 @@ public partial class App : Application
         services.AddSingleton<IUnsavedChangesPrompt, UnsavedChangesPrompt>();
         services.AddSingleton<IOnboardingWizardLauncher, OnboardingWizardLauncher>();
         services.AddSingleton<IEmbeddedTwitchAuthDialog, EmbeddedTwitchAuthDialog>();
-        services.AddSingleton<IEmbeddedYouTubeChatLoginDialog, EmbeddedYouTubeChatLoginDialog>();
+        services.AddSingleton<IPlatformWebChatLoginDialog, EmbeddedPlatformChatLoginDialog>();
+        services.AddSingleton<IPlatformAccountLogin, TwitchAccountLogin>();
+        services.AddSingleton<IPlatformAccountLogin, YouTubeAccountLogin>();
         services.AddSingleton<ILegacyImportDialog, LegacyImportDialog>();
         services.AddSingleton<StreamMonitoringViewModel>();
         services.AddSingleton<IMainWindowController, MainWindowController>();
@@ -666,7 +669,7 @@ public partial class App : Application
         services.AddTransient<PollProfileEditDialogViewModel>();
         services.AddTransient<PollFromProfileDialogViewModel>();
         services.AddTransient<EmbeddedTwitchAuthDialogViewModel>();
-        services.AddTransient<EmbeddedYouTubeChatLoginDialogViewModel>();
+        services.AddTransient<EmbeddedPlatformChatLoginDialogViewModel>();
         services.AddTransient<MultistreamPlatformSetupDialogViewModel>();
         services.AddTransient<MultistreamChannelWizardDialogViewModel>();
 

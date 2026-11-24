@@ -817,7 +817,7 @@ public sealed class Stage3MultiChannelWpfTests
         public Task<EmbeddedTwitchAuthResult> AuthorizeAsync(EmbeddedTwitchAuthRequest request)
         {
             Assert.That((request.Role, request.CheckBroadcasterChannel), Is.EqualTo((PlatformAuthRole.Bot, false)));
-            var flow = new OAuthFlowResult("fake-token", "fake-refresh", [], "somebot", "90", 3600);
+            var flow = new OAuthFlowResult("fake-token", "fake-refresh", request.Scopes, "somebot", "90", 3600);
             return Task.FromResult(EmbeddedTwitchAuthResult.Completed(flow));
         }
     }

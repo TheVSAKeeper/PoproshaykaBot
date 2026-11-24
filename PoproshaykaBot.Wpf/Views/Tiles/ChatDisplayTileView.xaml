@@ -45,75 +45,66 @@
                     <Setter Property="Visibility" Value="{Binding DataContext.SelectedMode.IsSplit, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource BoolToVisibility}}" />
                 </Style>
                 <DataTemplate x:Key="ChatPaneHeader">
-                    <DockPanel Margin="7,1">
-                        <DockPanel.Style>
-                            <Style TargetType="DockPanel">
-                                <Style.Triggers>
-                                    <MultiDataTrigger>
-                                        <MultiDataTrigger.Conditions>
-                                            <Condition Binding="{Binding HasAccountChoices}" Value="False" />
-                                            <Condition Binding="{Binding DataContext.SelectedMode.IsSplit, RelativeSource={RelativeSource AncestorType=UserControl}}" Value="False" />
-                                        </MultiDataTrigger.Conditions>
-                                        <Setter Property="Visibility" Value="Collapsed" />
-                                    </MultiDataTrigger>
-                                </Style.Triggers>
-                            </Style>
-                        </DockPanel.Style>
-                        <TextBlock DockPanel.Dock="Left" Text="{Binding DisplayName}" Style="{StaticResource ChatPaneTitle}"
-                                   VerticalAlignment="Center" />
-                        <Button DockPanel.Dock="Right"
-                                Content="Войти в браузере"
-                                Command="{Binding SignInBrowserCommand}"
-                                Style="{StaticResource Button.Ghost}"
-                                Padding="6,1" MinHeight="22" Margin="6,0,0,0"
-                                FontSize="{DynamicResource Font.Size.S}"
-                                AutomationProperties.Name="Войти в браузерный чат YouTube"
-                                ToolTip="Войти в аккаунт Google внутри плитки для полного контроля и модерации чата YouTube"
-                                Visibility="{Binding CanSignInBrowser, Converter={StaticResource BoolToVisibility}}" />
-                        <Button DockPanel.Dock="Right"
-                                Content="Выйти"
-                                Command="{Binding ResetBrowserSessionCommand}"
-                                Style="{StaticResource Button.Ghost}"
-                                Padding="6,1" MinHeight="22" Margin="6,0,0,0"
-                                FontSize="{DynamicResource Font.Size.S}"
-                                AutomationProperties.Name="Сбросить веб-сессию YouTube"
-                                ToolTip="Сбросить браузерную сессию YouTube и вернуться к отправке через API"
-                                Visibility="{Binding CanResetBrowserSession, Converter={StaticResource BoolToVisibility}}" />
-                        <ComboBox ItemsSource="{Binding AccountChoices}"
-                                  SelectedItem="{Binding SelectedAccount, Mode=TwoWay}"
-                                  TextSearch.TextPath="Label"
-                                  AutomationProperties.Name="Аккаунт чата"
-                                  ToolTip="{Binding SelectedAccount.Label}"
-                                  Style="{StaticResource ComboBox.Form}"
-                                  HorizontalAlignment="Left" MaxWidth="240"
-                                  MinHeight="22" Padding="5,2"
-                                  Background="Transparent"
-                                  FontSize="{DynamicResource Font.Size.S}"
-                                  Visibility="{Binding HasAccountChoices, Converter={StaticResource BoolToVisibility}}">
-                            <ComboBox.ItemTemplate>
-                                <DataTemplate>
-                                    <TextBlock Text="{Binding Label}"
-                                               TextWrapping="NoWrap"
-                                               TextTrimming="CharacterEllipsis" />
-                                </DataTemplate>
-                            </ComboBox.ItemTemplate>
-                        </ComboBox>
-                    </DockPanel>
-                </DataTemplate>
-                <DataTemplate x:Key="ChatMessageInput">
-                    <StackPanel Margin="6,4"
-                                Visibility="{Binding ShowMessageInput, Converter={StaticResource BoolToVisibility}}">
-                        <DockPanel>
-                            <Button DockPanel.Dock="Right" Content="Через API" Command="{Binding SendMessageCommand}"
-                                    AutomationProperties.Name="Отправить сообщение через API"
-                                    ToolTip="Отправить от выбранного аккаунта приложения"
-                                    Style="{StaticResource Button.Secondary}" Margin="6,0,0,0" />
-                            <TextBox Text="{Binding Message, UpdateSourceTrigger=PropertyChanged}"
-                                     AutomationProperties.Name="Сообщение в чат" />
+                    <StackPanel>
+                        <DockPanel Margin="7,1">
+                            <DockPanel.Style>
+                                <Style TargetType="DockPanel">
+                                    <Style.Triggers>
+                                        <MultiDataTrigger>
+                                            <MultiDataTrigger.Conditions>
+                                                <Condition Binding="{Binding HasAccountChoices}" Value="False" />
+                                                <Condition Binding="{Binding DataContext.SelectedMode.IsSplit, RelativeSource={RelativeSource AncestorType=UserControl}}" Value="False" />
+                                            </MultiDataTrigger.Conditions>
+                                            <Setter Property="Visibility" Value="Collapsed" />
+                                        </MultiDataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </DockPanel.Style>
+                            <TextBlock DockPanel.Dock="Left" Text="{Binding DisplayName}" Style="{StaticResource ChatPaneTitle}"
+                                       VerticalAlignment="Center" />
+                            <Button DockPanel.Dock="Right"
+                                    Content="Войти в браузере"
+                                    Command="{Binding SignInBrowserCommand}"
+                                    Style="{StaticResource Button.Ghost}"
+                                    Padding="6,1" MinHeight="22" Margin="6,0,0,0"
+                                    FontSize="{DynamicResource Font.Size.S}"
+                                    AutomationProperties.Name="{Binding DisplayName, StringFormat='Войти в веб-чат {0}'}"
+                                    ToolTip="{Binding DisplayName, StringFormat='Войти в аккаунт {0} внутри плитки для отправки сообщений и модерации чата'}"
+                                    Visibility="{Binding CanSignInBrowser, Converter={StaticResource BoolToVisibility}}" />
+                            <Button DockPanel.Dock="Right"
+                                    Content="Выйти"
+                                    Command="{Binding ResetBrowserSessionCommand}"
+                                    Style="{StaticResource Button.Ghost}"
+                                    Padding="6,1" MinHeight="22" Margin="6,0,0,0"
+                                    FontSize="{DynamicResource Font.Size.S}"
+                                    AutomationProperties.Name="{Binding DisplayName, StringFormat='Сбросить веб-сессию {0}'}"
+                                    ToolTip="{Binding DisplayName, StringFormat='Сбросить браузерную сессию {0}'}"
+                                    Visibility="{Binding CanResetBrowserSession, Converter={StaticResource BoolToVisibility}}" />
+                            <ComboBox ItemsSource="{Binding AccountChoices}"
+                                      SelectedItem="{Binding SelectedAccount, Mode=TwoWay}"
+                                      TextSearch.TextPath="Label"
+                                      AutomationProperties.Name="Аккаунт чата"
+                                      ToolTip="{Binding SelectedAccount.Label}"
+                                      Style="{StaticResource ComboBox.Form}"
+                                      HorizontalAlignment="Left" MaxWidth="240"
+                                      MinHeight="22" Padding="5,2"
+                                      Background="Transparent"
+                                      FontSize="{DynamicResource Font.Size.S}"
+                                      Visibility="{Binding HasAccountChoices, Converter={StaticResource BoolToVisibility}}">
+                                <ComboBox.ItemTemplate>
+                                    <DataTemplate>
+                                        <TextBlock Text="{Binding Label}"
+                                                   TextWrapping="NoWrap"
+                                                   TextTrimming="CharacterEllipsis" />
+                                    </DataTemplate>
+                                </ComboBox.ItemTemplate>
+                            </ComboBox>
                         </DockPanel>
-                        <TextBlock Text="{Binding MessageStatus}" Style="{StaticResource TextBlock.Subtle}"
+                        <TextBlock Text="{Binding StatusNotice}"
+                                   Style="{StaticResource TextBlock.Subtle}"
                                    TextWrapping="Wrap"
-                                   Visibility="{Binding MessageStatus, Converter={StaticResource NullToVisibility}}" />
+                                   Margin="7,2,7,2"
+                                   Visibility="{Binding StatusNotice, Converter={StaticResource NullToVisibility}}" />
                     </StackPanel>
                 </DataTemplate>
             </Grid.Resources>
@@ -139,10 +130,9 @@
                         </Style.Triggers>
                     </Style>
                 </UniformGrid.Style>
-                <DockPanel DataContext="{Binding TwitchChat}" ClipToBounds="True"
+                <DockPanel DataContext="{Binding PrimaryChat}" ClipToBounds="True"
                            Visibility="{Binding IsShown, Converter={StaticResource BoolToVisibility}}">
                     <ContentPresenter DockPanel.Dock="Top" Content="{Binding}" ContentTemplate="{StaticResource ChatPaneHeader}" />
-                    <ContentPresenter DockPanel.Dock="Bottom" Content="{Binding}" ContentTemplate="{StaticResource ChatMessageInput}" />
                     <Grid>
                         <wv2:WebView2 x:Name="WebView" Style="{StaticResource ChatWebView}"
                                       ZoomFactor="{Binding DataContext.ZoomFactor, RelativeSource={RelativeSource AncestorType=UserControl}, Mode=TwoWay}" />
@@ -150,10 +140,9 @@
                                           Visibility="{Binding HasFallback, Converter={StaticResource BoolToVisibility}}" />
                     </Grid>
                 </DockPanel>
-                <DockPanel DataContext="{Binding PlatformChat}" ClipToBounds="True"
+                <DockPanel DataContext="{Binding SecondaryChat}" ClipToBounds="True"
                            Visibility="{Binding IsShown, Converter={StaticResource BoolToVisibility}}">
                     <ContentPresenter DockPanel.Dock="Top" Content="{Binding}" ContentTemplate="{StaticResource ChatPaneHeader}" />
-                    <ContentPresenter DockPanel.Dock="Bottom" Content="{Binding}" ContentTemplate="{StaticResource ChatMessageInput}" />
                     <Grid>
                         <wv2:WebView2 x:Name="PlatformWebView" Style="{StaticResource ChatWebView}"
                                       ZoomFactor="{Binding DataContext.ZoomFactor, RelativeSource={RelativeSource AncestorType=UserControl}, Mode=TwoWay}" />

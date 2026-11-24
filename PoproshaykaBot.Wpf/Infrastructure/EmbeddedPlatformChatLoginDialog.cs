@@ -5,26 +5,26 @@ using PoproshaykaBot.Wpf.Views.Dialogs;
 
 namespace PoproshaykaBot.Wpf.Infrastructure;
 
-public sealed class EmbeddedYouTubeChatLoginDialog(
+public sealed class EmbeddedPlatformChatLoginDialog(
     IServiceScopeFactory scopeFactory,
-    ILogger<EmbeddedYouTubeChatLoginDialog> logger) : IEmbeddedYouTubeChatLoginDialog
+    ILogger<EmbeddedPlatformChatLoginDialog> logger) : IPlatformWebChatLoginDialog
 {
-    public Task<EmbeddedYouTubeChatLoginResult> SignInAsync(EmbeddedYouTubeChatLoginRequest request)
+    public Task<PlatformWebChatLoginResult> SignInAsync(PlatformWebChatLoginRequest request)
     {
         ArgumentNullException.ThrowIfNull(request);
 
         if (App.IsHeadless)
         {
-            logger.LogWarning("Встроенный вход YouTube подавлен в headless-режиме");
-            return Task.FromResult(EmbeddedYouTubeChatLoginResult.Unavailable(
+            logger.LogWarning("Встроенный вход веб-чата {Platform} подавлен в headless-режиме", request.Descriptor.PlatformDisplayName);
+            return Task.FromResult(PlatformWebChatLoginResult.Unavailable(
                 "Встроенный вход недоступен в автоматическом режиме."));
         }
 
         using var scope = scopeFactory.CreateScope();
-        var viewModel = scope.ServiceProvider.GetRequiredService<EmbeddedYouTubeChatLoginDialogViewModel>();
+        var viewModel = scope.ServiceProvider.GetRequiredService<EmbeddedPlatformChatLoginDialogViewModel>();
         viewModel.Configure(request);
 
-        var window = new EmbeddedYouTubeChatLoginWindow(viewModel)
+        var window = new EmbeddedPlatformChatLoginWindow(viewModel)
         {
             Owner = DialogOwner.Resolve(),
         };

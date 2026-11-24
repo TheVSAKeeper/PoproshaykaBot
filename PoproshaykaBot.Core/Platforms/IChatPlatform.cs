@@ -36,4 +36,17 @@ public interface IChatPlatform
     string? BuildStreamUrl(StreamInfo? stream = null) => null;
 
     string? BuildNativeChatUrl(StreamInfo stream) => null;
+
+    bool RequiresOnlineStreamForNativeChat => true;
+
+    bool SupportsChatClutterBlocking => false;
+
+    bool AppliesPreferredColorScheme => false;
+
+    string NativeChatUnavailableHeading => "Чат эфира недоступен";
+
+    string NativeChatUnavailableDescription => "Чат появится, когда у выбранного канала начнётся эфир с доступным чатом.";
+
+    string? BuildNativeChatUrl(StreamInfo? stream, string? targetChannelLogin, bool isDarkTheme) =>
+        stream is not null ? BuildNativeChatUrl(stream) : null;
 }

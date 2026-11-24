@@ -104,46 +104,10 @@ public sealed class YouTubeAccountsStore : RoleAccountsStoreBase<YouTubeAccounts
     public override (IReadOnlyList<(PlatformAuthRole Role, string ContextId)> Removed, bool Written) RemoveAccount(string accountId) =>
         RemoveAccountCore(accountId, YouTubeOAuthRoleHelpers.ClearAccountInPlace);
 
-    public bool SetBrowserProfile(string accountId, string? profileName)
-    {
-        if (string.IsNullOrWhiteSpace(accountId))
-        {
-            return false;
-        }
+    public override bool SupportsChatBrowserProfile => true;
 
-        var normalizedId = accountId.Trim();
-        var normalizedProfile = string.IsNullOrWhiteSpace(profileName) ? null : profileName.Trim();
-        if (normalizedProfile is not null && !Guid.TryParseExact(normalizedProfile, "N", out _))
-        {
-            throw new ArgumentException("Имя профиля браузера должно быть 32-символьным идентификатором.", nameof(profileName));
-        }
-
-        var updated = false;
-        var written = MutateFile(state =>
-        {
-            foreach (var role in PlatformAuthRoles.Active)
-            {
-                if (GetAccount(state, role) is { } defaultAccount
-                    && string.Equals(defaultAccount.ChannelId, normalizedId, StringComparison.Ordinal))
-                {
-                    defaultAccount.BrowserProfileName = normalizedProfile;
-                    updated = true;
-                }
-            }
-
-            foreach (var context in GetContexts(state))
-            {
-                if (context.Account is not null
-                    && string.Equals(context.Account.ChannelId, normalizedId, StringComparison.Ordinal))
-                {
-                    context.Account.BrowserProfileName = normalizedProfile;
-                    updated = true;
-                }
-            }
-        });
-
-        return updated && written;
-    }
+    public bool SetBrowserProfile(string accountId, string? profileName) =>
+        SetChatBrowserProfile(accountId, profileName);
 
     protected override YouTubeAccountSettings? GetAccount(YouTubeAccountsFileDto state, PlatformAuthRole role)
     {
@@ -184,6 +148,9 @@ public sealed class YouTubeAccountsStore : RoleAccountsStoreBase<YouTubeAccounts
         Guid.TryParseExact(account.BrowserProfileName, "N", out var profileId)
             ? new(WebView2UserDataFolders.ResolveYouTubeAccounts(), profileId.ToString("N"))
             : null;
+
+    protected override void SetChatBrowserProfileName(YouTubeAccountSettings account, string? profileName) =>
+        account.BrowserProfileName = profileName;
 
     protected override void CopyAccountFields(YouTubeAccountSettings source, YouTubeAccountSettings target)
     {

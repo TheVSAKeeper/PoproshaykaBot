@@ -12,7 +12,6 @@ using PoproshaykaBot.Core.Settings;
 using PoproshaykaBot.Core.Settings.Stores;
 using PoproshaykaBot.Core.Streaming;
 using PoproshaykaBot.Core.Twitch.Auth;
-using PoproshaykaBot.Core.Twitch.Chat;
 using PoproshaykaBot.Core.YouTube.Auth;
 using PoproshaykaBot.Wpf.Bootstrap;
 using PoproshaykaBot.Wpf.Infrastructure;
@@ -23,25 +22,18 @@ namespace PoproshaykaBot.Wpf.ViewModels.Settings;
 public sealed partial class PlatformAccountsSectionViewModel : ObservableObject
 {
     private readonly ChannelCatalogStore _catalogStore;
-    private readonly AccountsStore? _twitchAccountsStore;
-    private readonly YouTubeAccountsStore? _youtubeAccountsStore;
-    private readonly ITwitchOAuthService? _twitchOAuth;
-    private readonly IYouTubeOAuthService? _youtubeOAuth;
     private readonly SettingsManager? _settingsManager;
     private readonly YouTubeSettingsStore? _youtubeSettingsStore;
-    private readonly IShellLauncher? _shellLauncher;
+    private readonly YouTubeAccountsStore? _youtubeAccountsStore;
     private readonly IDialogService? _dialogService;
     private readonly IEventBus? _eventBus;
     private readonly TimeProvider _timeProvider;
-    private readonly IEmbeddedTwitchAuthDialog? _embeddedTwitchAuth;
     private readonly ILogger<PlatformAccountsSectionViewModel>? _logger;
     private readonly IChatPlatformRegistry? _platformRegistry;
     private readonly IReadOnlyDictionary<StreamingPlatform, IPlatformAccountDirectory> _accountDirectories;
     private readonly IReadOnlyDictionary<StreamingPlatform, IPlatformAccountLogin> _accountLogins;
     private readonly IPlatformAuthRegistry? _authRegistry;
-
-    private OAuthSettingsViewModel? _twitchCredentials;
-    private YouTubeSettingsSectionViewModel? _youtubeCredentials;
+    private readonly Dictionary<StreamingPlatform, Func<string?>> _unsavedCredentialChecks = [];
     private readonly Dictionary<GrantDraftKey, GrantDraft> _unsavedDrafts = [];
 
     [ObservableProperty]
@@ -84,28 +76,34 @@ public sealed partial class PlatformAccountsSectionViewModel : ObservableObject
         IChatPlatformRegistry? platformRegistry = null,
         IEnumerable<IPlatformAccountDirectory>? accountDirectories = null,
         IEnumerable<IPlatformAccountLogin>? accountLogins = null,
-        IPlatformAuthRegistry? authRegistry = null)
+        IPlatformAuthRegistry? authRegistry = null,
+        IPlatformWebChatLoginDialog? webChatLoginDialog = null)
     {
         ArgumentNullException.ThrowIfNull(catalogStore);
         _catalogStore = catalogStore;
-        _twitchAccountsStore = twitchAccountsStore;
-        _youtubeAccountsStore = youtubeAccountsStore;
-        _twitchOAuth = twitchOAuth;
-        _youtubeOAuth = youtubeOAuth;
         _settingsManager = settingsManager;
         _youtubeSettingsStore = youtubeSettingsStore;
-        _shellLauncher = shellLauncher;
+        _youtubeAccountsStore = youtubeAccountsStore;
         _dialogService = dialogService;
         _eventBus = eventBus;
         _timeProvider = timeProvider ?? TimeProvider.System;
-        _embeddedTwitchAuth = embeddedTwitchAuth;
         _logger = logger;
         _platformRegistry = platformRegistry;
-        _accountDirectories = (accountDirectories ?? [])
-            .Concat(new IPlatformAccountDirectory?[] { twitchAccountsStore, youtubeAccountsStore }.OfType<IPlatformAccountDirectory>())
-            .DistinctBy(static directory => directory.Platform)
-            .ToDictionary(static directory => directory.Platform);
-        _accountLogins = (accountLogins ?? []).ToDictionary(static login => login.Platform);
+        _accountDirectories = PlatformAccountLoginDefaults.BuildDirectories(
+            accountDirectories, twitchAccountsStore, youtubeAccountsStore);
+        _accountLogins = PlatformAccountLoginDefaults.Build(
+            accountLogins,
+            settingsManager,
+            twitchAccountsStore,
+            twitchOAuth,
+            youtubeSettingsStore,
+            youtubeAccountsStore,
+            youtubeOAuth,
+            shellLauncher,
+            _timeProvider,
+            embeddedTwitchAuth,
+            webChatLoginDialog,
+            eventBus);
         _authRegistry = authRegistry;
     }
 
@@ -126,25 +124,44 @@ public sealed partial class PlatformAccountsSectionViewModel : ObservableObject
 
     public bool SupportsAccounts => SupportsAccountsFor(SelectedPlatform);
 
-    public bool SupportsBrowserToggle => _accountLogins.GetValueOrDefault(SelectedPlatform)?.SupportsEmbeddedBrowser
-        ?? (SelectedPlatform == StreamingPlatform.Twitch && _embeddedTwitchAuth is not null);
+    public bool SupportsBrowserToggle => _accountLogins.GetValueOrDefault(SelectedPlatform)?.SupportsEmbeddedBrowser == true;
 
     public bool CanAuthorize => CanAuthorizePlatform(SelectedPlatform);
 
     internal void SetCredentialDrafts(OAuthSettingsViewModel? twitch, YouTubeSettingsSectionViewModel? youtube)
     {
-        _twitchCredentials = twitch;
-        _youtubeCredentials = youtube;
+        _unsavedCredentialChecks.Clear();
+        if (twitch is not null && _settingsManager is not null)
+        {
+            _unsavedCredentialChecks[StreamingPlatform.Twitch] = () =>
+            {
+                var settings = _settingsManager.Current.Twitch;
+                return twitch.ClientId.Trim() != settings.ClientId
+                    || twitch.ClientSecret.Trim() != settings.ClientSecret
+                    || twitch.RedirectUri.Trim() != settings.RedirectUri
+                    ? "Сначала сохраните новые реквизиты во вкладке «Параметры и доступ», затем повторите вход."
+                    : null;
+            };
+        }
+
+        if (youtube is not null && _youtubeSettingsStore is not null && _youtubeAccountsStore is not null)
+        {
+            _unsavedCredentialChecks[StreamingPlatform.YouTube] = () =>
+            {
+                var settings = _youtubeSettingsStore.Load();
+                var secret = _youtubeAccountsStore.LoadClientSecret();
+                return youtube.ClientId.Trim() != settings.ClientId || youtube.ClientSecret.Trim() != secret
+                    ? "Сначала сохраните новые реквизиты во вкладке «Параметры и доступ», затем повторите вход."
+                    : null;
+            };
+        }
     }
 
     public bool SupportsAccountsFor(StreamingPlatform? platform) =>
         platform is { } id && _accountDirectories.ContainsKey(id);
 
     private bool CanAuthorizePlatform(StreamingPlatform platform) =>
-        _accountLogins.GetValueOrDefault(platform)?.CanAuthorize ?? (
-        _shellLauncher is not null
-        && ((platform == StreamingPlatform.Twitch && _twitchOAuth is not null && _twitchAccountsStore is not null && _settingsManager is not null)
-            || (platform == StreamingPlatform.YouTube && _youtubeOAuth is not null && _youtubeAccountsStore is not null && _youtubeSettingsStore is not null)));
+        _accountLogins.GetValueOrDefault(platform)?.CanAuthorize == true;
 
     partial void OnSelectedPlatformChanged(StreamingPlatform value)
     {
@@ -185,21 +202,29 @@ public sealed partial class PlatformAccountsSectionViewModel : ObservableObject
         }
 
         var platform = SelectedPlatform;
-        var platformAccounts = ListPlatformAccounts(platform);
+        var directory = _accountDirectories[platform];
+        var login = _accountLogins.GetValueOrDefault(platform);
+        var platformAccounts = directory.ListAccounts();
         var channels = _catalogStore.Load().Channels
             .Where(c => c.Platform == platform && c.IsConfigured)
             .ToArray();
         var now = _timeProvider.GetUtcNow();
         var canAuth = CanAuthorizePlatform(platform);
+        var supportsWebChat = directory.SupportsChatBrowserProfile && login?.SupportsWebChatSignIn == true;
+        var oauthMethodTitle = login?.OAuthMethod.MethodTitle;
 
         foreach (var account in platformAccounts)
         {
-            var grants = BuildGrantViewModels(platform, account, channels, now, canAuth);
+            var grants = BuildGrantViewModels(platform, account, channels, now, canAuth, login);
             foreach (var grant in grants)
             {
                 grant.IsPermissionsExpanded = expandedPermissions.Contains(new(grant.Platform, grant.Role, grant.ContextId));
             }
+
             var assignedSummary = BuildAssignedChannelsSummary(account.Key.AccountId, channels);
+            var hasWebChatSession = account.Authorizations.Any(static auth => auth.ChatBrowserProfile is not null);
+            var (apiMethod, webChatMethod) = BuildAuthMethodDescriptors(grants, oauthMethodTitle, supportsWebChat, hasWebChatSession);
+
             var card = new PlatformAccountCardViewModel(
                 platform,
                 account.Key.AccountId,
@@ -207,15 +232,55 @@ public sealed partial class PlatformAccountsSectionViewModel : ObservableObject
                 assignedSummary,
                 grants,
                 canAuth,
+                supportsWebChat,
+                hasWebChatSession,
+                apiMethod,
+                webChatMethod,
+                oauthMethodTitle,
                 AddRoleForAccountAsync,
-                SignOutAccountAsync)
+                SignOutAccountAsync,
+                SignInWebChatAsync,
+                ResetWebChatAsync)
             {
-                CanRemove = _accountDirectories[platform].CanRemove,
+                CanRemove = directory.CanRemove,
             };
             Accounts.Add(card);
         }
 
         NotifyCountChanged();
+    }
+
+    private static (PlatformAuthMethodDescriptor ApiMethod, PlatformAuthMethodDescriptor? WebChatMethod) BuildAuthMethodDescriptors(
+        IReadOnlyList<PlatformAccountGrantViewModel> grants,
+        string? oauthMethodTitle,
+        bool supportsWebChat,
+        bool hasWebChatSession)
+    {
+        var anyReady = grants.Any(static g => g.TokenStatusSeverity == StatusSeverity.Success);
+        var anyAttention = grants.Any(static g => g.TokenStatusSeverity == StatusSeverity.Warning);
+        var anyInfo = grants.Any(static g => g.TokenStatusSeverity == StatusSeverity.Info);
+        var rolesSummary = grants.Count > 0
+            ? string.Join(", ", grants.Select(static g => g.RoleTitle))
+            : "нет ролей";
+
+        var (apiStatus, apiText) = anyAttention
+            ? (PlatformAuthMethodStatus.Attention, $"{rolesSummary} · требуется внимание")
+            : anyReady
+                ? (PlatformAuthMethodStatus.Ready, $"{rolesSummary} · токены готовы")
+                : anyInfo
+                    ? (PlatformAuthMethodStatus.Ready, $"{rolesSummary} · обновится по refresh-токену")
+                    : (PlatformAuthMethodStatus.Missing, "Токены отсутствуют");
+
+        var apiMethod = new PlatformAuthMethodDescriptor("api-oauth", "API / OAuth", apiStatus, apiText, oauthMethodTitle);
+        PlatformAuthMethodDescriptor? webChatMethod = supportsWebChat
+            ? new(
+                "web-chat",
+                "Веб-чат",
+                hasWebChatSession ? PlatformAuthMethodStatus.Ready : PlatformAuthMethodStatus.Missing,
+                hasWebChatSession ? "Подключён" : "Не подключён")
+            : null;
+
+        return (apiMethod, webChatMethod);
     }
 
     internal void RefreshIfPlatform(StreamingPlatform platform) => RefreshIfPlatform(platform, dropDraft: null);
@@ -312,6 +377,17 @@ public sealed partial class PlatformAccountsSectionViewModel : ObservableObject
             return;
         }
 
+        if (_unsavedCredentialChecks.TryGetValue(platform, out var check) && check() is { } unsavedWarning)
+        {
+            SetNotice(unsavedWarning, StatusSeverity.Warning);
+            return;
+        }
+
+        if (!_accountLogins.TryGetValue(platform, out var login))
+        {
+            return;
+        }
+
         IsAuthorizing = true;
         SetNotice("Ожидаем вход на площадке…", StatusSeverity.Info);
         if (combined)
@@ -325,15 +401,7 @@ public sealed partial class PlatformAccountsSectionViewModel : ObservableObject
 
         try
         {
-            var succeeded = _accountLogins.TryGetValue(platform, out var login)
-                ? await AuthorizeWithAdapterAsync(login, combined, role, targetAccountId, preferredContextId, customScopes)
-                : platform switch
-            {
-                StreamingPlatform.Twitch => await AuthorizeTwitchAsync(combined, role, targetAccountId, preferredContextId, customScopes),
-                StreamingPlatform.YouTube => await AuthorizeYouTubeAsync(combined, role, targetAccountId, preferredContextId),
-                _ => false,
-            };
-
+            var succeeded = await AuthorizeWithAdapterAsync(login, combined, role, targetAccountId, preferredContextId, customScopes);
             if (succeeded)
             {
                 RefreshIfPlatform(platform);
@@ -355,13 +423,24 @@ public sealed partial class PlatformAccountsSectionViewModel : ObservableObject
         }
     }
 
-    private async Task<bool> AuthorizeWithAdapterAsync(IPlatformAccountLogin login, bool combined, PlatformAuthRole role,
-        string? targetAccountId, string? preferredContextId, string[]? customScopes)
+    private async Task<bool> AuthorizeWithAdapterAsync(
+        IPlatformAccountLogin login,
+        bool combined,
+        PlatformAuthRole role,
+        string? targetAccountId,
+        string? preferredContextId,
+        string[]? customScopes)
     {
-        var result = await login.AuthorizeAsync(new(combined ? PlatformAuthRoles.Active : [role],
-            targetAccountId, preferredContextId, customScopes ?? [], UseSystemBrowser));
+        var result = await login.AuthorizeAsync(new(
+            combined ? PlatformAuthRoles.Active : [role],
+            targetAccountId,
+            preferredContextId,
+            customScopes ?? [],
+            UseSystemBrowser));
+
         foreach (var grant in result.ChangedAuthorizations)
         {
+            DropDraftsFor(login.Platform, grant.Role, [grant.ContextId]);
             PublishAuthorizationRefreshed(login.Platform, grant.Role, grant.ContextId);
         }
 
@@ -376,289 +455,114 @@ public sealed partial class PlatformAccountsSectionViewModel : ObservableObject
         return result.ChangedAuthorizations.Count > 0;
     }
 
-    private async Task<bool> AuthorizeTwitchAsync(
-        bool combined,
-        PlatformAuthRole role,
-        string? targetAccountId,
-        string? preferredContextId,
-        string[]? customScopes)
+    private async Task SignInWebChatAsync(PlatformAccountCardViewModel card)
     {
-        if (_settingsManager is null || _twitchOAuth is null || _twitchAccountsStore is null || _shellLauncher is null)
+        if (!_accountLogins.TryGetValue(card.Platform, out var login) || !login.SupportsWebChatSignIn)
         {
-            return false;
+            return;
         }
 
-        var settings = _settingsManager.Current.Twitch;
-        if (_twitchCredentials is { } twitch
-            && (twitch.ClientId.Trim() != settings.ClientId
-                || twitch.ClientSecret.Trim() != settings.ClientSecret
-                || twitch.RedirectUri.Trim() != settings.RedirectUri))
+        var result = await login.SignInWebChatAsync(card.AccountId, card.DisplayName);
+        if (result.Outcome != PlatformWebChatLoginOutcome.Completed)
         {
-            SetNotice("Сначала сохраните новые реквизиты во вкладке «Параметры и доступ», затем повторите вход.", StatusSeverity.Warning);
-            return false;
-        }
-
-        if (string.IsNullOrWhiteSpace(settings.ClientId) || string.IsNullOrWhiteSpace(settings.ClientSecret))
-        {
-            SetNotice("Заполните и сохраните ключи во вкладке «Параметры и доступ».", StatusSeverity.Warning);
-            return false;
-        }
-
-        string[] scopes = combined
-            ? [.. TwitchScopes.CombinedDefault]
-            : customScopes is { Length: > 0 }
-                ? customScopes
-                : role == PlatformAuthRole.Bot
-                    ? [.. TwitchScopes.BotRequired, .. TwitchScopes.BotOptional]
-                    : [.. TwitchScopes.BroadcasterRequired];
-
-        OAuthFlowResult? flow = null;
-        if (!UseSystemBrowser && _embeddedTwitchAuth is not null)
-        {
-            var embedded = await _embeddedTwitchAuth.AuthorizeAsync(new(role, settings.ClientId, settings.ClientSecret,
-                scopes, settings.RedirectUri, CheckBroadcasterChannel: false));
-            if (embedded.Outcome is EmbeddedTwitchAuthOutcome.Canceled or EmbeddedTwitchAuthOutcome.Failed)
+            if (!string.IsNullOrWhiteSpace(result.Message))
             {
-                SetNotice(embedded.Message, embedded.Outcome == EmbeddedTwitchAuthOutcome.Failed ? StatusSeverity.Error : StatusSeverity.Info);
-                return false;
+                SetNotice(result.Message, result.Severity);
             }
 
-            flow = embedded.Flow;
+            return;
         }
 
-        flow ??= await _twitchOAuth.StartOAuthFlowToDraftAsync(role, settings.ClientId, settings.ClientSecret, scopes,
-            settings.RedirectUri, url => _shellLauncher.Open(url), checkBroadcasterChannel: false);
-
-        if (string.IsNullOrWhiteSpace(flow.UserId))
+        PublishAccountRefreshed(card);
+        RefreshIfPlatform(card.Platform);
+        AccountsChanged?.Invoke(this, card.Platform);
+        if (!string.IsNullOrWhiteSpace(result.Message))
         {
-            SetNotice("Twitch не сообщил ID аккаунта.", StatusSeverity.Error);
-            return false;
+            SetNotice(result.Message, result.Severity);
         }
-
-        var id = flow.UserId.Trim();
-        if (!combined && !string.IsNullOrWhiteSpace(targetAccountId)
-            && !string.Equals(targetAccountId, id, StringComparison.Ordinal))
-        {
-            SetNotice($"Вы вошли под другим аккаунтом («{flow.Login}»), а права запрашивались для другого аккаунта. Изменения не сохранены.", StatusSeverity.Warning);
-            return false;
-        }
-
-        var now = _timeProvider.GetUtcNow();
-        var grantedScopes = flow.Scopes ?? [];
-        List<(PlatformAuthRole Role, string ContextId, string Label, TwitchAccountSettings Account)> entriesToSave = [];
-        List<PlatformAuthRole> missingRoles = [];
-
-        if (combined)
-        {
-            foreach (var targetRole in new[] { PlatformAuthRole.Bot, PlatformAuthRole.Broadcaster })
-            {
-                if (!HasRequiredTwitchScopes(targetRole, grantedScopes))
-                {
-                    missingRoles.Add(targetRole);
-                    continue;
-                }
-
-                var contextId = ResolveContextForSave(StreamingPlatform.Twitch, targetRole, id, preferredContextId: null);
-                var account = new TwitchAccountSettings();
-                flow.ApplyTo(account, now);
-                entriesToSave.Add((targetRole, contextId, flow.Login, account));
-            }
-
-            if (entriesToSave.Count == 0)
-            {
-                SetNotice("Twitch не выдал обязательные права ни для бота, ни для стримера. Изменения не сохранены.", StatusSeverity.Warning);
-                return false;
-            }
-        }
-        else
-        {
-            if (!HasRequiredTwitchScopes(role, grantedScopes))
-            {
-                SetNotice($"Twitch не выдал обязательные права для роли «{PlatformAuthRoles.Describe(role)}». Изменения не сохранены.", StatusSeverity.Warning);
-                return false;
-            }
-
-            var contextId = ResolveContextForSave(StreamingPlatform.Twitch, role, id, preferredContextId);
-            var account = new TwitchAccountSettings();
-            flow.ApplyTo(account, now);
-            entriesToSave.Add((role, contextId, flow.Login, account));
-        }
-
-        var written = _twitchAccountsStore.UpsertContexts(entriesToSave);
-
-        foreach (var saved in entriesToSave)
-        {
-            DropDraftsFor(StreamingPlatform.Twitch, saved.Role, [saved.ContextId]);
-            _twitchOAuth.ResetRetryState(saved.Role, saved.ContextId);
-            PublishAuthorizationRefreshed(StreamingPlatform.Twitch, saved.Role, saved.ContextId);
-        }
-
-        if (!written)
-        {
-            SetNotice("Аккаунт действует до перезапуска. Записать авторизацию в файл не удалось.", StatusSeverity.Warning);
-            return true;
-        }
-
-        if (!entriesToSave.All(entry => IsAuthorizationPersisted(StreamingPlatform.Twitch, entry.Role, entry.ContextId, id)))
-        {
-            SetNotice("Не удалось подтвердить запись авторизации Twitch на диске.", StatusSeverity.Warning);
-            return true;
-        }
-
-        if (combined && missingRoles.Count > 0)
-        {
-            var savedRoleText = PlatformAuthRoles.Describe(entriesToSave[0].Role).ToLowerInvariant();
-            var missingRoleText = PlatformAuthRoles.Describe(missingRoles[0]).ToLowerInvariant();
-            SetNotice($"Аккаунт «{flow.Login}» подключён только как {savedRoleText}: Twitch не выдал обязательные права для роли «{missingRoleText}».", StatusSeverity.Warning);
-            return true;
-        }
-
-        var roleText = combined ? "для бота и стримера" : $"как {PlatformAuthRoles.Describe(role).ToLowerInvariant()}";
-        SetNotice($"Аккаунт «{flow.Login}» подключён ({roleText}). Запись проверена.", StatusSeverity.Success);
-        return true;
     }
 
-    private async Task<bool> AuthorizeYouTubeAsync(
-        bool combined,
-        PlatformAuthRole role,
-        string? targetAccountId,
-        string? preferredContextId)
+    private Task ResetWebChatAsync(PlatformAccountCardViewModel card)
     {
-        if (_youtubeSettingsStore is null || _youtubeOAuth is null || _youtubeAccountsStore is null || _shellLauncher is null)
+        if (!_accountDirectories.TryGetValue(card.Platform, out var directory) || !directory.SupportsChatBrowserProfile)
         {
-            return false;
+            return Task.CompletedTask;
         }
 
-        var settings = _youtubeSettingsStore.Load();
-        var secret = _youtubeAccountsStore.LoadClientSecret();
-        if (_youtubeCredentials is { } youtube
-            && (youtube.ClientId.Trim() != settings.ClientId || youtube.ClientSecret.Trim() != secret))
+        if (_dialogService is not null
+            && !_dialogService.Confirm("Сброс веб-сессии",
+                $"Отвязать браузерную сессию веб-чата для аккаунта «{card.DisplayName}»?"))
         {
-            SetNotice("Сначала сохраните новые реквизиты во вкладке «Параметры и доступ», затем повторите вход.", StatusSeverity.Warning);
-            return false;
+            return Task.CompletedTask;
         }
 
-        if (string.IsNullOrWhiteSpace(settings.ClientId) || string.IsNullOrWhiteSpace(secret))
-        {
-            SetNotice("Заполните и сохраните ключи во вкладке «Параметры и доступ».", StatusSeverity.Warning);
-            return false;
-        }
-
-        string[] scopes = combined
-            ? [.. YouTubeScopes.CombinedDefault]
-            : [.. YouTubeScopes.RequiredFor(role)];
-
-        var flow = await _youtubeOAuth.StartOAuthFlowToDraftAsync(role, settings.ClientId, secret, scopes,
-            url => _shellLauncher.Open(url));
-        if (string.IsNullOrWhiteSpace(flow.ChannelId))
-        {
-            SetNotice("YouTube не сообщил ID авторизованного канала.", StatusSeverity.Error);
-            return false;
-        }
-
-        var id = flow.ChannelId.Trim();
-        var name = string.IsNullOrWhiteSpace(flow.ChannelTitle) ? id : flow.ChannelTitle;
-        if (!combined && !string.IsNullOrWhiteSpace(targetAccountId)
-            && !string.Equals(targetAccountId, id, StringComparison.Ordinal))
-        {
-            SetNotice($"Вы вошли под другим аккаунтом («{name}»), а права запрашивались для другого аккаунта. Изменения не сохранены.", StatusSeverity.Warning);
-            return false;
-        }
-
-        var now = _timeProvider.GetUtcNow();
-        var grantedScopes = flow.Scopes ?? [];
-        List<(PlatformAuthRole Role, string ContextId, string Label, YouTubeAccountSettings Account)> entriesToSave = [];
-        List<PlatformAuthRole> missingRoles = [];
-
-        if (combined)
-        {
-            foreach (var targetRole in new[] { PlatformAuthRole.Bot, PlatformAuthRole.Broadcaster })
-            {
-                if (!YouTubeScopes.ContainsRequiredScopes(targetRole, grantedScopes))
-                {
-                    missingRoles.Add(targetRole);
-                    continue;
-                }
-
-                var contextId = ResolveContextForSave(StreamingPlatform.YouTube, targetRole, id, preferredContextId: null);
-                var account = new YouTubeAccountSettings();
-                flow.ApplyTo(account, now);
-                entriesToSave.Add((targetRole, contextId, name, account));
-            }
-
-            if (entriesToSave.Count == 0)
-            {
-                SetNotice("YouTube не выдал обязательные права ни для бота, ни для стримера. Изменения не сохранены.", StatusSeverity.Warning);
-                return false;
-            }
-        }
-        else
-        {
-            if (!YouTubeScopes.ContainsRequiredScopes(role, grantedScopes))
-            {
-                SetNotice($"YouTube не выдал обязательные права для роли «{PlatformAuthRoles.Describe(role)}». Изменения не сохранены.", StatusSeverity.Warning);
-                return false;
-            }
-
-            var contextId = ResolveContextForSave(StreamingPlatform.YouTube, role, id, preferredContextId);
-            var account = new YouTubeAccountSettings();
-            flow.ApplyTo(account, now);
-            entriesToSave.Add((role, contextId, name, account));
-        }
-
-        var written = _youtubeAccountsStore.UpsertContexts(entriesToSave);
-
-        foreach (var saved in entriesToSave)
-        {
-            DropDraftsFor(StreamingPlatform.YouTube, saved.Role, [saved.ContextId]);
-            _youtubeOAuth.ResetRetryState(saved.Role, saved.ContextId);
-            PublishAuthorizationRefreshed(StreamingPlatform.YouTube, saved.Role, saved.ContextId);
-        }
-
-        if (!written)
-        {
-            SetNotice("Аккаунт действует до перезапуска. Записать авторизацию в файл не удалось.", StatusSeverity.Warning);
-            return true;
-        }
-
-        if (!entriesToSave.All(entry => IsAuthorizationPersisted(StreamingPlatform.YouTube, entry.Role, entry.ContextId, id)))
-        {
-            SetNotice("Не удалось подтвердить запись авторизации YouTube на диске.", StatusSeverity.Warning);
-            return true;
-        }
-
-        if (combined && missingRoles.Count > 0)
-        {
-            var savedRoleText = PlatformAuthRoles.Describe(entriesToSave[0].Role).ToLowerInvariant();
-            var missingRoleText = PlatformAuthRoles.Describe(missingRoles[0]).ToLowerInvariant();
-            SetNotice($"Аккаунт «{name}» подключён только как {savedRoleText}: YouTube не выдал обязательные права для роли «{missingRoleText}».", StatusSeverity.Warning);
-            return true;
-        }
-
-        var roleText = combined ? "для бота и стримера" : $"как {PlatformAuthRoles.Describe(role).ToLowerInvariant()}";
-        SetNotice($"Аккаунт «{name}» подключён ({roleText}). Запись проверена.", StatusSeverity.Success);
-        return true;
-    }
-
-    private string ResolveContextForSave(StreamingPlatform platform, PlatformAuthRole role, string accountId, string? preferredContextId)
-    {
-        if (!string.IsNullOrWhiteSpace(preferredContextId))
-        {
-            return AuthContextIds.Normalize(preferredContextId);
-        }
-
-        var existing = ListPlatformAccounts(platform)
-            .FirstOrDefault(a => string.Equals(a.Key.AccountId, accountId, StringComparison.Ordinal))
+        var existingProfiles = directory.ListAccounts()
+            .FirstOrDefault(a => string.Equals(a.Key.AccountId, card.AccountId, StringComparison.Ordinal))
             ?.Authorizations
-            .FirstOrDefault(g => g.Role == role)
-            ?.ContextId;
-        if (!string.IsNullOrWhiteSpace(existing))
+            .Select(static g => g.ChatBrowserProfile)
+            .Where(static p => p is not null)
+            .Distinct()
+            .ToArray() ?? [];
+
+        bool written;
+        try
         {
-            return AuthContextIds.Normalize(existing);
+            written = directory.SetChatBrowserProfile(card.AccountId, null);
+        }
+        catch (Exception exception)
+        {
+            _logger?.LogWarning(exception, "Ошибка сброса веб-профиля чата для {Platform} {AccountId}", card.Platform, card.AccountId);
+            SetNotice("Не удалось сбросить веб-сессию: ошибка записи файла аккаунтов.", StatusSeverity.Error);
+            return Task.CompletedTask;
         }
 
-        var prefix = platform == StreamingPlatform.Twitch ? "tw" : "yt";
-        return $"{prefix}-{role.ToString().ToLowerInvariant()}-{accountId}";
+        foreach (var profile in existingProfiles)
+        {
+            TryDeleteWebViewProfileDirectory(profile!);
+        }
+
+        PublishAccountRefreshed(card);
+        RefreshIfPlatform(card.Platform);
+        AccountsChanged?.Invoke(this, card.Platform);
+        SetNotice(written
+            ? $"Веб-сессия для «{card.DisplayName}» сброшена."
+            : "Веб-сессия сброшена в памяти до перезапуска – записать в файл не удалось.",
+            written ? StatusSeverity.Info : StatusSeverity.Warning);
+        return Task.CompletedTask;
+    }
+
+    private static void TryDeleteWebViewProfileDirectory(PlatformChatBrowserProfile profile)
+    {
+        if (string.IsNullOrWhiteSpace(profile.UserDataFolder) || string.IsNullOrWhiteSpace(profile.ProfileName))
+        {
+            return;
+        }
+
+        try
+        {
+            var profilePath = System.IO.Path.Combine(profile.UserDataFolder, "EBWebView", profile.ProfileName);
+            if (System.IO.Directory.Exists(profilePath))
+            {
+                System.IO.Directory.Delete(profilePath, recursive: true);
+            }
+        }
+        catch (Exception ex) when (ex is System.IO.IOException or UnauthorizedAccessException)
+        {
+        }
+    }
+
+    private void PublishAccountRefreshed(PlatformAccountCardViewModel card)
+    {
+        if (card.Grants.Count == 0)
+        {
+            PublishAuthorizationRefreshed(card.Platform, PlatformAuthRole.Bot, AuthContextIds.Default);
+            return;
+        }
+
+        foreach (var grant in card.Grants)
+        {
+            PublishAuthorizationRefreshed(card.Platform, grant.Role, grant.ContextId);
+        }
     }
 
     private Task SignOutAccountAsync(PlatformAccountCardViewModel card)
@@ -735,13 +639,9 @@ public sealed partial class PlatformAccountsSectionViewModel : ObservableObject
         {
             auth.ResetRetryState(role, contextId);
         }
-        else if (platform == StreamingPlatform.Twitch)
+        else if (_accountLogins.TryGetValue(platform, out var login))
         {
-            _twitchOAuth?.ResetRetryState(role, contextId);
-        }
-        else if (platform == StreamingPlatform.YouTube)
-        {
-            _youtubeOAuth?.ResetRetryState(role, contextId);
+            login.ResetRetryState(role, contextId);
         }
 
         PublishAuthorizationRefreshed(platform, role, contextId);
@@ -749,6 +649,11 @@ public sealed partial class PlatformAccountsSectionViewModel : ObservableObject
 
     private async Task ValidateGrantAsync(PlatformAccountGrantViewModel grant)
     {
+        if (!_accountLogins.TryGetValue(grant.Platform, out var login) || !login.SupportsTokenValidation)
+        {
+            return;
+        }
+
         var token = grant.AccessTokenValue.Trim();
         if (string.IsNullOrWhiteSpace(token))
         {
@@ -756,64 +661,18 @@ public sealed partial class PlatformAccountsSectionViewModel : ObservableObject
             return;
         }
 
-        if (grant.Platform == StreamingPlatform.Twitch && _twitchOAuth is not null)
-        {
-            grant.SetActionStatus("Проверка токена…", StatusSeverity.Info);
-            try
-            {
-                var info = await _twitchOAuth.ValidateAsync(token, CancellationToken.None);
-                if (info is null)
-                {
-                    grant.SetActionStatus("Токен недействителен или просрочен.", StatusSeverity.Error);
-                    return;
-                }
-
-                var expires = info.ExpiresIn > 0
-                    ? $" (истекает через {TimeSpan.FromSeconds(info.ExpiresIn):h\\ч\\ m\\м})"
-                    : string.Empty;
-                grant.SetActionStatus($"Токен действителен: {info.Login}{expires}.", StatusSeverity.Success);
-            }
-            catch (Exception exception)
-            {
-                _logger?.PlatformOAuthValidationFailed(exception, "twitch", grant.Role);
-                grant.SetActionStatus($"Не удалось проверить токен. {StreamingErrorMessages.SafeMessage(exception, grant.Platform)}", StatusSeverity.Error);
-            }
-
-            return;
-        }
-
-        if (grant.Platform == StreamingPlatform.YouTube && _youtubeOAuth is not null)
-        {
-            grant.SetActionStatus("Проверка токена…", StatusSeverity.Info);
-            try
-            {
-                var info = await _youtubeOAuth.ValidateAsync(token, CancellationToken.None);
-                if (info is null)
-                {
-                    grant.SetActionStatus("Токен недействителен или просрочен.", StatusSeverity.Error);
-                    return;
-                }
-
-                var subject = !string.IsNullOrWhiteSpace(info.ChannelTitle)
-                    ? $": {info.ChannelTitle}"
-                    : !string.IsNullOrWhiteSpace(info.ChannelId)
-                        ? $": {info.ChannelId}"
-                        : string.Empty;
-                var expires = info.ExpiresInSeconds > 0
-                    ? $" (истекает через {TimeSpan.FromSeconds(info.ExpiresInSeconds):h\\ч\\ m\\м})"
-                    : string.Empty;
-                grant.SetActionStatus($"Токен действителен{subject}{expires}.", StatusSeverity.Success);
-            }
-            catch (Exception exception)
-            {
-                _logger?.PlatformOAuthValidationFailed(exception, "youtube", grant.Role);
-                grant.SetActionStatus($"Не удалось проверить токен. {StreamingErrorMessages.SafeMessage(exception, grant.Platform)}", StatusSeverity.Error);
-            }
-        }
+        grant.SetActionStatus("Проверка токена…", StatusSeverity.Info);
+        var result = await login.ValidateTokenAsync(grant.Role, token, CancellationToken.None);
+        grant.SetActionStatus(result.Message, result.Severity);
     }
 
     private async Task RefreshGrantAsync(PlatformAccountGrantViewModel grant)
     {
+        if (!_accountLogins.TryGetValue(grant.Platform, out var login))
+        {
+            return;
+        }
+
         if (grant.IsRefreshTokenEdited)
         {
             grant.SetActionStatus("Сначала сохраните изменённый Refresh Token, затем нажмите «Обновить».", StatusSeverity.Warning);
@@ -828,178 +687,68 @@ public sealed partial class PlatformAccountsSectionViewModel : ObservableObject
         }
 
         grant.SetActionStatus("Обновление токена…", StatusSeverity.Info);
-        try
+        var result = await login.RefreshTokenAsync(grant.Role, grant.ContextId, refreshToken, CancellationToken.None);
+        if (!result.Succeeded)
         {
-            OAuthRefreshResult result;
-            if (grant.Platform == StreamingPlatform.Twitch)
-            {
-                if (_twitchOAuth is null || _settingsManager is null)
-                {
-                    return;
-                }
-
-                var settings = _settingsManager.Current.Twitch;
-                if (string.IsNullOrWhiteSpace(settings.ClientId) || string.IsNullOrWhiteSpace(settings.ClientSecret))
-                {
-                    grant.SetActionStatus("Заполните и сохраните Client ID и Client Secret во вкладке «Параметры и доступ».", StatusSeverity.Warning);
-                    return;
-                }
-
-                result = await _twitchOAuth.RefreshTokenWithResultAsync(grant.Role, grant.ContextId, settings.ClientId, settings.ClientSecret, refreshToken, CancellationToken.None);
-            }
-            else if (grant.Platform == StreamingPlatform.YouTube)
-            {
-                if (_youtubeOAuth is null || _youtubeSettingsStore is null || _youtubeAccountsStore is null)
-                {
-                    return;
-                }
-
-                var settings = _youtubeSettingsStore.Load();
-                var secret = _youtubeAccountsStore.LoadClientSecret();
-                if (string.IsNullOrWhiteSpace(settings.ClientId) || string.IsNullOrWhiteSpace(secret))
-                {
-                    grant.SetActionStatus("Заполните и сохраните реквизиты Google-проекта во вкладке «Параметры и доступ».", StatusSeverity.Warning);
-                    return;
-                }
-
-                result = await _youtubeOAuth.RefreshTokenWithResultAsync(grant.Role, grant.ContextId, settings.ClientId, secret, refreshToken, CancellationToken.None);
-            }
-            else
-            {
-                return;
-            }
-
-            var refreshedAt = TimeZoneInfo.ConvertTime(_timeProvider.GetUtcNow(), TimeZoneInfo.Local)
-                .ToString("dd.MM.yyyy HH:mm:ss", UiCulture.Russian);
-            RefreshIfPlatform(grant.Platform, dropDraft: new(grant.Platform, grant.Role, grant.ContextId));
-            AccountsChanged?.Invoke(this, grant.Platform);
-            if (result.Persisted && IsAuthorizationPersisted(grant.Platform, grant.Role, grant.ContextId, grant.AccountId))
-            {
-                SetNotice($"Токен ({grant.RoleTitle}, «{grant.AccountDisplayName}») обновлён ({refreshedAt}). Запись проверена.", StatusSeverity.Success);
-            }
-            else if (result.Persisted)
-            {
-                SetNotice("Токен обновлён, но подтвердить запись на диске не удалось.", StatusSeverity.Warning);
-            }
-            else
-            {
-                SetNotice($"Токен ({grant.RoleTitle}, «{grant.AccountDisplayName}») обновлён только в памяти до перезапуска – записать в файл не удалось.", StatusSeverity.Warning);
-            }
+            grant.SetActionStatus(result.Message, result.Severity);
+            return;
         }
-        catch (Exception exception)
+
+        var refreshedAt = TimeZoneInfo.ConvertTime(_timeProvider.GetUtcNow(), TimeZoneInfo.Local)
+            .ToString("dd.MM.yyyy HH:mm:ss", UiCulture.Russian);
+        RefreshIfPlatform(grant.Platform, dropDraft: new(grant.Platform, grant.Role, grant.ContextId));
+        AccountsChanged?.Invoke(this, grant.Platform);
+        if (result.Persisted && IsAuthorizationPersisted(grant.Platform, grant.Role, grant.ContextId, grant.AccountId))
         {
-            _logger?.PlatformOAuthRefreshFailed(exception, grant.Platform.ToString().ToLowerInvariant(), grant.Role);
-            grant.SetActionStatus($"Не удалось обновить токен. {StreamingErrorMessages.SafeMessage(exception, grant.Platform)}", StatusSeverity.Error);
+            SetNotice($"Токен ({grant.RoleTitle}, «{grant.AccountDisplayName}») обновлён ({refreshedAt}). Запись проверена.", StatusSeverity.Success);
+        }
+        else if (result.Persisted)
+        {
+            SetNotice("Токен обновлён, но подтвердить запись на диске не удалось.", StatusSeverity.Warning);
+        }
+        else
+        {
+            SetNotice($"Токен ({grant.RoleTitle}, «{grant.AccountDisplayName}») обновлён только в памяти до перезапуска – записать в файл не удалось.", StatusSeverity.Warning);
         }
     }
 
     private Task SaveManualGrantEditsAsync(PlatformAccountGrantViewModel grant)
     {
-        var applied = false;
-        var written = false;
-        var conflict = false;
-        var accessEdited = grant.IsAccessTokenEdited;
-        var refreshEdited = grant.IsRefreshTokenEdited;
-        var scopesEdited = grant.IsScopesEdited;
-
-        if (grant.Platform == StreamingPlatform.Twitch && _twitchAccountsStore is not null)
+        if (!_accountLogins.TryGetValue(grant.Platform, out var login))
         {
-            var scopes = scopesEdited ? ParseScopes(grant.ScopesText) : [];
-            (applied, written) = _twitchAccountsStore.TryMutateExisting(grant.Role, grant.ContextId, account =>
-            {
-                if ((accessEdited && !string.Equals(account.AccessToken ?? string.Empty, grant.InitialAccessToken, StringComparison.Ordinal))
-                    || (refreshEdited && !string.Equals(account.RefreshToken ?? string.Empty, grant.InitialRefreshToken, StringComparison.Ordinal)))
-                {
-                    conflict = true;
-                    return false;
-                }
-
-                if (accessEdited)
-                {
-                    account.AccessToken = grant.AccessTokenValue.Trim();
-                    account.AccessTokenExpiresAt = null;
-                    account.StoredScopes = [];
-                }
-
-                if (refreshEdited)
-                {
-                    account.RefreshToken = grant.RefreshTokenValue.Trim();
-                }
-
-                if (scopesEdited && scopes.Length > 0)
-                {
-                    account.Scopes = scopes;
-                }
-
-                return accessEdited || refreshEdited || (scopesEdited && scopes.Length > 0);
-            });
-            if (applied)
-            {
-                _twitchOAuth?.ResetRetryState(grant.Role, grant.ContextId);
-                PublishAuthorizationRefreshed(StreamingPlatform.Twitch, grant.Role, grant.ContextId);
-            }
-        }
-        else if (grant.Platform == StreamingPlatform.YouTube && _youtubeAccountsStore is not null)
-        {
-            (applied, written) = _youtubeAccountsStore.TryMutateExisting(grant.Role, grant.ContextId, account =>
-            {
-                if ((accessEdited && !string.Equals(account.AccessToken ?? string.Empty, grant.InitialAccessToken, StringComparison.Ordinal))
-                    || (refreshEdited && !string.Equals(account.RefreshToken ?? string.Empty, grant.InitialRefreshToken, StringComparison.Ordinal)))
-                {
-                    conflict = true;
-                    return false;
-                }
-
-                if (accessEdited)
-                {
-                    account.AccessToken = grant.AccessTokenValue.Trim();
-                    account.AccessTokenExpiresAt = null;
-                    account.StoredScopes = [];
-                }
-
-                if (refreshEdited)
-                {
-                    account.RefreshToken = grant.RefreshTokenValue.Trim();
-                }
-
-                return accessEdited || refreshEdited;
-            });
-            if (applied)
-            {
-                _youtubeOAuth?.ResetRetryState(grant.Role, grant.ContextId);
-                PublishAuthorizationRefreshed(StreamingPlatform.YouTube, grant.Role, grant.ContextId);
-            }
-        }
-
-        RefreshIfPlatform(grant.Platform, dropDraft: new(grant.Platform, grant.Role, grant.ContextId));
-        if (conflict)
-        {
-            SetNotice("Токен успел обновиться в фоне – данные карточки обновлены, повторите правку при необходимости.", StatusSeverity.Warning);
             return Task.CompletedTask;
         }
 
-        if (!applied)
+        var result = login.SaveManualEdits(grant.Role, grant.ContextId, new(
+            grant.IsAccessTokenEdited,
+            grant.AccessTokenValue,
+            grant.InitialAccessToken,
+            grant.IsRefreshTokenEdited,
+            grant.RefreshTokenValue,
+            grant.InitialRefreshToken,
+            grant.IsScopesEdited,
+            grant.ScopesText));
+
+        RefreshIfPlatform(grant.Platform, dropDraft: new(grant.Platform, grant.Role, grant.ContextId));
+        if (result.Conflict || !result.Applied)
         {
-            SetNotice("Сохранить правки не удалось – роль была удалена или не изменилась.", StatusSeverity.Warning);
+            SetNotice(result.Message, result.Severity);
             return Task.CompletedTask;
         }
 
         AccountsChanged?.Invoke(this, grant.Platform);
-        if (written && IsAuthorizationPersisted(grant.Platform, grant.Role, grant.ContextId, grant.AccountId))
+        if (result.Written && IsAuthorizationPersisted(grant.Platform, grant.Role, grant.ContextId, grant.AccountId))
         {
             SetNotice($"Правки токена ({grant.RoleTitle}, «{grant.AccountDisplayName}») сохранены. Запись проверена.", StatusSeverity.Success);
         }
         else
         {
-            SetNotice(written ? "Не удалось подтвердить запись правок на диске." : "Правки приняты в памяти до перезапуска.",
+            SetNotice(result.Written ? "Не удалось подтвердить запись правок на диске." : "Правки приняты в памяти до перезапуска.",
                 StatusSeverity.Warning);
         }
 
         return Task.CompletedTask;
     }
-
-    private IReadOnlyList<PlatformAccount> ListPlatformAccounts(StreamingPlatform platform) =>
-        _accountDirectories.GetValueOrDefault(platform)?.ListAccounts() ?? [];
 
     private bool IsAuthorizationPersisted(StreamingPlatform platform, PlatformAuthRole role, string contextId, string accountId) =>
         _accountDirectories.GetValueOrDefault(platform)?.VerifyPersistedAuthorization(role, contextId, accountId) == true;
@@ -1009,7 +758,8 @@ public sealed partial class PlatformAccountsSectionViewModel : ObservableObject
         PlatformAccount account,
         IReadOnlyList<ChannelCatalogEntry> channels,
         DateTimeOffset now,
-        bool canAuthorize)
+        bool canAuthorize,
+        IPlatformAccountLogin? login)
     {
         var directory = _accountDirectories[platform];
         var grants = new List<PlatformAccountGrantViewModel>();
@@ -1029,7 +779,7 @@ public sealed partial class PlatformAccountsSectionViewModel : ObservableObject
             if (directory.LoadAuthorization(role, summary.ContextId) is { } settings)
             {
                 grants.Add(BuildGrantViewModel(platform, account.Key.AccountId, account.DisplayName, role, summary.ContextId,
-                    summary.IsDefault, settings, now, canAuthorize, directory.GetPermissions(role), channels));
+                    summary.IsDefault, settings, now, canAuthorize, directory.GetPermissions(role), channels, login));
             }
         }
 
@@ -1047,19 +797,16 @@ public sealed partial class PlatformAccountsSectionViewModel : ObservableObject
         DateTimeOffset now,
         bool canAuthorize,
         IReadOnlyList<PlatformAccountOperation> permissions,
-        IReadOnlyList<ChannelCatalogEntry> channels)
+        IReadOnlyList<ChannelCatalogEntry> channels,
+        IPlatformAccountLogin? login)
     {
         var hasAccess = !string.IsNullOrWhiteSpace(settings.AccessToken);
         var hasRefresh = !string.IsNullOrWhiteSpace(settings.RefreshToken);
         var storedScopes = settings.StoredScopes;
-        var missingYouTubeRequired = platform == StreamingPlatform.YouTube
-            && storedScopes.Length > 0
-            && !YouTubeScopes.ContainsRequiredScopes(role, storedScopes);
-        var expectedScopes = missingYouTubeRequired
-            ? [.. YouTubeScopes.RequiredFor(role)]
-            : settings.Scopes;
-        var scopeMismatch = missingYouTubeRequired
-            || (storedScopes.Length > 0 && !new HashSet<string>(storedScopes, StringComparer.Ordinal).SetEquals(expectedScopes));
+        var expectedScopes = settings.Scopes;
+        var scopeMismatch = login is not null
+            ? login.TryEvaluateScopeMismatch(role, expectedScopes, storedScopes, out expectedScopes)
+            : storedScopes.Length > 0 && !new HashSet<string>(storedScopes, StringComparer.Ordinal).SetEquals(expectedScopes);
 
         var (statusText, severity) = DescribeTokenStatus(hasAccess, hasRefresh, scopeMismatch, settings.AccessTokenExpiresAt, now);
         var expiryText = settings.AccessTokenExpiresAt is { } expiresAt
@@ -1082,6 +829,7 @@ public sealed partial class PlatformAccountsSectionViewModel : ObservableObject
             tokenStatusSeverity: severity,
             tokenExpiryText: expiryText,
             canAuthorize: canAuthorize,
+            login: login,
             reauthorizeAsync: ReauthorizeGrantAsync,
             refreshAsync: RefreshGrantAsync,
             validateAsync: ValidateGrantAsync,
@@ -1089,7 +837,7 @@ public sealed partial class PlatformAccountsSectionViewModel : ObservableObject
             removeRoleAsync: RemoveGrantRoleAsync)
         {
             CanRemove = _accountDirectories[platform].CanRemove,
-            Permissions = DescribePermissions(platform, permissions, channels, accountId, role, contextId, storedScopes,
+            Permissions = DescribePermissions(login, permissions, channels, accountId, role, contextId, storedScopes,
                 hasAccess, hasRefresh, scopeMismatch, settings.AccessTokenExpiresAt, now),
         };
 
@@ -1102,10 +850,18 @@ public sealed partial class PlatformAccountsSectionViewModel : ObservableObject
     }
 
     private static IReadOnlyList<AccountPermissionStatus> DescribePermissions(
-        StreamingPlatform platform,
-        IReadOnlyList<PlatformAccountOperation> permissions, IReadOnlyList<ChannelCatalogEntry> channels,
-        string accountId, PlatformAuthRole role, string contextId, string[] scopes,
-        bool hasAccess, bool hasRefresh, bool scopeMismatch, DateTimeOffset? expiresAt, DateTimeOffset now)
+        IPlatformAccountLogin? login,
+        IReadOnlyList<PlatformAccountOperation> permissions,
+        IReadOnlyList<ChannelCatalogEntry> channels,
+        string accountId,
+        PlatformAuthRole role,
+        string contextId,
+        string[] scopes,
+        bool hasAccess,
+        bool hasRefresh,
+        bool scopeMismatch,
+        DateTimeOffset? expiresAt,
+        DateTimeOffset now)
     {
         var assignedChannels = channels
             .Select(channel => (Channel: channel, Assignment: channel.GetAccountAssignment(role)))
@@ -1115,9 +871,7 @@ public sealed partial class PlatformAccountsSectionViewModel : ObservableObject
             .ToArray();
         var granted = scopes.ToHashSet(StringComparer.Ordinal);
         var treatMismatchAsSessionFailure = scopeMismatch
-            && !(platform == StreamingPlatform.YouTube
-                && role == PlatformAuthRole.Broadcaster
-                && YouTubeScopes.ContainsUsableScopes(role, granted));
+            && (login?.ShouldTreatScopeMismatchAsSessionFailure(role, granted) ?? true);
         var sessionStatus = treatMismatchAsSessionFailure || (!hasRefresh && (!hasAccess || expiresAt <= now))
             ? ("Нужен вход", StatusSeverity.Warning)
             : !hasAccess || expiresAt <= now
@@ -1133,7 +887,7 @@ public sealed partial class PlatformAccountsSectionViewModel : ObservableObject
                 {
                     (message, severity) = ("Выданные права не подтверждены", StatusSeverity.Info);
                 }
-                else if (!permission.RequiredScopes.All(required => IsScopeSatisfied(platform, granted, required)))
+                else if (!permission.RequiredScopes.All(required => login?.IsScopeSatisfied(granted, required) ?? granted.Contains(required)))
                 {
                     (message, severity) = ("Не хватает прав", StatusSeverity.Warning);
                 }
@@ -1160,13 +914,6 @@ public sealed partial class PlatformAccountsSectionViewModel : ObservableObject
         }
 
         return result;
-    }
-
-    private static bool IsScopeSatisfied(StreamingPlatform platform, HashSet<string> granted, string required)
-    {
-        return platform == StreamingPlatform.YouTube
-            ? YouTubeScopes.IsScopeSatisfied(granted, required)
-            : granted.Contains(required);
     }
 
     private static (string Text, StatusSeverity Severity) DescribeTokenStatus(
@@ -1248,18 +995,6 @@ public sealed partial class PlatformAccountsSectionViewModel : ObservableObject
         StatusNotice = message;
     }
 
-    private static bool HasRequiredTwitchScopes(PlatformAuthRole role, IReadOnlyCollection<string> grantedScopes)
-    {
-        var required = role == PlatformAuthRole.Bot ? TwitchScopes.BotRequired : TwitchScopes.BroadcasterRequired;
-        var set = new HashSet<string>(grantedScopes, StringComparer.Ordinal);
-        return required.All(set.Contains);
-    }
-
-    private static string[] ParseScopes(string text) =>
-        text.Split([' ', '\t', '\r', '\n'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-            .Distinct(StringComparer.Ordinal)
-            .ToArray();
-
     private readonly record struct GrantDraftKey(StreamingPlatform Platform, PlatformAuthRole Role, string ContextId);
 
     private readonly record struct GrantDraft(string? AccessToken, string? RefreshToken, string? ScopesText);
@@ -1269,6 +1004,8 @@ public sealed partial class PlatformAccountCardViewModel : ObservableObject
 {
     private readonly Func<PlatformAccountCardViewModel, PlatformAuthRole, Task> _addRole;
     private readonly Func<PlatformAccountCardViewModel, Task> _signOut;
+    private readonly Func<PlatformAccountCardViewModel, Task> _signInWebChat;
+    private readonly Func<PlatformAccountCardViewModel, Task> _resetWebChat;
 
     public PlatformAccountCardViewModel(
         StreamingPlatform platform,
@@ -1277,8 +1014,15 @@ public sealed partial class PlatformAccountCardViewModel : ObservableObject
         string assignedChannelsText,
         IReadOnlyList<PlatformAccountGrantViewModel> grants,
         bool canAuthorize,
+        bool supportsWebChat,
+        bool hasWebChatSession,
+        PlatformAuthMethodDescriptor apiAuthMethod,
+        PlatformAuthMethodDescriptor? webChatMethod,
+        string? oauthMethodLabel,
         Func<PlatformAccountCardViewModel, PlatformAuthRole, Task> addRole,
-        Func<PlatformAccountCardViewModel, Task> signOut)
+        Func<PlatformAccountCardViewModel, Task> signOut,
+        Func<PlatformAccountCardViewModel, Task> signInWebChat,
+        Func<PlatformAccountCardViewModel, Task> resetWebChat)
     {
         Platform = platform;
         AccountId = accountId;
@@ -1286,8 +1030,16 @@ public sealed partial class PlatformAccountCardViewModel : ObservableObject
         AssignedChannelsText = assignedChannelsText;
         Grants = grants;
         CanAuthorize = canAuthorize;
+        SupportsWebChat = supportsWebChat;
+        HasWebChatSession = hasWebChatSession;
+        ApiAuthMethod = apiAuthMethod;
+        WebChatMethod = webChatMethod;
+        OAuthMethodLabel = oauthMethodLabel;
+        AuthMethods = webChatMethod is null ? [apiAuthMethod] : [apiAuthMethod, webChatMethod];
         _addRole = addRole;
         _signOut = signOut;
+        _signInWebChat = signInWebChat;
+        _resetWebChat = resetWebChat;
 
         var botGrant = grants.FirstOrDefault(static g => g.Role == PlatformAuthRole.Bot);
         var broadcasterGrant = grants.FirstOrDefault(static g => g.Role == PlatformAuthRole.Broadcaster);
@@ -1311,6 +1063,32 @@ public sealed partial class PlatformAccountCardViewModel : ObservableObject
 
     public bool CanRemove { get; init; }
 
+    public bool SupportsWebChat { get; }
+
+    public bool HasWebChatSession { get; }
+
+    public PlatformAuthMethodDescriptor ApiAuthMethod { get; }
+
+    public PlatformAuthMethodDescriptor? WebChatMethod { get; }
+
+    public IReadOnlyList<PlatformAuthMethodDescriptor> AuthMethods { get; }
+
+    public string? OAuthMethodLabel { get; }
+
+    public bool HasOAuthMethodLabel => !string.IsNullOrWhiteSpace(OAuthMethodLabel);
+
+    public string ApiAuthStatusText => $"API / OAuth: {ApiAuthMethod.StatusText}";
+
+    public StatusSeverity ApiAuthStatusSeverity => MapStatusSeverity(ApiAuthMethod.Status);
+
+    public string WebChatStatusText => HasWebChatSession ? "Веб-чат: подключён" : "Веб-чат: не подключён";
+
+    public StatusSeverity WebChatStatusSeverity => HasWebChatSession ? StatusSeverity.Success : StatusSeverity.Info;
+
+    public bool CanSignInWebChat => SupportsWebChat && !HasWebChatSession;
+
+    public bool CanResetWebChat => SupportsWebChat && HasWebChatSession;
+
     public bool HasBotRole { get; }
 
     public bool HasBroadcasterRole { get; }
@@ -1323,6 +1101,14 @@ public sealed partial class PlatformAccountCardViewModel : ObservableObject
 
     public StatusSeverity BroadcasterBadgeSeverity { get; }
 
+    private static StatusSeverity MapStatusSeverity(PlatformAuthMethodStatus status) => status switch
+    {
+        PlatformAuthMethodStatus.Ready => StatusSeverity.Success,
+        PlatformAuthMethodStatus.Attention => StatusSeverity.Warning,
+        PlatformAuthMethodStatus.Missing => StatusSeverity.Info,
+        _ => StatusSeverity.None,
+    };
+
     [RelayCommand(CanExecute = nameof(CanAddBotRole))]
     private Task AddBotRoleAsync() => _addRole(this, PlatformAuthRole.Bot);
 
@@ -1331,12 +1117,19 @@ public sealed partial class PlatformAccountCardViewModel : ObservableObject
 
     [RelayCommand]
     private Task SignOutAsync() => _signOut(this);
+
+    [RelayCommand(CanExecute = nameof(CanSignInWebChat))]
+    private Task SignInWebChatAsync() => _signInWebChat(this);
+
+    [RelayCommand(CanExecute = nameof(CanResetWebChat))]
+    private Task ResetWebChatAsync() => _resetWebChat(this);
 }
 
 public sealed record AccountPermissionStatus(string Name, string Status, StatusSeverity Severity);
 
 public sealed partial class PlatformAccountGrantViewModel : ObservableObject
 {
+    private readonly IPlatformAccountLogin? _login;
     private readonly Func<PlatformAccountGrantViewModel, Task> _reauthorizeAsync;
     private readonly Func<PlatformAccountGrantViewModel, Task> _refreshAsync;
     private readonly Func<PlatformAccountGrantViewModel, Task> _validateAsync;
@@ -1392,6 +1185,7 @@ public sealed partial class PlatformAccountGrantViewModel : ObservableObject
         StatusSeverity tokenStatusSeverity,
         string tokenExpiryText,
         bool canAuthorize,
+        IPlatformAccountLogin? login,
         Func<PlatformAccountGrantViewModel, Task> reauthorizeAsync,
         Func<PlatformAccountGrantViewModel, Task> refreshAsync,
         Func<PlatformAccountGrantViewModel, Task> validateAsync,
@@ -1405,6 +1199,7 @@ public sealed partial class PlatformAccountGrantViewModel : ObservableObject
         ContextId = contextId;
         IsDefault = isDefault;
         CanAuthorize = canAuthorize;
+        _login = login;
         TokenStatusText = tokenStatusText;
         TokenStatusSeverity = tokenStatusSeverity;
         TokenExpiryText = tokenExpiryText;
@@ -1446,9 +1241,9 @@ public sealed partial class PlatformAccountGrantViewModel : ObservableObject
 
     public bool CanRemove { get; init; }
 
-    public bool SupportsEditableScopes => Platform == StreamingPlatform.Twitch;
+    public bool SupportsEditableScopes => _login?.SupportsEditableScopes == true;
 
-    public bool SupportsTokenValidation => Platform is StreamingPlatform.Twitch or StreamingPlatform.YouTube;
+    public bool SupportsTokenValidation => _login?.SupportsTokenValidation == true;
 
     public string TokenStatusText { get; }
 
@@ -1515,14 +1310,10 @@ public sealed partial class PlatformAccountGrantViewModel : ObservableObject
 
     public string[] GetRequestedScopes()
     {
-        if (Platform != StreamingPlatform.Twitch)
-        {
-            return [.. _initialScopesText.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)];
-        }
-
-        var required = Role == PlatformAuthRole.Bot ? TwitchScopes.BotRequired : TwitchScopes.BroadcasterRequired;
         var parsed = ScopesText.Split([' ', '\t', '\r', '\n'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-        return [.. required.Union(parsed, StringComparer.Ordinal)];
+        return _login is not null
+            ? _login.MergeRequestedScopes(Role, parsed)
+            : parsed;
     }
 
     public void SetActionStatus(string message, StatusSeverity severity)
@@ -1588,9 +1379,12 @@ public sealed partial class PlatformAccountGrantViewModel : ObservableObject
     [RelayCommand(CanExecute = nameof(CanResetScopes))]
     private void ResetScopes()
     {
-        ScopesText = Role == PlatformAuthRole.Bot
-            ? string.Join(" ", [.. TwitchScopes.BotRequired, .. TwitchScopes.BotOptional])
-            : string.Join(" ", TwitchScopes.BroadcasterRequired);
+        if (_login is null)
+        {
+            return;
+        }
+
+        ScopesText = string.Join(" ", _login.GetDefaultScopes(Role));
         SetActionStatus("Права сброшены к стандартным. Нажмите «Сохранить правки» или «Переавторизовать».", StatusSeverity.Info);
     }
 

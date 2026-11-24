@@ -9,8 +9,15 @@ public enum ChatDisplayLayout
     Rows = 2,
 }
 
-public sealed record ChatDisplayMode(StreamingPlatform Platform, ChatDisplayLayout Layout, string Label)
+public sealed record ChatDisplayMode(
+    StreamingPlatform Platform,
+    ChatDisplayLayout Layout,
+    string Label,
+    StreamingPlatform? PrimaryPlatform = null)
 {
-    public string SettingsValue => $"{Platform}/{Layout}";
+    public StreamingPlatform EffectivePrimaryPlatform => PrimaryPlatform ?? Platform;
+    public string SettingsValue => IsSplit && PrimaryPlatform is { } primary && primary != StreamingPlatform.Twitch
+        ? $"{primary}+{Platform}/{Layout}"
+        : $"{Platform}/{Layout}";
     public bool IsSplit => Layout != ChatDisplayLayout.Single;
 }

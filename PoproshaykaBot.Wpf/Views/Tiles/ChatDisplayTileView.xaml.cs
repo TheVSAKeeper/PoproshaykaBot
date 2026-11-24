@@ -1,7 +1,6 @@
 ﻿using Microsoft.Extensions.Logging;
 using Microsoft.Web.WebView2.Core;
 using Microsoft.Web.WebView2.Wpf;
-using PoproshaykaBot.Core.Infrastructure;
 using PoproshaykaBot.Core.Platforms;
 using PoproshaykaBot.Core.Platforms.Auth;
 using PoproshaykaBot.Wpf.Bootstrap;
@@ -19,8 +18,8 @@ public partial class ChatDisplayTileView : UserControl, IView<ChatDisplayTileVie
     private readonly CancellationTokenSource _lifetime = new();
     private WebViewThemeBackground _themeBackground;
     private WebViewThemeBackground _platformThemeBackground;
-    private BrowserState _twitchBrowser = new();
-    private BrowserState _platformBrowser = new();
+    private BrowserState _primaryBrowser = new();
+    private BrowserState _secondaryBrowser = new();
 
     private bool _initialized;
     private bool _disposed;
@@ -41,9 +40,9 @@ public partial class ChatDisplayTileView : UserControl, IView<ChatDisplayTileVie
     }
 
     private ChatDisplayPaneViewModel? PaneFor(WebView2 browser) =>
-        ReferenceEquals(browser, WebView) ? _viewModel?.TwitchChat : _viewModel?.PlatformChat;
+        ReferenceEquals(browser, WebView) ? _viewModel?.PrimaryChat : _viewModel?.SecondaryChat;
 
-    private BrowserState StateFor(WebView2 browser) => ReferenceEquals(browser, WebView) ? _twitchBrowser : _platformBrowser;
+    private BrowserState StateFor(WebView2 browser) => ReferenceEquals(browser, WebView) ? _primaryBrowser : _secondaryBrowser;
 
     private bool IsCurrentBrowser(WebView2 browser) => !_disposed
         && (ReferenceEquals(browser, WebView) || ReferenceEquals(browser, PlatformWebView));
@@ -59,6 +58,9 @@ public partial class ChatDisplayTileView : UserControl, IView<ChatDisplayTileVie
             : ReferenceEquals(core, PlatformWebView.CoreWebView2) ? PlatformWebView : null;
     }
 
+    private WebView2 BrowserForPane(ChatDisplayPaneViewModel pane) =>
+        ReferenceEquals(pane, _viewModel?.PrimaryChat) ? WebView : PlatformWebView;
+
     private async void OnLoaded(object sender, RoutedEventArgs e)
     {
         if (_initialized || _disposed)
@@ -73,9 +75,10 @@ public partial class ChatDisplayTileView : UserControl, IView<ChatDisplayTileVie
 
         _initialized = true;
         _viewModel = viewModel;
+        _viewModel.SetDarkTheme(ThemeManager.Current?.IsDark == true);
         _viewModel.OpenRequested += OnOpenRequested;
         _viewModel.ResetSessionRequested += OnResetSessionRequested;
-        _viewModel.ResetPlatformSessionRequested += OnResetPlatformSessionRequested;
+        _viewModel.ResetPaneSessionRequested += OnResetPaneSessionRequested;
         _viewModel.ClutterScriptChanged += OnClutterScriptChanged;
 
         await Task.WhenAll(OpenChatAsync(WebView), OpenChatAsync(PlatformWebView));
@@ -104,10 +107,7 @@ public partial class ChatDisplayTileView : UserControl, IView<ChatDisplayTileVie
 
     private void OnThemeChanged(object? sender, ThemeDefinition theme)
     {
-        if (_viewModel?.PlatformChat.Platform == StreamingPlatform.YouTube)
-        {
-            _ = OpenChatAsync(PlatformWebView);
-        }
+        _viewModel?.SetDarkTheme(theme.IsDark);
     }
 
     private void Release()
@@ -130,7 +130,7 @@ public partial class ChatDisplayTileView : UserControl, IView<ChatDisplayTileVie
         {
             _viewModel.OpenRequested -= OnOpenRequested;
             _viewModel.ResetSessionRequested -= OnResetSessionRequested;
-            _viewModel.ResetPlatformSessionRequested -= OnResetPlatformSessionRequested;
+            _viewModel.ResetPaneSessionRequested -= OnResetPaneSessionRequested;
             _viewModel.ClutterScriptChanged -= OnClutterScriptChanged;
         }
 
@@ -167,8 +167,7 @@ public partial class ChatDisplayTileView : UserControl, IView<ChatDisplayTileVie
         }
 
         var profile = pane.SelectedAccount?.BrowserProfile;
-        var dataFolder = profile?.UserDataFolder ?? (ReferenceEquals(browser, WebView) ? viewModel.UserDataFolder
-            : AppPaths.Combine("WebView2", "platform-chat"));
+        var dataFolder = profile?.UserDataFolder ?? viewModel.GetDefaultUserDataFolder(pane);
         var session = (DataFolder: dataFolder, ProfileName: profile?.ProfileName);
         if (state.Session is { } active && active != session)
         {
@@ -180,7 +179,6 @@ public partial class ChatDisplayTileView : UserControl, IView<ChatDisplayTileVie
         var request = ++state.OpenRequest;
 
         var uri = pane.ChannelUri;
-        var isYouTube = pane.Platform == StreamingPlatform.YouTube;
         var isDarkTheme = ThemeManager.Current?.IsDark == true;
         Task? initialization = null;
 
@@ -204,12 +202,7 @@ public partial class ChatDisplayTileView : UserControl, IView<ChatDisplayTileVie
                 return;
             }
 
-            if (isYouTube)
-            {
-                uri = BuildYouTubeChatUri(uri, isDarkTheme);
-            }
-
-            initialization = state.Initialization ??= InitializeBrowserAsync(browser, session, viewModel);
+            initialization = state.Initialization ??= InitializeBrowserAsync(browser, pane, session, viewModel);
             await initialization;
 
             if (!IsCurrentBrowser(browser) || request != state.OpenRequest || browser.CoreWebView2 is not { } core)
@@ -219,7 +212,7 @@ public partial class ChatDisplayTileView : UserControl, IView<ChatDisplayTileVie
 
             if (reload || !state.Navigation.CanReuse(uri))
             {
-                if (isYouTube)
+                if (pane.AppliesPreferredColorScheme)
                 {
                     core.Profile.PreferredColorScheme = isDarkTheme
                         ? CoreWebView2PreferredColorScheme.Dark
@@ -274,7 +267,7 @@ public partial class ChatDisplayTileView : UserControl, IView<ChatDisplayTileVie
 
     private WebView2 ReplaceBrowser(WebView2 browser)
     {
-        var isTwitch = ReferenceEquals(browser, WebView);
+        var isPrimary = ReferenceEquals(browser, WebView);
         var host = (Grid)browser.Parent;
         var replacement = new WebView2 { Style = browser.Style, Name = browser.Name };
         if (BindingOperations.GetBindingBase(browser, WebView2.ZoomFactorProperty) is { } zoomBinding)
@@ -286,12 +279,12 @@ public partial class ChatDisplayTileView : UserControl, IView<ChatDisplayTileVie
         host.Children.RemoveAt(index);
         UnregisterName(browser.Name);
         RegisterName(replacement.Name, replacement);
-        if (isTwitch)
+        if (isPrimary)
         {
             _themeBackground.Detach();
             _themeBackground = WebViewThemeBackground.Attach(replacement);
             WebView = replacement;
-            _twitchBrowser = new();
+            _primaryBrowser = new();
             _clutterScriptId = null;
             _clutterScriptGeneration++;
         }
@@ -300,7 +293,7 @@ public partial class ChatDisplayTileView : UserControl, IView<ChatDisplayTileVie
             _platformThemeBackground.Detach();
             _platformThemeBackground = WebViewThemeBackground.Attach(replacement);
             PlatformWebView = replacement;
-            _platformBrowser = new();
+            _secondaryBrowser = new();
         }
 
         ReleaseBrowser(browser);
@@ -308,16 +301,11 @@ public partial class ChatDisplayTileView : UserControl, IView<ChatDisplayTileVie
         return replacement;
     }
 
-    private static Uri BuildYouTubeChatUri(Uri uri, bool isDarkTheme)
-    {
-        var builder = new UriBuilder(uri);
-        var query = builder.Query.TrimStart('?');
-        var themeParameter = isDarkTheme ? "dark_theme=1" : "dark_theme=0";
-        builder.Query = query.Length == 0 ? themeParameter : $"{query}&{themeParameter}";
-        return builder.Uri;
-    }
-
-    private async Task InitializeBrowserAsync(WebView2 browser, (string DataFolder, string? ProfileName) session, ChatDisplayTileViewModel viewModel)
+    private async Task InitializeBrowserAsync(
+        WebView2 browser,
+        ChatDisplayPaneViewModel pane,
+        (string DataFolder, string? ProfileName) session,
+        ChatDisplayTileViewModel viewModel)
     {
         var environment = await WebView2EnvironmentFactory.CreateAsync(session.DataFolder, viewModel.Logger, _lifetime.Token);
         if (!IsCurrentBrowser(browser))
@@ -342,9 +330,9 @@ public partial class ChatDisplayTileView : UserControl, IView<ChatDisplayTileVie
         core.NavigationStarting += OnNavigationStarting;
         core.NavigationCompleted += OnNavigationCompleted;
 
-        if (ReferenceEquals(browser, WebView))
+        if (pane.SupportsClutterBlocking)
         {
-            await RegisterClutterScriptAsync(viewModel);
+            await RegisterClutterScriptAsync(browser, viewModel);
         }
         else
         {
@@ -367,9 +355,9 @@ public partial class ChatDisplayTileView : UserControl, IView<ChatDisplayTileVie
         }
     }
 
-    private async Task<bool> RegisterClutterScriptAsync(ChatDisplayTileViewModel viewModel)
+    private async Task<bool> RegisterClutterScriptAsync(WebView2 browser, ChatDisplayTileViewModel viewModel)
     {
-        if (_disposed || WebView.CoreWebView2 is not { } core)
+        if (_disposed || browser.CoreWebView2 is not { } core)
         {
             return false;
         }
@@ -386,7 +374,7 @@ public partial class ChatDisplayTileView : UserControl, IView<ChatDisplayTileVie
 
             var scriptId = await core.AddScriptToExecuteOnDocumentCreatedAsync(viewModel.BuildHideClutterScript());
 
-            if (_disposed || !ReferenceEquals(core, WebView.CoreWebView2))
+            if (_disposed || !ReferenceEquals(core, browser.CoreWebView2))
             {
                 return false;
             }
@@ -421,36 +409,60 @@ public partial class ChatDisplayTileView : UserControl, IView<ChatDisplayTileVie
 
     private async Task ReapplyClutterScriptAsync(ChatDisplayTileViewModel viewModel)
     {
-        if (_disposed || WebView.CoreWebView2 is null)
+        if (_disposed)
         {
             return;
         }
 
-        if (!await RegisterClutterScriptAsync(viewModel) || _disposed)
+        foreach (var browser in new[] { WebView, PlatformWebView })
         {
-            return;
-        }
+            if (PaneFor(browser) is not { IsShown: true, SupportsClutterBlocking: true } || browser.CoreWebView2 is null)
+            {
+                continue;
+            }
 
-        await RefreshTwitchAfterSettingsChangeAsync();
+            if (!await RegisterClutterScriptAsync(browser, viewModel) || _disposed)
+            {
+                return;
+            }
+
+            await RefreshPaneAfterSettingsChangeAsync(browser);
+        }
     }
 
     private void OnOpenRequested(ChatDisplayPaneViewModel pane, bool reload)
     {
-        var browser = ReferenceEquals(pane, _viewModel?.TwitchChat) ? WebView : PlatformWebView;
-        _ = OpenChatAsync(browser, reload);
+        _ = OpenChatAsync(BrowserForPane(pane), reload);
     }
 
     private void OnResetSessionRequested()
     {
-        var browser = WebView;
-        if (_viewModel is not { TwitchChat.IsShown: true } viewModel || browser.CoreWebView2?.Profile is not { } profile)
+        if (_viewModel is not { } viewModel)
+        {
+            return;
+        }
+
+        var pane = viewModel.PrimaryChat.IsShown ? viewModel.PrimaryChat : viewModel.SecondaryChat;
+        if (!pane.IsShown)
+        {
+            return;
+        }
+
+        if (pane.SelectedAccount is { Id.Length: > 0, BrowserProfile: not null } selectedAccount)
+        {
+            OnResetPaneSessionRequested(pane, selectedAccount.Id, selectedAccount.Label);
+            return;
+        }
+
+        var browser = BrowserForPane(pane);
+        if (browser.CoreWebView2?.Profile is not { } profile)
         {
             return;
         }
 
         var confirmed = StyledMessageBox.Show(
-            $"Это завершит вход в чате Twitch и очистит куки профиля «{viewModel.TwitchChat.SelectedAccount?.Label}». Продолжить?",
-            "Сброс сессии Twitch",
+            $"Это завершит вход в чате {pane.DisplayName} и очистит куки профиля «{pane.SelectedAccount?.Label}». Продолжить?",
+            $"Сброс сессии {pane.DisplayName}",
             MessageBoxButton.YesNo,
             MessageBoxImage.Warning) == MessageBoxResult.Yes;
 
@@ -464,17 +476,19 @@ public partial class ChatDisplayTileView : UserControl, IView<ChatDisplayTileVie
             exception => viewModel.Logger.LogError(exception, "Не удалось очистить данные сессии WebView2"));
     }
 
-    private void OnResetPlatformSessionRequested(string accountId, string accountLabel)
+    private void OnResetPaneSessionRequested(ChatDisplayPaneViewModel pane, string accountId, string accountLabel)
     {
-        var browser = PlatformWebView;
-        if (_viewModel is not { PlatformChat.IsShown: true } viewModel)
+        var browser = BrowserForPane(pane);
+        if (_viewModel is not { } viewModel || !pane.IsShown)
         {
             return;
         }
 
+        var targetPlatform = pane.Platform;
+        var platformDisplayName = pane.DisplayName;
         var confirmed = StyledMessageBox.Show(
-            $"Это завершит браузерный вход YouTube и очистит куки профиля «{accountLabel}». Отправка через API останется доступной. Продолжить?",
-            "Сброс веб-сессии YouTube",
+            $"Это завершит веб-сессию {platformDisplayName} и очистит куки профиля «{accountLabel}». Продолжить?",
+            $"Сброс веб-сессии {platformDisplayName}",
             MessageBoxButton.YesNo,
             MessageBoxImage.Warning) == MessageBoxResult.Yes;
 
@@ -484,21 +498,24 @@ public partial class ChatDisplayTileView : UserControl, IView<ChatDisplayTileVie
         }
 
         var profile = browser.CoreWebView2?.Profile;
-        var browserProfile = viewModel.PlatformChat.SelectedAccount?.BrowserProfile;
+        var browserProfile = pane.SelectedAccount?.BrowserProfile;
         _ = UiAsync.RunGuardedAsync(
-            () => ClearPlatformSessionAsync(browser, profile, browserProfile, viewModel, accountId),
+            () => ClearPaneSessionAsync(browser, profile, browserProfile, viewModel, pane, targetPlatform, platformDisplayName, accountId),
             exception =>
             {
-                viewModel.Logger.LogError(exception, "Не удалось очистить веб-сессию YouTube WebView2");
-                viewModel.PlatformChat.MessageStatus = "Не удалось очистить куки веб-сессии YouTube. Попробуйте позже.";
+                viewModel.Logger.LogError(exception, "Не удалось очистить веб-сессию {Platform} WebView2", platformDisplayName);
+                pane.StatusNotice = $"Не удалось очистить куки веб-сессии {platformDisplayName}. Попробуйте позже.";
             });
     }
 
-    private async Task ClearPlatformSessionAsync(
+    private async Task ClearPaneSessionAsync(
         WebView2 browser,
         CoreWebView2Profile? profile,
         PlatformChatBrowserProfile? browserProfile,
         ChatDisplayTileViewModel viewModel,
+        ChatDisplayPaneViewModel pane,
+        StreamingPlatform targetPlatform,
+        string platformDisplayName,
         string accountId)
     {
         if (profile is null && browserProfile is not null && IsCurrentBrowser(browser))
@@ -512,7 +529,7 @@ public partial class ChatDisplayTileView : UserControl, IView<ChatDisplayTileVie
             }
 
             state.Session = targetSession;
-            var init = state.Initialization ??= InitializeBrowserAsync(browser, targetSession, viewModel);
+            var init = state.Initialization ??= InitializeBrowserAsync(browser, pane, targetSession, viewModel);
             await init;
 
             if (!IsCurrentBrowser(browser))
@@ -525,8 +542,8 @@ public partial class ChatDisplayTileView : UserControl, IView<ChatDisplayTileVie
 
         if (profile is null)
         {
-            viewModel.Logger.LogWarning("Профиль WebView2 для аккаунта YouTube {AccountId} недоступен для очистки", accountId);
-            viewModel.PlatformChat.MessageStatus = "Не удалось очистить веб-сессию YouTube: браузер недоступен.";
+            viewModel.Logger.LogWarning("Профиль WebView2 для аккаунта {Platform} {AccountId} недоступен для очистки", platformDisplayName, accountId);
+            pane.StatusNotice = $"Не удалось очистить веб-сессию {platformDisplayName}: браузер недоступен.";
             return;
         }
 
@@ -538,7 +555,7 @@ public partial class ChatDisplayTileView : UserControl, IView<ChatDisplayTileVie
             return;
         }
 
-        viewModel.CompletePlatformSessionReset(accountId);
+        viewModel.CompletePaneSessionReset(pane, targetPlatform, accountId);
     }
 
     private async Task ClearSessionAsync(WebView2 browser, CoreWebView2Profile profile)
@@ -555,13 +572,13 @@ public partial class ChatDisplayTileView : UserControl, IView<ChatDisplayTileVie
             return;
         }
 
-        await RefreshTwitchAfterSettingsChangeAsync();
+        await RefreshPaneAfterSettingsChangeAsync(browser);
     }
 
-    private Task RefreshTwitchAfterSettingsChangeAsync()
+    private Task RefreshPaneAfterSettingsChangeAsync(WebView2 browser)
     {
-        _twitchBrowser.Navigation.RequireRetry();
-        return OpenChatAsync(WebView, reload: true);
+        StateFor(browser).Navigation.RequireRetry();
+        return OpenChatAsync(browser, reload: true);
     }
 
     private void OnNavigationStarting(object? sender, CoreWebView2NavigationStartingEventArgs e)

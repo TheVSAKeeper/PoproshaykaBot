@@ -238,7 +238,69 @@
                                                Foreground="{DynamicResource Fg.Muted}"
                                                FontSize="{DynamicResource Font.Size.S}"
                                                TextWrapping="Wrap"
-                                               Margin="0,0,0,10" />
+                                               Margin="0,0,0,8" />
+
+                                    <Border Background="{DynamicResource Bg.Base}"
+                                            BorderBrush="{DynamicResource Border.Subtle}"
+                                            BorderThickness="1"
+                                            CornerRadius="{DynamicResource Radius.S}"
+                                            Padding="10,7"
+                                            Margin="0,0,0,10">
+                                        <StackPanel>
+                                            <DockPanel>
+                                                <TextBlock DockPanel.Dock="Right"
+                                                           Text="{Binding OAuthMethodLabel}"
+                                                           Foreground="{DynamicResource Fg.Muted}"
+                                                           FontSize="{DynamicResource Font.Size.Caption}"
+                                                           VerticalAlignment="Center"
+                                                           Margin="8,0,0,0"
+                                                           Visibility="{Binding HasOAuthMethodLabel, Converter={StaticResource BoolToVisibility}}" />
+                                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                                    <Ellipse Width="7"
+                                                             Height="7"
+                                                             VerticalAlignment="Center"
+                                                             Margin="0,0,7,0"
+                                                             keepshell:SeverityBrushBehavior.Fill="{Binding ApiAuthStatusSeverity}" />
+                                                    <TextBlock Text="{Binding ApiAuthStatusText}"
+                                                               keepshell:SeverityBrushBehavior.Foreground="{Binding ApiAuthStatusSeverity}"
+                                                               FontSize="{DynamicResource Font.Size.S}"
+                                                               VerticalAlignment="Center" />
+                                                </StackPanel>
+                                            </DockPanel>
+                                            <DockPanel Margin="0,6,0,0"
+                                                       Visibility="{Binding SupportsWebChat, Converter={StaticResource BoolToVisibility}}">
+                                                <WrapPanel DockPanel.Dock="Right"
+                                                           VerticalAlignment="Center"
+                                                           Margin="8,0,0,0">
+                                                    <Button Content="Войти в веб-чат"
+                                                            Style="{StaticResource Button.Secondary}"
+                                                            Command="{Binding SignInWebChatCommand}"
+                                                            MinHeight="24"
+                                                            Padding="9,2"
+                                                            FontSize="{DynamicResource Font.Size.S}"
+                                                            Visibility="{Binding CanSignInWebChat, Converter={StaticResource BoolToVisibility}}" />
+                                                    <Button Content="Сбросить веб-сессию"
+                                                            Style="{StaticResource Button.Ghost}"
+                                                            Command="{Binding ResetWebChatCommand}"
+                                                            MinHeight="24"
+                                                            Padding="9,2"
+                                                            FontSize="{DynamicResource Font.Size.S}"
+                                                            Visibility="{Binding CanResetWebChat, Converter={StaticResource BoolToVisibility}}" />
+                                                </WrapPanel>
+                                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                                    <Ellipse Width="7"
+                                                             Height="7"
+                                                             VerticalAlignment="Center"
+                                                             Margin="0,0,7,0"
+                                                             keepshell:SeverityBrushBehavior.Fill="{Binding WebChatStatusSeverity}" />
+                                                    <TextBlock Text="{Binding WebChatStatusText}"
+                                                               keepshell:SeverityBrushBehavior.Foreground="{Binding WebChatStatusSeverity}"
+                                                               FontSize="{DynamicResource Font.Size.S}"
+                                                               VerticalAlignment="Center" />
+                                                </StackPanel>
+                                            </DockPanel>
+                                        </StackPanel>
+                                    </Border>
 
                                     <ItemsControl ItemsSource="{Binding Grants}" Focusable="False">
                                         <ItemsControl.ItemTemplate>

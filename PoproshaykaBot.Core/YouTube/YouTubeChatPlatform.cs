@@ -135,11 +135,30 @@ public sealed class YouTubeChatPlatform : IChatPlatform
         }
     }
 
+    public bool AppliesPreferredColorScheme => true;
+
     public string? BuildNativeChatUrl(StreamInfo stream)
     {
         return string.IsNullOrWhiteSpace(stream.Id)
             ? null
             : $"https://www.youtube.com/live_chat?v={Uri.EscapeDataString(stream.Id.Trim())}&is_popout=1";
+    }
+
+    public string? BuildNativeChatUrl(StreamInfo? stream, string? targetChannelLogin, bool isDarkTheme)
+    {
+        if (stream is null)
+        {
+            return null;
+        }
+
+        var url = BuildNativeChatUrl(stream);
+        if (string.IsNullOrWhiteSpace(url))
+        {
+            return null;
+        }
+
+        var separator = url.Contains('?') ? '&' : '?';
+        return $"{url}{separator}dark_theme={(isDarkTheme ? "1" : "0")}";
     }
 
     public string? BuildStreamUrl(StreamInfo? stream = null)
