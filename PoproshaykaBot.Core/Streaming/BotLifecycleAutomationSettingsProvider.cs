@@ -1,19 +1,13 @@
 ﻿using PoproshaykaBot.Core.Platforms;
-using PoproshaykaBot.Core.Settings;
+using PoproshaykaBot.Core.Settings.Stores;
 
 namespace PoproshaykaBot.Core.Streaming;
 
-public sealed class BotLifecycleAutomationSettingsProvider(SettingsManager settingsManager)
+public sealed class BotLifecycleAutomationSettingsProvider(PlatformLifecycleSettingsStore store)
     : IBotLifecycleAutomationSettingsProvider
 {
-    private static readonly BotLifecycleAutomationSettings DisabledSettings = new();
-
     public BotLifecycleAutomationSettings Get(StreamingPlatform platform)
     {
-        return platform switch
-        {
-            StreamingPlatform.Twitch => settingsManager.Current.Twitch.BotLifecycleAutomation,
-            _ => DisabledSettings,
-        };
+        return store.Get(platform);
     }
 }

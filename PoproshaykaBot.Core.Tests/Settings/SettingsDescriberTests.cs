@@ -199,6 +199,7 @@ public sealed class SettingsDescriberTests
         {
             nameof(AppSettings),
             "ChatSettings",
+            "PlatformLifecycleSettings",
             "ObsIntegrationSettings",
             "ObsChatSettings",
             "UpdateSettings",

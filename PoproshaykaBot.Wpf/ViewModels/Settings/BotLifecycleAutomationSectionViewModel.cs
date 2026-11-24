@@ -1,30 +1,47 @@
 ﻿using CommunityToolkit.Mvvm.ComponentModel;
+using PoproshaykaBot.Core.Platforms;
+using PoproshaykaBot.Core.Settings.Stores;
 using PoproshaykaBot.Core.Streaming;
+using System.Collections.ObjectModel;
 
 namespace PoproshaykaBot.Wpf.ViewModels.Settings;
 
-public sealed partial class BotLifecycleAutomationSectionViewModel : ObservableObject, IDisposable
+public sealed class BotLifecycleAutomationSectionViewModel : ObservableObject, IDisposable
 {
-    [ObservableProperty]
-    private bool _autoConnectOnStreamOnline;
-
-    [ObservableProperty]
-    private bool _autoDisconnectOnStreamOffline;
-
-    public BotLifecycleAutomationSectionViewModel()
+    public BotLifecycleAutomationSectionViewModel(IChatPlatformRegistry? platformRegistry = null)
     {
+        if (platformRegistry is not null)
+        {
+            foreach (var platform in platformRegistry.All)
+            {
+                Platforms.Add(new(platform.Id, platform.DisplayName));
+            }
+        }
     }
 
-    public void LoadSettings(BotLifecycleAutomationSettings settings)
+    public ObservableCollection<PlatformLifecycleItemViewModel> Platforms { get; } = [];
+
+    public void LoadSettings(PlatformLifecycleSettingsFile file)
     {
-        AutoConnectOnStreamOnline = settings.AutoConnectOnStreamOnline;
-        AutoDisconnectOnStreamOffline = settings.AutoDisconnectOnStreamOffline;
+        ArgumentNullException.ThrowIfNull(file);
+
+        foreach (var item in Platforms)
+        {
+            var settings = file.Platforms.TryGetValue(item.Platform, out var found) && found is not null
+                ? found
+                : new BotLifecycleAutomationSettings();
+            item.LoadSettings(settings);
+        }
     }
 
-    public void SaveSettings(BotLifecycleAutomationSettings settings)
+    public void SaveSettings(PlatformLifecycleSettingsFile file)
     {
-        settings.AutoConnectOnStreamOnline = AutoConnectOnStreamOnline;
-        settings.AutoDisconnectOnStreamOffline = AutoDisconnectOnStreamOffline;
+        ArgumentNullException.ThrowIfNull(file);
+
+        foreach (var item in Platforms)
+        {
+            file.Platforms[item.Platform] = item.ToSettings();
+        }
     }
 
     public void Dispose()

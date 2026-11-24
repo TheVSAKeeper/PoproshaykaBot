@@ -7,6 +7,7 @@ using PoproshaykaBot.Core.Infrastructure.Events.Lifecycle;
 using PoproshaykaBot.Core.Infrastructure.Events.Streaming;
 using PoproshaykaBot.Core.Infrastructure.Hosting;
 using PoproshaykaBot.Core.Settings;
+using PoproshaykaBot.Core.Settings.Stores;
 using PoproshaykaBot.Core.Streaming;
 
 namespace PoproshaykaBot.Core.Tests.Streaming;
@@ -19,6 +20,7 @@ public sealed class BotLifecycleAutomationHandlerTests
     [SetUp]
     public void SetUp()
     {
+        _directory = Directory.CreateTempSubdirectory("lifecycle-handler");
         _order = [];
 
         _settings = new()
@@ -36,6 +38,7 @@ public sealed class BotLifecycleAutomationHandlerTests
 
         _settingsManager = Substitute.For<SettingsManager>(NullLogger<SettingsManager>.Instance, null, null);
         _settingsManager.Current.Returns(_settings);
+        _lifecycleStore = new(_settingsManager, filePath: Path.Combine(_directory.FullName, "platform-lifecycle.json"));
 
         _connectionController = Substitute.For<IBotConnectionController>();
 
@@ -57,7 +60,7 @@ public sealed class BotLifecycleAutomationHandlerTests
             NullLogger<BroadcastAggregator>.Instance);
 
         _handler = new(_connectionController,
-            new BotLifecycleAutomationSettingsProvider(_settingsManager),
+            new BotLifecycleAutomationSettingsProvider(_lifecycleStore),
             _aggregator,
             _targetChannelProvider,
             _eventBus,
@@ -90,14 +93,17 @@ public sealed class BotLifecycleAutomationHandlerTests
     {
         _handler.Dispose();
         _aggregator.Dispose();
+        _directory.Delete(recursive: true);
     }
 
     private static readonly TimeSpan WaitTimeout = TimeSpan.FromSeconds(5);
 
+    private DirectoryInfo _directory = null!;
     private List<string> _order = null!;
     private TaskCompletionSource _continuationsDone = null!;
     private AppSettings _settings = null!;
     private SettingsManager _settingsManager = null!;
+    private PlatformLifecycleSettingsStore _lifecycleStore = null!;
     private IBotConnectionController _connectionController = null!;
     private InMemoryEventBus _eventBus = null!;
     private BotLifecycleAutomationHandler _handler = null!;
@@ -235,6 +241,27 @@ public sealed class BotLifecycleAutomationHandlerTests
 
         _connectionController.DidNotReceive().StartConnection(Arg.Any<StreamingPlatform>());
         await _connectionController.DidNotReceive().StopAsync(Arg.Any<StreamingPlatform>(), Arg.Any<BotStopMode>());
+    }
+
+    [Test]
+    public async Task StreamWentOnlineAndOffline_YouTubeEnabled_ConnectsAndDisconnectsYouTube()
+    {
+        _lifecycleStore.Set(StreamingPlatform.YouTube, new()
+        {
+            AutoConnectOnStreamOnline = true,
+            AutoDisconnectOnStreamOffline = true,
+        });
+
+        await _eventBus.PublishAsync(new PlatformConnectionChanged(StreamingPlatform.YouTube, BotLifecyclePhase.Idle));
+        await _eventBus.PublishAsync(new StreamWentOnline(StreamingPlatform.YouTube, "UC_MAIN", null));
+
+        _connectionController.Received(1).StartConnection(StreamingPlatform.YouTube);
+
+        await _eventBus.PublishAsync(new PlatformConnectionChanged(StreamingPlatform.YouTube, BotLifecyclePhase.Connected));
+        await _eventBus.PublishAsync(new StreamWentOffline(StreamingPlatform.YouTube, "UC_MAIN"));
+        await _continuationsDone.Task.WaitAsync(WaitTimeout);
+
+        await _connectionController.Received(1).StopAsync(StreamingPlatform.YouTube, BotStopMode.Graceful);
     }
 
     private FakeTargetChannelProvider _targetChannelProvider = null!;

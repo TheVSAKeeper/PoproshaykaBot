@@ -548,7 +548,11 @@ public sealed class MultistreamLayoutTests
                 new BasicSettingsSectionContributor(new(), new(), new(), manager, new StubTargetChannelProvider()),
                 new TwitchConnectionSettingsContributor(oauth, accounts, manager, NullLogger<TwitchConnectionSettingsContributor>.Instance),
                 new YouTubeConnectionSettingsContributor(ytVm, ytSettingsStore, ytAccountsStore),
-                new StreamSettingsSectionContributor(new(), new(), new(new(filePath: Path.Combine(_directory, "polls.json")), TimeProvider.System)),
+                new StreamSettingsSectionContributor(
+                    new(),
+                    new(registry),
+                    new(new(filePath: Path.Combine(_directory, "polls.json")), TimeProvider.System),
+                    new(manager, filePath: Path.Combine(_directory, "platform-lifecycle.json"), gate: gate)),
                 new ChannelsSettingsSectionContributor(editor, groups, catalog),
             ],
             manager, gate, server, bus, NullLogger<SettingsPageViewModel>.Instance, dialogs, new MemorySettings(),

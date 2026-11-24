@@ -14,6 +14,7 @@ public static class SettingsServiceCollectionExtensions
         services.AddSingleton<SettingsWriteGate>();
         services.AddSingleton<SettingsManager>();
         services.AddSingleton<ChatSettingsStore>();
+        services.AddSingleton<PlatformLifecycleSettingsStore>();
         services.AddSingleton<IChatHistorySettingsProvider>(static provider => provider.GetRequiredService<ChatSettingsStore>());
         services.AddSingleton<AccountsStore>();
         services.AddSingleton<YouTubeSettingsStore>();
@@ -39,6 +40,7 @@ public static class SettingsServiceCollectionExtensions
         [
             new(nameof(AppSettings), SettingsDescriber.Describe(provider.GetRequiredService<SettingsManager>().Current)),
             new("ChatSettings", ChatSettingsStore.Describe(provider.GetRequiredService<ChatSettingsStore>().Load())),
+            new("PlatformLifecycleSettings", PlatformLifecycleSettingsStore.Describe(provider.GetRequiredService<PlatformLifecycleSettingsStore>().Load())),
             new("ObsIntegrationSettings", ObsIntegrationStore.Describe(provider.GetRequiredService<ObsIntegrationStore>().Load())),
             new("ObsChatSettings", ObsChatStore.Describe(provider.GetRequiredService<ObsChatStore>().Load())),
             new("UpdateSettings", UpdateStore.Describe(provider.GetRequiredService<UpdateStore>().Load())),

@@ -108,7 +108,7 @@ internal static class PlatformSettingsPages
     {
         SectionKey or "oauth" or "youtube" or "channels" => SectionKey,
         "basic" when path == "basic/channel" => SectionKey,
-        "stream" when path is "stream/auto" or "stream/lifecycle" => SectionKey,
+        "stream" when path == "stream/auto" || path.StartsWith("stream/lifecycle", StringComparison.Ordinal) => SectionKey,
         _ => path,
     };
 }
