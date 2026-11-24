@@ -1725,6 +1725,86 @@ public class YouTubeStreamMonitorTests
         Assert.That(_governor.CaptureDiagnostics().ExhaustedByServer, Is.False);
     }
 
+    [Test]
+    public async Task CaptureDiagnostics_Reports_Monitoring_Transport_Accurately()
+    {
+        Assert.That(_monitor.CaptureDiagnostics().Transport, Is.EqualTo(YouTubeMonitoringTransport.None));
+
+        _broadcastClient.ListActiveBroadcastsAsync(Arg.Any<CancellationToken>())
+            .Returns(Array.Empty<YouTubeBroadcastSummary>());
+        await _monitor.RefreshLiveSnapshotAsync();
+        Assert.That(_monitor.CaptureDiagnostics().Transport, Is.EqualTo(YouTubeMonitoringTransport.DataApi));
+
+        var catalogStore = new ChannelCatalogStore(null, Path.Combine(_directory, "channels-transport.json"));
+        const string foreignChannelId = "UC0000000000000000000009";
+        catalogStore.Save(new()
+        {
+            Channels =
+            [
+                new()
+                {
+                    Platform = StreamingPlatform.YouTube,
+                    ChannelId = foreignChannelId,
+                    DisplayName = "Foreign",
+                    IsConfigured = true,
+                    MonitoringEnabled = true,
+                    BotAccountId = "UC_BOT",
+                    BotContextId = "yt-bot-1",
+                    BotVerifiedSubjectId = "UC_BOT",
+                },
+            ],
+            Platforms = [new() { Platform = StreamingPlatform.YouTube, ActiveChannelId = foreignChannelId }],
+        });
+
+        var publicDiscovery = Substitute.For<IYouTubePublicLiveDiscoveryClient>();
+        publicDiscovery.FindActiveLiveVideoAsync(foreignChannelId, Arg.Any<CancellationToken>())
+            .Returns((YouTubePublicLiveVideo?)null);
+
+        var roleAuth = new RoleAwareStubAuthService();
+        roleAuth.SetToken(PlatformAuthRole.Bot, "yt-bot-1", "bot-token");
+        _accountsStore.UpsertContext(PlatformAuthRole.Bot, "yt-bot-1", "Bot", new YouTubeAccountSettings { ChannelId = "UC_BOT" });
+
+        var resolver = new YouTubeTargetChannelResolver(_broadcastClient, _accountsStore, NullLogger<YouTubeTargetChannelResolver>.Instance);
+        using var botMonitor = new YouTubeStreamMonitor(
+            _broadcastClient,
+            resolver,
+            _selectionStore,
+            roleAuth,
+            _settingsStore,
+            _governor,
+            _eventBus,
+            _clock,
+            NullLogger<YouTubeStreamMonitor>.Instance,
+            catalogStore,
+            _accountsStore,
+            publicDiscovery: publicDiscovery);
+
+        await botMonitor.RefreshLiveSnapshotAsync();
+        Assert.That(botMonitor.CaptureDiagnostics().Transport, Is.EqualTo(YouTubeMonitoringTransport.InnerTubeDiscovery));
+
+        publicDiscovery.FindActiveLiveVideoAsync(foreignChannelId, Arg.Any<CancellationToken>())
+            .Returns(new YouTubePublicLiveVideo("vid-live", foreignChannelId, "Foreign", "Live!", _clock.UtcNow.AddMinutes(-5)));
+        _broadcastClient.GetVideoLiveSampleAsync("vid-live", PlatformAuthRole.Bot, "yt-bot-1", Arg.Any<CancellationToken>())
+            .Returns(new YouTubeVideoLiveSample(
+                "vid-live",
+                "Live!",
+                _clock.UtcNow.AddMinutes(-5),
+                null,
+                100,
+                foreignChannelId,
+                "Foreign",
+                "chat-live",
+                HasLiveStreamingDetails: true));
+
+        _clock.UtcNow = _clock.UtcNow.AddMinutes(2);
+        await botMonitor.RefreshLiveSnapshotAsync();
+        Assert.That(botMonitor.CaptureDiagnostics().Transport, Is.EqualTo(YouTubeMonitoringTransport.HybridInnerTubeAndDataApi));
+
+        _settingsStore.Mutate(s => s.Enabled = false);
+        await botMonitor.RefreshLiveSnapshotAsync();
+        Assert.That(botMonitor.CaptureDiagnostics().Transport, Is.EqualTo(YouTubeMonitoringTransport.None));
+    }
+
     private YouTubeBroadcastSummary BuildBroadcast(string videoId, string liveChatId, string title)
     {
         return new(videoId, ChannelId, "MainChannel", liveChatId, title, _clock.UtcNow);

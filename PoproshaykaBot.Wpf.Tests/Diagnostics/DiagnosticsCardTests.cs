@@ -1,6 +1,7 @@
 ﻿using KeepShell.Diagnostics;
 using Microsoft.Extensions.Logging.Abstractions;
 using PoproshaykaBot.Core.Diagnostics;
+using PoproshaykaBot.Core.Streaming;
 using PoproshaykaBot.Wpf.Infrastructure.Diagnostics;
 using PoproshaykaBot.Wpf.ViewModels.Diagnostics;
 
@@ -104,6 +105,26 @@ public class DiagnosticsCardTests
             Assert.That(card.State, Is.EqualTo(DiagnosticsCardState.Error));
             Assert.That(card.Rows.Single(row => row.Key == "Twitch").Value, Is.EqualTo("подключено"));
             Assert.That(card.Rows.Single(row => row.Key == "YouTube").Value, Does.Contain("токен бота недоступен"));
+            Assert.That(card.Rows.Single(row => row.Key == "Транспорт чата YouTube").Value, Does.Contain("gRPC"));
+        }
+    }
+
+    [Test]
+    public void Чат_показывает_InnerTube_транспорт_YouTube_в_диагностике()
+    {
+        var snapshot = DiagnosticsSnapshots.Full() with
+        {
+            YouTubeChat = new(ConnectionState.Connected, YouTubeChatTransport.InnerTube, ChatReadIssue.None,
+                "@VissGames", "chat", null, null, null, 12, 0, 0),
+            YouTubeMonitoring = new(true, StreamStatus.Online, YouTubeMonitorIssue.None,
+                "UC1", "vid-1", "chat", 1, DiagnosticsSnapshots.CapturedAt, 0, YouTubeMonitoringTransport.HybridInnerTubeAndDataApi),
+        };
+        var card = Activate(publisher => new ChatDiagnosticsCardViewModel(publisher), snapshot);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(card.Rows.Single(row => row.Key == "Транспорт чата YouTube").Value, Does.Contain("InnerTube"));
+            Assert.That(card.Rows.Single(row => row.Key == "Мониторинг YouTube").Value, Does.Contain("InnerTube").And.Contains("Data API"));
         }
     }
 

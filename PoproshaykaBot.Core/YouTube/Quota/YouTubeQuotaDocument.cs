@@ -61,6 +61,10 @@ internal sealed class YouTubeQuotaProjectRecord
     [JsonPropertyName("broadcasterCommittedUnits")]
     public int BroadcasterCommittedUnits { get; set; }
 
+    [JsonPropertyName("categoryUnits")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public Dictionary<string, int>? CategoryUnits { get; set; }
+
     [JsonPropertyName("exhaustedByServer")]
     public bool ExhaustedByServer { get; set; }
 
@@ -76,6 +80,7 @@ internal sealed class YouTubeQuotaProjectRecord
             CommittedUnits = CommittedUnits,
             BotCommittedUnits = BotCommittedUnits,
             BroadcasterCommittedUnits = BroadcasterCommittedUnits,
+            CategoryUnits = CategoryUnits is null ? null : new Dictionary<string, int>(CategoryUnits, StringComparer.Ordinal),
             ExhaustedByServer = ExhaustedByServer,
             UpdatedAtUtc = UpdatedAtUtc,
         };

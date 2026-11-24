@@ -6,15 +6,29 @@ using PoproshaykaBot.Wpf.Infrastructure;
 
 namespace PoproshaykaBot.Wpf.ViewModels.Settings;
 
+public sealed record YouTubeQuotaCategoryItem(string Label, int Units, string UnitsText);
+
 public sealed partial class YouTubeQuotaStatusViewModel : ObservableObject, IDisposable
 {
     private static readonly TimeSpan AutoRefreshInterval = TimeSpan.FromSeconds(5);
 
+    private static readonly (YouTubeQuotaCategory Category, string Label)[] CategoryDisplayOrder =
+    [
+        (YouTubeQuotaCategory.ChatSend, "Отправка в чат"),
+        (YouTubeQuotaCategory.StreamMonitoring, "Мониторинг эфира"),
+        (YouTubeQuotaCategory.ChatRead, "Чтение чата (API)"),
+        (YouTubeQuotaCategory.ChannelAndBroadcastInfo, "Проверка канала и метаданные"),
+        (YouTubeQuotaCategory.Other, "Прочие запросы API"),
+    ];
+
     private readonly IYouTubeQuotaGovernor? _governor;
+    private readonly IYouTubeChatDiagnostics? _chatDiagnostics;
+    private readonly IYouTubeMonitorDiagnostics? _monitorDiagnostics;
     private readonly TimeProvider _timeProvider;
     private readonly IUiTimer _refreshTimer;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasNoUsageToday))]
     private bool _hasData;
 
     [ObservableProperty]
@@ -39,15 +53,36 @@ public sealed partial class YouTubeQuotaStatusViewModel : ObservableObject, IDis
     [NotifyPropertyChangedFor(nameof(HasWarning))]
     private string _warningText = string.Empty;
 
+    [ObservableProperty]
+    private string _chatReadTransportText = string.Empty;
+
+    [ObservableProperty]
+    private string _monitoringTransportText = string.Empty;
+
+    [ObservableProperty]
+    private string _chatSendTransportText = string.Empty;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasCategoryItems))]
+    [NotifyPropertyChangedFor(nameof(HasNoUsageToday))]
+    private IReadOnlyList<YouTubeQuotaCategoryItem> _categoryItems = [];
+
+    [ObservableProperty]
+    private string _categorySummaryText = string.Empty;
+
     public YouTubeQuotaStatusViewModel(
         IYouTubeQuotaGovernor? governor,
         IUiDispatcher uiDispatcher,
-        TimeProvider timeProvider)
+        TimeProvider timeProvider,
+        IYouTubeChatDiagnostics? chatDiagnostics = null,
+        IYouTubeMonitorDiagnostics? monitorDiagnostics = null)
     {
         ArgumentNullException.ThrowIfNull(uiDispatcher);
         ArgumentNullException.ThrowIfNull(timeProvider);
 
         _governor = governor;
+        _chatDiagnostics = chatDiagnostics;
+        _monitorDiagnostics = monitorDiagnostics;
         _timeProvider = timeProvider;
         _refreshTimer = uiDispatcher.CreateTimer(AutoRefreshInterval, Refresh);
 
@@ -56,9 +91,15 @@ public sealed partial class YouTubeQuotaStatusViewModel : ObservableObject, IDis
 
     public bool HasWarning => !string.IsNullOrEmpty(WarningText);
 
+    public bool HasCategoryItems => CategoryItems.Count > 0;
+
+    public bool HasNoUsageToday => HasData && CategoryItems.Count == 0;
+
+    public string NoUsageTodayText => "За сегодня квота не расходовалась.";
+
     public void SetAutoRefresh(bool active)
     {
-        if (active && _governor is not null)
+        if (active && (_governor is not null || _chatDiagnostics is not null || _monitorDiagnostics is not null))
         {
             Refresh();
             _refreshTimer.Start();
@@ -71,6 +112,8 @@ public sealed partial class YouTubeQuotaStatusViewModel : ObservableObject, IDis
     [RelayCommand]
     public void Refresh()
     {
+        RefreshTransports();
+
         if (_governor is null)
         {
             HasData = false;
@@ -81,6 +124,8 @@ public sealed partial class YouTubeQuotaStatusViewModel : ObservableObject, IDis
             NextResetText = string.Empty;
             ReliabilityText = string.Empty;
             WarningText = string.Empty;
+            CategoryItems = [];
+            CategorySummaryText = string.Empty;
             return;
         }
 
@@ -125,11 +170,118 @@ public sealed partial class YouTubeQuotaStatusViewModel : ObservableObject, IDis
         };
 
         WarningText = BuildWarning(status);
+
+        var items = BuildCategoryItems(status, committed, culture);
+        CategoryItems = items;
+        CategorySummaryText = items.Count == 0
+            ? NoUsageTodayText
+            : string.Join(", ", items.Select(static item => $"{item.Label}: {item.UnitsText}"));
     }
 
     public void Dispose()
     {
         _refreshTimer.Stop();
+    }
+
+    private void RefreshTransports()
+    {
+        var chatStatus = _chatDiagnostics?.CaptureDiagnostics();
+        var monitorStatus = _monitorDiagnostics?.CaptureDiagnostics();
+
+        ChatReadTransportText = FormatChatReadTransport(chatStatus);
+        MonitoringTransportText = FormatMonitoringTransport(monitorStatus);
+        ChatSendTransportText = monitorStatus is { Enabled: false }
+            ? "YouTube Data API (20 ед. за сообщение; сейчас YouTube отключён)"
+            : "YouTube Data API (20 ед. за сообщение); при работе без ответов бота квота не тратится";
+    }
+
+    internal static string FormatChatReadTransport(YouTubeChatStatus? status)
+    {
+        if (status is null)
+        {
+            return "данные недоступны";
+        }
+
+        return status.Transport switch
+        {
+            YouTubeChatTransport.InnerTube => "InnerTube (без расхода квоты)",
+            YouTubeChatTransport.GrpcStream => "YouTube Data API (gRPC, ~5 ед./запрос)",
+            YouTubeChatTransport.RestPolling => "YouTube Data API (REST, 5 ед./запрос)",
+            _ => status.Issue switch
+            {
+                ChatReadIssue.MissingBotAuth => "не подключён – нужна авторизация бота",
+                ChatReadIssue.WaitingForActiveBroadcast => "не подключён – ожидание активного эфира",
+                ChatReadIssue.QuotaExhausted => "не подключён – квота исчерпана",
+                ChatReadIssue.TransientError => "не подключён – ошибка чтения, повтор подключения",
+                _ => "не подключён",
+            },
+        };
+    }
+
+    internal static string FormatMonitoringTransport(YouTubeMonitoringStatus? status)
+    {
+        if (status is null)
+        {
+            return "данные недоступны";
+        }
+
+        if (!status.Enabled)
+        {
+            return "не запущен (YouTube отключён)";
+        }
+
+        return status.Transport switch
+        {
+            YouTubeMonitoringTransport.InnerTubeDiscovery => "InnerTube (0 ед. квоты)",
+            YouTubeMonitoringTransport.HybridInnerTubeAndDataApi => "InnerTube (0 ед.) + Data API для метаданных (1 ед./мин)",
+            YouTubeMonitoringTransport.DataApi => "YouTube Data API (1 ед./запрос)",
+            _ => status.Issue switch
+            {
+                YouTubeMonitorIssue.MissingBroadcasterAuth => "не запущен – нужна авторизация стримера",
+                YouTubeMonitorIssue.MissingBotAuth => "не запущен – нужна авторизация бота",
+                YouTubeMonitorIssue.QuotaExhausted => "приостановлен – квота исчерпана",
+                YouTubeMonitorIssue.AccessUnverified => "не запущен – доступ аккаунта не подтверждён",
+                YouTubeMonitorIssue.InvalidTargetChannel => "не запущен – канал YouTube не найден",
+                _ => "не запущен",
+            },
+        };
+    }
+
+    private static IReadOnlyList<YouTubeQuotaCategoryItem> BuildCategoryItems(
+        YouTubeQuotaStatus status,
+        int committed,
+        IFormatProvider culture)
+    {
+        if (committed <= 0)
+        {
+            return [];
+        }
+
+        var items = new List<YouTubeQuotaCategoryItem>(CategoryDisplayOrder.Length + 1);
+        var accounted = 0;
+
+        if (status.CategoryUnits is { Count: > 0 } categories)
+        {
+            foreach (var (category, label) in CategoryDisplayOrder)
+            {
+                if (categories.TryGetValue(category, out var units) && units > 0)
+                {
+                    accounted += units;
+                    items.Add(new(label, units, string.Format(culture, "{0:N0} ед.", units)));
+                }
+            }
+        }
+
+        var remainder = committed - accounted;
+        if (remainder > 0)
+        {
+            var remainderLabel = accounted == 0
+                ? "Без детализации по операциям"
+                : "Прочие и ранние запросы";
+            items.Add(new(remainderLabel, remainder, string.Format(culture, "{0:N0} ед.", remainder)));
+        }
+
+        return items;
     }
 
     private static StatusSeverity ResolveSeverity(YouTubeQuotaStatus status, double fillPercent)

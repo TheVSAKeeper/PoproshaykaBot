@@ -30,7 +30,7 @@ internal sealed class YouTubeRestLiveChatSendClient(
         ArgumentException.ThrowIfNullOrWhiteSpace(liveChatId);
         ArgumentException.ThrowIfNullOrWhiteSpace(messageText);
 
-        if (!quotaGovernor.TryReserve(PlatformAuthRole.Bot, priority, InsertQuotaCost, out var lease))
+        if (!quotaGovernor.TryReserve(PlatformAuthRole.Bot, priority, InsertQuotaCost, out var lease, YouTubeQuotaCategory.ChatSend))
         {
             throw new YouTubeApiException(
                 YouTubeApiErrorKind.LocalQuotaBudgetReached,

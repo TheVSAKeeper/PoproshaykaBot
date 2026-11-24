@@ -14,6 +14,14 @@ public enum YouTubeMonitorIssue
     AccessUnverified = 7,
 }
 
+public enum YouTubeMonitoringTransport
+{
+    None = 0,
+    InnerTubeDiscovery = 1,
+    DataApi = 2,
+    HybridInnerTubeAndDataApi = 3,
+}
+
 public sealed record YouTubeMonitoringStatus(
     bool Enabled,
     StreamStatus StreamStatus,
@@ -23,7 +31,8 @@ public sealed record YouTubeMonitoringStatus(
     string? ActiveLiveChatId,
     int ActiveCandidateCount,
     DateTimeOffset? LastPollAt,
-    int ConsecutiveFailures);
+    int ConsecutiveFailures,
+    YouTubeMonitoringTransport Transport = YouTubeMonitoringTransport.None);
 
 public interface IYouTubeMonitorDiagnostics
 {

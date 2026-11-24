@@ -75,6 +75,7 @@ internal sealed class YouTubeStreamMonitor
     private bool _disposed;
     private PlatformAuthRole? _lastMonitoringRole;
     private PlatformAuthRole? _activeDiscoveryRole;
+    private YouTubeMonitoringTransport _transport;
     private StreamMonitoringStatus? _lastMonitoringStatus;
     private string? _lastMonitoringDetail;
 
@@ -317,6 +318,7 @@ internal sealed class YouTubeStreamMonitor
         lock (_sync)
         {
             disconnectRole = _lastMonitoringRole ?? PlatformAuthRole.Broadcaster;
+            _transport = YouTubeMonitoringTransport.None;
         }
 
         await PublishMonitoringStatusIfChangedAsync(StreamMonitoringStatus.Disconnected, null, disconnectRole).ConfigureAwait(false);
@@ -367,7 +369,8 @@ internal sealed class YouTubeStreamMonitor
                 _activeBroadcast?.LiveChatId,
                 _activeCandidates.Count,
                 _lastPollAt,
-                _consecutiveFailures);
+                _consecutiveFailures,
+                _transport);
         }
     }
 
@@ -1626,6 +1629,7 @@ internal sealed class YouTubeStreamMonitor
                         _activeDiscoveryRole = null;
                         _activeCandidates = [];
                         _issue = YouTubeMonitorIssue.None;
+                        _transport = ResolveMonitoringTransport(role, isActiveBroadcast: false);
                         _lastLoggedMultiSetKey = null;
                     }
                 }
@@ -1799,6 +1803,7 @@ internal sealed class YouTubeStreamMonitor
                         _activeDiscoveryRole = null;
                         _activeCandidates = [];
                         _issue = YouTubeMonitorIssue.None;
+                        _transport = ResolveMonitoringTransport(role, isActiveBroadcast: false);
                         _lastLoggedMultiSetKey = null;
                     }
                 }
@@ -1894,6 +1899,7 @@ internal sealed class YouTubeStreamMonitor
                 if (stillActiveLocked)
                 {
                     _issue = YouTubeMonitorIssue.None;
+                    _transport = ResolveMonitoringTransport(role, isActiveBroadcast: true);
                 }
             }
 
@@ -1975,6 +1981,7 @@ internal sealed class YouTubeStreamMonitor
                 _activeSelectionVideoId = null;
                 _activeDiscoveryRole = null;
                 _activeCandidates = [];
+                _transport = YouTubeMonitoringTransport.None;
                 _lastLoggedMultiSetKey = null;
             }
 
@@ -2334,6 +2341,7 @@ internal sealed class YouTubeStreamMonitor
                 _activeDiscoveryRole = null;
                 _activeCandidates = [];
                 _issue = YouTubeMonitorIssue.None;
+                _transport = ResolveMonitoringTransport(role, isActiveBroadcast: false);
                 _lastLoggedMultiSetKey = null;
             }
 
@@ -2390,6 +2398,7 @@ internal sealed class YouTubeStreamMonitor
             }
 
             _issue = YouTubeMonitorIssue.None;
+            _transport = ResolveMonitoringTransport(role, isActiveBroadcast: true);
             onlineTransition = sample.ConcurrentViewers.HasValue
                 ? _stateMachine.ApplyOnlineSnapshot(streamInfo)
                 : _stateMachine.ApplyOnlineWithoutViewerSample(streamInfo);
@@ -2493,6 +2502,7 @@ internal sealed class YouTubeStreamMonitor
                 _activeDiscoveryRole = statusRole;
                 _activeCandidates = matches;
                 _issue = YouTubeMonitorIssue.None;
+                _transport = ResolveMonitoringTransport(statusRole, isActiveBroadcast: true);
                 _lastLoggedMultiSetKey = null;
             }
 
@@ -2566,6 +2576,7 @@ internal sealed class YouTubeStreamMonitor
 
             _activeBroadcast = selected;
             _activeDiscoveryRole = statusRole;
+            _transport = ResolveMonitoringTransport(statusRole, isActiveBroadcast: true);
         }
 
         await eventBus.PublishAsync(new YouTubeActiveBroadcastChanged(selected), CancellationToken.None).ConfigureAwait(false);
@@ -2640,6 +2651,7 @@ internal sealed class YouTubeStreamMonitor
             _activeDiscoveryRole = null;
             _activeCandidates = [];
             _issue = YouTubeMonitorIssue.None;
+            _transport = ResolveMonitoringTransport(statusRole, isActiveBroadcast: false);
             _lastLoggedMultiSetKey = null;
         }
 
@@ -2683,6 +2695,7 @@ internal sealed class YouTubeStreamMonitor
             _activeDiscoveryRole = null;
             _activeCandidates = matches;
             _issue = YouTubeMonitorIssue.MultipleActiveBroadcasts;
+            _transport = ResolveMonitoringTransport(statusRole, isActiveBroadcast: true);
 
             if (!string.Equals(_lastLoggedMultiSetKey, setKey, StringComparison.Ordinal))
             {
@@ -2734,6 +2747,7 @@ internal sealed class YouTubeStreamMonitor
         {
             _enabled = false;
             _issue = YouTubeMonitorIssue.None;
+            _transport = YouTubeMonitoringTransport.None;
             previousActive = _activeBroadcast;
             _activeBroadcast = null;
             _activeSelectionVideoId = null;
@@ -2801,6 +2815,7 @@ internal sealed class YouTubeStreamMonitor
             _issue = role == PlatformAuthRole.Bot
                 ? YouTubeMonitorIssue.MissingBotAuth
                 : YouTubeMonitorIssue.MissingBroadcasterAuth;
+            _transport = YouTubeMonitoringTransport.None;
             previousActive = _activeBroadcast;
             _activeBroadcast = null;
             _activeSelectionVideoId = null;
@@ -2834,6 +2849,7 @@ internal sealed class YouTubeStreamMonitor
             _stateMachine.ResetToUnknown();
             _targetChannelId = null;
             _issue = YouTubeMonitorIssue.InvalidTargetChannel;
+            _transport = YouTubeMonitoringTransport.None;
             previousActive = _activeBroadcast;
             _activeBroadcast = null;
             _activeSelectionVideoId = null;
@@ -2876,6 +2892,7 @@ internal sealed class YouTubeStreamMonitor
         lock (_sync)
         {
             _issue = YouTubeMonitorIssue.QuotaExhausted;
+            _transport = YouTubeMonitoringTransport.None;
             previousActive = _activeBroadcast;
             _activeBroadcast = null;
             _activeSelectionVideoId = null;
@@ -3191,6 +3208,18 @@ internal sealed class YouTubeStreamMonitor
         }
 
         return await broadcastClient.GetVideoLiveSampleAsync(videoId, role, contextId, ct).ConfigureAwait(false);
+    }
+
+    private static YouTubeMonitoringTransport ResolveMonitoringTransport(PlatformAuthRole role, bool isActiveBroadcast)
+    {
+        if (role == PlatformAuthRole.Broadcaster)
+        {
+            return YouTubeMonitoringTransport.DataApi;
+        }
+
+        return isActiveBroadcast
+            ? YouTubeMonitoringTransport.HybridInnerTubeAndDataApi
+            : YouTubeMonitoringTransport.InnerTubeDiscovery;
     }
 
     private static MonitoringUnavailableReason MapIssueToReason(YouTubeMonitorIssue issue)

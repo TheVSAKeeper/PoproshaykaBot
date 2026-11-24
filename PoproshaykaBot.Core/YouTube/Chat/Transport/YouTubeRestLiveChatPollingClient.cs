@@ -25,7 +25,7 @@ internal sealed partial class YouTubeRestLiveChatPollingClient(
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(liveChatId);
 
-        if (!quotaGovernor.TryReserve(PlatformAuthRole.Bot, YouTubeQuotaPriority.CriticalReadAndMonitor, 5, out var lease))
+        if (!quotaGovernor.TryReserve(PlatformAuthRole.Bot, YouTubeQuotaPriority.CriticalReadAndMonitor, 5, out var lease, YouTubeQuotaCategory.ChatRead))
         {
             throw new YouTubeApiException(
                 YouTubeApiErrorKind.LocalQuotaBudgetReached,

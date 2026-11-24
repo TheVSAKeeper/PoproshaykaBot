@@ -10,6 +10,7 @@ public sealed class YouTubeQuotaLease : IDisposable
     private readonly string _projectKey;
     private readonly DateOnly _pacificDate;
     private readonly PlatformAuthRole _role;
+    private readonly YouTubeQuotaCategory _category;
     private int _state;
 
     private YouTubeQuotaLease()
@@ -23,12 +24,14 @@ public sealed class YouTubeQuotaLease : IDisposable
         string projectKey,
         DateOnly pacificDate,
         PlatformAuthRole role,
-        int cost)
+        int cost,
+        YouTubeQuotaCategory category = YouTubeQuotaCategory.Other)
     {
         _governor = governor;
         _projectKey = projectKey;
         _pacificDate = pacificDate;
         _role = role;
+        _category = category;
         Cost = cost;
     }
 
@@ -43,7 +46,7 @@ public sealed class YouTubeQuotaLease : IDisposable
             return;
         }
 
-        _governor.Commit(_projectKey, _pacificDate, _role, Cost);
+        _governor.Commit(_projectKey, _pacificDate, _role, _category, Cost);
     }
 
     public void Refund()

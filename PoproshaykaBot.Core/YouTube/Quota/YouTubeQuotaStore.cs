@@ -379,6 +379,17 @@ internal sealed class YouTubeQuotaStore(
                 return false;
             }
 
+            if (record.CategoryUnits is not null)
+            {
+                foreach (var (categoryName, categoryValue) in record.CategoryUnits)
+                {
+                    if (string.IsNullOrWhiteSpace(categoryName) || categoryValue < 0)
+                    {
+                        return false;
+                    }
+                }
+            }
+
             if (!DateOnly.TryParseExact(
                     record.PacificDate,
                     "yyyy-MM-dd",

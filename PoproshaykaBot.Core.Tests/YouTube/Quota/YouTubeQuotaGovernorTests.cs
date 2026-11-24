@@ -174,9 +174,66 @@ public class YouTubeQuotaGovernorTests
         });
     }
 
-    private YouTubeQuotaLease ReserveOrFail(PlatformAuthRole role, YouTubeQuotaPriority priority, int cost)
+    [Test]
+    public void Tracks_CategoryUnits_And_Clears_Them_On_Pacific_Midnight_Rollover()
     {
-        Assert.That(_governor.TryReserve(role, priority, cost, out var lease), Is.True);
+        _clock.UtcNow = new DateTimeOffset(2026, 11, 15, 20, 0, 0, TimeSpan.Zero);
+
+        using (var sendLease = ReserveOrFail(PlatformAuthRole.Bot, YouTubeQuotaPriority.CommandReply, 20, YouTubeQuotaCategory.ChatSend))
+        {
+            sendLease.Commit();
+        }
+
+        using (var readLease = ReserveOrFail(PlatformAuthRole.Bot, YouTubeQuotaPriority.CriticalReadAndMonitor, 5, YouTubeQuotaCategory.ChatRead))
+        {
+            readLease.Commit();
+        }
+
+        using (var monitorLease = ReserveOrFail(PlatformAuthRole.Broadcaster, YouTubeQuotaPriority.CriticalReadAndMonitor, 2, YouTubeQuotaCategory.StreamMonitoring))
+        {
+            monitorLease.Commit();
+        }
+
+        using (var infoLease = ReserveOrFail(PlatformAuthRole.Broadcaster, YouTubeQuotaPriority.CriticalReadAndMonitor, 50, YouTubeQuotaCategory.ChannelAndBroadcastInfo))
+        {
+            infoLease.Commit();
+        }
+
+        using (var defaultLease = ReserveOrFail(PlatformAuthRole.Bot, YouTubeQuotaPriority.CriticalReadAndMonitor, 3))
+        {
+            defaultLease.Commit();
+        }
+
+        var beforeRollover = _governor.CaptureDiagnostics();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(beforeRollover.CommittedUnits, Is.EqualTo(80));
+            Assert.That(beforeRollover.CategoryUnits, Is.Not.Null);
+            Assert.That(beforeRollover.CategoryUnits![YouTubeQuotaCategory.ChatSend], Is.EqualTo(20));
+            Assert.That(beforeRollover.CategoryUnits[YouTubeQuotaCategory.ChatRead], Is.EqualTo(5));
+            Assert.That(beforeRollover.CategoryUnits[YouTubeQuotaCategory.StreamMonitoring], Is.EqualTo(2));
+            Assert.That(beforeRollover.CategoryUnits[YouTubeQuotaCategory.ChannelAndBroadcastInfo], Is.EqualTo(50));
+            Assert.That(beforeRollover.CategoryUnits[YouTubeQuotaCategory.Other], Is.EqualTo(3));
+        });
+
+        _clock.UtcNow = new DateTimeOffset(2026, 11, 16, 8, 0, 0, TimeSpan.Zero);
+        var afterRollover = _governor.CaptureDiagnostics();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(afterRollover.CommittedUnits, Is.EqualTo(0));
+            Assert.That(afterRollover.CategoryUnits, Is.Empty);
+        });
+    }
+
+    private YouTubeQuotaLease ReserveOrFail(
+        PlatformAuthRole role,
+        YouTubeQuotaPriority priority,
+        int cost,
+        YouTubeQuotaCategory category = YouTubeQuotaCategory.Other)
+    {
+        Assert.That(_governor.TryReserve(role, priority, cost, out var lease, category), Is.True);
         return lease;
     }
 }

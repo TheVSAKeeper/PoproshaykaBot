@@ -7,6 +7,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using PoproshaykaBot.Core.Diagnostics;
 using PoproshaykaBot.Core.Platforms.Auth;
 using PoproshaykaBot.Core.Settings.Stores;
+using PoproshaykaBot.Core.Streaming;
 using PoproshaykaBot.Core.YouTube;
 using PoproshaykaBot.Core.YouTube.Auth;
 using PoproshaykaBot.Core.YouTube.Quota;
@@ -246,9 +247,119 @@ public sealed class YouTubeSettingsSectionTests
         }
     }
 
+    [Test]
+    public void QuotaStatus_Displays_Transports_And_Category_Breakdown_Without_Dirtying_Settings()
+    {
+        var governor = new FakeYouTubeQuotaGovernor(new YouTubeQuotaStatus(
+            "proj-1",
+            new DateOnly(2026, 11, 16),
+            new DateTimeOffset(2026, 11, 17, 8, 0, 0, TimeSpan.Zero),
+            10_000,
+            91,
+            0,
+            75,
+            16,
+            9_909,
+            false,
+            YouTubeQuotaReliability.Reliable,
+            true,
+            new Dictionary<YouTubeQuotaCategory, int>
+            {
+                [YouTubeQuotaCategory.ChatSend] = 60,
+                [YouTubeQuotaCategory.ChatRead] = 15,
+                [YouTubeQuotaCategory.StreamMonitoring] = 12,
+                [YouTubeQuotaCategory.ChannelAndBroadcastInfo] = 4,
+            }));
+
+        var chatDiag = new FakeYouTubeChatDiagnostics(new YouTubeChatStatus(
+            ConnectionState.Connected,
+            YouTubeChatTransport.InnerTube,
+            ChatReadIssue.None,
+            "@streamer",
+            "chat-1",
+            null,
+            null,
+            null,
+            0,
+            0,
+            0));
+
+        var monitorDiag = new FakeYouTubeMonitorDiagnostics(new YouTubeMonitoringStatus(
+            true,
+            StreamStatus.Online,
+            YouTubeMonitorIssue.None,
+            "UC1",
+            "vid-1",
+            "chat-1",
+            1,
+            DateTimeOffset.UtcNow,
+            0,
+            YouTubeMonitoringTransport.HybridInnerTubeAndDataApi));
+
+        using var vm = CreateSection(TimeProvider.System, governor, chatDiag, monitorDiag);
+        var changed = 0;
+        vm.SettingChanged += (_, _) => changed++;
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(vm.QuotaStatus.ChatReadTransportText, Does.Contain("InnerTube (без расхода квоты)"));
+            Assert.That(vm.QuotaStatus.MonitoringTransportText, Does.Contain("InnerTube").And.Contains("Data API"));
+            Assert.That(vm.QuotaStatus.ChatSendTransportText, Does.Contain("YouTube Data API (20 ед. за сообщение)"));
+            Assert.That(vm.QuotaStatus.HasCategoryItems, Is.True);
+            Assert.That(vm.QuotaStatus.HasNoUsageToday, Is.False);
+            Assert.That(vm.QuotaStatus.CategoryItems.Select(static c => c.Label), Is.EqualTo(new[]
+            {
+                "Отправка в чат",
+                "Мониторинг эфира",
+                "Чтение чата (API)",
+                "Проверка канала и метаданные",
+            }));
+            Assert.That(vm.QuotaStatus.CategorySummaryText, Does.Contain("Отправка в чат: 60 ед."));
+            Assert.That(changed, Is.Zero);
+        }
+
+        chatDiag.Status = chatDiag.Status with { Transport = YouTubeChatTransport.GrpcStream };
+        monitorDiag.Status = monitorDiag.Status with { Transport = YouTubeMonitoringTransport.DataApi };
+        governor.Status = governor.Status with
+        {
+            CommittedUnits = 0,
+            BotCommittedUnits = 0,
+            BroadcasterCommittedUnits = 0,
+            CategoryUnits = new Dictionary<YouTubeQuotaCategory, int>(),
+        };
+
+        vm.QuotaStatus.RefreshCommand.Execute(null);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(vm.QuotaStatus.ChatReadTransportText, Does.Contain("gRPC"));
+            Assert.That(vm.QuotaStatus.MonitoringTransportText, Does.Contain("YouTube Data API"));
+            Assert.That(vm.QuotaStatus.HasCategoryItems, Is.False);
+            Assert.That(vm.QuotaStatus.HasNoUsageToday, Is.True);
+            Assert.That(vm.QuotaStatus.CategorySummaryText, Is.EqualTo("За сегодня квота не расходовалась."));
+            Assert.That(changed, Is.Zero);
+        }
+
+        governor.Status = governor.Status with
+        {
+            CommittedUnits = 50,
+            CategoryUnits = null,
+        };
+        vm.QuotaStatus.RefreshCommand.Execute(null);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(vm.QuotaStatus.HasCategoryItems, Is.True);
+            Assert.That(vm.QuotaStatus.CategoryItems[0].Label, Is.EqualTo("Без детализации по операциям"));
+            Assert.That(vm.QuotaStatus.CategoryItems[0].UnitsText, Is.EqualTo("50 ед."));
+        }
+    }
+
     private YouTubeSettingsSectionViewModel CreateSection(
         TimeProvider? timeProvider = null,
-        IYouTubeQuotaGovernor? quotaGovernor = null)
+        IYouTubeQuotaGovernor? quotaGovernor = null,
+        IYouTubeChatDiagnostics? chatDiagnostics = null,
+        IYouTubeMonitorDiagnostics? monitorDiagnostics = null)
     {
         return new(
             _oauthService,
@@ -257,7 +368,9 @@ public sealed class YouTubeSettingsSectionTests
             _dispatcher,
             timeProvider ?? TimeProvider.System,
             NullLoggerFactory.Instance,
-            quotaGovernor);
+            quotaGovernor,
+            chatDiagnostics,
+            monitorDiagnostics);
     }
 
     private sealed class FakeShellLauncher : IShellLauncher
@@ -356,7 +469,8 @@ public sealed class YouTubeSettingsSectionTests
             PlatformAuthRole role,
             YouTubeQuotaPriority priority,
             int cost,
-            out YouTubeQuotaLease lease)
+            out YouTubeQuotaLease lease,
+            YouTubeQuotaCategory category = YouTubeQuotaCategory.Other)
         {
             lease = default!;
             return false;
@@ -367,5 +481,19 @@ public sealed class YouTubeSettingsSectionTests
         }
 
         public YouTubeQuotaStatus CaptureDiagnostics() => Status;
+    }
+
+    private sealed class FakeYouTubeChatDiagnostics(YouTubeChatStatus status) : IYouTubeChatDiagnostics
+    {
+        public YouTubeChatStatus Status { get; set; } = status;
+
+        public YouTubeChatStatus CaptureDiagnostics() => Status;
+    }
+
+    private sealed class FakeYouTubeMonitorDiagnostics(YouTubeMonitoringStatus status) : IYouTubeMonitorDiagnostics
+    {
+        public YouTubeMonitoringStatus Status { get; set; } = status;
+
+        public YouTubeMonitoringStatus CaptureDiagnostics() => Status;
     }
 }

@@ -39,15 +39,17 @@ public class YouTubeQuotaStoreTests
     }
 
     [Test]
-    public void Valid_File_Persists_And_Reloads_Counters()
+    public void Valid_File_Persists_And_Reloads_Counters_And_Categories()
     {
         var settingsStore = CreateSettingsStore();
 
         using (var store = new YouTubeQuotaStore(NullLogger<YouTubeQuotaStore>.Instance, _quotaPath))
         {
             var gov = new YouTubeQuotaGovernor(store, settingsStore, _clock, NullLogger<YouTubeQuotaGovernor>.Instance);
-            Assert.That(gov.TryReserve(PlatformAuthRole.Bot, YouTubeQuotaPriority.CriticalReadAndMonitor, 42, out var lease), Is.True);
-            lease.Commit();
+            Assert.That(gov.TryReserve(PlatformAuthRole.Bot, YouTubeQuotaPriority.CommandReply, 40, out var sendLease, YouTubeQuotaCategory.ChatSend), Is.True);
+            sendLease.Commit();
+            Assert.That(gov.TryReserve(PlatformAuthRole.Bot, YouTubeQuotaPriority.CriticalReadAndMonitor, 2, out var monLease, YouTubeQuotaCategory.StreamMonitoring), Is.True);
+            monLease.Commit();
         }
 
         using var reloadedStore = new YouTubeQuotaStore(NullLogger<YouTubeQuotaStore>.Instance, _quotaPath);
@@ -60,6 +62,41 @@ public class YouTubeQuotaStoreTests
             Assert.That(status.BotCommittedUnits, Is.EqualTo(42));
             Assert.That(status.Reliability, Is.EqualTo(YouTubeQuotaReliability.Reliable));
             Assert.That(status.CanWriteFile, Is.True);
+            Assert.That(status.CategoryUnits, Is.Not.Null);
+            Assert.That(status.CategoryUnits![YouTubeQuotaCategory.ChatSend], Is.EqualTo(40));
+            Assert.That(status.CategoryUnits[YouTubeQuotaCategory.StreamMonitoring], Is.EqualTo(2));
+        });
+    }
+
+    [Test]
+    public void Legacy_Quota_File_Without_CategoryUnits_Loads_Cleanly()
+    {
+        File.WriteAllText(
+            _quotaPath,
+            """{"schemaVersion":1,"projects":{"proj":{"pacificDate":"2026-11-15","dailyBudget":10000,"committedUnits":65,"botCommittedUnits":60,"broadcasterCommittedUnits":5,"exhaustedByServer":false}}}""");
+        var settingsStore = CreateSettingsStore();
+
+        using var store = new YouTubeQuotaStore(NullLogger<YouTubeQuotaStore>.Instance, _quotaPath);
+        var gov = new YouTubeQuotaGovernor(store, settingsStore, _clock, NullLogger<YouTubeQuotaGovernor>.Instance);
+        var status = gov.CaptureDiagnostics();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(status.Reliability, Is.EqualTo(YouTubeQuotaReliability.Reliable));
+            Assert.That(status.CommittedUnits, Is.EqualTo(65));
+            Assert.That(status.BotCommittedUnits, Is.EqualTo(60));
+            Assert.That(status.BroadcasterCommittedUnits, Is.EqualTo(5));
+            Assert.That(status.CategoryUnits, Is.Empty);
+        });
+
+        Assert.That(gov.TryReserve(PlatformAuthRole.Bot, YouTubeQuotaPriority.CommandReply, 20, out var lease, YouTubeQuotaCategory.ChatSend), Is.True);
+        lease.Commit();
+
+        var updated = gov.CaptureDiagnostics();
+        Assert.Multiple(() =>
+        {
+            Assert.That(updated.CommittedUnits, Is.EqualTo(85));
+            Assert.That(updated.CategoryUnits![YouTubeQuotaCategory.ChatSend], Is.EqualTo(20));
         });
     }
 

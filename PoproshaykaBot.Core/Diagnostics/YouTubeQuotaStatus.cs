@@ -14,4 +14,5 @@ public sealed record YouTubeQuotaStatus(
     int Tier1RemainingUnits,
     bool ExhaustedByServer,
     YouTubeQuotaReliability Reliability,
-    bool CanWriteFile);
+    bool CanWriteFile,
+    IReadOnlyDictionary<YouTubeQuotaCategory, int>? CategoryUnits = null);

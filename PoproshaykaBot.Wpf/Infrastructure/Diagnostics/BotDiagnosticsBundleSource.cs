@@ -366,10 +366,18 @@ public sealed class BotDiagnosticsBundleSource(
                 _ => "без замечаний",
             };
 
+            var transportText = ytMonitor.Transport switch
+            {
+                YouTubeMonitoringTransport.InnerTubeDiscovery => "InnerTube",
+                YouTubeMonitoringTransport.HybridInnerTubeAndDataApi => "InnerTube + Data API",
+                YouTubeMonitoringTransport.DataApi => "Data API",
+                _ => "нет",
+            };
+
             builder.AppendLine(
                 $"Мониторинг YouTube: {streamText}, канал {ytMonitor.TargetChannelId ?? DiagnosticsFormat.Unset}, "
                 + $"видео {ytMonitor.ActiveVideoId ?? DiagnosticsFormat.Unset}, чат {ytMonitor.ActiveLiveChatId ?? DiagnosticsFormat.Unset}, "
-                + $"состояние: {issueText}, последний опрос {Moment(ytMonitor.LastPollAt)}");
+                + $"состояние: {issueText}, последний опрос {Moment(ytMonitor.LastPollAt)}, транспорт {transportText}");
         }
         else
         {
@@ -427,13 +435,17 @@ public sealed class BotDiagnosticsBundleSource(
 
             var markerSuffix = markers.Count > 0 ? $", {string.Join(", ", markers)}" : string.Empty;
 
+            var categorySummary = ytQuota.CategoryUnits is { Count: > 0 }
+                ? ", категории: " + string.Join(", ", ytQuota.CategoryUnits.OrderBy(static kv => (int)kv.Key).Select(static kv => $"{kv.Key}={kv.Value}"))
+                : string.Empty;
+
             builder.AppendLine(
                 $"Квота YouTube ({ytQuota.ProjectKey ?? DiagnosticsFormat.Unset}): "
                 + $"{DiagnosticsFormat.Number(ytQuota.CommittedUnits)} из {DiagnosticsFormat.Number(ytQuota.DailyBudget)} "
                 + $"(в резерве {DiagnosticsFormat.Number(ytQuota.ReservedUnits)}, "
                 + $"бот {DiagnosticsFormat.Number(ytQuota.BotCommittedUnits)}, "
                 + $"ведущий {DiagnosticsFormat.Number(ytQuota.BroadcasterCommittedUnits)}, "
-                + $"сброс {Moment(ytQuota.NextResetAt)}{markerSuffix})");
+                + $"сброс {Moment(ytQuota.NextResetAt)}{categorySummary}{markerSuffix})");
         }
         else
         {

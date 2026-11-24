@@ -40,7 +40,7 @@ internal sealed class YouTubeGrpcLiveChatStreamClient(
                 "Токен YouTube для роли Bot отсутствует или недействителен.");
         }
 
-        if (!quotaGovernor.TryReserve(PlatformAuthRole.Bot, YouTubeQuotaPriority.CriticalReadAndMonitor, 5, out var lease))
+        if (!quotaGovernor.TryReserve(PlatformAuthRole.Bot, YouTubeQuotaPriority.CriticalReadAndMonitor, 5, out var lease, YouTubeQuotaCategory.ChatRead))
         {
             throw new YouTubeApiException(
                 YouTubeApiErrorKind.LocalQuotaBudgetReached,

@@ -2,6 +2,7 @@
 using KeepShell.Services;
 using KeepShell.Services.Modal;
 using Microsoft.Extensions.Logging;
+using PoproshaykaBot.Core.Diagnostics;
 using PoproshaykaBot.Core.Platforms.Auth;
 using PoproshaykaBot.Core.YouTube;
 using PoproshaykaBot.Core.YouTube.Auth;
@@ -44,7 +45,9 @@ public sealed partial class YouTubeSettingsSectionViewModel : ObservableObject, 
         IUiDispatcher uiDispatcher,
         TimeProvider timeProvider,
         ILoggerFactory loggerFactory,
-        IYouTubeQuotaGovernor? quotaGovernor = null)
+        IYouTubeQuotaGovernor? quotaGovernor = null,
+        IYouTubeChatDiagnostics? chatDiagnostics = null,
+        IYouTubeMonitorDiagnostics? monitorDiagnostics = null)
     {
         var accountLogger = loggerFactory.CreateLogger<PlatformOAuthAccountViewModel>();
 
@@ -64,7 +67,7 @@ public sealed partial class YouTubeSettingsSectionViewModel : ObservableObject, 
             timeProvider,
             accountLogger);
 
-        QuotaStatus = new(quotaGovernor, uiDispatcher, timeProvider);
+        QuotaStatus = new(quotaGovernor, uiDispatcher, timeProvider, chatDiagnostics, monitorDiagnostics);
 
         Bot.SettingChanged += OnAccountSettingChanged;
         Broadcaster.SettingChanged += OnAccountSettingChanged;

@@ -11,7 +11,8 @@ public interface IYouTubeQuotaGovernor
         PlatformAuthRole role,
         YouTubeQuotaPriority priority,
         int cost,
-        out YouTubeQuotaLease lease);
+        out YouTubeQuotaLease lease,
+        YouTubeQuotaCategory category = YouTubeQuotaCategory.Other);
 
     void MarkExhaustedFromServer(PlatformAuthRole role);
 

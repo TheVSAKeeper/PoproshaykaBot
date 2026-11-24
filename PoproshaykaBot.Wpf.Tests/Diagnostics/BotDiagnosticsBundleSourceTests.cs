@@ -282,7 +282,8 @@ public class BotDiagnosticsBundleSourceTests
             PlatformAuthRole role,
             YouTubeQuotaPriority priority,
             int cost,
-            out YouTubeQuotaLease lease)
+            out YouTubeQuotaLease lease,
+            YouTubeQuotaCategory category = YouTubeQuotaCategory.Other)
         {
             lease = default!;
             return false;

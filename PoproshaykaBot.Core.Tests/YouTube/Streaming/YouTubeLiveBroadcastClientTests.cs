@@ -275,6 +275,8 @@ public class YouTubeLiveBroadcastClientTests
             Assert.That(sample.ActiveLiveChatId, Is.EqualTo("lc-bot-1"));
             Assert.That(quota.BotCommittedUnits, Is.EqualTo(2));
             Assert.That(quota.BroadcasterCommittedUnits, Is.EqualTo(0));
+            Assert.That(quota.CategoryUnits![YouTubeQuotaCategory.ChannelAndBroadcastInfo], Is.EqualTo(1));
+            Assert.That(quota.CategoryUnits[YouTubeQuotaCategory.StreamMonitoring], Is.EqualTo(1));
             Assert.That(_botRequests, Has.Count.EqualTo(2));
             Assert.That(_broadcasterRequests, Is.Empty);
         });

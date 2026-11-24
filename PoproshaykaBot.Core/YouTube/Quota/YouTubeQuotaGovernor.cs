@@ -43,7 +43,8 @@ internal sealed class YouTubeQuotaGovernor(
         PlatformAuthRole role,
         YouTubeQuotaPriority priority,
         int cost,
-        out YouTubeQuotaLease lease)
+        out YouTubeQuotaLease lease,
+        YouTubeQuotaCategory category = YouTubeQuotaCategory.Other)
     {
         if (cost <= 0 || priority == YouTubeQuotaPriority.None)
         {
@@ -57,6 +58,7 @@ internal sealed class YouTubeQuotaGovernor(
         var projectKey = YouTubeQuotaPolicy.NormalizeProjectKey(settings);
         var dailyBudget = YouTubeQuotaPolicy.NormalizeBudget(settings.DailyQuotaBudget);
         var window = PacificQuotaClock.GetWindow(timeProvider.GetUtcNow());
+        var normalizedCategory = category == YouTubeQuotaCategory.None ? YouTubeQuotaCategory.Other : category;
 
         lock (_sync)
         {
@@ -69,7 +71,7 @@ internal sealed class YouTubeQuotaGovernor(
             }
 
             bucket.ReservedUnits += cost;
-            lease = new(this, projectKey, window.PacificDate, role, cost);
+            lease = new(this, projectKey, window.PacificDate, role, cost, normalizedCategory);
             return true;
         }
     }
@@ -169,11 +171,12 @@ internal sealed class YouTubeQuotaGovernor(
                 tier1Remaining,
                 bucket.ExhaustedByServer,
                 store.Reliability,
-                store.CanWriteFile);
+                store.CanWriteFile,
+                BuildCategoryUnitsSnapshotLocked(bucket));
         }
     }
 
-    internal void Commit(string projectKey, DateOnly leaseDate, PlatformAuthRole role, int cost)
+    internal void Commit(string projectKey, DateOnly leaseDate, PlatformAuthRole role, YouTubeQuotaCategory category, int cost)
     {
         EnsureHydrated();
 
@@ -181,6 +184,7 @@ internal sealed class YouTubeQuotaGovernor(
         var dailyBudget = YouTubeQuotaPolicy.NormalizeBudget(settings.DailyQuotaBudget);
         var utcNow = timeProvider.GetUtcNow();
         var window = PacificQuotaClock.GetWindow(utcNow);
+        var normalizedCategory = category == YouTubeQuotaCategory.None ? YouTubeQuotaCategory.Other : category;
 
         YouTubeQuotaDocument snapshot;
         long snapshotSequence;
@@ -205,6 +209,7 @@ internal sealed class YouTubeQuotaGovernor(
                 bucket.BroadcasterCommittedUnits += cost;
             }
 
+            bucket.CategoryUnits[normalizedCategory] = bucket.CategoryUnits.GetValueOrDefault(normalizedCategory) + cost;
             bucket.DailyBudget = dailyBudget;
             bucket.UpdatedAtUtc = utcNow;
             snapshot = BuildDocumentSnapshotLocked();
@@ -253,7 +258,7 @@ internal sealed class YouTubeQuotaGovernor(
                     continue;
                 }
 
-                _buckets[key] = new()
+                var bucketState = new BucketState
                 {
                     PacificDate = date,
                     DailyBudget = record.DailyBudget,
@@ -263,6 +268,22 @@ internal sealed class YouTubeQuotaGovernor(
                     ExhaustedByServer = record.ExhaustedByServer,
                     UpdatedAtUtc = record.UpdatedAtUtc,
                 };
+
+                if (record.CategoryUnits is not null)
+                {
+                    foreach (var (rawCategory, units) in record.CategoryUnits)
+                    {
+                        if (units > 0
+                            && Enum.TryParse<YouTubeQuotaCategory>(rawCategory, ignoreCase: true, out var parsedCategory)
+                            && parsedCategory != YouTubeQuotaCategory.None)
+                        {
+                            bucketState.CategoryUnits[parsedCategory] =
+                                bucketState.CategoryUnits.GetValueOrDefault(parsedCategory) + units;
+                        }
+                    }
+                }
+
+                _buckets[key] = bucketState;
             }
 
             _hydratedFromStore = true;
@@ -296,6 +317,7 @@ internal sealed class YouTubeQuotaGovernor(
             bucket.CommittedUnits = 0;
             bucket.BotCommittedUnits = 0;
             bucket.BroadcasterCommittedUnits = 0;
+            bucket.CategoryUnits.Clear();
             bucket.ReservedUnits = 0;
             bucket.ExhaustedByServer = false;
             bucket.ExhaustedWarningLogged = false;
@@ -323,6 +345,19 @@ internal sealed class YouTubeQuotaGovernor(
                 continue;
             }
 
+            Dictionary<string, int>? categoryUnits = null;
+            if (bucket.CategoryUnits.Count > 0)
+            {
+                categoryUnits = bucket.CategoryUnits
+                    .Where(static kv => kv.Value > 0)
+                    .ToDictionary(static kv => kv.Key.ToString(), static kv => kv.Value, StringComparer.Ordinal);
+
+                if (categoryUnits.Count == 0)
+                {
+                    categoryUnits = null;
+                }
+            }
+
             doc.Projects[key] = new()
             {
                 PacificDate = bucket.PacificDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
@@ -330,12 +365,27 @@ internal sealed class YouTubeQuotaGovernor(
                 CommittedUnits = bucket.CommittedUnits,
                 BotCommittedUnits = bucket.BotCommittedUnits,
                 BroadcasterCommittedUnits = bucket.BroadcasterCommittedUnits,
+                CategoryUnits = categoryUnits,
                 ExhaustedByServer = bucket.ExhaustedByServer,
                 UpdatedAtUtc = bucket.UpdatedAtUtc,
             };
         }
 
         return doc;
+    }
+
+    private static Dictionary<YouTubeQuotaCategory, int> BuildCategoryUnitsSnapshotLocked(BucketState bucket)
+    {
+        var snapshot = new Dictionary<YouTubeQuotaCategory, int>();
+        foreach (var (category, units) in bucket.CategoryUnits)
+        {
+            if (units > 0)
+            {
+                snapshot[category] = units;
+            }
+        }
+
+        return snapshot;
     }
 
     private sealed class BucketState
@@ -349,6 +399,8 @@ internal sealed class YouTubeQuotaGovernor(
         public int BotCommittedUnits { get; set; }
 
         public int BroadcasterCommittedUnits { get; set; }
+
+        public Dictionary<YouTubeQuotaCategory, int> CategoryUnits { get; } = [];
 
         public int ReservedUnits { get; set; }
 

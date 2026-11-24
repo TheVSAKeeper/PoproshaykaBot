@@ -41,7 +41,13 @@ internal sealed class YouTubeLiveBroadcastClient(
         var normalized = handle.StartsWith('@') ? handle : "@" + handle;
         var uri = $"youtube/v3/channels?part=snippet&forHandle={Uri.EscapeDataString(normalized)}";
 
-        var json = await SendAuthorizedGetAsync(role, uri, "channels.list", cancellationToken).ConfigureAwait(false);
+        var json = await SendAuthorizedGetAsync(
+                role,
+                uri,
+                "channels.list",
+                YouTubeQuotaCategory.ChannelAndBroadcastInfo,
+                cancellationToken)
+            .ConfigureAwait(false);
         var dto = DeserializeResponse<ChannelsListResponseDto>(json, "channels.list");
         var channelId = dto?.Items?.FirstOrDefault()?.Id;
 
@@ -76,7 +82,13 @@ internal sealed class YouTubeLiveBroadcastClient(
                 uri += $"&pageToken={Uri.EscapeDataString(pageToken)}";
             }
 
-            var json = await SendAuthorizedGetAsync(role, uri, "liveBroadcasts.list", cancellationToken).ConfigureAwait(false);
+            var json = await SendAuthorizedGetAsync(
+                    role,
+                    uri,
+                    "liveBroadcasts.list",
+                    YouTubeQuotaCategory.StreamMonitoring,
+                    cancellationToken)
+                .ConfigureAwait(false);
             var dto = DeserializeResponse<LiveBroadcastsListResponseDto>(json, "liveBroadcasts.list");
 
             if (dto?.Items is not null)
@@ -128,7 +140,13 @@ internal sealed class YouTubeLiveBroadcastClient(
         using var _ = PlatformAuthRequestOptions.UseContext(contextId);
 
         var uri = $"youtube/v3/videos?part=snippet,liveStreamingDetails&id={Uri.EscapeDataString(videoId)}";
-        var json = await SendAuthorizedGetAsync(role, uri, "videos.list", cancellationToken).ConfigureAwait(false);
+        var json = await SendAuthorizedGetAsync(
+                role,
+                uri,
+                "videos.list",
+                YouTubeQuotaCategory.StreamMonitoring,
+                cancellationToken)
+            .ConfigureAwait(false);
         var dto = DeserializeResponse<VideosListResponseDto>(json, "videos.list");
         var item = dto?.Items?.FirstOrDefault();
 
@@ -180,7 +198,12 @@ internal sealed class YouTubeLiveBroadcastClient(
             throw new ArgumentException("Title is required.", nameof(request));
         }
 
-        if (!quotaGovernor.TryReserve(role, YouTubeQuotaPriority.CriticalReadAndMonitor, YouTubeQuotaCost, out var lease))
+        if (!quotaGovernor.TryReserve(
+                role,
+                YouTubeQuotaPriority.CriticalReadAndMonitor,
+                YouTubeQuotaCost,
+                out var lease,
+                YouTubeQuotaCategory.ChannelAndBroadcastInfo))
         {
             return YouTubeBroadcastUpdateResult.Failure(
                 YouTubeApiErrorKind.LocalQuotaBudgetReached,
@@ -296,9 +319,10 @@ internal sealed class YouTubeLiveBroadcastClient(
         PlatformAuthRole role,
         string relativeUri,
         string operation,
+        YouTubeQuotaCategory category,
         CancellationToken cancellationToken)
     {
-        if (!quotaGovernor.TryReserve(role, YouTubeQuotaPriority.CriticalReadAndMonitor, 1, out var lease))
+        if (!quotaGovernor.TryReserve(role, YouTubeQuotaPriority.CriticalReadAndMonitor, 1, out var lease, category))
         {
             throw new YouTubeApiException(
                 YouTubeApiErrorKind.LocalQuotaBudgetReached,

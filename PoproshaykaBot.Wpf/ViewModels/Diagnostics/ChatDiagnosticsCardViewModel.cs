@@ -1,6 +1,8 @@
 ﻿using KeepShell.Diagnostics;
 using PoproshaykaBot.Core.Diagnostics;
+using PoproshaykaBot.Core.Platforms;
 using PoproshaykaBot.Wpf.Infrastructure.Diagnostics;
+using PoproshaykaBot.Wpf.ViewModels.Settings;
 
 namespace PoproshaykaBot.Wpf.ViewModels.Diagnostics;
 
@@ -22,6 +24,11 @@ public sealed class ChatDiagnosticsCardViewModel(DiagnosticsSnapshotPublisher pu
             foreach (var entry in platformChats)
             {
                 var platformState = AddChatRows(rows, entry.DisplayName, entry.Status, snapshot.CapturedAt);
+                if (entry.Platform == StreamingPlatform.YouTube)
+                {
+                    AddYouTubeTransportRows(rows, snapshot.YouTubeChat, snapshot.YouTubeMonitoring);
+                }
+
                 state = CombineState(state, platformState, hasState);
                 hasState = true;
             }
@@ -33,10 +40,49 @@ public sealed class ChatDiagnosticsCardViewModel(DiagnosticsSnapshotPublisher pu
         if (snapshot.YouTubeChat is { } youtubeChat)
         {
             var youtubeState = AddChatRows(rows, "YouTube", youtubeChat.ToChatConnectionStatus(), snapshot.CapturedAt);
+            AddYouTubeTransportRows(rows, youtubeChat, snapshot.YouTubeMonitoring);
             state = CombineState(state, youtubeState, hasExistingState: true);
         }
 
         return new(state, rows);
+    }
+
+    private static void AddYouTubeTransportRows(
+        List<DiagnosticsCardRow> rows,
+        YouTubeChatStatus? youtubeChat,
+        YouTubeMonitoringStatus? youtubeMonitoring)
+    {
+        if (youtubeChat is not null)
+        {
+            var shortChat = youtubeChat.Transport switch
+            {
+                YouTubeChatTransport.InnerTube => "InnerTube (0 ед.)",
+                YouTubeChatTransport.GrpcStream => "Data API (gRPC)",
+                YouTubeChatTransport.RestPolling => "Data API (REST)",
+                _ => "не подключён",
+            };
+            rows.Add(new("Транспорт чата YouTube", shortChat)
+            {
+                Hint = YouTubeQuotaStatusViewModel.FormatChatReadTransport(youtubeChat),
+            });
+        }
+
+        if (youtubeMonitoring is not null)
+        {
+            var shortMonitor = !youtubeMonitoring.Enabled
+                ? "отключён"
+                : youtubeMonitoring.Transport switch
+                {
+                    YouTubeMonitoringTransport.InnerTubeDiscovery => "InnerTube (0 ед.)",
+                    YouTubeMonitoringTransport.HybridInnerTubeAndDataApi => "InnerTube + Data API",
+                    YouTubeMonitoringTransport.DataApi => "YouTube Data API",
+                    _ => "не запущен",
+                };
+            rows.Add(new("Мониторинг YouTube", shortMonitor)
+            {
+                Hint = YouTubeQuotaStatusViewModel.FormatMonitoringTransport(youtubeMonitoring),
+            });
+        }
     }
 
     private static DiagnosticsCardState CombineState(
