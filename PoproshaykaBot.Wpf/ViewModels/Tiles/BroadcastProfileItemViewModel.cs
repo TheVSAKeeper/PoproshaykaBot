@@ -214,7 +214,7 @@ public sealed partial class BroadcastProfileItemViewModel : ObservableObject
             return BroadcastProfileSyncState.None;
         }
 
-        if (syncSummary is not null && syncSummary.State != BroadcastProfileSyncState.None)
+        if (syncSummary is not null)
         {
             return syncSummary.State;
         }

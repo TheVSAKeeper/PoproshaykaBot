@@ -46,10 +46,11 @@
                                keepshell:SeverityBrushBehavior.Foreground="{Binding ToastSeverity}" />
                 </Border>
 
-                <StackPanel Orientation="Horizontal"
-                            HorizontalAlignment="Right"
-                            VerticalAlignment="Center">
-                    <TextBlock Text="Сцена:"
+                <DockPanel HorizontalAlignment="Right"
+                           VerticalAlignment="Center"
+                           LastChildFill="True">
+                    <TextBlock DockPanel.Dock="Left"
+                               Text="Сцена:"
                                Style="{StaticResource TextBlock.Subtle}"
                                FontSize="{DynamicResource Font.Size.XS}"
                                Margin="0,0,4,0"
@@ -60,7 +61,7 @@
                                FontSize="{DynamicResource Font.Size.S}"
                                TextTrimming="CharacterEllipsis"
                                VerticalAlignment="Center" />
-                </StackPanel>
+                </DockPanel>
             </DockPanel>
         </Grid>
 

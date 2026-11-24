@@ -242,7 +242,7 @@ public sealed class ObsMultistreamOutputsTests
     }
 
     [Test]
-    public async Task Старт_и_стоп_доп_выхода_нормализуют_префикс_и_учитывают_ключи_вендоров()
+    public async Task Старт_и_стоп_доп_выхода_передают_имя_без_искажения_и_учитывают_ключи_вендоров()
     {
         await _service.ConnectAsync(new() { Enabled = true }, CancellationToken.None);
         _client.EnqueueVendorResponse(
@@ -255,7 +255,7 @@ public sealed class ObsMultistreamOutputsTests
             "start_output",
             """{"vendorName":"aitum-stream-suite","requestType":"start_output","responseData":{"success":true}}""");
 
-        await _service.StartSecondaryOutputAsync("Aitum Stream Suite Output YouTube", CancellationToken.None);
+        await _service.StartSecondaryOutputAsync("YouTube", CancellationToken.None);
 
         var suiteStart = _client.Requests.Last(r => string.Equals(r.RequestType, "CallVendorRequest", StringComparison.Ordinal));
         using (Assert.EnterMultipleScope())
@@ -285,7 +285,7 @@ public sealed class ObsMultistreamOutputsTests
         {
             Assert.That(multiStop.RequestData!.Value.GetProperty("vendorName").GetString(), Is.EqualTo("aitum-multistream"));
             Assert.That(multiStop.RequestData!.Value.GetProperty("requestType").GetString(), Is.EqualTo("stop_output"));
-            Assert.That(multiStop.RequestData!.Value.GetProperty("requestData").GetProperty("name").GetString(), Is.EqualTo("Вывод YouTube"));
+            Assert.That(multiStop.RequestData!.Value.GetProperty("requestData").GetProperty("name").GetString(), Is.EqualTo("aitum_multi_output_Вывод YouTube"));
         }
     }
 

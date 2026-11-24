@@ -55,6 +55,22 @@ public static class ObsStreamHealth
         };
     }
 
+    public static string? FormatBytes(bool? active, long? bytes)
+    {
+        if (active != true || bytes is null or <= 0)
+        {
+            return null;
+        }
+
+        var value = bytes.Value;
+        return value switch
+        {
+            >= 1L << 30 => string.Create(UiCulture.Russian, $"{value / (double)(1L << 30):0.##} ГБ"),
+            >= 1L << 20 => string.Create(UiCulture.Russian, $"{value / (double)(1L << 20):0.#} МБ"),
+            _ => string.Create(UiCulture.Russian, $"{value / 1024D:0} КБ"),
+        };
+    }
+
     private static string FormatPercent(double share)
     {
         var percent = share * 100D;

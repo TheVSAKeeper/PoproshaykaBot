@@ -1,5 +1,6 @@
 ﻿using PoproshaykaBot.Core.Platforms;
 using PoproshaykaBot.Core.Streaming;
+using System.Text;
 using System.Text.RegularExpressions;
 
 namespace PoproshaykaBot.Core.Broadcast.Profiles;
@@ -17,8 +18,16 @@ internal static class BroadcastProfileSyncMatcher
             return string.Equals(profileTitle, streamTitle, StringComparison.Ordinal);
         }
 
-        var pattern = "^" + Regex.Escape(profileTitle).Replace(Regex.Escape(Placeholder), "\\d+") + "$";
-        return Regex.IsMatch(streamTitle, pattern, RegexOptions.None, TitleMatchTimeout);
+        var parts = profileTitle.Split(Placeholder, StringSplitOptions.None);
+        var pattern = new StringBuilder("^").Append(Regex.Escape(parts[0]));
+        for (var i = 1; i < parts.Length; i++)
+        {
+            pattern.Append(i == 1 ? @"(?<num>\d+)" : @"\k<num>")
+                .Append(Regex.Escape(parts[i]));
+        }
+
+        pattern.Append('$');
+        return Regex.IsMatch(streamTitle, pattern.ToString(), RegexOptions.None, TitleMatchTimeout);
     }
 
     public static BroadcastProfile WithResolvedTitle(BroadcastProfile profile, string resolvedTitle)

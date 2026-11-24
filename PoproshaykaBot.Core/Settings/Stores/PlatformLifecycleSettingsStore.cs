@@ -51,9 +51,12 @@ public sealed class PlatformLifecycleSettingsStore
 
     public PlatformLifecycleSettingsFile Load()
     {
-        var loaded = Normalize(_store.Load());
-        SeedLegacyTwitchIfNeeded(loaded);
-        return loaded;
+        lock (_overrideLock)
+        {
+            var loaded = Normalize(_store.Load());
+            SeedLegacyTwitchLocked(loaded);
+            return loaded;
+        }
     }
 
     public BotLifecycleAutomationSettings Get(StreamingPlatform platform)
@@ -68,11 +71,13 @@ public sealed class PlatformLifecycleSettingsStore
     {
         ArgumentNullException.ThrowIfNull(value);
 
-        var snapshot = Normalize(value);
-        var written = _store.Save(snapshot);
-
-        MarkExplicitValue();
-        return written;
+        lock (_overrideLock)
+        {
+            var snapshot = Normalize(value);
+            var written = _store.Save(snapshot);
+            _hasExplicitValue = true;
+            return written;
+        }
     }
 
     public bool Set(StreamingPlatform platform, BotLifecycleAutomationSettings settings)
@@ -92,41 +97,30 @@ public sealed class PlatformLifecycleSettingsStore
     {
         ArgumentNullException.ThrowIfNull(mutator);
 
-        var written = _store.Mutate(state =>
-        {
-            SeedLegacyTwitchIfNeeded(state);
-            mutator(state);
-            var normalized = Normalize(state);
-            state.Platforms.Clear();
-            foreach (var pair in normalized.Platforms)
-            {
-                state.Platforms[pair.Key] = pair.Value;
-            }
-        });
-
-        MarkExplicitValue();
-        return written;
-    }
-
-    private void SeedLegacyTwitchIfNeeded(PlatformLifecycleSettingsFile state)
-    {
-        bool hasExplicitValue;
         lock (_overrideLock)
         {
-            hasExplicitValue = _hasExplicitValue;
-        }
+            var written = _store.Mutate(state =>
+            {
+                SeedLegacyTwitchLocked(state);
+                mutator(state);
+                var normalized = Normalize(state);
+                state.Platforms.Clear();
+                foreach (var pair in normalized.Platforms)
+                {
+                    state.Platforms[pair.Key] = pair.Value;
+                }
+            });
 
-        if (!hasExplicitValue && _settingsManager is not null && !state.Platforms.ContainsKey(StreamingPlatform.Twitch))
+            _hasExplicitValue = true;
+            return written;
+        }
+    }
+
+    private void SeedLegacyTwitchLocked(PlatformLifecycleSettingsFile state)
+    {
+        if (!_hasExplicitValue && _settingsManager is not null && !state.Platforms.ContainsKey(StreamingPlatform.Twitch))
         {
             state.Platforms[StreamingPlatform.Twitch] = CloneSettings(_settingsManager.Current.Twitch.BotLifecycleAutomation);
-        }
-    }
-
-    private void MarkExplicitValue()
-    {
-        lock (_overrideLock)
-        {
-            _hasExplicitValue = true;
         }
     }
 

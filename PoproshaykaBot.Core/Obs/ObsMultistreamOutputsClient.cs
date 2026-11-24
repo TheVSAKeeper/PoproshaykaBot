@@ -147,19 +147,29 @@ public sealed class ObsMultistreamOutputsClient(
             return cached;
         }
 
-        if (await ProbeVendorAsync(StreamSuiteVendorName, cancellationToken).ConfigureAwait(false))
+        var suiteProbe = await ProbeVendorAsync(StreamSuiteVendorName, cancellationToken).ConfigureAwait(false);
+        if (suiteProbe == true)
         {
             _detectedVendor = ObsMultistreamVendor.AitumStreamSuite;
             return ObsMultistreamVendor.AitumStreamSuite;
         }
 
-        if (await ProbeVendorAsync(MultistreamVendorName, cancellationToken).ConfigureAwait(false))
+        var multistreamProbe = await ProbeVendorAsync(MultistreamVendorName, cancellationToken).ConfigureAwait(false);
+        if (multistreamProbe == true)
         {
-            _detectedVendor = ObsMultistreamVendor.AitumMultistream;
+            if (suiteProbe == false)
+            {
+                _detectedVendor = ObsMultistreamVendor.AitumMultistream;
+            }
+
             return ObsMultistreamVendor.AitumMultistream;
         }
 
-        _detectedVendor = ObsMultistreamVendor.ObsOutput;
+        if (suiteProbe == false && multistreamProbe == false)
+        {
+            _detectedVendor = ObsMultistreamVendor.ObsOutput;
+        }
+
         return ObsMultistreamVendor.ObsOutput;
     }
 
@@ -217,12 +227,18 @@ public sealed class ObsMultistreamOutputsClient(
             }
 
             var status = await TryGetOutputStatusAsync(output.Name, cancellationToken).ConfigureAwait(false);
+            var isActive = status?.Active ?? output.Active;
+            if (!isActive)
+            {
+                continue;
+            }
+
             result.Add(new(
                 NormalizeOutputName(output.Name),
                 output.Name,
                 output.Kind,
                 ObsMultistreamVendor.ObsOutput,
-                status?.Active ?? output.Active,
+                isActive,
                 status?.Reconnecting ?? false,
                 status?.Timecode,
                 status?.DurationMs,
@@ -257,14 +273,14 @@ public sealed class ObsMultistreamOutputsClient(
             throw new InvalidOperationException("Управление дополнительными выходами недоступно без плагина Aitum");
         }
 
-        var normalizedName = NormalizeOutputName(name, vendor);
+        var outputName = name.Trim();
         var vendorName = vendor == ObsMultistreamVendor.AitumStreamSuite
             ? StreamSuiteVendorName
             : MultistreamVendorName;
         var requestType = isStart ? "start_output" : "stop_output";
         object requestData = vendor == ObsMultistreamVendor.AitumStreamSuite
-            ? new { output = normalizedName }
-            : new { name = normalizedName };
+            ? new { output = outputName }
+            : new { name = outputName };
 
         JsonElement? response;
         try
@@ -282,11 +298,11 @@ public sealed class ObsMultistreamOutputsClient(
         if (data is { } payload && GetOptionalBool(payload, "success") == false)
         {
             var error = GetOptionalString(payload, "error");
-            throw new InvalidOperationException(MapVendorError(error, normalizedName));
+            throw new InvalidOperationException(MapVendorError(error, outputName));
         }
     }
 
-    private async Task<bool> ProbeVendorAsync(string vendorName, CancellationToken cancellationToken)
+    private async Task<bool?> ProbeVendorAsync(string vendorName, CancellationToken cancellationToken)
     {
         try
         {
@@ -295,7 +311,7 @@ public sealed class ObsMultistreamOutputsClient(
             var data = UnwrapVendorResponseData(response);
             if (data is not { ValueKind: JsonValueKind.Object } payload)
             {
-                return false;
+                return null;
             }
 
             if (GetOptionalBool(payload, "success") == true)
@@ -305,10 +321,15 @@ public sealed class ObsMultistreamOutputsClient(
 
             return !string.IsNullOrWhiteSpace(GetOptionalString(payload, "version"));
         }
+        catch (ObsRequestException exception) when (exception.Code == VendorNotFoundErrorCode)
+        {
+            logger.LogDebug(exception, "Вендор OBS {VendorName} не установлен (код {Code})", vendorName, exception.Code);
+            return false;
+        }
         catch (ObsRequestException exception)
         {
-            logger.LogDebug(exception, "Вендор OBS {VendorName} недоступен (код {Code})", vendorName, exception.Code);
-            return false;
+            logger.LogDebug(exception, "Временная ошибка опроса вендора OBS {VendorName} (код {Code})", vendorName, exception.Code);
+            return null;
         }
     }
 

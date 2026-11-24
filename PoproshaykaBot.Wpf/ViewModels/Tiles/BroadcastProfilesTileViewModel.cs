@@ -106,6 +106,7 @@ public sealed partial class BroadcastProfilesTileViewModel : DashboardTileViewMo
         _subs.Add(bus.SubscribeOnUi<StreamWentOffline>(_ => ReloadItems()));
         _subs.Add(bus.SubscribeOnUi<StreamMetadataResolved>(_ => ReloadItems()));
         _subs.Add(bus.SubscribeOnUi<ChannelUpdated>(_ => ReloadItems()));
+        _subs.Add(bus.SubscribeOnUi<ActiveChannelChanged>(_ => ReloadItems()));
         _subs.Add(bus.SubscribeOnUi<YouTubeActiveBroadcastChanged>(_ => ReloadItems()));
 
         _activeProfileId = profiles.Load().LastAppliedProfileId;

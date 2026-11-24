@@ -65,7 +65,8 @@ public sealed class BotLifecycleAutomationSectionTests
             new(),
             lifecycleVm,
             new(new(filePath: pollsPath), TimeProvider.System),
-            lifecycleStore);
+            lifecycleStore,
+            settingsManager);
 
         var catalogStore = new ChannelCatalogStore(filePath: Path.Combine(_directory.FullName, "channels.json"), gate: gate);
         var bus = new InMemoryEventBus(NullLogger<InMemoryEventBus>.Instance);

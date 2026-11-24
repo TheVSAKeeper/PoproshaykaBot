@@ -77,6 +77,7 @@ internal static class LegacyDataCatalog
         new("obs-chat.json", $"{SettingsFolderName}/obs-chat.json", LegacyDataCategory.Settings, true),
         new("obs-integration.json", $"{SettingsFolderName}/obs-integration.json", LegacyDataCategory.Settings, true),
         new("polls.json", $"{SettingsFolderName}/polls.json", LegacyDataCategory.Settings, true),
+        new("platform-lifecycle.json", $"{SettingsFolderName}/platform-lifecycle.json", LegacyDataCategory.Settings, true),
         new("recent-categories.json", $"{SettingsFolderName}/recent-categories.json", LegacyDataCategory.Settings, true),
         new("update.json", $"{SettingsFolderName}/update.json", LegacyDataCategory.Settings, true),
         new(UiPreferencesFileName, $"{SettingsFolderName}/{UiPreferencesFileName}", LegacyDataCategory.UiPreferences, true),

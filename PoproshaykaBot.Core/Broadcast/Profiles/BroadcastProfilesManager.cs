@@ -164,19 +164,23 @@ public class BroadcastProfilesManager
             await _eventBus.PublishAsync(new BroadcastProfileApplyFailed(profileToApply, errorMessage, results), cancellationToken);
         }
 
-        var written = _profilesStore.Mutate(bp =>
+        var written = true;
+        if (success)
         {
-            bp.LastAppliedProfileId = profile.Id;
-
-            if (success && hasPlaceholder)
+            written = _profilesStore.Mutate(bp =>
             {
-                var stored = bp.Profiles.FirstOrDefault(p => p.Id == profile.Id);
-                if (stored != null)
+                bp.LastAppliedProfileId = profile.Id;
+
+                if (hasPlaceholder)
                 {
-                    stored.LastApplyAt = _timeProvider.GetUtcNow();
+                    var stored = bp.Profiles.FirstOrDefault(p => p.Id == profile.Id);
+                    if (stored != null)
+                    {
+                        stored.LastApplyAt = _timeProvider.GetUtcNow();
+                    }
                 }
-            }
-        });
+            });
+        }
 
         _logger.LogInformation("Профиль трансляции применён: {ProfileName} (Id={ProfileId}, success={Success}, {Outcome})",
             profile.Name,
@@ -211,7 +215,7 @@ public class BroadcastProfilesManager
 
             var evaluation = _appliers.TryGetValue(platform, out var platformApplier)
                 ? platformApplier.EvaluateSync(profile, stream)
-                : BroadcastProfileSyncMatcher.EvaluateTitleOnly(platform, profile.Title?.Trim() ?? string.Empty, stream);
+                : new BroadcastProfileSyncEvaluation(platform, BroadcastProfileSyncState.Pending);
 
             switch (evaluation.State)
             {
@@ -540,6 +544,11 @@ public class BroadcastProfilesManager
             CancellationToken cancellationToken)
         {
             var effectiveProfile = BroadcastProfileSyncMatcher.WithResolvedTitle(profile, resolvedTitle);
+            if (inner is ChannelInformationApplier concrete)
+            {
+                return await concrete.ApplyForPlatformAsync(effectiveProfile, cancellationToken);
+            }
+
             var succeeded = await inner.ApplyAsync(effectiveProfile, cancellationToken);
             return new(StreamingPlatform.Twitch, succeeded, succeeded ? null : "Не удалось обновить канал Twitch");
         }

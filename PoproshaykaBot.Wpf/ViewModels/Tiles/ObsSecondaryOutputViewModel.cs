@@ -1,7 +1,6 @@
 ﻿using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using PoproshaykaBot.Core.Obs;
-using PoproshaykaBot.Wpf.Infrastructure;
 using System;
 using System.Threading.Tasks;
 
@@ -77,7 +76,7 @@ public sealed partial class ObsSecondaryOutputViewModel : ObservableObject
 
     public bool HasTimecode => !string.IsNullOrWhiteSpace(Timecode);
 
-    public string? BytesText => FormatBytes(IsActive, Bytes);
+    public string? BytesText => ObsStreamHealth.FormatBytes(IsActive, Bytes);
 
     public bool HasBytes => !string.IsNullOrWhiteSpace(BytesText);
 
@@ -121,11 +120,13 @@ public sealed partial class ObsSecondaryOutputViewModel : ObservableObject
 
         Health = health?.Text;
         HealthSeverity = health?.Severity;
+        IsActionInFlight = false;
     }
 
     public void ApplyActiveState(bool active)
     {
         IsActive = active;
+        IsActionInFlight = false;
         if (!active)
         {
             IsReconnecting = false;
@@ -145,21 +146,5 @@ public sealed partial class ObsSecondaryOutputViewModel : ObservableObject
     private bool CanToggle()
     {
         return CanControl && !IsActionInFlight;
-    }
-
-    private static string? FormatBytes(bool active, long? bytes)
-    {
-        if (!active || bytes is null or <= 0)
-        {
-            return null;
-        }
-
-        var value = bytes.Value;
-        return value switch
-        {
-            >= 1L << 30 => string.Create(UiCulture.Russian, $"{value / (double)(1L << 30):0.##} ГБ"),
-            >= 1L << 20 => string.Create(UiCulture.Russian, $"{value / (double)(1L << 20):0.#} МБ"),
-            _ => string.Create(UiCulture.Russian, $"{value / 1024D:0} КБ"),
-        };
     }
 }

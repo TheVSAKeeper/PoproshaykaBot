@@ -52,6 +52,7 @@ public sealed partial class ObsInfoTileViewModel : DashboardTileViewModel, IDisp
     private readonly IUiTimer _toastTimer;
     private readonly IUiTimer _secondaryRefreshTimer;
 
+    private readonly CancellationTokenSource _disposeCts = new();
     private ObsIntegrationSettings _settings = new();
     private CancellationTokenSource? _refreshCts;
     private DateTimeOffset _lastAutoConnectAttempt = DateTimeOffset.MinValue;
@@ -499,17 +500,14 @@ public sealed partial class ObsInfoTileViewModel : DashboardTileViewModel, IDisp
             return;
         }
 
-        if (!row.IsActive && StreamCard.State != ObsOutputCardState.Active)
-        {
-            ShowToast("Сначала запустите основной эфир OBS", "Warning");
-            return;
-        }
-
         row.IsActionInFlight = true;
+        var succeeded = false;
 
         try
         {
-            using var cts = new CancellationTokenSource(SnapshotTimeout);
+            using var cts = CancellationTokenSource.CreateLinkedTokenSource(_disposeCts.Token);
+            cts.CancelAfter(SnapshotTimeout);
+
             if (row.IsActive)
             {
                 await _obsIntegration.StopSecondaryOutputAsync(row.Name, cts.Token);
@@ -519,25 +517,45 @@ public sealed partial class ObsInfoTileViewModel : DashboardTileViewModel, IDisp
                 await _obsIntegration.StartSecondaryOutputAsync(row.Name, cts.Token);
             }
 
+            succeeded = true;
             ScheduleDelayedSecondaryRefresh();
         }
-        catch (OperationCanceledException)
+        catch (OperationCanceledException exception)
         {
+            if (_disposed)
+            {
+                return;
+            }
+
+            _logger.ObsSecondaryOutputActionFailed(exception, row.Name);
             ShowToast("Превышено время ожидания OBS", "Error");
         }
         catch (InvalidOperationException exception)
         {
+            if (_disposed)
+            {
+                return;
+            }
+
             _logger.ObsSecondaryOutputActionFailed(exception, row.Name);
             ShowToast(exception.Message, "Warning");
         }
         catch (Exception exception)
         {
+            if (_disposed)
+            {
+                return;
+            }
+
             _logger.ObsSecondaryOutputActionFailed(exception, row.Name);
             ShowToast("Не удалось управлять дополнительным выходом", "Error");
         }
         finally
         {
-            row.IsActionInFlight = false;
+            if (!succeeded || _disposed)
+            {
+                row.IsActionInFlight = false;
+            }
         }
     }
 
@@ -551,8 +569,13 @@ public sealed partial class ObsInfoTileViewModel : DashboardTileViewModel, IDisp
             }
 
             var row = SecondaryOutputs.FirstOrDefault(item =>
-                string.Equals(item.Name, vendorEvent.OutputName, StringComparison.OrdinalIgnoreCase)
-                || string.Equals(item.OutputId, vendorEvent.OutputName, StringComparison.OrdinalIgnoreCase));
+                item.Vendor == vendorEvent.Vendor
+                && (string.Equals(item.Name, vendorEvent.OutputName, StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(item.OutputId, vendorEvent.OutputName, StringComparison.OrdinalIgnoreCase)))
+                ?? SecondaryOutputs.FirstOrDefault(item =>
+                    item.Vendor == ObsMultistreamVendor.ObsOutput
+                    && (string.Equals(item.Name, vendorEvent.OutputName, StringComparison.OrdinalIgnoreCase)
+                        || string.Equals(item.OutputId, vendorEvent.OutputName, StringComparison.OrdinalIgnoreCase)));
 
             row?.ApplyActiveState(vendorEvent.Kind == ObsSecondaryOutputEventKind.Started);
 
@@ -798,18 +821,7 @@ public sealed partial class ObsInfoTileViewModel : DashboardTileViewModel, IDisp
 
     private static string? FormatRecordBytes(bool? active, long? bytes)
     {
-        if (active != true || bytes is null or <= 0)
-        {
-            return null;
-        }
-
-        var value = bytes.Value;
-        return value switch
-        {
-            >= 1L << 30 => string.Create(UiCulture.Russian, $"{value / (double)(1L << 30):0.##} ГБ"),
-            >= 1L << 20 => string.Create(UiCulture.Russian, $"{value / (double)(1L << 20):0.#} МБ"),
-            _ => string.Create(UiCulture.Russian, $"{value / 1024D:0} КБ"),
-        };
+        return ObsStreamHealth.FormatBytes(active, bytes);
     }
 
     private static string? GetOptionalString(JsonElement element, string propertyName)
@@ -905,6 +917,8 @@ public sealed partial class ObsInfoTileViewModel : DashboardTileViewModel, IDisp
 
         _obsClient.EventReceived -= OnObsEventReceived;
 
+        _disposeCts.Cancel();
+        _disposeCts.Dispose();
         Interlocked.Exchange(ref _refreshCts, null)?.Cancel();
 
         foreach (var sub in _subs)

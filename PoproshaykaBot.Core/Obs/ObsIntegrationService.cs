@@ -252,7 +252,7 @@ public sealed class ObsIntegrationService(
                 var recordStatus = await GetRecordStatusAsync(cts.Token).ConfigureAwait(false);
                 var audioSources = await GetAudioSourceSnapshotsAsync(settings, cts.Token)
                     .ConfigureAwait(false);
-                var secondaryOutputs = await _multistreamClient.GetSecondaryOutputsAsync(cts.Token)
+                var secondaryOutputs = await TryGetSecondaryOutputsIsolatedAsync(cancellationToken)
                     .ConfigureAwait(false);
 
                 _summaryFailureLogged = false;
@@ -399,6 +399,29 @@ public sealed class ObsIntegrationService(
     public Task ToggleRecordPauseAsync(CancellationToken cancellationToken)
     {
         return InvokeOutputRequestAsync("ToggleRecordPause", cancellationToken);
+    }
+
+    private async Task<IReadOnlyList<ObsSecondaryOutputSnapshot>> TryGetSecondaryOutputsIsolatedAsync(
+        CancellationToken cancellationToken)
+    {
+        using var secondaryCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        secondaryCts.CancelAfter(TimeSpan.FromSeconds(2));
+
+        try
+        {
+            return await _multistreamClient.GetSecondaryOutputsAsync(secondaryCts.Token)
+                .ConfigureAwait(false);
+        }
+        catch (OperationCanceledException exception) when (!cancellationToken.IsCancellationRequested)
+        {
+            logger.LogDebug(exception, "Таймаут опроса дополнительных выходов OBS – основной снимок сохранён");
+            return [];
+        }
+        catch (ObsRequestException exception)
+        {
+            logger.LogDebug(exception, "Ошибка опроса дополнительных выходов OBS – основной снимок сохранён");
+            return [];
+        }
     }
 
     public async Task StartSecondaryOutputAsync(string name, CancellationToken cancellationToken)

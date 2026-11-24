@@ -12,14 +12,17 @@ public sealed class StreamSettingsSectionContributor : ISettingsSectionContribut
     private readonly BotLifecycleAutomationSectionViewModel _botLifecycle;
     private readonly PollsSettingsSectionViewModel _polls;
     private readonly PlatformLifecycleSettingsStore? _platformLifecycleStore;
+    private readonly SettingsManager? _settingsManager;
 
     private PlatformLifecycleSettingsFile _lifecycleDraft = new();
+    private bool _lifecycleEdited;
 
     public StreamSettingsSectionContributor(
         AutoBroadcastSettingsViewModel autoBroadcast,
         BotLifecycleAutomationSectionViewModel botLifecycle,
         PollsSettingsSectionViewModel polls,
-        PlatformLifecycleSettingsStore? platformLifecycleStore = null)
+        PlatformLifecycleSettingsStore? platformLifecycleStore = null,
+        SettingsManager? settingsManager = null)
     {
         ArgumentNullException.ThrowIfNull(autoBroadcast);
         ArgumentNullException.ThrowIfNull(botLifecycle);
@@ -29,6 +32,7 @@ public sealed class StreamSettingsSectionContributor : ISettingsSectionContribut
         _botLifecycle = botLifecycle;
         _polls = polls;
         _platformLifecycleStore = platformLifecycleStore;
+        _settingsManager = settingsManager;
     }
 
     public int Order => 5;
@@ -91,6 +95,7 @@ public sealed class StreamSettingsSectionContributor : ISettingsSectionContribut
             ? JsonStoreClone.DeepClone(_platformLifecycleStore.Load())
             : new();
         _botLifecycle.LoadSettings(_lifecycleDraft);
+        _lifecycleEdited = false;
         _polls.RevertCommand.Execute(null);
     }
 
@@ -109,6 +114,15 @@ public sealed class StreamSettingsSectionContributor : ISettingsSectionContribut
             }
         }
 
+        void OnLifecyclePropertyChanged(object? sender, PropertyChangedEventArgs e)
+        {
+            if (!string.Equals(e.PropertyName, "HasErrors", StringComparison.Ordinal))
+            {
+                _lifecycleEdited = true;
+                markDirty();
+            }
+        }
+
         void OnPollsChanged(object? sender, PropertyChangedEventArgs e)
         {
             if (string.Equals(e.PropertyName, nameof(PollsSettingsSectionViewModel.HasChanges), StringComparison.Ordinal))
@@ -118,10 +132,10 @@ public sealed class StreamSettingsSectionContributor : ISettingsSectionContribut
         }
 
         subscription.TrackPropertyChanged(_autoBroadcast, OnPropertyChanged);
-        subscription.TrackPropertyChanged(_botLifecycle, OnPropertyChanged);
+        subscription.TrackPropertyChanged(_botLifecycle, OnLifecyclePropertyChanged);
         foreach (var platform in _botLifecycle.Platforms)
         {
-            subscription.TrackPropertyChanged(platform, OnPropertyChanged);
+            subscription.TrackPropertyChanged(platform, OnLifecyclePropertyChanged);
         }
         subscription.TrackPropertyChanged(_polls, OnPollsChanged);
 
@@ -133,20 +147,40 @@ public sealed class StreamSettingsSectionContributor : ISettingsSectionContribut
         ArgumentNullException.ThrowIfNull(targetSettings);
 
         _autoBroadcast.SaveSettings(targetSettings.Twitch.AutoBroadcast);
-        _botLifecycle.SaveSettings(_lifecycleDraft);
-        if (_lifecycleDraft.Platforms.TryGetValue(StreamingPlatform.Twitch, out var twitchLifecycle))
+        if (_lifecycleEdited)
         {
-            targetSettings.Twitch.BotLifecycleAutomation.AutoConnectOnStreamOnline = twitchLifecycle.AutoConnectOnStreamOnline;
-            targetSettings.Twitch.BotLifecycleAutomation.AutoDisconnectOnStreamOffline = twitchLifecycle.AutoDisconnectOnStreamOffline;
+            _botLifecycle.SaveSettings(_lifecycleDraft);
+            if (_platformLifecycleStore is null
+                && _lifecycleDraft.Platforms.TryGetValue(StreamingPlatform.Twitch, out var twitchLifecycle))
+            {
+                targetSettings.Twitch.BotLifecycleAutomation.AutoConnectOnStreamOnline = twitchLifecycle.AutoConnectOnStreamOnline;
+                targetSettings.Twitch.BotLifecycleAutomation.AutoDisconnectOnStreamOffline = twitchLifecycle.AutoDisconnectOnStreamOffline;
+            }
         }
     }
 
     public Task<SettingsSectionSaveOutcome> SaveAsync(AppSettings targetSettings, bool appSettingsWritten)
     {
         var written = !_polls.HasChanges || _polls.SaveChanges();
-        if (_platformLifecycleStore is not null)
+        if (_lifecycleEdited && _platformLifecycleStore is not null)
         {
-            written &= _platformLifecycleStore.Save(_lifecycleDraft);
+            var lifecycleWritten = _platformLifecycleStore.Save(_lifecycleDraft);
+            written &= lifecycleWritten;
+
+            if (lifecycleWritten)
+            {
+                _lifecycleEdited = false;
+
+                if (_settingsManager is not null
+                    && _lifecycleDraft.Platforms.TryGetValue(StreamingPlatform.Twitch, out var twitchLifecycle))
+                {
+                    _settingsManager.Mutate(settings =>
+                    {
+                        settings.Twitch.BotLifecycleAutomation.AutoConnectOnStreamOnline = twitchLifecycle.AutoConnectOnStreamOnline;
+                        settings.Twitch.BotLifecycleAutomation.AutoDisconnectOnStreamOffline = twitchLifecycle.AutoDisconnectOnStreamOffline;
+                    });
+                }
+            }
         }
 
         return Task.FromResult(SettingsSectionSaveOutcome.FromWrite(written));
