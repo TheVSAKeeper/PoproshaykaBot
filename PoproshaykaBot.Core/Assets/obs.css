@@ -522,6 +522,33 @@ body::-webkit-scrollbar {
     box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
 }
 
+.badge--fallback {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 2px;
+    box-sizing: border-box;
+    color: #fff;
+}
+
+.badge--fallback svg {
+    width: 100%;
+    height: 100%;
+    display: block;
+}
+
+.badge--broadcaster {
+    background: #e91916;
+}
+
+.badge--moderator {
+    background: #00ad03;
+}
+
+.badge--subscriber {
+    background: #339af0;
+}
+
 .platform-badge {
     display: inline-flex;
     align-items: center;

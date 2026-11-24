@@ -138,6 +138,12 @@ html[data-overlay-theme="flow"] #chat .flow-head {
     border-radius: 50%;
 }
 
+html[data-overlay-theme="flow"] #chat .flow-head:has(.flow-medal) {
+    margin: 0 10px 4px -10px;
+    shape-outside: inset(0 round 50% 50% 16px 50%);
+    shape-margin: 4px;
+}
+
 html[data-overlay-theme="flow"] #chat .message.no-avatars .flow-head {
     display: none;
 }

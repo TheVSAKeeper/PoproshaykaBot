@@ -330,9 +330,10 @@
         if (head) return head;
 
         const name = meta?.displayName || node.querySelector('.username')?.textContent || '';
+        const initialSource = name.trim().replace(/^@+/, '') || name.trim();
         head = document.createElement('span');
         head.className = 'flow-head';
-        head.dataset.initial = name.trim().charAt(0).toUpperCase();
+        head.dataset.initial = initialSource.charAt(0).toUpperCase();
 
         const avatar = existingAvatar || node.querySelector(':scope > .avatar');
         if (avatar) {
@@ -1328,11 +1329,32 @@
         });
     }
 
+    function renderFallbackBadge(type, version) {
+        const normalized = typeof type === 'string' ? type.trim().toLowerCase() : '';
+        const safeTitle = escapeAttr(`${type} ${version}`.trim());
+        if (normalized === 'broadcaster') {
+            return `<span class="badge badge--fallback badge--broadcaster" title="${safeTitle}" aria-label="Broadcaster">`
+                + '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M17 10.5V7a1 1 0 0 0-1-1H4a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-3.5l4 4v-11l-4 4z"/></svg>'
+                + '</span>';
+        }
+        if (normalized === 'moderator') {
+            return `<span class="badge badge--fallback badge--moderator" title="${safeTitle}" aria-label="Moderator">`
+                + '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 2L4 5v6.1c0 5 3.4 9.7 8 10.9 4.6-1.2 8-5.9 8-10.9V5l-8-3z"/></svg>'
+                + '</span>';
+        }
+        if (normalized === 'subscriber') {
+            return `<span class="badge badge--fallback badge--subscriber" title="${safeTitle}" aria-label="Subscriber">`
+                + '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 2l3.1 6.3 6.9 1-5 4.9 1.2 6.8L12 17.8 5.8 21 7 14.2 2 9.3l6.9-1L12 2z"/></svg>'
+                + '</span>';
+        }
+        return '';
+    }
+
     function renderBadges(badges) {
         if (!badges || badges.length === 0) return '';
 
         return badges.map(badge => {
-            if (!badge.imageUrl) return '';
+            if (!badge.imageUrl) return renderFallbackBadge(badge.type, badge.version);
             const src = escapeAttr(badge.imageUrl);
             const type = escapeAttr(badge.type);
             const version = escapeAttr(badge.version);
