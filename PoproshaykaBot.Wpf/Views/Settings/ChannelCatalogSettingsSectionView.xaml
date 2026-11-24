@@ -21,6 +21,7 @@
                 <Setter Property="Padding" Value="12,10" />
                 <Setter Property="Margin" Value="4,0,4,8" />
                 <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                <Setter Property="VerticalContentAlignment" Value="Center" />
                 <Setter Property="Cursor" Value="Hand" />
                 <Setter Property="FocusVisualStyle" Value="{StaticResource Chrome.FocusVisual}" />
                 <Setter Property="AutomationProperties.Name" Value="{Binding AutomationSummary}" />
