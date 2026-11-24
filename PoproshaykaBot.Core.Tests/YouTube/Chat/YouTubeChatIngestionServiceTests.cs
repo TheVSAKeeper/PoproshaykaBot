@@ -211,6 +211,57 @@ public class YouTubeChatIngestionServiceTests
     }
 
     [Test]
+    public async Task Broadcast_With_ChatDisabled_Sets_ChatDisabled_Issue_And_Logs_Once()
+    {
+        var warningEvents = new List<Microsoft.Extensions.Logging.EventId>();
+        var capturingLogger = Substitute.For<Microsoft.Extensions.Logging.ILogger<YouTubeChatIngestionService>>();
+        capturingLogger.IsEnabled(Arg.Any<Microsoft.Extensions.Logging.LogLevel>()).Returns(true);
+        capturingLogger.When(l => l.Log(
+                Microsoft.Extensions.Logging.LogLevel.Warning,
+                Arg.Any<Microsoft.Extensions.Logging.EventId>(),
+                Arg.Any<object>(),
+                Arg.Any<Exception?>(),
+                Arg.Any<Func<object, Exception?, string>>()))
+            .Do(call => warningEvents.Add(call.ArgAt<Microsoft.Extensions.Logging.EventId>(1)));
+
+        var broadcastSource = new MutableBroadcastSource
+        {
+            CurrentBroadcast = new("vid-disabled", ChannelId, "YTBroadcaster", string.Empty, "No Chat", _clock.UtcNow)
+            {
+                IsChatDisabled = true,
+            },
+        };
+
+        var streamClient = new FakeStreamClient(_ => []);
+        var pollingClient = new FakePollingClient((_, _) => Task.FromResult(new YouTubeLiveChatBatch([], null, TimeSpan.FromSeconds(5), null)));
+
+        using var ingestion = new YouTubeChatIngestionService(
+            streamClient,
+            pollingClient,
+            new YouTubeChatMessageMapper(),
+            broadcastSource,
+            _sessionContext,
+            _authService,
+            _accountsStore,
+            _quotaGovernor,
+            _eventBus,
+            _clock,
+            capturingLogger);
+
+        await ingestion.RunSingleIterationAsync(CancellationToken.None);
+        await ingestion.RunSingleIterationAsync(CancellationToken.None);
+
+        var diag = ingestion.CaptureDiagnostics();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(diag.State, Is.EqualTo(ConnectionState.Disconnected));
+            Assert.That(diag.Issue, Is.EqualTo(ChatReadIssue.ChatDisabled));
+            Assert.That(warningEvents.Count(static id => id.Id == 2112), Is.EqualTo(1));
+        });
+    }
+
+    [Test]
     public async Task InvalidPageToken_Publishes_GapEvent_And_Resets_Cursor_Without_Replaying_Seen_Items()
     {
         var gaps = new List<ChatReadingGapDetected>();

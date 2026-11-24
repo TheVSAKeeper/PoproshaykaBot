@@ -224,6 +224,20 @@ public sealed class MultiChannelCatalogAndAuthTests
     }
 
     [Test]
+    public void YouTubeChannelSeedProvider_sets_MonitoringEnabled_true_even_when_youtube_is_disabled()
+    {
+        var ytSettings = new YouTubeSettingsStore(NullLogger<YouTubeSettingsStore>.Instance, Path.Combine(_root, "yt-seed.json"));
+        ytSettings.Save(new PoproshaykaBot.Core.YouTube.YouTubeSettings { Enabled = false, Channel = "UC0000000000000000000001" });
+        var ytAccounts = new YouTubeAccountsStore(NullLogger<YouTubeAccountsStore>.Instance, Path.Combine(_root, "yt-seed-acc.json"));
+
+        var provider = new PoproshaykaBot.Core.YouTube.YouTubeChannelSeedProvider(ytSettings, ytAccounts);
+        var seed = provider.TryCreateSeed();
+
+        Assert.That(seed, Is.Not.Null);
+        Assert.That(seed!.MonitoringEnabled, Is.True);
+    }
+
+    [Test]
     public void ChannelCatalogStore_Load_normalizes_duplicate_platforms_and_channels_from_disk()
     {
         var channelsPath = Path.Combine(_root, "channels-dup.json");

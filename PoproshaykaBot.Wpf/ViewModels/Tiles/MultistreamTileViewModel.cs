@@ -1142,6 +1142,7 @@ public sealed partial class MultistreamPlatformRowViewModel(
         return chat?.Issue switch
         {
             ChatReadIssue.WaitingForActiveBroadcast => ("Чат: ожидание чата эфира", IsOnline ? StatusSeverity.Warning : StatusSeverity.Info),
+            ChatReadIssue.ChatDisabled => ("Чат: отключён на трансляции", StatusSeverity.Info),
             ChatReadIssue.QuotaExhausted => ("Чат: исчерпана квота API", StatusSeverity.Warning),
             ChatReadIssue.TransientError => ("Чат: сбой чтения, повтор подключения", StatusSeverity.Warning),
             ChatReadIssue.SubscriptionFailed => ("Чат: подписка не подтверждена", StatusSeverity.Error),

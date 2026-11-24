@@ -560,6 +560,104 @@ public sealed class StreamStatusBroadcastHandlerTests
         _messenger.DidNotReceive().Send(StreamingPlatform.Twitch, Arg.Any<string>(), Arg.Any<ChatSendCategory>());
     }
 
+    [Test]
+    public async Task PlatformConnectionChanged_WhenChatNotReadyInRegistry_DefersUntilChatAvailableAndSendsOnce()
+    {
+        _handler.Dispose();
+        var youtubeConnected = false;
+        var youtubePlatform = Substitute.For<IChatPlatform>();
+        youtubePlatform.Id.Returns(StreamingPlatform.YouTube);
+        youtubePlatform.IsConnected.Returns(_ => youtubeConnected);
+
+        var registry = Substitute.For<IChatPlatformRegistry>();
+        registry.All.Returns([youtubePlatform]);
+        registry.TryGet(StreamingPlatform.YouTube, out Arg.Any<IChatPlatform?>())
+            .Returns(callInfo =>
+            {
+                callInfo[1] = youtubePlatform;
+                return true;
+            });
+
+        _messenger.Send(StreamingPlatform.YouTube, "Стрим начался", ChatSendCategory.EventNotification)
+            .Returns(ChatEnqueueResult.Queued);
+
+        using var handler = new StreamStatusBroadcastHandler(
+            _scheduler,
+            _messenger,
+            _broadcastState,
+            _targetsProvider,
+            _targetChannel,
+            _settingsManager,
+            _eventBus,
+            NullLogger<StreamStatusBroadcastHandler>.Instance,
+            registry);
+
+        _livePlatforms.Add(StreamingPlatform.Twitch);
+        await _eventBus.PublishAsync(new BroadcastStarted(Guid.NewGuid(), StreamingPlatform.Twitch, Channel, null, DateTimeOffset.UtcNow));
+        await _eventBus.PublishAsync(new PlatformConnectionChanged(StreamingPlatform.YouTube, BotLifecyclePhase.Connected));
+
+        _messenger.DidNotReceive().Send(StreamingPlatform.YouTube, "Стрим начался", ChatSendCategory.EventNotification);
+
+        await _eventBus.PublishAsync(new PlatformChatAvailabilityChanged(StreamingPlatform.YouTube, true));
+        _messenger.DidNotReceive().Send(StreamingPlatform.YouTube, "Стрим начался", ChatSendCategory.EventNotification);
+
+        youtubeConnected = true;
+        await _eventBus.PublishAsync(new PlatformChatAvailabilityChanged(StreamingPlatform.YouTube, true));
+        await _eventBus.PublishAsync(new PlatformChatAvailabilityChanged(StreamingPlatform.YouTube, true));
+
+        _messenger.Received(1).Send(StreamingPlatform.YouTube, "Стрим начался", ChatSendCategory.EventNotification);
+    }
+
+    [TestCase(true)]
+    [TestCase(false)]
+    public async Task PlatformConnectionChanged_WhenChatNotReadyAndBroadcastEndsOrChanges_DoesNotSendStaleNotification(bool endBroadcast)
+    {
+        _handler.Dispose();
+        var youtubeConnected = false;
+        var youtubePlatform = Substitute.For<IChatPlatform>();
+        youtubePlatform.Id.Returns(StreamingPlatform.YouTube);
+        youtubePlatform.IsConnected.Returns(_ => youtubeConnected);
+
+        var registry = Substitute.For<IChatPlatformRegistry>();
+        registry.All.Returns([youtubePlatform]);
+        registry.TryGet(StreamingPlatform.YouTube, out Arg.Any<IChatPlatform?>())
+            .Returns(callInfo =>
+            {
+                callInfo[1] = youtubePlatform;
+                return true;
+            });
+
+        using var handler = new StreamStatusBroadcastHandler(
+            _scheduler,
+            _messenger,
+            _broadcastState,
+            _targetsProvider,
+            _targetChannel,
+            _settingsManager,
+            _eventBus,
+            NullLogger<StreamStatusBroadcastHandler>.Instance,
+            registry);
+
+        _livePlatforms.Add(StreamingPlatform.Twitch);
+        await _eventBus.PublishAsync(new BroadcastStarted(Guid.NewGuid(), StreamingPlatform.Twitch, Channel, null, DateTimeOffset.UtcNow));
+        await _eventBus.PublishAsync(new PlatformConnectionChanged(StreamingPlatform.YouTube, BotLifecyclePhase.Connected));
+
+        if (endBroadcast)
+        {
+            _livePlatforms.Clear();
+            await _eventBus.PublishAsync(new BroadcastEnded(Guid.NewGuid(), StreamingPlatform.Twitch, Channel, DateTimeOffset.UtcNow));
+        }
+        else
+        {
+            await _eventBus.PublishAsync(new BroadcastStarted(Guid.NewGuid(), StreamingPlatform.Twitch, Channel, null, DateTimeOffset.UtcNow, IsCatchUp: true));
+        }
+
+        youtubeConnected = true;
+        await _eventBus.PublishAsync(new PlatformChatAvailabilityChanged(StreamingPlatform.YouTube, true));
+
+        _messenger.DidNotReceive().Send(StreamingPlatform.YouTube, "Стрим начался", ChatSendCategory.EventNotification);
+    }
+
     private static async Task RunConcurrentDuringBlockedSendAsync(
         Func<Task> blockedPublish,
         Func<Task> concurrentPublish,

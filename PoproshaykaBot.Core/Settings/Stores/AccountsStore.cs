@@ -202,18 +202,7 @@ public sealed class AccountsStore : RoleAccountsStoreBase<AccountsStore.Accounts
         return DescribeAccounts(LoadFile());
     }
 
-    public string DescribeContextsSnapshot()
-    {
-        var contexts = LoadFile().Contexts;
-
-        if (contexts is null || contexts.Count == 0)
-        {
-            return "нет";
-        }
-
-        return string.Join("; ", contexts.Select(static entry =>
-            $"{SettingsDescriber.Value(entry.ContextId)}/{entry.Role}: {Describe(entry.Account ?? new())}"));
-    }
+    public string DescribeContextsSnapshot() => DescribeContextsSnapshot(Describe);
 
     public static string Describe(TwitchAccountSettings account)
     {

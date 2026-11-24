@@ -69,4 +69,16 @@ internal static partial class CoreLog
         Level = LogLevel.Information,
         Message = "Кэш истории чата восстановлен: областей {ScopeCount}, сообщений {MessageCount}")]
     public static partial void ChatHistoryCacheRestored(this ILogger logger, int scopeCount, int messageCount);
+
+    [LoggerMessage(
+        EventId = 2111,
+        Level = LogLevel.Warning,
+        Message = "YouTube эфир {VideoId} (канал {ChannelId}) идёт без liveChatId – чат трансляции отключён")]
+    public static partial void YouTubeChatDisabledOnBroadcast(this ILogger logger, string videoId, string channelId);
+
+    [LoggerMessage(
+        EventId = 2112,
+        Level = LogLevel.Warning,
+        Message = "Чтение чата YouTube приостановлено для эфира {VideoId} (канал {ChannelId}): чат трансляции отключён")]
+    public static partial void YouTubeChatIngestionDisabled(this ILogger logger, string videoId, string channelId);
 }

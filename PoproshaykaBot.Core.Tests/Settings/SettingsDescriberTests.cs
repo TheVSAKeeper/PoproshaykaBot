@@ -216,6 +216,7 @@ public sealed class SettingsDescriberTests
             "Account.Contexts",
             "YouTubeSettings",
             "YouTubeAccounts",
+            "YouTubeAccounts.Contexts",
         }));
     }
 }

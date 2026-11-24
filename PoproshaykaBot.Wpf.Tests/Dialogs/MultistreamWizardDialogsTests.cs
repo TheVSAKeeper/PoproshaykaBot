@@ -483,6 +483,53 @@ public sealed class MultistreamWizardDialogsTests
         });
     }
 
+    [Test]
+    public async Task ChannelWizard_assign_account_on_auto_discovered_unconfigured_channel_enables_monitoring()
+    {
+        var catalog = new ChannelCatalogStore(filePath: Path.Combine(_directory, "auto-channels.json"));
+        var twitchAccounts = new AccountsStore(filePath: Path.Combine(_directory, "auto-accounts.json"));
+        var ytAccounts = new YouTubeAccountsStore(filePath: Path.Combine(_directory, "auto-yt-accounts.json"));
+
+        ytAccounts.SaveAll(
+            "secret",
+            new YouTubeAccountSettings { ChannelId = "UC_BOT", ChannelTitle = "BotYT", AccessToken = "tok", RefreshToken = "ref" },
+            new YouTubeAccountSettings());
+
+        catalog.EnsureChannelKnown(new(StreamingPlatform.YouTube, "UC_AUTO"), "AutoChannel");
+        var before = catalog.FindEntry(new(StreamingPlatform.YouTube, "UC_AUTO"));
+        Assert.That(before, Is.Not.Null);
+        Assert.Multiple(() =>
+        {
+            Assert.That(before!.IsConfigured, Is.False);
+            Assert.That(before.MonitoringEnabled, Is.False);
+        });
+
+        var adapter = new StubChannelAdapter(StreamingPlatform.YouTube, () => ytAccounts.ListAccounts())
+        {
+            ResolveHandler = _ => new(
+                new(StreamingPlatform.YouTube, "UC_AUTO"),
+                "AutoChannel",
+                "@AutoChannel",
+                "https://youtube.com/channel/UC_AUTO"),
+            VerifyHandler = (_, _, _) => new(true, "UC_BOT"),
+        };
+
+        var vm = new MultistreamChannelWizardDialogViewModel(catalog, [adapter], twitchAccounts, ytAccounts);
+        vm.InitializeForAdd(StreamingPlatform.YouTube);
+        vm.ChannelInput = "UC_AUTO";
+        await vm.NextCommand.ExecuteAsync(null);
+        await vm.NextCommand.ExecuteAsync(null);
+
+        var after = catalog.FindEntry(new(StreamingPlatform.YouTube, "UC_AUTO"));
+        Assert.That(after, Is.Not.Null);
+        Assert.Multiple(() =>
+        {
+            Assert.That(after!.IsConfigured, Is.True);
+            Assert.That(after.MonitoringEnabled, Is.True);
+            Assert.That(after.BotAccountId, Is.EqualTo("UC_BOT"));
+        });
+    }
+
     private sealed class StubChannelAdapter(
         StreamingPlatform platform,
         Func<IReadOnlyList<PlatformAccount>> listAccounts) : IPlatformChannelAdapter

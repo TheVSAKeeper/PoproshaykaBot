@@ -19,6 +19,8 @@ public class BroadcastHistoryStore : IExternalWriteParticipant, IFlushableHistor
     private HashSet<Guid> _persistedSourceIds = [];
     private List<StreamSessionRecord> _lastPersistedProjection = [];
 
+    private FileReadState _sourceReadState;
+    private FileReadState _projectionReadState;
     private bool _canWriteSource;
     private bool _canWriteProjection;
     private bool _suspendedCanWriteSource;
@@ -39,23 +41,41 @@ public class BroadcastHistoryStore : IExternalWriteParticipant, IFlushableHistor
         var sourceRead = ReadRawDocument<BroadcastHistoryDocument>(_broadcastsPath, "история эфиров");
         var projectionRead = ReadRawDocument<StreamSessionHistory>(_projectionPath, "проекция сессий Twitch");
 
-        SourceReadState = sourceRead.State;
-        ProjectionReadState = projectionRead.State;
+        _sourceReadState = sourceRead.State;
+        _projectionReadState = projectionRead.State;
 
         InitializeFromReads(sourceRead, projectionRead);
 
         _logger?.LogDebug(
             "BroadcastHistoryStore инициализирован (broadcasts={SourceState}, projection={ProjectionState}, эфиров={Count}, запись источника={CanWriteSource}, запись проекции={CanWriteProjection})",
-            SourceReadState,
-            ProjectionReadState,
+            _sourceReadState,
+            _projectionReadState,
             _state.Broadcasts.Count,
             _canWriteSource,
             _canWriteProjection);
     }
 
-    public FileReadState SourceReadState { get; }
+    public FileReadState SourceReadState
+    {
+        get
+        {
+            lock (_syncLock)
+            {
+                return _sourceReadState;
+            }
+        }
+    }
 
-    public FileReadState ProjectionReadState { get; }
+    public FileReadState ProjectionReadState
+    {
+        get
+        {
+            lock (_syncLock)
+            {
+                return _projectionReadState;
+            }
+        }
+    }
 
     public bool CanWriteSource
     {
@@ -696,6 +716,10 @@ public class BroadcastHistoryStore : IExternalWriteParticipant, IFlushableHistor
             AtomicFile.Save(_broadcastsPath, json, _logger);
             _persistedSourceIds = [.. _state.Broadcasts.SelectMany(static b => (b.MergedBroadcastIds ?? []).Prepend(b.Id))];
             _sourceDirty = false;
+            if (_sourceReadState == FileReadState.Missing)
+            {
+                _sourceReadState = FileReadState.Loaded;
+            }
             return true;
         }
         catch (Exception exception)
@@ -788,6 +812,10 @@ public class BroadcastHistoryStore : IExternalWriteParticipant, IFlushableHistor
             AtomicFile.Save(_projectionPath, json, _logger);
             _lastPersistedProjection = expected.Sessions;
             _projectionDirty = false;
+            if (_projectionReadState == FileReadState.Missing)
+            {
+                _projectionReadState = FileReadState.Loaded;
+            }
             if (_state.ProjectionOutOfDate)
             {
                 _sourceDirty = true;

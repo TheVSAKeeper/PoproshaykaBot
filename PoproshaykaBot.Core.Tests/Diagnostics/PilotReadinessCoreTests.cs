@@ -57,6 +57,36 @@ public sealed class PilotReadinessCoreTests
     }
 
     [Test]
+    public void Снимок_именованных_контекстов_YouTube_описывает_контексты_без_утечки_секретов()
+    {
+        var path = Path.Combine(_directory.FullName, "youtube-accounts.json");
+        var store = new YouTubeAccountsStore(null, path);
+        store.SaveClientSecret("yt-client-secret-raw");
+        store.Mutate(PlatformAuthRole.Broadcaster, "yt-broadcaster-1", account =>
+        {
+            account.ChannelTitle = "MainYT";
+            account.ChannelId = "UC_MAIN_1";
+            account.AccessToken = "yt-access-secret";
+            account.RefreshToken = "yt-refresh-secret";
+            account.StoredScopes = ["https://www.googleapis.com/auth/youtube.readonly"];
+        });
+
+        var description = store.DescribeContextsSnapshot();
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(description, Does.Contain("yt-broadcaster-1/Broadcaster"));
+            Assert.That(description, Does.Contain("канал MainYT"));
+            Assert.That(description, Does.Contain("channelId UC_MAIN_1"));
+            Assert.That(description, Does.Contain("access-токен есть"));
+            Assert.That(description, Does.Contain("refresh-токен есть"));
+            Assert.That(description, Does.Not.Contain("yt-client-secret-raw"));
+            Assert.That(description, Does.Not.Contain("yt-access-secret"));
+            Assert.That(description, Does.Not.Contain("yt-refresh-secret"));
+        }
+    }
+
+    [Test]
     public void Каталог_переноса_включает_настройки_и_статистику_команд_и_профили_YouTube()
     {
         var files = LegacyDataCatalog.AllEntries.Select(static e => e.FileName).ToArray();

@@ -537,6 +537,49 @@ public class YouTubeLiveBroadcastClientTests
         });
     }
 
+    [Test]
+    public async Task ListActiveBroadcasts_Maps_Broadcast_Without_LiveChatId_As_ChatDisabled()
+    {
+        var client = CreateClient(_ => JsonResponse("""
+            {
+              "items": [
+                {
+                  "id": "vid-no-chat",
+                  "snippet": {
+                    "channelId": "UC0000000000000000000001",
+                    "channelTitle": "MainChannel",
+                    "title": "Stream Without Chat",
+                    "actualStartTime": "2026-11-15T18:00:00Z"
+                  }
+                },
+                {
+                  "id": "vid-empty-chat",
+                  "snippet": {
+                    "channelId": "UC0000000000000000000001",
+                    "channelTitle": "MainChannel",
+                    "title": "Stream Blank Chat",
+                    "liveChatId": "   ",
+                    "actualStartTime": "2026-11-15T18:10:00Z"
+                  }
+                }
+              ]
+            }
+            """));
+
+        var broadcasts = await client.ListActiveBroadcastsAsync(CancellationToken.None);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(broadcasts, Has.Count.EqualTo(2));
+            Assert.That(broadcasts[0].VideoId, Is.EqualTo("vid-no-chat"));
+            Assert.That(broadcasts[0].LiveChatId, Is.EqualTo(string.Empty));
+            Assert.That(broadcasts[0].IsChatDisabled, Is.True);
+            Assert.That(broadcasts[1].VideoId, Is.EqualTo("vid-empty-chat"));
+            Assert.That(broadcasts[1].LiveChatId, Is.EqualTo(string.Empty));
+            Assert.That(broadcasts[1].IsChatDisabled, Is.True);
+        });
+    }
+
     private YouTubeLiveBroadcastClient CreateClient(Func<HttpRequestMessage, HttpResponseMessage> handler)
     {
         var httpClientFactory = Substitute.For<IHttpClientFactory>();

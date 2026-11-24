@@ -1706,6 +1706,68 @@ public class YouTubeStreamMonitorTests
     }
 
     [Test]
+    public async Task OfficialBroadcast_Without_LiveChatId_Transitions_To_Online_And_Marks_Chat_Disabled_Without_Log_Spam()
+    {
+        var warningEvents = new List<Microsoft.Extensions.Logging.EventId>();
+        var capturingLogger = Substitute.For<Microsoft.Extensions.Logging.ILogger<YouTubeStreamMonitor>>();
+        capturingLogger.IsEnabled(Arg.Any<Microsoft.Extensions.Logging.LogLevel>()).Returns(true);
+        capturingLogger.When(l => l.Log(
+                Microsoft.Extensions.Logging.LogLevel.Warning,
+                Arg.Any<Microsoft.Extensions.Logging.EventId>(),
+                Arg.Any<object>(),
+                Arg.Any<Exception?>(),
+                Arg.Any<Func<object, Exception?, string>>()))
+            .Do(call => warningEvents.Add(call.ArgAt<Microsoft.Extensions.Logging.EventId>(1)));
+
+        var resolver = new YouTubeTargetChannelResolver(_broadcastClient, _accountsStore, NullLogger<YouTubeTargetChannelResolver>.Instance);
+        using var monitor = new YouTubeStreamMonitor(
+            _broadcastClient,
+            resolver,
+            _selectionStore,
+            _authService,
+            _settingsStore,
+            _governor,
+            _eventBus,
+            _clock,
+            capturingLogger);
+
+        var disabledBroadcast = new YouTubeBroadcastSummary("vid-no-chat", ChannelId, "MainChannel", string.Empty, "No Chat Stream", _clock.UtcNow)
+        {
+            IsChatDisabled = true,
+        };
+        _broadcastClient.ListActiveBroadcastsAsync(Arg.Any<CancellationToken>())
+            .Returns([disabledBroadcast]);
+        _broadcastClient.GetVideoLiveSampleAsync("vid-no-chat", Arg.Any<CancellationToken>())
+            .Returns(new YouTubeVideoLiveSample(
+                "vid-no-chat",
+                "No Chat Stream",
+                _clock.UtcNow,
+                null,
+                12,
+                ChannelId,
+                "MainChannel",
+                ActiveLiveChatId: null,
+                HasLiveStreamingDetails: true));
+
+        var chatAvailabilityEvents = new List<PlatformChatAvailabilityChanged>();
+        using var chatSub = _eventBus.Subscribe<PlatformChatAvailabilityChanged>(chatAvailabilityEvents.Add);
+
+        await monitor.RefreshLiveSnapshotAsync();
+        await monitor.RefreshLiveSnapshotAsync();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(monitor.CurrentStatus, Is.EqualTo(StreamStatus.Online));
+            Assert.That(monitor.CurrentBroadcast?.VideoId, Is.EqualTo("vid-no-chat"));
+            Assert.That(monitor.CurrentBroadcast?.LiveChatId, Is.EqualTo(string.Empty));
+            Assert.That(monitor.CurrentBroadcast?.IsChatDisabled, Is.True);
+            Assert.That(chatAvailabilityEvents, Has.Count.EqualTo(1));
+            Assert.That(chatAvailabilityEvents[0].IsAvailable, Is.False);
+            Assert.That(warningEvents.Count(static id => id.Id == 2111), Is.EqualTo(1));
+        });
+    }
+
+    [Test]
     public void QuotaGovernor_Late_Exhaustion_On_Old_Project_Or_Day_Does_Not_Exhaust_New_Project_Or_Day()
     {
         _settingsStore.Save(new YouTubeSettings { Enabled = true, ProjectId = "proj-old", DailyQuotaBudget = 10_000 });

@@ -195,4 +195,40 @@ public sealed partial class ActiveBroadcastStoreTests
             Assert.That(store.Load(), Is.Null);
         }
     }
+
+    [Test]
+    public void ReadState_UpdatesOnSaveAndDelete_WithoutOverwritingFailed()
+    {
+        var store = CreateStore();
+        Assert.That(store.ReadState, Is.EqualTo(FileReadState.Missing));
+
+        var draft = new ActiveBroadcast
+        {
+            BroadcastId = Guid.NewGuid(),
+            StartedAt = DateTimeOffset.UtcNow.AddMinutes(-5),
+            UpdatedAt = DateTimeOffset.UtcNow,
+        };
+
+        Assert.That(store.TrySave(draft), Is.True);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(store.ReadState, Is.EqualTo(FileReadState.Loaded));
+            Assert.That(store.CaptureDiagnosticsSummary().ReadState, Is.EqualTo(FileReadState.Loaded));
+        }
+
+        Assert.That(store.TryDelete(), Is.True);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(store.ReadState, Is.EqualTo(FileReadState.Missing));
+            Assert.That(store.CaptureDiagnosticsSummary().ReadState, Is.EqualTo(FileReadState.Missing));
+        }
+
+        var failedPath = Path.Combine(_directory, "failed_active_broadcast.json");
+        File.WriteAllText(failedPath, "{invalid");
+        var failedStore = new ActiveBroadcastStore(_historyStore, NullLogger<ActiveBroadcastStore>.Instance, failedPath, _legacyPath);
+        Assert.That(failedStore.ReadState, Is.EqualTo(FileReadState.Failed));
+        Assert.That(failedStore.TrySave(draft), Is.False);
+        Assert.That(failedStore.TryDelete(), Is.False);
+        Assert.That(failedStore.ReadState, Is.EqualTo(FileReadState.Failed));
+    }
 }

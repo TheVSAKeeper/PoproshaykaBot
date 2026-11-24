@@ -27,4 +27,5 @@ public enum ChatReadIssue
     QuotaExhausted = 3,
     TransientError = 4,
     SubscriptionFailed = 5,
+    ChatDisabled = 6,
 }

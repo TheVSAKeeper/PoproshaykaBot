@@ -211,6 +211,7 @@ public sealed partial class YouTubeQuotaStatusViewModel : ObservableObject, IDis
             {
                 ChatReadIssue.MissingBotAuth => "не подключён – нужна авторизация бота",
                 ChatReadIssue.WaitingForActiveBroadcast => "не подключён – ожидание активного эфира",
+                ChatReadIssue.ChatDisabled => "не подключён – чат отключён на трансляции",
                 ChatReadIssue.QuotaExhausted => "не подключён – квота исчерпана",
                 ChatReadIssue.TransientError => "не подключён – ошибка чтения, повтор подключения",
                 _ => "не подключён",

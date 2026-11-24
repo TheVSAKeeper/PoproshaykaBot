@@ -209,4 +209,42 @@ public sealed partial class BroadcastHistoryStoreTests
 
         Assert.That(_store.TrySetHidden(Guid.NewGuid(), true), Is.False);
     }
+
+    [Test]
+    public void ReadStates_TransitionFromMissingToLoadedOnFirstSave_WithoutOverwritingFailed()
+    {
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(_store.SourceReadState, Is.EqualTo(FileReadState.Missing));
+            Assert.That(_store.ProjectionReadState, Is.EqualTo(FileReadState.Missing));
+        }
+
+        Assert.That(_store.TryAppend(CreateYouTubeOnlyRecord("yt-chan", 5)), Is.True);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(_store.SourceReadState, Is.EqualTo(FileReadState.Loaded));
+            Assert.That(_store.ProjectionReadState, Is.EqualTo(FileReadState.Missing));
+        }
+
+        Assert.That(_store.TryAppend(CreateTwitchRecord("tw-chan", 10)), Is.True);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(_store.SourceReadState, Is.EqualTo(FileReadState.Loaded));
+            Assert.That(_store.ProjectionReadState, Is.EqualTo(FileReadState.Loaded));
+            var summary = _store.CaptureDiagnosticsSummary();
+            Assert.That(summary.SourceReadState, Is.EqualTo(FileReadState.Loaded));
+            Assert.That(summary.ProjectionReadState, Is.EqualTo(FileReadState.Loaded));
+        }
+
+        var failedDir = Path.Combine(_directory, "failed-proj");
+        Directory.CreateDirectory(failedDir);
+        var bPath = Path.Combine(failedDir, "broadcasts.json");
+        var pPath = Path.Combine(failedDir, "stream_sessions.json");
+        File.WriteAllText(bPath, JsonSerializer.Serialize(new BroadcastHistoryDocument { Broadcasts = [CreateTwitchRecord("tw", 1)] }, JsonStoreOptions.Default));
+        File.WriteAllText(pPath, "{broken");
+
+        var failedProjStore = new BroadcastHistoryStore(NullLogger<BroadcastHistoryStore>.Instance, bPath, pPath);
+        Assert.That(failedProjStore.SourceReadState, Is.EqualTo(FileReadState.Loaded));
+        Assert.That(failedProjStore.ProjectionReadState, Is.EqualTo(FileReadState.Failed));
+    }
 }

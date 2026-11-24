@@ -21,6 +21,7 @@ public class ActiveBroadcastStore : IExternalWriteParticipant
     private readonly Lock _syncLock = new();
 
     private ActiveBroadcast? _currentDraft;
+    private FileReadState _readState;
     private string? _lastSaveError;
     private bool _canWrite;
     private bool _suspendedCanWrite;
@@ -40,7 +41,7 @@ public class ActiveBroadcastStore : IExternalWriteParticipant
         _legacyFilePath = legacyFilePath ?? Path.Combine(AppPaths.BaseDirectory, LegacyFileName);
 
         var (state, loaded) = ReadDraftFile(_filePath);
-        ReadState = state;
+        _readState = state;
 
         switch (state)
         {
@@ -57,11 +58,24 @@ public class ActiveBroadcastStore : IExternalWriteParticipant
             default:
                 _canWrite = true;
                 _currentDraft = TryMigrateLegacyDraft();
+                if (_currentDraft is not null)
+                {
+                    _readState = FileReadState.Loaded;
+                }
                 break;
         }
     }
 
-    public FileReadState ReadState { get; }
+    public FileReadState ReadState
+    {
+        get
+        {
+            lock (_syncLock)
+            {
+                return _readState;
+            }
+        }
+    }
 
     public string? LastSaveError => Volatile.Read(ref _lastSaveError);
 
@@ -218,6 +232,10 @@ public class ActiveBroadcastStore : IExternalWriteParticipant
                 AtomicFile.Save(_filePath, json, _logger);
                 _currentDraft = snapshot;
                 _lastSaveError = null;
+                if (_readState != FileReadState.Failed)
+                {
+                    _readState = FileReadState.Loaded;
+                }
                 return true;
             }
             catch (Exception exception)
@@ -255,6 +273,10 @@ public class ActiveBroadcastStore : IExternalWriteParticipant
 
                 _currentDraft = null;
                 _lastSaveError = null;
+                if (_readState != FileReadState.Failed)
+                {
+                    _readState = FileReadState.Missing;
+                }
                 return true;
             }
             catch (Exception exception)

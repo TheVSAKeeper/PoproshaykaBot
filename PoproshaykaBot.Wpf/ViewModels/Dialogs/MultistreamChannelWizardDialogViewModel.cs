@@ -560,6 +560,11 @@ public sealed partial class MultistreamChannelWizardDialogViewModel : Observable
             }
             else
             {
+                if (!existing.IsConfigured)
+                {
+                    existing.MonitoringEnabled |= supportsBackgroundMonitoring;
+                }
+
                 existing.IsConfigured = true;
                 if (!string.IsNullOrWhiteSpace(TargetChannelDisplayName))
                 {

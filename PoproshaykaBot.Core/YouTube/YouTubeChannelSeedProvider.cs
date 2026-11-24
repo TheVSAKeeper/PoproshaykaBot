@@ -47,7 +47,7 @@ public sealed class YouTubeChannelSeedProvider(
             displayName,
             handle,
             $"https://youtube.com/channel/{channelId}",
-            MonitoringEnabled: ytSettings.Enabled,
+            MonitoringEnabled: true,
             BroadcasterSubjectId: string.Equals(broadcaster.ChannelId, channelId, StringComparison.Ordinal) ? channelId : null,
             BotSubjectId: youtubeAccountsStore.Load(PlatformAuthRole.Bot).ChannelId);
     }

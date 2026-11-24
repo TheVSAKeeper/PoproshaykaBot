@@ -398,6 +398,7 @@ public sealed class BotDiagnosticsBundleSource(
             {
                 ChatReadIssue.MissingBotAuth => ", нужна авторизация бота",
                 ChatReadIssue.WaitingForActiveBroadcast => ", ожидание активной трансляции",
+                ChatReadIssue.ChatDisabled => ", чат отключён на трансляции",
                 ChatReadIssue.QuotaExhausted => ", квота исчерпана",
                 ChatReadIssue.TransientError => ", ошибка чтения",
                 _ => string.Empty,

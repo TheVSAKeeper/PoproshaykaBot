@@ -5,6 +5,7 @@ using PoproshaykaBot.Core.Infrastructure.Events;
 using PoproshaykaBot.Core.Infrastructure.Events.Chat;
 using PoproshaykaBot.Core.Infrastructure.Events.Streaming;
 using PoproshaykaBot.Core.Infrastructure.Hosting;
+using PoproshaykaBot.Core.Infrastructure.Logging;
 using PoproshaykaBot.Core.Platforms;
 using PoproshaykaBot.Core.Platforms.Auth;
 using PoproshaykaBot.Core.Settings;
@@ -1854,6 +1855,11 @@ internal sealed class YouTubeStreamMonitor
 
             if (stillActiveLocked)
             {
+                if (!active.IsChatDisabled && effectiveBroadcast.IsChatDisabled)
+                {
+                    CoreLog.YouTubeChatDisabledOnBroadcast(logger, effectiveBroadcast.VideoId, slot.ChannelId);
+                }
+
                 await eventBus.PublishAsync(new YouTubeActiveBroadcastChanged(effectiveBroadcast), CancellationToken.None).ConfigureAwait(false);
                 if (IsCurrentSettings(settingsRevision)
                     && (sample.HasLiveStreamingDetails || string.IsNullOrWhiteSpace(active.LiveChatId)))
@@ -2371,6 +2377,11 @@ internal sealed class YouTubeStreamMonitor
                 _activeBroadcast = effectiveBroadcast;
             }
 
+            if (!active.IsChatDisabled && effectiveBroadcast.IsChatDisabled)
+            {
+                CoreLog.YouTubeChatDisabledOnBroadcast(logger, effectiveBroadcast.VideoId, targetChannelId);
+            }
+
             await eventBus.PublishAsync(new YouTubeActiveBroadcastChanged(effectiveBroadcast), CancellationToken.None).ConfigureAwait(false);
             if (!IsCurrentSettings(expectedSettingsRevision))
             {
@@ -2580,6 +2591,14 @@ internal sealed class YouTubeStreamMonitor
         }
 
         await eventBus.PublishAsync(new YouTubeActiveBroadcastChanged(selected), CancellationToken.None).ConfigureAwait(false);
+
+        if (selected.IsChatDisabled
+            && (previousActive is null
+                || !previousActive.IsChatDisabled
+                || !string.Equals(previousActive.VideoId, selected.VideoId, StringComparison.Ordinal)))
+        {
+            CoreLog.YouTubeChatDisabledOnBroadcast(logger, selected.VideoId, targetChannelId);
+        }
 
         if (initialSample?.ConcurrentViewers is int viewers)
         {

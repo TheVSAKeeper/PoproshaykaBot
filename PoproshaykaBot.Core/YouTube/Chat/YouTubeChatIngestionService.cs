@@ -97,6 +97,7 @@ internal sealed class YouTubeChatIngestionService(
 
     private int _consecutiveRapidCloses;
     private int _consecutiveTransientFailures;
+    private string? _loggedChatDisabledVideoId;
     private bool _wakePending;
     private bool _isRunning;
     private bool _disposed;
@@ -200,6 +201,7 @@ internal sealed class YouTubeChatIngestionService(
             _transport = YouTubeChatTransport.None;
             _issue = ChatReadIssue.None;
             _connectedSince = null;
+            _loggedChatDisabledVideoId = null;
         }
 
         if (unsubscribeSettings && settingsStore is not null)
@@ -356,6 +358,11 @@ internal sealed class YouTubeChatIngestionService(
         var session = sessionContext.Current;
         using var _ = PlatformAuthRequestOptions.UseContext(session?.BotContextId);
 
+        var isDisabledForTarget = broadcast is { IsChatDisabled: true }
+            && !string.IsNullOrWhiteSpace(broadcast.ChannelId)
+            && (session?.TargetChannelId is not { Length: > 0 } targetId
+                || string.Equals(broadcast.ChannelId, targetId, StringComparison.Ordinal));
+
         if (broadcast is null
             || string.IsNullOrWhiteSpace(broadcast.ChannelId)
             || (session?.TargetChannelId is { Length: > 0 } expectedTarget
@@ -364,17 +371,44 @@ internal sealed class YouTubeChatIngestionService(
         {
             await MarkIngestionStoppedAsync(timeProvider.GetUtcNow(), ct).ConfigureAwait(false);
 
+            string? disabledVideoIdToLog = null;
+            string? disabledChannelIdToLog = null;
+
             lock (_sync)
             {
                 _liveChatId = null;
                 _connectedSince = null;
                 _transport = YouTubeChatTransport.None;
-                _state = ConnectionState.Connecting;
-                _issue = ChatReadIssue.WaitingForActiveBroadcast;
+                _state = isDisabledForTarget ? ConnectionState.Disconnected : ConnectionState.Connecting;
+                _issue = isDisabledForTarget ? ChatReadIssue.ChatDisabled : ChatReadIssue.WaitingForActiveBroadcast;
                 _channel = session?.ChannelLabel;
+
+                if (isDisabledForTarget)
+                {
+                    if (!string.Equals(_loggedChatDisabledVideoId, broadcast!.VideoId, StringComparison.Ordinal))
+                    {
+                        _loggedChatDisabledVideoId = broadcast.VideoId;
+                        disabledVideoIdToLog = broadcast.VideoId;
+                        disabledChannelIdToLog = broadcast.ChannelId;
+                    }
+                }
+                else
+                {
+                    _loggedChatDisabledVideoId = null;
+                }
+            }
+
+            if (disabledVideoIdToLog is not null && disabledChannelIdToLog is not null)
+            {
+                CoreLog.YouTubeChatIngestionDisabled(logger, disabledVideoIdToLog, disabledChannelIdToLog);
             }
 
             return WaitingBroadcastInterval;
+        }
+
+        lock (_sync)
+        {
+            _loggedChatDisabledVideoId = null;
         }
 
         var channelLabel = session?.ChannelLabel;

@@ -736,7 +736,7 @@ public sealed partial class ChannelCatalogSettingsSectionViewModel : ObservableO
         var vm = new ChannelCatalogItemViewModel(
             entry,
             isFirstForPlatform,
-            entry.MonitoringEnabled,
+            HasCapability(platform, PlatformCapabilities.BackgroundStreamMonitoring),
             NotifyEdited,
             VerifyAccessAsync,
             AuthorizeRoleAsync,

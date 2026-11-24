@@ -419,24 +419,29 @@ internal sealed class YouTubeLiveBroadcastClient(
         if (item?.Snippet is null
             || string.IsNullOrWhiteSpace(item.Id)
             || string.IsNullOrWhiteSpace(item.Snippet.ChannelId)
-            || string.IsNullOrWhiteSpace(item.Snippet.LiveChatId)
             || item.Snippet.ActualEndTime.HasValue)
         {
             return false;
         }
 
+        var liveChatId = string.IsNullOrWhiteSpace(item.Snippet.LiveChatId)
+            ? string.Empty
+            : item.Snippet.LiveChatId.Trim();
         var startedAt = item.Snippet.ActualStartTime ?? item.Snippet.PublishedAt ?? DateTimeOffset.UtcNow;
 
         summary = new(
             item.Id.Trim(),
             item.Snippet.ChannelId.Trim(),
             item.Snippet.ChannelTitle ?? string.Empty,
-            item.Snippet.LiveChatId.Trim(),
+            liveChatId,
             item.Snippet.Title ?? string.Empty,
             startedAt.ToUniversalTime(),
             item.Snippet.Description,
             YouTubeBroadcastPrivacyStatus.Normalize(item.Status?.PrivacyStatus),
-            item.Snippet.ScheduledStartTime?.ToUniversalTime());
+            item.Snippet.ScheduledStartTime?.ToUniversalTime())
+        {
+            IsChatDisabled = liveChatId.Length == 0,
+        };
 
         return true;
     }

@@ -1,4 +1,5 @@
 ﻿using Microsoft.Extensions.Logging;
+using PoproshaykaBot.Core.Settings;
 using PoproshaykaBot.Core.Settings.Stores;
 
 namespace PoproshaykaBot.Core.Platforms.Auth;
@@ -659,6 +660,20 @@ public abstract class RoleAccountsStoreBase<TFile, TAccount> : IPlatformAccountD
 
         EnsureDefaultScopes(entry.Account, role);
         return entry.Account;
+    }
+
+    protected string DescribeContextsSnapshot(Func<TAccount, string> describeAccount)
+    {
+        ArgumentNullException.ThrowIfNull(describeAccount);
+
+        var contexts = GetContexts(_store.Load());
+        if (contexts.Count == 0)
+        {
+            return "нет";
+        }
+
+        return string.Join("; ", contexts.Select(entry =>
+            $"{SettingsDescriber.Value(entry.ContextId)}/{entry.Role}: {describeAccount(entry.Account ?? new())}"));
     }
 
     protected abstract TAccount? GetAccount(TFile state, PlatformAuthRole role);

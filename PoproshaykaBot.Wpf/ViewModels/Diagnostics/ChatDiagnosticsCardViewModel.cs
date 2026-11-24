@@ -111,6 +111,7 @@ public sealed class ChatDiagnosticsCardViewModel(DiagnosticsSnapshotPublisher pu
         {
             ChatReadIssue.MissingBotAuth => ("чат не читается: токен бота недоступен", DiagnosticsCardState.Error),
             ChatReadIssue.WaitingForActiveBroadcast => ("ожидание чата эфира", DiagnosticsCardState.Warning),
+            ChatReadIssue.ChatDisabled => ("чат отключён на трансляции", DiagnosticsCardState.Warning),
             ChatReadIssue.QuotaExhausted => ("чат не читается: квота исчерпана", DiagnosticsCardState.Warning),
             ChatReadIssue.TransientError => ("сбой чтения чата, повтор подключения", DiagnosticsCardState.Warning),
             ChatReadIssue.SubscriptionFailed => ("подписка на чат не подтверждена", DiagnosticsCardState.Error),

@@ -107,7 +107,11 @@ public sealed class StreamStatusBroadcastHandler :
                     }
                     else
                     {
-                        sendDeferredStart = TryAcquireOrDeferStartSendLocked(@event.Platform, out generation, out sendId);
+                        if (_platformRegistry is null
+                            || (_platformRegistry.TryGet(@event.Platform, out var adapter) && adapter.IsConnected))
+                        {
+                            sendDeferredStart = TryAcquireOrDeferStartSendLocked(@event.Platform, out generation, out sendId);
+                        }
 
                         if (targets.Contains(@event.Platform) && !_scheduler.IsActive)
                         {
@@ -162,7 +166,9 @@ public sealed class StreamStatusBroadcastHandler :
 
         lock (_stateLock)
         {
-            if (_broadcastState.IsAnyLive && _connectedPlatforms.Contains(@event.Platform))
+            var isChatReady = _platformRegistry is null
+                || (_platformRegistry.TryGet(@event.Platform, out var adapter) && adapter.IsConnected);
+            if (_broadcastState.IsAnyLive && _connectedPlatforms.Contains(@event.Platform) && isChatReady)
             {
                 sendDeferredStart = TryAcquireOrDeferStartSendLocked(@event.Platform, out generation, out sendId);
             }

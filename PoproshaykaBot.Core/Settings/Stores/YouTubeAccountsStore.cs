@@ -237,6 +237,8 @@ public sealed class YouTubeAccountsStore : RoleAccountsStoreBase<YouTubeAccounts
         return DescribeAccounts(LoadFile());
     }
 
+    public string DescribeContextsSnapshot() => DescribeContextsSnapshot(Describe);
+
     private static string DescribeAccounts(YouTubeAccountsFileDto state)
     {
         return $"{Describe(state.ClientSecret, state.BotAccount ?? new(), state.BroadcasterAccount ?? new())}; доп. контекстов {state.Contexts?.Count ?? 0}";

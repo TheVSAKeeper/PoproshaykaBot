@@ -165,6 +165,7 @@ public static class YouTubeServiceCollectionExtensions
             [
                 new("YouTubeSettings", YouTubeSettingsStore.Describe(youtubeSettings.Load())),
                 new("YouTubeAccounts", youtubeAccounts.DescribeSnapshot()),
+                new("YouTubeAccounts.Contexts", youtubeAccounts.DescribeContextsSnapshot()),
             ];
         }));
 
