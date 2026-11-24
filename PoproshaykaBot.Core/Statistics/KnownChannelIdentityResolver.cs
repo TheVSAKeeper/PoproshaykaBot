@@ -143,10 +143,7 @@ internal sealed class KnownChannelIdentityResolver
             list.Add(new TwitchChannelIdentitySource(twitchAccountsStore, settingsManager));
         }
 
-        if (youtubeAccountsStore is not null || youtubeSettingsStore is not null)
-        {
-            list.Add(new YouTubeChannelIdentitySource(youtubeAccountsStore, youtubeSettingsStore));
-        }
+        list.Add(new YouTubeChannelIdentitySource(youtubeAccountsStore, youtubeSettingsStore));
 
         return list;
     }

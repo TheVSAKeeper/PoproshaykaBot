@@ -86,7 +86,10 @@ internal sealed class Stage8Layer2Tests
     {
         var bus = new InMemoryEventBus(NullLogger<InMemoryEventBus>.Instance);
         var twitch = new StubPlatform(StreamingPlatform.Twitch, "Twitch", PlatformCapabilities.ChannelMetadataEdit, true, StreamStatus.Offline, null, "streamer");
-        var youtube = new StubPlatform(StreamingPlatform.YouTube, "YouTube", PlatformCapabilities.None, true, StreamStatus.Offline, null, "UC_MAIN");
+        var youtube = new StubPlatform(StreamingPlatform.YouTube, "YouTube", PlatformCapabilities.None, true, StreamStatus.Offline, null, "UC_MAIN")
+        {
+            UsesSingleMonitoringRole = true,
+        };
         var registry = new StubPlatformRegistry(twitch, youtube);
 
         using var vm = new StreamMonitoringViewModel(bus, registry);
@@ -658,6 +661,8 @@ internal sealed class Stage8Layer2Tests
         public bool IsEnabled => IsEnabledValue;
 
         public bool IsConnected => false;
+
+        public bool UsesSingleMonitoringRole { get; init; }
 
         public MutableStreamStatus MutableStream { get; }
 

@@ -26,7 +26,8 @@ public sealed partial class CommandsPageViewModel : ObservableObject, IPageHeade
     private static readonly PlatformEnablementOption EnableOnPlatform = new("Включена", true);
     private static readonly PlatformEnablementOption DisableOnPlatform = new("Выключена", false);
 
-    private const string WhisperReauthorizationNotice = "Пока у бота нет разрешения на личные сообщения, он отвечает в общем чате. Чтобы включить шёпот, откройте «Настройки → Площадки → Twitch» и войдите заново в строке «Бот» нужного канала.";
+    private static string FormatWhisperReauthorizationNotice(string platformDisplayName) =>
+        $"Пока у бота нет разрешения на личные сообщения, он отвечает в общем чате. Чтобы включить шёпот, откройте «Настройки → Площадки → {platformDisplayName}» и войдите заново в строке «Бот» нужного канала.";
 
     private const string NotWrittenNotice = "Параметры применены и работают до перезапуска. В файл они не записаны: туда только что перенесены данные предыдущей версии. Перезапустите приложение и сохраните параметры ещё раз.";
 
@@ -648,18 +649,39 @@ public sealed partial class CommandsPageViewModel : ObservableObject, IPageHeade
 
     private void RefreshWhisperNotice()
     {
-        if (!CapabilitiesFor(ProbePlatform).HasFlag(PlatformCapabilities.Whisper))
+        var platform = ProbePlatform;
+        if (!CapabilitiesFor(platform).HasFlag(PlatformCapabilities.Whisper))
         {
             WhisperNotice = null;
             return;
         }
 
         var whispers = _allRows.Any(row => row.EffectiveTarget.WhispersToCaller());
+        if (!whispers)
+        {
+            WhisperNotice = null;
+            return;
+        }
 
-        var bot = _authorization is null ? _accountsStore.LoadBot() : _authorization.GetAccount(PlatformAuthRole.Bot);
-        WhisperNotice = whispers && (bot is null || !TwitchScopes.IsGranted(bot, TwitchScopes.UserManageWhispers))
-            ? WhisperReauthorizationNotice
-            : null;
+        var adapter = _platformRegistry?.Find(platform);
+        bool hasPermission;
+        if (adapter?.HasWhisperPermission is { } adapterPermission)
+        {
+            hasPermission = adapterPermission;
+        }
+        else if (platform == StreamingPlatform.Twitch)
+        {
+            var bot = _authorization is null ? _accountsStore.LoadBot() : _authorization.GetAccount(PlatformAuthRole.Bot);
+            hasPermission = bot is not null && TwitchScopes.IsGranted(bot, TwitchScopes.UserManageWhispers);
+        }
+        else
+        {
+            hasPermission = true;
+        }
+
+        WhisperNotice = hasPermission
+            ? null
+            : FormatWhisperReauthorizationNotice(PlatformVisuals.GetDisplayName(platform, _platformRegistry));
     }
 
     private void RebuildView()

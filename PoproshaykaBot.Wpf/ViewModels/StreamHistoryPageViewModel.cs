@@ -73,6 +73,7 @@ public sealed partial class StreamHistoryPageViewModel : ObservableObject, IPage
     private readonly GameBoxArtProvider _boxArt;
     private readonly StatisticsPreload? _preload;
     private readonly ChannelCatalogStore? _channelCatalog;
+    private readonly IChatPlatformRegistry? _platformRegistry;
     private readonly List<IDisposable> _subs = [];
     private readonly List<StreamSessionRowViewModel> _allSessions = [];
     private readonly List<StreamSessionRowViewModel> _visibleSessions = [];
@@ -240,6 +241,7 @@ public sealed partial class StreamHistoryPageViewModel : ObservableObject, IPage
         _boxArt = boxArt;
         _preload = preload;
         _channelCatalog = channelCatalog;
+        _platformRegistry = platformRegistry;
         PlatformOptions = PlatformFilterOption.ForRegistry(platformRegistry);
 
         _trendMetric = NormalizeMetric(settings.GetEnum(SettingsKeys.StreamTrendMetric, StreamTrendMetric.PeakViewers));
@@ -1327,7 +1329,7 @@ public sealed partial class StreamHistoryPageViewModel : ObservableObject, IPage
                 var resolvedName = p.ChannelKey is { } chKey
                     ? _channelCatalog?.ResolveDisplayName(chKey)
                     : null;
-                return new StreamSessionPlatformBreakdownViewModel(p, resolvedName);
+                return new StreamSessionPlatformBreakdownViewModel(p, resolvedName, _platformRegistry);
             }).ToList()
             : []);
         HasDetailPlatformBreakdown = showBreakdown;
@@ -1796,12 +1798,15 @@ public sealed class StreamSessionChatterRowViewModel
 
 public sealed class StreamSessionPlatformBreakdownViewModel
 {
-    public StreamSessionPlatformBreakdownViewModel(BroadcastPlatformRecord source, string? resolvedChannel = null)
+    public StreamSessionPlatformBreakdownViewModel(
+        BroadcastPlatformRecord source,
+        string? resolvedChannel = null,
+        IChatPlatformRegistry? platformRegistry = null)
     {
         ArgumentNullException.ThrowIfNull(source);
 
         Platform = source.Platform;
-        DisplayName = PlatformVisuals.GetDisplayName(source.Platform);
+        DisplayName = PlatformVisuals.GetDisplayName(source.Platform, platformRegistry);
         Channel = !string.IsNullOrWhiteSpace(resolvedChannel) ? resolvedChannel : source.Channel;
         HasTitle = source.Title is { Length: > 0 };
         Title = HasTitle ? source.Title! : "Без названия";

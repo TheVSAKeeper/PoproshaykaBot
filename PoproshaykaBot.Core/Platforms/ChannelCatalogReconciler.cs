@@ -76,8 +76,17 @@ public sealed class ChannelCatalogReconciler
             return;
         }
 
+        if (seed.Platform != platform)
+        {
+            _logger.LogWarning(
+                "Каталог каналов: провайдер площадки {ExpectedPlatform} вернул запись для {ActualPlatform}, перенос пропущен",
+                platform,
+                seed.Platform);
+            return;
+        }
+
         SeedChannel(
-            seed.Platform,
+            platform,
             seed.ChannelId,
             seed.DisplayName,
             seed.Handle,

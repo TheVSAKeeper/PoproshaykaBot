@@ -33,7 +33,7 @@ public sealed partial class StreamMonitoringViewModel : ObservableObject, IDispo
             .Select(static platform => new PlatformMonitoringGroupViewModel(
                 platform.Id,
                 platform.DisplayName,
-                !platform.Capabilities.HasFlag(PlatformCapabilities.ChannelMetadataEdit)))
+                platform.UsesSingleMonitoringRole))
             .ToArray();
 
         Groups = groups;

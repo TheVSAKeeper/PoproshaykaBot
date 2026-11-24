@@ -415,7 +415,7 @@ public sealed partial class PlatformAccountsSectionViewModel : ObservableObject
         catch (Exception exception)
         {
             _logger?.ChannelAuthorizationFailed(platform, role, exception.GetType().Name);
-            SetNotice($"Не удалось подключить аккаунт. {StreamingErrorMessages.SafeMessage(exception, platform)}", StatusSeverity.Error);
+            SetNotice($"Не удалось подключить аккаунт. {StreamingErrorMessages.SafeMessage(exception, platform, _platformRegistry)}", StatusSeverity.Error);
         }
         finally
         {

@@ -18,6 +18,7 @@ using PoproshaykaBot.Core.Streaming;
 using PoproshaykaBot.Core.Streaming.Switching;
 using PoproshaykaBot.Wpf.Bootstrap;
 using PoproshaykaBot.Wpf.Infrastructure;
+using PoproshaykaBot.Wpf.Infrastructure.Platforms;
 
 namespace PoproshaykaBot.Wpf.ViewModels.Tiles;
 
@@ -77,7 +78,7 @@ public sealed partial class MultistreamTileViewModel : DashboardTileViewModel, I
         : base(TileTypeId, "Мультистрим", maxWidth: 500, minWidth: 280, minHeight: 324)
     {
         _catalog = catalog;
-        _enablementSources = BuildEnablementSources(enablementSources, youtubeSettings);
+        _enablementSources = PlatformEnablementSources.BuildMap(enablementSources, youtubeSettings);
         _connectionManager = connectionManager;
         _authorization = authorization;
         _dispatcher = dispatcher;
@@ -198,27 +199,6 @@ public sealed partial class MultistreamTileViewModel : DashboardTileViewModel, I
     private void OnCatalogChanged(object? sender, EventArgs e) => _dispatcher.Invoke(RefreshVisible);
 
     private void OnEnablementSourceChanged() => _dispatcher.Invoke(RefreshVisible);
-
-    private static IReadOnlyDictionary<StreamingPlatform, IPlatformEnablementSource> BuildEnablementSources(
-        IEnumerable<IPlatformEnablementSource>? enablementSources,
-        IPlatformEnablementSource? fallbackSource)
-    {
-        var map = new Dictionary<StreamingPlatform, IPlatformEnablementSource>();
-        if (enablementSources is not null)
-        {
-            foreach (var source in enablementSources)
-            {
-                map[source.Platform] = source;
-            }
-        }
-
-        if (fallbackSource is not null && !map.ContainsKey(fallbackSource.Platform))
-        {
-            map[fallbackSource.Platform] = fallbackSource;
-        }
-
-        return map;
-    }
 
     private void OnChannelSelectionRequested(StreamingPlatform platform, MultistreamChannelOption target)
     {
@@ -413,7 +393,12 @@ public sealed partial class MultistreamTileViewModel : DashboardTileViewModel, I
             var enabled = platform.IsEnabled;
             var enabledInSettings = _enablementSources.TryGetValue(platform.Id, out var enablementSource)
                 && enablementSource.IsEnabledInSettings;
-            var blockedByDebug = !enabled && enabledInSettings;
+            var blockedByDebug = platform.IsBlockedByDebugSession
+                || (isDebugSession
+                    && !enabled
+                    && enabledInSettings
+                    && _targetChannelProvider is not null
+                    && platform.Id != _targetChannelProvider.DebugPlatform);
             var isSwitchBlockedByDebug = blockedByDebug
                 || (isDebugSession && _targetChannelProvider is not null && platform.Id == _targetChannelProvider.DebugPlatform);
             var chat = platform.CaptureChatStatus(phase);

@@ -113,7 +113,7 @@ public sealed partial class StreamInfoTileViewModel : DashboardTileViewModel, ID
         _platformSelection = new TilePlatformSelection(platformRegistry);
         _logger = logger;
         _uiDispatcher = uiDispatcher;
-        _enablementSources = MergeEnablementSources(enablementSources, youtubeSettingsStore);
+        _enablementSources = PlatformEnablementSources.BuildList(enablementSources, youtubeSettingsStore);
         _catalogStore = catalogStore;
         _shellLauncher = shellLauncher;
 
@@ -160,6 +160,7 @@ public sealed partial class StreamInfoTileViewModel : DashboardTileViewModel, ID
         _subs.Add(bus.SubscribeOnUi<PlatformConnectionChanged>(_ => OnPlatformStateChanged()));
         _subs.Add(bus.SubscribeOnUi<YouTubeActiveBroadcastChanged>(OnYouTubeActiveBroadcastChanged));
         _subs.Add(bus.SubscribeOnUi<YouTubeMultipleBroadcastsDetected>(OnYouTubeMultipleBroadcastsDetected));
+        _subs.Add(bus.SubscribeOnUi<PlatformMultipleBroadcastsChanged>(OnPlatformMultipleBroadcastsChanged));
         _subs.Add(bus.SubscribeOnUi<ActiveChannelChanged>(_ => OnPlatformStateChanged()));
         _subs.Add(bus.SubscribeOnUi<ChannelMonitoringStateChanged>(OnChannelMonitoringStateChanged));
 
@@ -256,27 +257,6 @@ public sealed partial class StreamInfoTileViewModel : DashboardTileViewModel, ID
         _uiDispatcher.Invoke(OnPlatformStateChanged);
     }
 
-    private static IReadOnlyList<IPlatformEnablementSource> MergeEnablementSources(
-        IEnumerable<IPlatformEnablementSource>? enablementSources,
-        IPlatformEnablementSource? fallbackSource)
-    {
-        var map = new Dictionary<StreamingPlatform, IPlatformEnablementSource>();
-        if (enablementSources is not null)
-        {
-            foreach (var source in enablementSources)
-            {
-                map[source.Platform] = source;
-            }
-        }
-
-        if (fallbackSource is not null && !map.ContainsKey(fallbackSource.Platform))
-        {
-            map[fallbackSource.Platform] = fallbackSource;
-        }
-
-        return [.. map.Values];
-    }
-
     private void OnCatalogChanged(object? sender, EventArgs e)
     {
         _uiDispatcher.Invoke(OnPlatformStateChanged);
@@ -295,8 +275,7 @@ public sealed partial class StreamInfoTileViewModel : DashboardTileViewModel, ID
     {
         if (activeChanged.ActiveBroadcast is not null)
         {
-            _multipleBroadcastsPlatforms.Remove(activeChanged.Platform);
-            OnPropertyChanged(nameof(HasMultipleBroadcastsNotice));
+            UpdateMultipleBroadcasts(activeChanged.Platform, 1);
         }
 
         OnPlatformStateChanged();
@@ -304,13 +283,23 @@ public sealed partial class StreamInfoTileViewModel : DashboardTileViewModel, ID
 
     private void OnYouTubeMultipleBroadcastsDetected(YouTubeMultipleBroadcastsDetected detectedEvent)
     {
-        if (detectedEvent.Candidates.Count > 1)
+        UpdateMultipleBroadcasts(detectedEvent.Platform, detectedEvent.Candidates.Count);
+    }
+
+    private void OnPlatformMultipleBroadcastsChanged(PlatformMultipleBroadcastsChanged changedEvent)
+    {
+        UpdateMultipleBroadcasts(changedEvent.Platform, changedEvent.ActiveBroadcastCount);
+    }
+
+    private void UpdateMultipleBroadcasts(StreamingPlatform platform, int activeBroadcastCount)
+    {
+        if (activeBroadcastCount > 1)
         {
-            _multipleBroadcastsPlatforms.Add(detectedEvent.Platform);
+            _multipleBroadcastsPlatforms.Add(platform);
         }
         else
         {
-            _multipleBroadcastsPlatforms.Remove(detectedEvent.Platform);
+            _multipleBroadcastsPlatforms.Remove(platform);
         }
 
         OnPropertyChanged(nameof(HasMultipleBroadcastsNotice));

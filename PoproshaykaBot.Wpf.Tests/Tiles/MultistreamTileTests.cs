@@ -233,7 +233,10 @@ public sealed class MultistreamTileTests
         {
             var youtubeSettings = new YouTubeSettingsStore(filePath: Path.Combine(directory.FullName, "youtube.json"));
             var debug = false;
-            var youtube = new FakePlatform(StreamingPlatform.YouTube, () => youtubeSettings.Load().Enabled && !debug);
+            var youtube = new FakePlatform(
+                StreamingPlatform.YouTube,
+                () => youtubeSettings.Load().Enabled && !debug,
+                () => youtubeSettings.Load().Enabled && debug);
             var registry = new ChatPlatformRegistry([youtube]);
             var catalog = new ChannelCatalogStore(filePath: Path.Combine(directory.FullName, "channels.json"));
             var bus = new InMemoryEventBus(NullLogger<InMemoryEventBus>.Instance);
@@ -882,12 +885,16 @@ public sealed class MultistreamTileTests
         public bool Start(string executable, params string[] arguments) => true;
     }
 
-    private sealed class FakePlatform(StreamingPlatform id, Func<bool>? isEnabled = null) : IChatPlatform
+    private sealed class FakePlatform(
+        StreamingPlatform id,
+        Func<bool>? isEnabled = null,
+        Func<bool>? isBlockedByDebugSession = null) : IChatPlatform
     {
         public StreamingPlatform Id => id;
         public string DisplayName => id.ToString();
         public PlatformCapabilities Capabilities => PlatformCapabilities.None;
         public bool IsEnabled => isEnabled?.Invoke() ?? true;
+        public bool IsBlockedByDebugSession => isBlockedByDebugSession?.Invoke() ?? false;
         public bool UsesChannelCatalog { get; init; } = true;
         public string? ConfiguredChannel { get; init; }
         public bool IsConnected => ChatState == ConnectionState.Connected;

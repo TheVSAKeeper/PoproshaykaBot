@@ -115,13 +115,19 @@ public sealed class PlatformCleanupThirdPlatformWpfTests
     }
 
     [Test]
-    public async Task StreamMonitoring_resets_superseded_role_for_single_role_third_platform()
+    public async Task StreamMonitoring_respects_explicit_UsesSingleMonitoringRole_contract()
     {
         var bus = new InMemoryEventBus(NullLogger<InMemoryEventBus>.Instance);
-        var vk = new StubChatPlatform(StreamingPlatform.VkLive, "VK Видео Live", PlatformCapabilities.None, true, StreamStatus.Offline, null, "vk-chan");
-        var registry = new StubPlatformRegistry(vk);
-
-        using var vm = new StreamMonitoringViewModel(bus, registry);
+        var singleRoleVk = new StubChatPlatform(
+            StreamingPlatform.VkLive,
+            "VK Видео Live",
+            PlatformCapabilities.None,
+            true,
+            StreamStatus.Offline,
+            null,
+            "vk-chan",
+            usesSingleMonitoringRole: true);
+        using var singleVm = new StreamMonitoringViewModel(bus, new StubPlatformRegistry(singleRoleVk));
 
         await bus.PublishAsync(new StreamMonitoringStatusChanged(StreamingPlatform.VkLive, PlatformAuthRole.Bot, StreamMonitoringStatus.Connected));
         await bus.PublishAsync(new StreamMonitoringStatusChanged(StreamingPlatform.VkLive, PlatformAuthRole.Broadcaster, StreamMonitoringStatus.Connected));
@@ -129,9 +135,78 @@ public sealed class PlatformCleanupThirdPlatformWpfTests
 
         Assert.Multiple(() =>
         {
-            Assert.That(vm.Groups.Single().Bot.IsReported, Is.False);
-            Assert.That(vm.Groups.Single().Broadcaster.IsReported, Is.True);
-            Assert.That(vm.Groups.Single().Broadcaster.Text, Is.EqualTo("Стример: работает"));
+            Assert.That(singleVm.Groups.Single().Bot.IsReported, Is.False);
+            Assert.That(singleVm.Groups.Single().Broadcaster.IsReported, Is.True);
+            Assert.That(singleVm.Groups.Single().Broadcaster.Text, Is.EqualTo("Стример: работает"));
+        });
+
+        var dualRoleVk = new StubChatPlatform(
+            StreamingPlatform.VkLive,
+            "VK Видео Live",
+            PlatformCapabilities.None,
+            true,
+            StreamStatus.Offline,
+            null,
+            "vk-chan",
+            usesSingleMonitoringRole: false);
+        using var dualVm = new StreamMonitoringViewModel(bus, new StubPlatformRegistry(dualRoleVk));
+
+        await bus.PublishAsync(new StreamMonitoringStatusChanged(StreamingPlatform.VkLive, PlatformAuthRole.Bot, StreamMonitoringStatus.Connected));
+        await bus.PublishAsync(new StreamMonitoringStatusChanged(StreamingPlatform.VkLive, PlatformAuthRole.Broadcaster, StreamMonitoringStatus.Connected));
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(dualVm.Groups.Single().Bot.IsReported, Is.True);
+            Assert.That(dualVm.Groups.Single().Broadcaster.IsReported, Is.True);
+        });
+    }
+
+    [Test]
+    public void CommandsPage_whisper_notice_follows_selected_platform_permission_and_name()
+    {
+        var hasVkWhisperPermission = true;
+        var registry = new StubPlatformRegistry(
+            new StubChatPlatform(StreamingPlatform.Twitch, "Twitch", PlatformCapabilities.Whisper | PlatformCapabilities.ChannelMetadataEdit, true, StreamStatus.Offline, null, "tw"),
+            new StubChatPlatform(
+                StreamingPlatform.VkLive,
+                "VK Видео Live",
+                PlatformCapabilities.Whisper,
+                () => true,
+                StreamStatus.Offline,
+                null,
+                "vk",
+                hasWhisperPermission: () => hasVkWhisperPermission));
+
+        var settingsManager = new SettingsManager(NullLogger<SettingsManager>.Instance, Path.Combine(_root, "settings.json"));
+        var cmdStore = new CommandSettingsStore(null, Path.Combine(_root, "commands.json"));
+        cmdStore.Mutate(s => s.DefaultResponseTarget = CommandResponseTarget.Whisper | CommandResponseTarget.Chat);
+        var usage = new CommandUsageRepository(TimeProvider.System);
+        var processor = new ChatCommandProcessor(
+            [new StubCommand("title", PlatformCapabilities.ChannelMetadataEdit), new StubCommand("помощь", PlatformCapabilities.None)],
+            cmdStore,
+            usage,
+            NullLogger<ChatCommandProcessor>.Instance,
+            "!");
+
+        var page = new CommandsPageViewModel(
+            processor,
+            cmdStore,
+            settingsManager,
+            usage,
+            new FakeUnsavedChangesPrompt(),
+            new AccountsStore(null, Path.Combine(_root, "accounts.json")),
+            NullLogger<CommandsPageViewModel>.Instance,
+            registry);
+
+        page.CommandScope = page.CommandScopes.Single(scope => scope.Platform == StreamingPlatform.VkLive);
+        Assert.That(page.WhisperNotice, Is.Null);
+
+        hasVkWhisperPermission = false;
+        page.RefreshCommand.Execute(null);
+        Assert.Multiple(() =>
+        {
+            Assert.That(page.WhisperNotice, Does.Contain("VK Видео Live"));
+            Assert.That(page.WhisperNotice, Does.Not.Contain("Twitch"));
         });
     }
 
@@ -217,10 +292,24 @@ public sealed class PlatformCleanupThirdPlatformWpfTests
             Assert.That(tile.Rows.Single().IsPlatformEnabled, Is.True);
             Assert.That(page.PlatformReadinessText, Is.EqualTo("Площадка: включена"));
         });
+
+        var adapterEnabled = false;
+        var unavailableVk = new StubChatPlatform(StreamingPlatform.VkLive, "VK Видео Live", PlatformCapabilities.None, () => adapterEnabled, StreamStatus.Offline, null, "vk-chan");
+        using var unavailableTile = new MultistreamTileViewModel(
+            new StubPlatformRegistry(unavailableVk), catalog, connection, new PlatformAuthRegistry([]), [], bus, dispatcher,
+            enablementSources: [enablementSource]);
+        unavailableTile.SetPageOnScreen(true);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(unavailableTile.Rows.Single().IsPlatformEnabled, Is.False);
+            Assert.That(unavailableTile.Rows.Single().IsBlockedByDebugSession, Is.False);
+            Assert.That(unavailableTile.Rows.Single().StatusBadgeText, Is.EqualTo("Отключён"));
+        });
     }
 
     [Test]
-    public void StreamInfo_StreamPreview_and_History_include_third_platform_via_registry_and_enablement_source()
+    public async Task StreamInfo_StreamPreview_and_History_include_third_platform_via_registry_and_enablement_source()
     {
         var bus = new InMemoryEventBus(NullLogger<InMemoryEventBus>.Instance);
         var dispatcher = new ManualUiDispatcher();
@@ -236,7 +325,32 @@ public sealed class PlatformCleanupThirdPlatformWpfTests
         using var previewTile = new StreamPreviewTileViewModel(
             registry, bus, NullLogger<StreamPreviewTileViewModel>.Instance, dispatcher,
             enablementSources: [enablement]);
+
+        await bus.PublishAsync(new PlatformMultipleBroadcastsChanged(StreamingPlatform.VkLive, "vk-chan", 2));
+        Assert.That(infoTile.HasMultipleBroadcastsNotice, Is.True);
+        await bus.PublishAsync(new PlatformMultipleBroadcastsChanged(StreamingPlatform.VkLive, "vk-chan", 1));
+        Assert.That(infoTile.HasMultipleBroadcastsNotice, Is.False);
+
         var historyStore = new BroadcastHistoryStore(null, Path.Combine(_root, "broadcasts.json"), Path.Combine(_root, "sessions.json"));
+        var now = DateTimeOffset.UtcNow;
+        historyStore.TryAppend(new BroadcastRecord
+        {
+            StartedAt = now.AddHours(-1),
+            EndedAt = now,
+            Platforms =
+            [
+                new BroadcastPlatformRecord
+                {
+                    Platform = StreamingPlatform.VkLive,
+                    Channel = "vk-chan",
+                    Title = "VK Эфир",
+                    StartedAt = now.AddHours(-1),
+                    EndedAt = now,
+                    MessageCount = 5,
+                    ChatterCount = 2,
+                },
+            ],
+        });
         using var historyPage = new StreamHistoryPageViewModel(
             historyStore,
             new UserStatisticsRepository(NullLogger<UserStatisticsRepository>.Instance),
@@ -244,6 +358,7 @@ public sealed class PlatformCleanupThirdPlatformWpfTests
             new GameBoxArtProvider(new FakeBoxArtCache(), NullLogger<GameBoxArtProvider>.Instance),
             bus,
             platformRegistry: registry);
+        historyPage.SelectedRow = historyPage.Sessions[0];
 
         Assert.Multiple(() =>
         {
@@ -252,6 +367,8 @@ public sealed class PlatformCleanupThirdPlatformWpfTests
             Assert.That(previewTile.SelectedPlatform, Is.EqualTo(StreamingPlatform.VkLive));
             Assert.That(previewTile.SelectedPlatformName, Is.EqualTo("VK Видео Live"));
             Assert.That(historyPage.PlatformOptions.Select(static o => o.Platform), Is.EqualTo(new StreamingPlatform?[] { null, StreamingPlatform.VkLive }));
+            Assert.That(historyPage.DetailPlatformBreakdown, Has.Count.EqualTo(1));
+            Assert.That(historyPage.DetailPlatformBreakdown[0].DisplayName, Is.EqualTo("VK Видео Live"));
         });
     }
 
@@ -274,7 +391,9 @@ public sealed class PlatformCleanupThirdPlatformWpfTests
         StreamStatus status,
         StreamInfo? info,
         string? configuredChannel,
-        string? streamUrl = null) : IChatPlatform
+        string? streamUrl = null,
+        bool usesSingleMonitoringRole = false,
+        Func<bool?>? hasWhisperPermission = null) : IChatPlatform
     {
         public StubChatPlatform(
             StreamingPlatform id,
@@ -284,8 +403,10 @@ public sealed class PlatformCleanupThirdPlatformWpfTests
             StreamStatus status,
             StreamInfo? info,
             string? configuredChannel,
-            string? streamUrl = null)
-            : this(id, displayName, capabilities, () => isEnabled, status, info, configuredChannel, streamUrl)
+            string? streamUrl = null,
+            bool usesSingleMonitoringRole = false,
+            Func<bool?>? hasWhisperPermission = null)
+            : this(id, displayName, capabilities, () => isEnabled, status, info, configuredChannel, streamUrl, usesSingleMonitoringRole, hasWhisperPermission)
         {
         }
 
@@ -294,6 +415,8 @@ public sealed class PlatformCleanupThirdPlatformWpfTests
         public PlatformCapabilities Capabilities => capabilities;
         public bool IsEnabled => isEnabled();
         public bool IsConnected => false;
+        public bool UsesSingleMonitoringRole => usesSingleMonitoringRole;
+        public bool? HasWhisperPermission => hasWhisperPermission?.Invoke();
         public IStreamStatus StreamStatus { get; } = new StubStreamStatus(status, info);
         public IPlatformMessenger Messenger => null!;
         public string? ConfiguredChannel => configuredChannel;

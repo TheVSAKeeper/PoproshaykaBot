@@ -21,6 +21,8 @@ using PoproshaykaBot.Core.Twitch;
 using PoproshaykaBot.Core.Twitch.Chat;
 using PoproshaykaBot.Core.Twitch.EventSub;
 using PoproshaykaBot.Core.Twitch.Helix;
+using PoproshaykaBot.Core.YouTube;
+using PoproshaykaBot.Core.YouTube.Streaming;
 using System.Net.Http;
 using System.Text.Json;
 
@@ -95,6 +97,129 @@ public sealed class PlatformCleanupThirdPlatformTests
     }
 
     [Test]
+    public void ChannelCatalogReconciler_ignores_seed_with_mismatched_platform()
+    {
+        var catalog = new ChannelCatalogStore(filePath: Path.Combine(_root, "channels.json"));
+        catalog.Mutate(settings =>
+        {
+            settings.Channels.Add(new()
+            {
+                Platform = StreamingPlatform.YouTube,
+                ChannelId = "UC-existing",
+                DisplayName = "Existing YT",
+                IsConfigured = true,
+                MonitoringEnabled = false,
+            });
+        });
+
+        var mismatchedProvider = new StubSeedProvider(
+            StreamingPlatform.VkLive,
+            new PlatformChannelSeed(
+                StreamingPlatform.YouTube,
+                "UC-existing",
+                "Hijacked",
+                "@hijacked",
+                "https://youtube.com/@hijacked",
+                MonitoringEnabled: true,
+                BroadcasterSubjectId: null,
+                BotSubjectId: null),
+            _ => { });
+
+        var reconciler = new ChannelCatalogReconciler(
+            catalog,
+            [mismatchedProvider],
+            NullLogger<ChannelCatalogReconciler>.Instance);
+
+        reconciler.ReconcileStartup();
+
+        var ytChannels = catalog.GetConfiguredChannels(StreamingPlatform.YouTube);
+        Assert.Multiple(() =>
+        {
+            Assert.That(catalog.GetConfiguredChannels(StreamingPlatform.VkLive), Is.Empty);
+            Assert.That(ytChannels, Has.Count.EqualTo(1));
+            Assert.That(ytChannels[0].MonitoringEnabled, Is.False);
+            Assert.That(ytChannels[0].DisplayName, Is.EqualTo("Existing YT"));
+        });
+    }
+
+    [Test]
+    public void KnownChannelIdentityResolver_legacy_constructor_extracts_youtube_channel_url_id_without_youtube_stores()
+    {
+        var catalog = new ChannelCatalogStore(filePath: Path.Combine(_root, "channels.json"));
+        var resolver = new KnownChannelIdentityResolver(catalog);
+        var snapshot = resolver.BuildSnapshot(history: null, activeBroadcast: null);
+
+        var resolved = snapshot.Resolve(
+            StreamingPlatform.YouTube,
+            channelId: null,
+            channelName: "https://www.youtube.com/channel/UC1234567890123456789012");
+
+        Assert.That(resolved, Is.EqualTo(new ChannelKey(StreamingPlatform.YouTube, "UC1234567890123456789012")));
+    }
+
+    [Test]
+    public void YouTubeChatPlatform_CaptureChatStatus_preserves_disconnected_and_issue_in_idle_phase()
+    {
+        var ytSettings = new YouTubeSettingsStore(filePath: Path.Combine(_root, "youtube.json"));
+        var ytAccounts = new YouTubeAccountsStore(filePath: Path.Combine(_root, "youtube-accounts.json"));
+        var target = Substitute.For<ITargetChannelProvider>();
+        target.Current.Returns(new TargetChannelState(string.Empty, string.Empty, false, false));
+
+        var initialDiagnostics = Substitute.For<IYouTubeChatDiagnostics>();
+        initialDiagnostics.CaptureDiagnostics().Returns(new YouTubeChatStatus(
+            ConnectionState.Disconnected,
+            YouTubeChatTransport.None,
+            ChatReadIssue.None,
+            "yt-chan",
+            null,
+            null,
+            null,
+            null,
+            0,
+            0,
+            0));
+
+        var platform = new YouTubeChatPlatform(
+            Substitute.For<IStreamStatus>(),
+            new YouTubeSessionContext(),
+            Substitute.For<IYouTubeActiveBroadcastSource>(),
+            Substitute.For<IPlatformMessenger>(),
+            ytSettings,
+            ytAccounts,
+            target,
+            chatDiagnostics: initialDiagnostics);
+
+        var idleStatus = platform.CaptureChatStatus(BotLifecyclePhase.Idle);
+        Assert.Multiple(() =>
+        {
+            Assert.That(idleStatus, Is.Not.Null);
+            Assert.That(idleStatus!.State, Is.EqualTo(ConnectionState.Disconnected));
+            Assert.That(idleStatus.Issue, Is.EqualTo(ChatReadIssue.None));
+        });
+
+        initialDiagnostics.CaptureDiagnostics().Returns(new YouTubeChatStatus(
+            ConnectionState.Disconnected,
+            YouTubeChatTransport.None,
+            ChatReadIssue.QuotaExhausted,
+            "yt-chan",
+            null,
+            null,
+            null,
+            null,
+            0,
+            0,
+            0));
+
+        var idleWithIssue = platform.CaptureChatStatus(BotLifecyclePhase.Idle);
+        Assert.Multiple(() =>
+        {
+            Assert.That(idleWithIssue, Is.Not.Null);
+            Assert.That(idleWithIssue!.State, Is.EqualTo(ConnectionState.Disconnected));
+            Assert.That(idleWithIssue.Issue, Is.EqualTo(ChatReadIssue.QuotaExhausted));
+        });
+    }
+
+    [Test]
     public void KnownChannelIdentityResolver_resolves_third_platform_aliases_and_direct_ids()
     {
         var catalog = new ChannelCatalogStore(filePath: Path.Combine(_root, "channels.json"));
@@ -123,19 +248,29 @@ public sealed class PlatformCleanupThirdPlatformTests
     }
 
     [Test]
-    public void StreamingErrorMessages_uses_display_name_for_third_platform()
+    public void StreamingErrorMessages_uses_registered_adapter_display_name_for_third_platform()
     {
+        var displayName = "VK Видео Live";
+        var vkPlatform = Substitute.For<IChatPlatform>();
+        vkPlatform.Id.Returns(StreamingPlatform.VkLive);
+        vkPlatform.DisplayName.Returns(_ => displayName);
+        var registry = new ChatPlatformRegistry([vkPlatform]);
+
         Assert.Multiple(() =>
         {
-            Assert.That(StreamingErrorMessages.SafeMessage(new TimeoutException(), StreamingPlatform.VkLive),
-                Is.EqualTo("Превышено время ожидания ответа VK Live"));
-            Assert.That(StreamingErrorMessages.SafeMessage(new HttpRequestException("err"), StreamingPlatform.VkLive),
-                Is.EqualTo("Ошибка сети при обращении к VK Live"));
-            Assert.That(StreamingErrorMessages.SafeMessage(new UnauthorizedAccessException(), StreamingPlatform.VkLive),
-                Is.EqualTo("Ошибка авторизации в VK Live"));
-            Assert.That(StreamingErrorMessages.SafeMessage(new JsonException(), StreamingPlatform.VkLive),
-                Is.EqualTo("Некорректный ответ VK Live"));
+            Assert.That(StreamingErrorMessages.SafeMessage(new TimeoutException(), StreamingPlatform.VkLive, registry),
+                Is.EqualTo("Превышено время ожидания ответа VK Видео Live"));
+            Assert.That(StreamingErrorMessages.SafeMessage(new HttpRequestException("err"), StreamingPlatform.VkLive, registry),
+                Is.EqualTo("Ошибка сети при обращении к VK Видео Live"));
+            Assert.That(StreamingErrorMessages.SafeMessage(new UnauthorizedAccessException(), StreamingPlatform.VkLive, registry),
+                Is.EqualTo("Ошибка авторизации в VK Видео Live"));
+            Assert.That(StreamingErrorMessages.SafeMessage(new JsonException(), StreamingPlatform.VkLive, registry),
+                Is.EqualTo("Некорректный ответ VK Видео Live"));
         });
+
+        displayName = "VK Live Новый";
+        Assert.That(StreamingErrorMessages.SafeMessage(new TimeoutException(), StreamingPlatform.VkLive, registry),
+            Is.EqualTo("Превышено время ожидания ответа VK Live Новый"));
     }
 
     [Test]

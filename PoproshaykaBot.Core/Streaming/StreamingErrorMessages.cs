@@ -15,7 +15,19 @@ public static class StreamingErrorMessages
         return SafeMessage(exception, StreamingPlatform.Twitch);
     }
 
-    public static string SafeMessage(Exception exception, StreamingPlatform platform)
+    public static string SafeMessage(
+        Exception exception,
+        StreamingPlatform platform,
+        IChatPlatformRegistry? platformRegistry = null)
+    {
+        var platformName = platformRegistry?.Find(platform)?.DisplayName;
+        return SafeMessage(exception, platform, platformName);
+    }
+
+    public static string SafeMessage(
+        Exception exception,
+        StreamingPlatform platform,
+        string? platformDisplayName)
     {
         if (exception is YouTubeApiException ytEx)
         {
@@ -37,7 +49,9 @@ public static class StreamingErrorMessages
             };
         }
 
-        var platformName = PlatformDisplayNames.Get(platform);
+        var platformName = string.IsNullOrWhiteSpace(platformDisplayName)
+            ? platform.ToString()
+            : platformDisplayName.Trim();
         return exception switch
         {
             OperationCanceledException => "Операция отменена",

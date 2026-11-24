@@ -40,6 +40,15 @@ public sealed class TwitchChatPlatform(
 
     public bool IsConnected => !string.IsNullOrWhiteSpace(channels.GetChannel(StreamingPlatform.Twitch));
 
+    public bool? HasWhisperPermission
+    {
+        get
+        {
+            var bot = authorization is null ? accountsStore.LoadBot() : authorization.GetAccount(PlatformAuthRole.Bot);
+            return bot is not null && TwitchScopes.IsGranted(bot, TwitchScopes.UserManageWhispers);
+        }
+    }
+
     public bool UsesChannelCatalog => targetChannelProvider?.Current.IsDebugSession != true;
 
     public ChatConnectionStatus? CaptureChatStatus(BotLifecyclePhase phase) =>

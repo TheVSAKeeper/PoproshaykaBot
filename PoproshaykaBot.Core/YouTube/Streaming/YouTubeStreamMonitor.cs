@@ -2708,6 +2708,9 @@ internal sealed class YouTubeStreamMonitor
         await eventBus.PublishAsync(
             new YouTubeMultipleBroadcastsDetected(targetChannelId, matches),
             CancellationToken.None).ConfigureAwait(false);
+        await eventBus.PublishAsync(
+            new PlatformMultipleBroadcastsChanged(StreamingPlatform.YouTube, targetChannelId, matches.Length),
+            CancellationToken.None).ConfigureAwait(false);
 
         if (publishStatus)
         {

@@ -57,17 +57,30 @@ public sealed class YouTubeChatPlatform : IChatPlatform
 
     public bool IsEnabled => _settingsStore.Load().Enabled && !_targetChannelProvider.Current.IsDebugSession;
 
+    public bool IsBlockedByDebugSession => _settingsStore.Load().Enabled && _targetChannelProvider.Current.IsDebugSession;
+
     public bool IsConnected =>
         _sessionContext.Current is not null
         && !string.IsNullOrWhiteSpace(_activeBroadcastSource.CurrentBroadcast?.LiveChatId);
+
+    public bool UsesSingleMonitoringRole => true;
 
     public IStreamStatus StreamStatus => _streamStatus;
 
     public ChatConnectionStatus? CaptureChatStatus(BotLifecyclePhase phase)
     {
         var chat = _chatDiagnostics?.CaptureDiagnostics().ToChatConnectionStatus();
-        return chat is not null && ChatConnectionStatus.InactiveState(phase) is { } state
-            ? chat with { State = state, Issue = ChatReadIssue.None }
+        if (chat is null || phase == BotLifecyclePhase.Idle)
+        {
+            return chat;
+        }
+
+        return ChatConnectionStatus.InactiveState(phase) is { } state
+            ? chat with
+            {
+                State = state,
+                Issue = phase == BotLifecyclePhase.Failed ? chat.Issue : ChatReadIssue.None,
+            }
             : chat;
     }
 

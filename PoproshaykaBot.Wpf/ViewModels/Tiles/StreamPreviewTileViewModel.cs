@@ -81,7 +81,7 @@ public sealed partial class StreamPreviewTileViewModel : DashboardTileViewModel,
         _platformSelection = new TilePlatformSelection(platformRegistry);
         _logger = logger;
         _uiDispatcher = uiDispatcher;
-        _enablementSources = MergeEnablementSources(enablementSources, youtubeSettingsStore);
+        _enablementSources = PlatformEnablementSources.BuildList(enablementSources, youtubeSettingsStore);
         _refreshTimer = uiDispatcher.CreateTimer(AutoRefreshInterval, OnRefreshTimerTick);
 
         _switchPlatformToolbarItem = new ToolbarItemViewModel(
@@ -169,27 +169,6 @@ public sealed partial class StreamPreviewTileViewModel : DashboardTileViewModel,
     private void OnEnablementSourceChanged()
     {
         _uiDispatcher.Invoke(OnPlatformStateChanged);
-    }
-
-    private static IReadOnlyList<IPlatformEnablementSource> MergeEnablementSources(
-        IEnumerable<IPlatformEnablementSource>? enablementSources,
-        IPlatformEnablementSource? fallbackSource)
-    {
-        var map = new Dictionary<StreamingPlatform, IPlatformEnablementSource>();
-        if (enablementSources is not null)
-        {
-            foreach (var source in enablementSources)
-            {
-                map[source.Platform] = source;
-            }
-        }
-
-        if (fallbackSource is not null && !map.ContainsKey(fallbackSource.Platform))
-        {
-            map[fallbackSource.Platform] = fallbackSource;
-        }
-
-        return [.. map.Values];
     }
 
     public void Dispose()

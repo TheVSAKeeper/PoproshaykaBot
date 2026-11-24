@@ -15,7 +15,13 @@ public interface IChatPlatform
 
     bool IsEnabled { get; }
 
+    bool IsBlockedByDebugSession => false;
+
     bool IsConnected { get; }
+
+    bool UsesSingleMonitoringRole => false;
+
+    bool? HasWhisperPermission => null;
 
     IStreamStatus StreamStatus { get; }
 
