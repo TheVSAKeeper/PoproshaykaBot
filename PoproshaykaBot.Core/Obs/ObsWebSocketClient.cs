@@ -20,10 +20,11 @@ public sealed class ObsWebSocketClient(ILogger<ObsWebSocketClient> logger) : IOb
     private const int EventSubscriptionScenes = 1 << 2;
     private const int EventSubscriptionInputs = 1 << 3;
     private const int EventSubscriptionOutputs = 1 << 6;
+    private const int EventSubscriptionVendors = 1 << 9;
     private const int EventSubscriptionInputVolumeMeters = 1 << 16;
 
     private const int DashboardEventSubscriptions =
-        EventSubscriptionScenes | EventSubscriptionInputs | EventSubscriptionOutputs | EventSubscriptionInputVolumeMeters;
+        EventSubscriptionScenes | EventSubscriptionInputs | EventSubscriptionOutputs | EventSubscriptionVendors | EventSubscriptionInputVolumeMeters;
 
     private static readonly Action<ILogger, string, int, Exception?> LogConnecting =
         LoggerMessage.Define<string, int>(LogLevel.Information,

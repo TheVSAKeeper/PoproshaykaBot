@@ -9,7 +9,7 @@
              d:DataContext="{d:DesignInstance vm:ObsSourceMeterViewModel}"
              d:DesignWidth="320">
 
-    <StackPanel Margin="0,0,0,8">
+    <StackPanel Margin="0,0,0,5">
         <DockPanel LastChildFill="True">
             <TextBlock DockPanel.Dock="Right"
                        Text="{Binding StateText}"
@@ -35,8 +35,8 @@
                        VerticalAlignment="Center" />
         </DockPanel>
 
-        <ProgressBar Height="6"
-                     Margin="0,4,0,0"
+        <ProgressBar Height="5"
+                     Margin="0,3,0,0"
                      Minimum="0"
                      Maximum="1"
                      Value="{Binding Level, Mode=OneWay}"

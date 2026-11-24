@@ -1,5 +1,13 @@
 ﻿using Microsoft.Extensions.Logging.Abstractions;
+using PoproshaykaBot.Core.Infrastructure.Events;
+using PoproshaykaBot.Core.Obs;
+using PoproshaykaBot.Core.Settings;
+using PoproshaykaBot.Core.Settings.Obs;
+using PoproshaykaBot.Core.Settings.Stores;
+using PoproshaykaBot.Wpf.Tests.Support;
 using PoproshaykaBot.Wpf.ViewModels.Tiles;
+using System.IO;
+using System.Text.Json;
 
 namespace PoproshaykaBot.Wpf.Tests.Tiles;
 
@@ -88,6 +96,252 @@ public class ObsTileTests
             Assert.That(card.Title, Is.EqualTo(title));
             Assert.That(card.IsRunning, Is.EqualTo(running), "Таймер виден только у идущего выхода");
             Assert.That(card.ShowsSecondaryButton, Is.EqualTo(showsPause), "Пауза есть только у идущей записи");
+        }
+    }
+
+    [TestCase(true, false, 0L, 0D, "В эфире", "Success", "Кадры не теряются", null)]
+    [TestCase(true, true, 0L, 0D, "Переподключение…", "Warning", "Кадры не теряются", null)]
+    [TestCase(true, false, 20L, 0D, "В эфире", "Success", "Пропущено кадров: 20 (2 %)", "Warning")]
+    [TestCase(true, false, 70L, 0.2D, "В эфире", "Success", "Пропущено кадров: 70 (7 %)", "Error")]
+    [TestCase(false, false, 70L, 0D, "Не идёт", null, null, null)]
+    public void Доп_выход_отображает_статус_и_пороги_дропов(
+        bool active,
+        bool reconnecting,
+        long skipped,
+        double congestion,
+        string stateText,
+        string? expectedStateSeverity,
+        string? expectedHealthText,
+        string? expectedHealthSeverity)
+    {
+        var snapshot = new ObsSecondaryOutputSnapshot(
+            "YouTube",
+            "aitum_multi_output_YouTube",
+            "rtmp_output",
+            ObsMultistreamVendor.AitumMultistream,
+            active,
+            reconnecting,
+            active ? "00:12:34.000" : null,
+            active ? 754000 : null,
+            active ? 2_097_152 : null,
+            congestion,
+            skipped,
+            TotalFrames,
+            CanControl: true,
+            IsVertical: false);
+
+        var row = new ObsSecondaryOutputViewModel(snapshot, _ => Task.CompletedTask);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(row.StateText, Is.EqualTo(stateText));
+            Assert.That(row.StateSeverity, Is.EqualTo(expectedStateSeverity));
+            Assert.That(row.Health, Is.EqualTo(expectedHealthText));
+            Assert.That(row.HealthSeverity, Is.EqualTo(expectedHealthSeverity));
+            Assert.That(row.BytesText, Is.EqualTo(active ? "2 МБ" : null));
+            Assert.That(row.ActionButtonText, Is.EqualTo(active ? "■ Стоп" : "▶ Старт"));
+        }
+    }
+
+    [Test]
+    public async Task Плитка_OBS_без_ограничения_ширины_380_показывает_доп_выходы_и_защищает_старт_без_эфира()
+    {
+        var tempDir = Path.Combine(Path.GetTempPath(), $"obs-tile-test-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(tempDir);
+
+        try
+        {
+            var bus = new InMemoryEventBus(NullLogger<InMemoryEventBus>.Instance);
+            var store = new ObsIntegrationStore(
+                bus,
+                NullLogger<ObsIntegrationStore>.Instance,
+                Path.Combine(tempDir, "obs-integration.json"));
+            store.Save(new ObsIntegrationSettings { Enabled = true, AutoConnect = false });
+
+            var settingsManager = new SettingsManager(NullLogger<SettingsManager>.Instance, Path.Combine(tempDir, "settings.json"));
+            var client = new FakeTileObsClient();
+            using var integration = new ObsIntegrationService(client, settingsManager, NullLogger<ObsIntegrationService>.Instance);
+            var dispatcher = new ManualUiDispatcher();
+
+            using var tile = new ObsInfoTileViewModel(
+                store,
+                integration,
+                client,
+                bus,
+                NullLogger<ObsInfoTileViewModel>.Instance,
+                dispatcher);
+
+            Assert.That(tile.MaxWidth, Is.Null);
+
+            tile.BeginPreview(new(
+                new(true, "33.0.1", "5.7.6", null),
+                "Main",
+                IsStreaming: false,
+                StreamTimecode: null,
+                StreamCongestion: null,
+                StreamSkippedFrames: null,
+                StreamTotalFrames: null,
+                IsRecording: false,
+                IsRecordingPaused: false,
+                RecordTimecode: null,
+                RecordBytes: null,
+                [],
+                DateTimeOffset.Now,
+                [
+                    new("YouTube", "aitum_multi_output_YouTube", "rtmp_output", ObsMultistreamVendor.AitumMultistream,
+                        IsActive: false, IsReconnecting: false, null, null, null, null, null, null,
+                        CanControl: true, IsVertical: false),
+                ]));
+
+            tile.EndPreview();
+
+            client.EnqueueResponse("GetVersion", """{"obsVersion":"33.0.1","obsWebSocketVersion":"5.7.6"}""");
+            client.EnqueueResponse("GetCurrentProgramScene", """{"currentProgramSceneName":"Main"}""");
+            client.EnqueueResponse("GetStreamStatus", """{"outputActive":false}""");
+            client.EnqueueResponse("GetRecordStatus", """{"outputActive":false}""");
+            client.EnqueueResponse("GetInputList", """{"inputs":[]}""");
+            client.EnqueueVendorResponse("aitum-stream-suite", "version", code: 600);
+            client.EnqueueVendorResponse("aitum-multistream", "version", """{"responseData":{"version":"1.0.9","success":true}}""");
+            client.EnqueueVendorResponse("aitum-multistream", "get_outputs", """{"responseData":{"outputs":[{"name":"YouTube","vertical":false}],"success":true}}""");
+            client.EnqueueResponse("GetOutputList", """{"outputs":[]}""");
+
+            await tile.RefreshCommand.ExecuteAsync(null);
+
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(tile.ShowSecondaryOutputs, Is.True);
+                Assert.That(tile.SecondaryOutputs, Has.Count.EqualTo(1));
+                Assert.That(tile.SecondaryOutputs[0].Name, Is.EqualTo("YouTube"));
+                Assert.That(tile.SecondaryOutputs[0].IsActive, Is.False);
+            }
+
+            await tile.SecondaryOutputs[0].ToggleCommand.ExecuteAsync(null);
+
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(tile.IsToastVisible, Is.True);
+                Assert.That(tile.ToastSeverity, Is.EqualTo("Warning"));
+                Assert.That(tile.ToastText, Is.EqualTo("Сначала запустите основной эфир OBS"));
+                Assert.That(client.VendorRequestsSent("start_output"), Is.Zero);
+            }
+
+            using var doc = JsonDocument.Parse("""{"vendorName":"aitum-multistream","eventType":"output_started","eventData":{"name":"aitum_multi_output_YouTube"}}""");
+            client.RaiseEvent(new("VendorEvent", 512, doc.RootElement.Clone()));
+
+            Assert.That(tile.SecondaryOutputs[0].IsActive, Is.True);
+        }
+        finally
+        {
+            if (Directory.Exists(tempDir))
+            {
+                Directory.Delete(tempDir, recursive: true);
+            }
+        }
+    }
+
+    private sealed class FakeTileObsClient : IObsWebSocketClient
+    {
+        private readonly Dictionary<string, Queue<Func<Task<JsonElement?>>>> _responses = new(StringComparer.Ordinal);
+        private readonly Dictionary<(string Vendor, string RequestType), Queue<Func<Task<JsonElement?>>>> _vendorResponses = new();
+
+        public event EventHandler<ObsWebSocketEventArgs>? EventReceived;
+
+        public bool IsConnected { get; private set; }
+
+        public DateTimeOffset? LastExchangeAt { get; private set; }
+
+        public List<(string RequestType, string? VendorRequestType)> SentRequests { get; } = [];
+
+        public int VendorRequestsSent(string vendorRequestType)
+        {
+            return SentRequests.Count(item =>
+                string.Equals(item.RequestType, "CallVendorRequest", StringComparison.Ordinal)
+                && string.Equals(item.VendorRequestType, vendorRequestType, StringComparison.Ordinal));
+        }
+
+        public void RaiseEvent(ObsWebSocketEventArgs args)
+        {
+            EventReceived?.Invoke(this, args);
+        }
+
+        public Task<ObsConnectionSnapshot> ConnectAsync(ObsConnectionOptions options, CancellationToken cancellationToken)
+        {
+            IsConnected = true;
+            return Task.FromResult(new ObsConnectionSnapshot(true, "33.0.1", "5.7.6", null));
+        }
+
+        public Task DisconnectAsync(CancellationToken cancellationToken)
+        {
+            IsConnected = false;
+            return Task.CompletedTask;
+        }
+
+        public Task<JsonElement?> SendRequestAsync(string requestType, object? requestData, CancellationToken cancellationToken)
+        {
+            var payload = requestData is null ? (JsonElement?)null : JsonSerializer.SerializeToElement(requestData);
+            string? vendorReq = null;
+            if (string.Equals(requestType, "CallVendorRequest", StringComparison.Ordinal)
+                && payload is { } element)
+            {
+                var vendor = element.GetProperty("vendorName").GetString() ?? string.Empty;
+                vendorReq = element.GetProperty("requestType").GetString() ?? string.Empty;
+                SentRequests.Add((requestType, vendorReq));
+
+                if (_vendorResponses.TryGetValue((vendor, vendorReq), out var vendorQueue) && vendorQueue.Count > 0)
+                {
+                    LastExchangeAt = DateTimeOffset.UtcNow;
+                    return vendorQueue.Dequeue().Invoke();
+                }
+            }
+            else
+            {
+                SentRequests.Add((requestType, vendorReq));
+            }
+
+            if (_responses.TryGetValue(requestType, out var queue) && queue.Count > 0)
+            {
+                LastExchangeAt = DateTimeOffset.UtcNow;
+                return queue.Dequeue().Invoke();
+            }
+
+            return Task.FromResult<JsonElement?>(null);
+        }
+
+        public void EnqueueResponse(string requestType, string json)
+        {
+            if (!_responses.TryGetValue(requestType, out var queue))
+            {
+                queue = new();
+                _responses[requestType] = queue;
+            }
+
+            using var doc = JsonDocument.Parse(json);
+            var clone = doc.RootElement.Clone();
+            queue.Enqueue(() => Task.FromResult<JsonElement?>(clone));
+        }
+
+        public void EnqueueVendorResponse(string vendorName, string requestType, string? json = null, int? code = null)
+        {
+            if (!_vendorResponses.TryGetValue((vendorName, requestType), out var queue))
+            {
+                queue = new();
+                _vendorResponses[(vendorName, requestType)] = queue;
+            }
+
+            if (code is { } errorCode)
+            {
+                queue.Enqueue(() => Task.FromException<JsonElement?>(new ObsRequestException("CallVendorRequest", errorCode, "No vendor")));
+                return;
+            }
+
+            using var doc = JsonDocument.Parse(json!);
+            var clone = doc.RootElement.Clone();
+            queue.Enqueue(() => Task.FromResult<JsonElement?>(clone));
+        }
+
+        public ValueTask DisposeAsync()
+        {
+            return ValueTask.CompletedTask;
         }
     }
 }

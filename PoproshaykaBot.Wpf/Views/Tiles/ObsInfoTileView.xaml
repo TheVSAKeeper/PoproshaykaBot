@@ -10,59 +10,109 @@
              mc:Ignorable="d"
              d:DataContext="{d:DesignInstance vm:ObsInfoTileViewModel}"
              d:DesignHeight="640"
-             d:DesignWidth="360">
+             d:DesignWidth="420">
 
-    <StackPanel>
-        <DockPanel LastChildFill="True"
-                   Margin="0,0,0,10">
-            <Border DockPanel.Dock="Right"
-                    Style="{StaticResource Badge}"
-                    Visibility="{Binding IsToastVisible, Converter={StaticResource BoolToVisibility}}"
-                    keepshell:SeverityBrushBehavior.SoftBackground="{Binding ToastSeverity}"
-                    keepshell:SeverityBrushBehavior.BorderBrush="{Binding ToastSeverity}">
-                <TextBlock Text="{Binding ToastText}"
-                           FontSize="{DynamicResource Font.Size.Caption}"
-                           keepshell:SeverityBrushBehavior.Foreground="{Binding ToastSeverity}" />
-            </Border>
+    <StackPanel VerticalAlignment="Top">
+        <Grid Margin="0,0,0,8">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
 
-            <TextBlock Text="{Binding ConnectionText}"
+            <TextBlock Grid.Column="0"
+                       Text="{Binding ConnectionText}"
                        ToolTip="{Binding ConnectionToolTip}"
                        FontWeight="SemiBold"
+                       FontSize="{DynamicResource Font.Size.S}"
+                       VerticalAlignment="Center"
                        behaviors:StreamStatusBrushBehavior.Foreground="{Binding ConnectionStatus}" />
-        </DockPanel>
 
-        <DockPanel LastChildFill="True"
-                   Margin="0,0,0,12">
-            <TextBlock DockPanel.Dock="Left"
-                       Text="Сцена"
+            <DockPanel Grid.Column="1"
+                       Margin="10,0,0,0"
+                       LastChildFill="True"
+                       VerticalAlignment="Center">
+                <Border DockPanel.Dock="Right"
+                        Style="{StaticResource Badge}"
+                        Padding="6,1"
+                        Margin="6,0,0,0"
+                        VerticalAlignment="Center"
+                        Visibility="{Binding IsToastVisible, Converter={StaticResource BoolToVisibility}}"
+                        keepshell:SeverityBrushBehavior.SoftBackground="{Binding ToastSeverity}"
+                        keepshell:SeverityBrushBehavior.BorderBrush="{Binding ToastSeverity}">
+                    <TextBlock Text="{Binding ToastText}"
+                               FontSize="{DynamicResource Font.Size.Caption}"
+                               TextTrimming="CharacterEllipsis"
+                               ToolTip="{Binding ToastText}"
+                               keepshell:SeverityBrushBehavior.Foreground="{Binding ToastSeverity}" />
+                </Border>
+
+                <StackPanel Orientation="Horizontal"
+                            HorizontalAlignment="Right"
+                            VerticalAlignment="Center">
+                    <TextBlock Text="Сцена:"
+                               Style="{StaticResource TextBlock.Subtle}"
+                               FontSize="{DynamicResource Font.Size.XS}"
+                               Margin="0,0,4,0"
+                               VerticalAlignment="Center" />
+                    <TextBlock Text="{Binding SceneName}"
+                               ToolTip="{Binding SceneName}"
+                               FontWeight="SemiBold"
+                               FontSize="{DynamicResource Font.Size.S}"
+                               TextTrimming="CharacterEllipsis"
+                               VerticalAlignment="Center" />
+                </StackPanel>
+            </DockPanel>
+        </Grid>
+
+        <Grid x:Name="OutputsGrid"
+              Margin="0,0,0,8"
+              SizeChanged="OnOutputsSizeChanged"
+              Visibility="{Binding HasOutputs, Converter={StaticResource BoolToVisibility}}">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition x:Name="SecondOutputColumn"
+                                  Width="0" />
+            </Grid.ColumnDefinitions>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+
+            <ContentControl x:Name="StreamCardHost"
+                            Grid.Row="0"
+                            Grid.Column="0"
+                            Margin="0,0,0,6"
+                            VerticalAlignment="Top"
+                            Content="{Binding StreamCard}" />
+
+            <ContentControl x:Name="RecordCardHost"
+                            Grid.Row="1"
+                            Grid.Column="0"
+                            VerticalAlignment="Top"
+                            Content="{Binding RecordCard}" />
+        </Grid>
+
+        <StackPanel Margin="0,0,0,8"
+                    Visibility="{Binding ShowSecondaryOutputs, Converter={StaticResource BoolToVisibility}}">
+            <TextBlock Text="Доп. выходы"
                        Style="{StaticResource TextBlock.Subtle}"
-                       Margin="0,0,8,0"
-                       VerticalAlignment="Center" />
-            <TextBlock Text="{Binding SceneName}"
-                       ToolTip="{Binding SceneName}"
-                       FontWeight="SemiBold"
-                       TextTrimming="CharacterEllipsis"
-                       VerticalAlignment="Center" />
-        </DockPanel>
+                       FontSize="{DynamicResource Font.Size.XS}"
+                       Margin="0,0,0,4" />
 
-        <ContentControl Content="{Binding StreamCard}"
-                        Margin="0,0,0,10"
-                        Visibility="{Binding HasOutputs, Converter={StaticResource BoolToVisibility}}" />
-
-        <ContentControl Content="{Binding RecordCard}"
-                        Margin="0,0,0,14"
-                        Visibility="{Binding HasOutputs, Converter={StaticResource BoolToVisibility}}" />
+            <ItemsControl ItemsSource="{Binding SecondaryOutputs}" />
+        </StackPanel>
 
         <StackPanel Visibility="{Binding IsUnavailable, Converter={StaticResource InverseBoolToVisibility}}">
             <TextBlock Text="Аудиоисточники"
                        Style="{StaticResource TextBlock.Subtle}"
-                       Margin="0,0,0,6" />
+                       FontSize="{DynamicResource Font.Size.XS}"
+                       Margin="0,0,0,4" />
 
             <ItemsControl ItemsSource="{Binding AudioSources}"
                           Visibility="{Binding HasAudioSources, Converter={StaticResource BoolToVisibility}}" />
 
             <controls:EmptyState Icon="Mic"
-                                 IconSize="22"
+                                 IconSize="20"
                                  Heading="Источники не найдены"
                                  Description="Включите OBS-интеграцию и настройте аудиоисточники."
                                  HorizontalAlignment="Stretch"

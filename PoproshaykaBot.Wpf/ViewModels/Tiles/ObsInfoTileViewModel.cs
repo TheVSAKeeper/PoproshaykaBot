@@ -32,6 +32,7 @@ public sealed partial class ObsInfoTileViewModel : DashboardTileViewModel, IDisp
     private static readonly TimeSpan AutoConnectRetryInterval = TimeSpan.FromSeconds(30);
     private static readonly TimeSpan SnapshotTimeout = TimeSpan.FromSeconds(8);
     private static readonly TimeSpan ToastDuration = TimeSpan.FromSeconds(4);
+    private static readonly TimeSpan SecondaryRefreshDelay = TimeSpan.FromMilliseconds(500);
 
     private readonly ObsIntegrationStore _store;
     private readonly ObsIntegrationService _obsIntegration;
@@ -49,6 +50,7 @@ public sealed partial class ObsInfoTileViewModel : DashboardTileViewModel, IDisp
     private readonly IUiTimer _refreshTimer;
     private readonly IUiTimer _volumeMeterTimer;
     private readonly IUiTimer _toastTimer;
+    private readonly IUiTimer _secondaryRefreshTimer;
 
     private ObsIntegrationSettings _settings = new();
     private CancellationTokenSource? _refreshCts;
@@ -68,6 +70,7 @@ public sealed partial class ObsInfoTileViewModel : DashboardTileViewModel, IDisp
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasOutputs))]
     [NotifyPropertyChangedFor(nameof(IsUnavailable))]
+    [NotifyPropertyChangedFor(nameof(ShowSecondaryOutputs))]
     private string _connectionStatus = "off";
 
     [ObservableProperty]
@@ -76,6 +79,11 @@ public sealed partial class ObsInfoTileViewModel : DashboardTileViewModel, IDisp
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasAudioSources))]
     private bool _audioSourcesEmpty = true;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasSecondaryOutputs))]
+    [NotifyPropertyChangedFor(nameof(ShowSecondaryOutputs))]
+    private bool _secondaryOutputsEmpty = true;
 
     [ObservableProperty]
     private bool _isToastVisible;
@@ -93,7 +101,7 @@ public sealed partial class ObsInfoTileViewModel : DashboardTileViewModel, IDisp
         IEventBus bus,
         ILogger<ObsInfoTileViewModel> logger,
         IUiDispatcher uiDispatcher)
-        : base("obs-info", "OBS", maxWidth: 380, maxHeight: 720, minHeight: 154)
+        : base("obs-info", "OBS", maxHeight: 720, minHeight: 154)
     {
         _store = store;
         _obsIntegration = obsIntegration;
@@ -111,6 +119,7 @@ public sealed partial class ObsInfoTileViewModel : DashboardTileViewModel, IDisp
         _refreshTimer = uiDispatcher.CreateTimer(TimeSpan.FromMilliseconds(DisconnectedRefreshIntervalMs), OnRefreshTimerTick);
         _volumeMeterTimer = uiDispatcher.CreateTimer(TimeSpan.FromMilliseconds(MinVolumeMeterDelayMs), OnVolumeMeterTimerTick);
         _toastTimer = uiDispatcher.CreateTimer(ToastDuration, OnToastTimerTick);
+        _secondaryRefreshTimer = uiDispatcher.CreateTimer(SecondaryRefreshDelay, OnSecondaryRefreshTimerTick);
 
         Initialize();
     }
@@ -119,7 +128,13 @@ public sealed partial class ObsInfoTileViewModel : DashboardTileViewModel, IDisp
 
     public ObsOutputCardViewModel RecordCard { get; }
 
+    public ObservableCollection<ObsSecondaryOutputViewModel> SecondaryOutputs { get; } = [];
+
     public ObservableCollection<ObsSourceMeterViewModel> AudioSources { get; } = [];
+
+    public bool HasSecondaryOutputs => !SecondaryOutputsEmpty;
+
+    public bool ShowSecondaryOutputs => HasOutputs && HasSecondaryOutputs;
 
     public bool HasAudioSources => !AudioSourcesEmpty;
 
@@ -185,6 +200,12 @@ public sealed partial class ObsInfoTileViewModel : DashboardTileViewModel, IDisp
         if (string.Equals(evt.EventType, "InputVolumeMeters", StringComparison.Ordinal))
         {
             UpdateVolumeTargetsFromObsEvent(evt);
+            return;
+        }
+
+        if (ObsMultistreamOutputsClient.TryParseVendorEvent(evt, out var vendorEvent) && vendorEvent is not null)
+        {
+            HandleSecondaryOutputVendorEvent(vendorEvent);
             return;
         }
 
@@ -442,7 +463,128 @@ public sealed partial class ObsInfoTileViewModel : DashboardTileViewModel, IDisp
             snapshot.RecordTimecode,
             FormatRecordBytes(snapshot.IsRecording, snapshot.RecordBytes));
 
+        ApplySecondaryOutputs(snapshot.SecondaryOutputs);
         ApplyAudioSources(snapshot.AudioSources, configuredOrder);
+    }
+
+    private void ApplySecondaryOutputs(IReadOnlyList<ObsSecondaryOutputSnapshot> secondaryOutputs)
+    {
+        if (secondaryOutputs.Count == SecondaryOutputs.Count
+            && SecondaryOutputs.Select(item => item.OutputId)
+                .SequenceEqual(secondaryOutputs.Select(item => item.OutputId), StringComparer.Ordinal))
+        {
+            for (var index = 0; index < secondaryOutputs.Count; index++)
+            {
+                SecondaryOutputs[index].ApplySnapshot(secondaryOutputs[index]);
+            }
+
+            SecondaryOutputsEmpty = SecondaryOutputs.Count == 0;
+            return;
+        }
+
+        SecondaryOutputs.Clear();
+
+        foreach (var output in secondaryOutputs)
+        {
+            SecondaryOutputs.Add(new(output, ToggleSecondaryOutputAsync));
+        }
+
+        SecondaryOutputsEmpty = SecondaryOutputs.Count == 0;
+    }
+
+    private async Task ToggleSecondaryOutputAsync(ObsSecondaryOutputViewModel row)
+    {
+        if (!row.CanControl || _disposed || _previewing)
+        {
+            return;
+        }
+
+        if (!row.IsActive && StreamCard.State != ObsOutputCardState.Active)
+        {
+            ShowToast("Сначала запустите основной эфир OBS", "Warning");
+            return;
+        }
+
+        row.IsActionInFlight = true;
+
+        try
+        {
+            using var cts = new CancellationTokenSource(SnapshotTimeout);
+            if (row.IsActive)
+            {
+                await _obsIntegration.StopSecondaryOutputAsync(row.Name, cts.Token);
+            }
+            else
+            {
+                await _obsIntegration.StartSecondaryOutputAsync(row.Name, cts.Token);
+            }
+
+            ScheduleDelayedSecondaryRefresh();
+        }
+        catch (OperationCanceledException)
+        {
+            ShowToast("Превышено время ожидания OBS", "Error");
+        }
+        catch (InvalidOperationException exception)
+        {
+            _logger.ObsSecondaryOutputActionFailed(exception, row.Name);
+            ShowToast(exception.Message, "Warning");
+        }
+        catch (Exception exception)
+        {
+            _logger.ObsSecondaryOutputActionFailed(exception, row.Name);
+            ShowToast("Не удалось управлять дополнительным выходом", "Error");
+        }
+        finally
+        {
+            row.IsActionInFlight = false;
+        }
+    }
+
+    private void HandleSecondaryOutputVendorEvent(ObsSecondaryOutputEvent vendorEvent)
+    {
+        _uiDispatcher.Invoke(() =>
+        {
+            if (_disposed || _previewing)
+            {
+                return;
+            }
+
+            var row = SecondaryOutputs.FirstOrDefault(item =>
+                string.Equals(item.Name, vendorEvent.OutputName, StringComparison.OrdinalIgnoreCase)
+                || string.Equals(item.OutputId, vendorEvent.OutputName, StringComparison.OrdinalIgnoreCase));
+
+            row?.ApplyActiveState(vendorEvent.Kind == ObsSecondaryOutputEventKind.Started);
+
+            if (vendorEvent.Kind == ObsSecondaryOutputEventKind.Stopped
+                && vendorEvent.ErrorCode is not null and not 0
+                && !string.IsNullOrWhiteSpace(vendorEvent.LastError))
+            {
+                ShowToast($"Выход «{vendorEvent.OutputName}» остановлен", "Warning");
+            }
+
+            ScheduleDelayedSecondaryRefresh();
+        });
+    }
+
+    private void OnSecondaryRefreshTimerTick()
+    {
+        _secondaryRefreshTimer.Stop();
+        if (!_disposed && !_previewing)
+        {
+            _ = RefreshSnapshotAsync(connectIfNeeded: false);
+        }
+    }
+
+    private void ScheduleDelayedSecondaryRefresh()
+    {
+        if (_disposed || _previewing)
+        {
+            return;
+        }
+
+        _secondaryRefreshTimer.Stop();
+        _secondaryRefreshTimer.Start();
     }
 
     private void ApplyAudioSources(IReadOnlyList<ObsAudioSourceSnapshot> audioSources, bool configuredOrder = true)
@@ -507,6 +649,9 @@ public sealed partial class ObsInfoTileViewModel : DashboardTileViewModel, IDisp
 
     private void ClearRows()
     {
+        SecondaryOutputs.Clear();
+        SecondaryOutputsEmpty = true;
+
         AudioSources.Clear();
         AudioSourcesEmpty = true;
 
@@ -756,6 +901,7 @@ public sealed partial class ObsInfoTileViewModel : DashboardTileViewModel, IDisp
         _refreshTimer.Stop();
         _volumeMeterTimer.Stop();
         _toastTimer.Stop();
+        _secondaryRefreshTimer.Stop();
 
         _obsClient.EventReceived -= OnObsEventReceived;
 

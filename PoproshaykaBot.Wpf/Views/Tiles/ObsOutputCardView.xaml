@@ -12,6 +12,8 @@
         <Style x:Key="ObsCardAccent"
                TargetType="Border"
                BasedOn="{StaticResource Card.Inset}">
+            <Setter Property="Padding"
+                    Value="10,7" />
             <Setter Property="BorderBrush"
                     Value="{DynamicResource Border.Default}" />
             <Setter Property="BorderThickness"
@@ -128,34 +130,36 @@
 
             <DockPanel Grid.Row="0"
                        LastChildFill="True"
-                       Margin="0,0,0,8">
+                       Margin="0,0,0,5">
                 <Ellipse DockPanel.Dock="Left"
                          Style="{StaticResource ObsCardDot}"
                          VerticalAlignment="Center"
-                         Margin="0,0,8,0" />
+                         Margin="0,0,6,0" />
                 <TextBlock Text="{Binding Title}"
                            Style="{StaticResource ObsCardStateText}"
+                           FontSize="{DynamicResource Font.Size.S}"
                            TextTrimming="CharacterEllipsis"
                            VerticalAlignment="Center" />
             </DockPanel>
 
             <StackPanel Grid.Row="1"
-                        Margin="0,0,0,8"
+                        Margin="0,0,0,6"
                         Visibility="{Binding IsRunning, Converter={StaticResource BoolToVisibility}}">
                 <Grid>
                     <TextBlock Text="–:–:–"
                                Style="{StaticResource TextBlock.Mono}"
-                               FontSize="{DynamicResource Font.Size.XL}"
+                               FontSize="{DynamicResource Font.Size.L}"
                                Visibility="{Binding HasTimecode, Converter={StaticResource InverseBoolToVisibility}}" />
                     <TextBlock Text="{Binding Timecode, Converter={StaticResource Timecode}}"
                                Style="{StaticResource TextBlock.Mono}"
-                               FontSize="{DynamicResource Font.Size.XL}"
+                               FontSize="{DynamicResource Font.Size.L}"
                                Visibility="{Binding HasTimecode, Converter={StaticResource BoolToVisibility}}" />
                 </Grid>
 
                 <TextBlock Text="{Binding Health}"
                            Style="{StaticResource ObsCardHealth}"
-                           Margin="0,4,0,0"
+                           FontSize="{DynamicResource Font.Size.XS}"
+                           Margin="0,2,0,0"
                            TextWrapping="Wrap"
                            Visibility="{Binding Health, Converter={StaticResource NullToVisibility}}" />
             </StackPanel>
@@ -163,17 +167,24 @@
             <TextBlock Grid.Row="2"
                        Text="{Binding Meta}"
                        Style="{StaticResource ObsCardMeta}"
-                       Margin="0,0,0,8"
+                       FontSize="{DynamicResource Font.Size.XS}"
+                       Margin="0,0,0,6"
                        TextWrapping="Wrap"
                        Visibility="{Binding Meta, Converter={StaticResource NullToVisibility}}" />
 
             <WrapPanel Grid.Row="3">
                 <Button Style="{StaticResource Button.Secondary}"
-                        Margin="0,0,8,0"
+                        MinHeight="24"
+                        Padding="8,2"
+                        FontSize="{DynamicResource Font.Size.XS}"
+                        Margin="0,0,6,0"
                         Content="{Binding PrimaryButtonText}"
                         Command="{Binding InvokePrimaryCommand}" />
 
                 <Button Style="{StaticResource Button.Ghost}"
+                        MinHeight="24"
+                        Padding="8,2"
+                        FontSize="{DynamicResource Font.Size.XS}"
                         Content="{Binding SecondaryButtonText}"
                         Command="{Binding InvokeSecondaryCommand}"
                         Visibility="{Binding ShowsSecondaryButton, Converter={StaticResource BoolToVisibility}}" />

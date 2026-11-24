@@ -40,6 +40,8 @@ public sealed class ObsIntegrationService(
 
     private readonly SemaphoreSlim _operationGate = new(1, 1);
 
+    private readonly ObsMultistreamOutputsClient _multistreamClient = new(client, logger);
+
     private bool _connectFailureLogged;
 
     private bool _summaryFailureLogged;
@@ -91,6 +93,7 @@ public sealed class ObsIntegrationService(
         try
         {
             await client.DisconnectAsync(cancellationToken).ConfigureAwait(false);
+            _multistreamClient.ResetVendorCache();
             CurrentStatus = ObsConnectionSnapshot.Disconnected();
         }
         finally
@@ -249,6 +252,8 @@ public sealed class ObsIntegrationService(
                 var recordStatus = await GetRecordStatusAsync(cts.Token).ConfigureAwait(false);
                 var audioSources = await GetAudioSourceSnapshotsAsync(settings, cts.Token)
                     .ConfigureAwait(false);
+                var secondaryOutputs = await _multistreamClient.GetSecondaryOutputsAsync(cts.Token)
+                    .ConfigureAwait(false);
 
                 _summaryFailureLogged = false;
 
@@ -264,7 +269,8 @@ public sealed class ObsIntegrationService(
                     recordStatus.Timecode,
                     recordStatus.Bytes,
                     audioSources,
-                    DateTimeOffset.Now);
+                    DateTimeOffset.Now,
+                    secondaryOutputs);
             }
             catch (Exception exception) when (exception is not OperationCanceledException)
             {
@@ -393,6 +399,56 @@ public sealed class ObsIntegrationService(
     public Task ToggleRecordPauseAsync(CancellationToken cancellationToken)
     {
         return InvokeOutputRequestAsync("ToggleRecordPause", cancellationToken);
+    }
+
+    public async Task StartSecondaryOutputAsync(string name, CancellationToken cancellationToken)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(name);
+
+        await _operationGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+
+        try
+        {
+            if (!client.IsConnected)
+            {
+                throw new InvalidOperationException("OBS не подключён");
+            }
+
+            using var cts = CreateTimeoutToken(cancellationToken);
+            var streamStatus = await GetStreamStatusAsync(cts.Token).ConfigureAwait(false);
+            if (streamStatus.Active != true)
+            {
+                throw new InvalidOperationException("Сначала запустите основной эфир OBS");
+            }
+
+            await _multistreamClient.StartOutputAsync(name, cts.Token).ConfigureAwait(false);
+        }
+        finally
+        {
+            _operationGate.Release();
+        }
+    }
+
+    public async Task StopSecondaryOutputAsync(string name, CancellationToken cancellationToken)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(name);
+
+        await _operationGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+
+        try
+        {
+            if (!client.IsConnected)
+            {
+                throw new InvalidOperationException("OBS не подключён");
+            }
+
+            using var cts = CreateTimeoutToken(cancellationToken);
+            await _multistreamClient.StopOutputAsync(name, cts.Token).ConfigureAwait(false);
+        }
+        finally
+        {
+            _operationGate.Release();
+        }
     }
 
     public void Dispose()
@@ -572,6 +628,7 @@ public sealed class ObsIntegrationService(
             return;
         }
 
+        _multistreamClient.ResetVendorCache();
         var snapshot = await client.ConnectAsync(CreateOptions(settings), cancellationToken).ConfigureAwait(false);
         CurrentStatus = await RefreshVersionSnapshotAsync(snapshot, cancellationToken).ConfigureAwait(false);
         _connectFailureLogged = false;
@@ -613,6 +670,7 @@ public sealed class ObsIntegrationService(
     {
         try
         {
+            _multistreamClient.ResetVendorCache();
             var snapshot = await client.ConnectAsync(CreateOptions(settings), cancellationToken).ConfigureAwait(false);
             CurrentStatus = await RefreshVersionSnapshotAsync(snapshot, cancellationToken).ConfigureAwait(false);
             _connectFailureLogged = false;
@@ -621,6 +679,7 @@ public sealed class ObsIntegrationService(
         }
         catch (Exception exception)
         {
+            _multistreamClient.ResetVendorCache();
             var safeMessage = ToSafeMessage(exception);
             CurrentStatus = ObsConnectionSnapshot.Disconnected(safeMessage);
 
