@@ -75,7 +75,7 @@ public static class BroadcastProfileApplySummary
         BroadcastProfilePlatformApplyResult result,
         Func<StreamingPlatform, string>? getPlatformName)
     {
-        var name = getPlatformName?.Invoke(result.Platform) ?? DefaultPlatformName(result.Platform);
+        var name = getPlatformName?.Invoke(result.Platform) ?? result.Platform.ToString();
 
         if (result.Succeeded)
         {
@@ -87,16 +87,5 @@ public static class BroadcastProfileApplySummary
             : result.ErrorMessage.Trim();
 
         return $"{name} – {reason}";
-    }
-
-    private static string DefaultPlatformName(StreamingPlatform platform)
-    {
-        return platform switch
-        {
-            StreamingPlatform.Twitch => "Twitch",
-            StreamingPlatform.YouTube => "YouTube",
-            StreamingPlatform.VkLive => "VK Live",
-            _ => platform.ToString(),
-        };
     }
 }

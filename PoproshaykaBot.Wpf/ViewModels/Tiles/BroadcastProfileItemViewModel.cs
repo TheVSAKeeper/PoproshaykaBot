@@ -27,11 +27,20 @@ public sealed partial class BroadcastProfileItemViewModel : ObservableObject
         Action<BroadcastProfileItemViewModel> duplicate,
         Action<BroadcastProfileItemViewModel> delete,
         IReadOnlyList<BroadcastProfileTarget> targetPlatforms,
-        BroadcastProfileYouTubeMetadata? youtubeMetadata = null)
+        BroadcastProfileYouTubeMetadata? youtubeMetadata = null,
+        BroadcastProfileSyncSummary? syncSummary = null,
+        Func<StreamingPlatform, string>? getPlatformName = null)
     {
         Profile = profile;
         _isActive = isActive;
-        _hasDrift = hasDrift;
+        _syncState = ResolveInitialSyncState(isActive, hasDrift, syncSummary);
+        _hasDrift = isActive && _syncState == BroadcastProfileSyncState.Drifted;
+        DriftedPlatformNames = isActive && syncSummary is not null
+            ? syncSummary.DriftedPlatforms.Select(p => getPlatformName?.Invoke(p) ?? p.ToString()).ToArray()
+            : [];
+        PendingPlatformNames = isActive && syncSummary is not null
+            ? syncSummary.PendingPlatforms.Select(p => getPlatformName?.Invoke(p) ?? p.ToString()).ToArray()
+            : [];
         _applyAsync = applyAsync;
         _adjustNumberAsync = adjustNumberAsync;
         _editAsync = editAsync;
@@ -100,21 +109,118 @@ public sealed partial class BroadcastProfileItemViewModel : ObservableObject
     public string NumberBadge { get; }
     public bool HasNumberPlaceholder { get; }
     public IReadOnlyList<BroadcastProfileTarget> TargetPlatforms { get; }
+    public IReadOnlyList<string> DriftedPlatformNames { get; }
+    public IReadOnlyList<string> PendingPlatformNames { get; }
 
     [ObservableProperty]
     private bool _isApplyInFlight;
 
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(ActiveStatusText))]
+    [NotifyPropertyChangedFor(nameof(ActiveStatusText), nameof(SyncToolTip), nameof(HasSyncToolTip))]
     private bool _isActive;
 
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(ActiveStatusText))]
+    [NotifyPropertyChangedFor(nameof(ActiveStatusText), nameof(SyncToolTip), nameof(HasSyncToolTip))]
     private bool _hasDrift;
 
-    public string ActiveStatusText => !IsActive
-        ? string.Empty
-        : HasDrift ? "Применён, расходится с каналом" : "Применён";
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ActiveStatusText), nameof(SyncToolTip), nameof(HasSyncToolTip))]
+    private BroadcastProfileSyncState _syncState;
+
+    public string ActiveStatusText
+    {
+        get
+        {
+            if (!IsActive)
+            {
+                return string.Empty;
+            }
+
+            return SyncState switch
+            {
+                BroadcastProfileSyncState.Drifted when DriftedPlatformNames.Count > 0 =>
+                    $"Применён, расходится: {string.Join(", ", DriftedPlatformNames)}",
+                BroadcastProfileSyncState.Drifted => "Применён, расходится с каналом",
+                BroadcastProfileSyncState.Pending when PendingPlatformNames.Count > 0 =>
+                    $"Применён, ожидает данные: {string.Join(", ", PendingPlatformNames)}",
+                BroadcastProfileSyncState.Pending => "Применён, ожидает данные площадок",
+                _ => "Применён",
+            };
+        }
+    }
+
+    public string? SyncToolTip
+    {
+        get
+        {
+            if (!IsActive)
+            {
+                return null;
+            }
+
+            return SyncState switch
+            {
+                BroadcastProfileSyncState.Drifted when DriftedPlatformNames.Count > 0 =>
+                    $"Расходится: {string.Join(", ", DriftedPlatformNames)}",
+                BroadcastProfileSyncState.Drifted => "Расходится с каналом",
+                BroadcastProfileSyncState.Pending when PendingPlatformNames.Count > 0 =>
+                    $"Ожидает данные: {string.Join(", ", PendingPlatformNames)}",
+                BroadcastProfileSyncState.Pending => "Ожидает данные площадок",
+                BroadcastProfileSyncState.Synced => "Синхронизирован со всеми целевыми площадками",
+                _ => null,
+            };
+        }
+    }
+
+    public bool HasSyncToolTip => !string.IsNullOrEmpty(SyncToolTip);
+
+    partial void OnIsActiveChanged(bool value)
+    {
+        var nextState = !value
+            ? BroadcastProfileSyncState.None
+            : SyncState == BroadcastProfileSyncState.None
+                ? (HasDrift ? BroadcastProfileSyncState.Drifted : BroadcastProfileSyncState.Synced)
+                : SyncState;
+
+        if (_syncState != nextState)
+        {
+            _syncState = nextState;
+            OnPropertyChanged(nameof(SyncState));
+        }
+    }
+
+    partial void OnHasDriftChanged(bool value)
+    {
+        if (!IsActive)
+        {
+            return;
+        }
+
+        var nextState = value ? BroadcastProfileSyncState.Drifted : BroadcastProfileSyncState.Synced;
+        if (_syncState != nextState)
+        {
+            _syncState = nextState;
+            OnPropertyChanged(nameof(SyncState));
+        }
+    }
+
+    private static BroadcastProfileSyncState ResolveInitialSyncState(
+        bool isActive,
+        bool hasDrift,
+        BroadcastProfileSyncSummary? syncSummary)
+    {
+        if (!isActive)
+        {
+            return BroadcastProfileSyncState.None;
+        }
+
+        if (syncSummary is not null && syncSummary.State != BroadcastProfileSyncState.None)
+        {
+            return syncSummary.State;
+        }
+
+        return hasDrift ? BroadcastProfileSyncState.Drifted : BroadcastProfileSyncState.Synced;
+    }
 
     [RelayCommand]
     private async Task ApplyAsync()

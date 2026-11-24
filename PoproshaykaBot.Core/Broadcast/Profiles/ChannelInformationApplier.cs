@@ -2,6 +2,7 @@
 using PoproshaykaBot.Core.Debugging;
 using PoproshaykaBot.Core.Infrastructure.Events;
 using PoproshaykaBot.Core.Infrastructure.Events.Broadcasting;
+using PoproshaykaBot.Core.Platforms;
 using PoproshaykaBot.Core.Twitch;
 using PoproshaykaBot.Core.Twitch.Helix;
 
@@ -22,22 +23,35 @@ public sealed class ChannelInformationApplier(
 
     public async Task<bool> ApplyAsync(BroadcastProfile profile, CancellationToken cancellationToken)
     {
+        var result = await ApplyForPlatformAsync(profile, cancellationToken);
+
+        if (!result.Succeeded)
+        {
+            await eventBus.PublishAsync(
+                new BroadcastProfileApplyFailed(profile, result.ErrorMessage ?? "Не удалось обновить канал"),
+                cancellationToken);
+            return false;
+        }
+
+        await eventBus.PublishAsync(new BroadcastProfileApplied(profile), cancellationToken);
+        return true;
+    }
+
+    internal async Task<BroadcastProfilePlatformApplyResult> ApplyForPlatformAsync(
+        BroadcastProfile profile,
+        CancellationToken cancellationToken)
+    {
         if (targetChannelProvider.Current.IsForeign)
         {
             logger.LogInformation("Профиль {Profile} не применён: {Reason}", profile.Name, ForeignChannelMessage);
-            await eventBus.PublishAsync(new BroadcastProfileApplyFailed(profile, ForeignChannelMessage), cancellationToken);
-
-            return false;
+            return new(StreamingPlatform.Twitch, false, ForeignChannelMessage);
         }
 
         var broadcasterId = await idProvider.GetAsync(cancellationToken);
 
         if (broadcasterId == null)
         {
-            await eventBus.PublishAsync(new BroadcastProfileApplyFailed(profile, "Не удалось определить канал"),
-                cancellationToken);
-
-            return false;
+            return new(StreamingPlatform.Twitch, false, "Не удалось определить канал");
         }
 
         var request = new PatchChannelRequest
@@ -57,10 +71,7 @@ public sealed class ChannelInformationApplier(
         catch (Exception exception)
         {
             logger.LogWarning(exception, "Не удалось применить профиль {Profile}", profile.Name);
-            await eventBus.PublishAsync(new BroadcastProfileApplyFailed(profile, HelixErrorMessages.SafeMessage(exception)),
-                cancellationToken);
-
-            return false;
+            return new(StreamingPlatform.Twitch, false, HelixErrorMessages.SafeMessage(exception));
         }
 
         var confirmed = await confirmationTask;
@@ -71,8 +82,7 @@ public sealed class ChannelInformationApplier(
                 profile.Name);
         }
 
-        await eventBus.PublishAsync(new BroadcastProfileApplied(profile), cancellationToken);
-        return true;
+        return new(StreamingPlatform.Twitch, true);
     }
 
     public async Task<bool> ApplyPatchAsync(string? title, string? gameId, string? gameName, CancellationToken cancellationToken)

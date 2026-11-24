@@ -1,23 +1,27 @@
-﻿using Microsoft.Extensions.Logging;
+﻿using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using PoproshaykaBot.Core.Chat;
 using PoproshaykaBot.Core.Infrastructure.Events;
 using PoproshaykaBot.Core.Infrastructure.Events.Broadcasting;
 using PoproshaykaBot.Core.Platforms;
 using PoproshaykaBot.Core.Settings.Stores;
+using PoproshaykaBot.Core.Streaming;
+using System.Collections.Frozen;
 using System.Globalization;
 
 namespace PoproshaykaBot.Core.Broadcast.Profiles;
 
-public class BroadcastProfilesManager(
-    BroadcastProfilesStore profilesStore,
-    IChannelInformationApplier applier,
-    IEventBus eventBus,
-    TimeProvider timeProvider,
-    ILogger<BroadcastProfilesManager> logger,
-    BroadcastProfilePlatformsStore? profilePlatformsStore = null,
-    BroadcastProfileYouTubeStore? youtubeStore = null,
-    IYouTubeBroadcastProfileApplier? youtubeApplier = null)
+public class BroadcastProfilesManager
 {
+    private readonly BroadcastProfilesStore _profilesStore;
+    private readonly IEventBus _eventBus;
+    private readonly TimeProvider _timeProvider;
+    private readonly ILogger<BroadcastProfilesManager> _logger;
+    private readonly BroadcastProfilePlatformsStore? _profilePlatformsStore;
+    private readonly BroadcastProfileYouTubeStore? _youtubeStore;
+    private readonly IChatPlatformRegistry? _platformRegistry;
+    private readonly FrozenDictionary<StreamingPlatform, IPlatformBroadcastProfileApplier> _appliers;
+
     private enum AdvanceOutcome
     {
         NotFound = 0,
@@ -25,9 +29,75 @@ public class BroadcastProfilesManager(
         Advanced = 2,
     }
 
+    public BroadcastProfilesManager(
+        BroadcastProfilesStore profilesStore,
+        IChannelInformationApplier? applier,
+        IEventBus eventBus,
+        TimeProvider timeProvider,
+        ILogger<BroadcastProfilesManager> logger,
+        BroadcastProfilePlatformsStore? profilePlatformsStore = null,
+        BroadcastProfileYouTubeStore? youtubeStore = null,
+        IYouTubeBroadcastProfileApplier? youtubeApplier = null)
+        : this(
+            profilesStore,
+            applier,
+            eventBus,
+            timeProvider,
+            logger,
+            profilePlatformsStore,
+            youtubeStore,
+            youtubeApplier,
+            platformAppliers: null,
+            platformRegistry: null)
+    {
+    }
+
+    [ActivatorUtilitiesConstructor]
+    public BroadcastProfilesManager(
+        BroadcastProfilesStore profilesStore,
+        IChannelInformationApplier? applier,
+        IEventBus eventBus,
+        TimeProvider timeProvider,
+        ILogger<BroadcastProfilesManager> logger,
+        BroadcastProfilePlatformsStore? profilePlatformsStore,
+        BroadcastProfileYouTubeStore? youtubeStore,
+        IYouTubeBroadcastProfileApplier? youtubeApplier,
+        IEnumerable<IPlatformBroadcastProfileApplier>? platformAppliers,
+        IChatPlatformRegistry? platformRegistry)
+    {
+        _profilesStore = profilesStore;
+        _eventBus = eventBus;
+        _timeProvider = timeProvider;
+        _logger = logger;
+        _profilePlatformsStore = profilePlatformsStore;
+        _youtubeStore = youtubeStore;
+        _platformRegistry = platformRegistry;
+
+        var map = new Dictionary<StreamingPlatform, IPlatformBroadcastProfileApplier>();
+        if (platformAppliers is not null)
+        {
+            foreach (var platformApplier in platformAppliers)
+            {
+                map[platformApplier.Platform] = platformApplier;
+            }
+        }
+
+        if (!map.ContainsKey(StreamingPlatform.Twitch) && applier is not null)
+        {
+            map[StreamingPlatform.Twitch] = new LegacyTwitchPlatformApplier(applier);
+        }
+
+        if (!map.ContainsKey(StreamingPlatform.YouTube) && youtubeApplier is not null)
+        {
+            map[StreamingPlatform.YouTube] = new LegacyYouTubePlatformApplier(youtubeApplier, youtubeStore);
+        }
+
+        _appliers = map.ToFrozenDictionary();
+    }
+
     public virtual BroadcastProfile? FindByName(string name)
     {
-        return profilesStore.Load()
+        return _profilesStore.Load()
             .Profiles
             .FirstOrDefault(p => string.Equals(p.Name, name, StringComparison.OrdinalIgnoreCase));
     }
@@ -44,11 +114,11 @@ public class BroadcastProfilesManager(
 
         if (profile == null)
         {
-            logger.LogDebug("ApplyAsync: профиль Id={ProfileId} не найден", id);
+            _logger.LogDebug("ApplyAsync: профиль Id={ProfileId} не найден", id);
             return null;
         }
 
-        var youtubeMetadata = youtubeStore?.GetMetadata(profile.Id);
+        var youtubeMetadata = _youtubeStore?.GetMetadata(profile.Id);
         var template = MessageTemplate.For(profile.Title);
         var hasTitlePlaceholder = template.Contains("n");
         var hasYouTubePlaceholder = youtubeMetadata is not null
@@ -56,72 +126,45 @@ public class BroadcastProfilesManager(
                 || MessageTemplate.For(youtubeMetadata.Description ?? string.Empty).Contains("n"));
         var hasPlaceholder = hasTitlePlaceholder || hasYouTubePlaceholder;
 
-        BroadcastProfile profileToApply;
-        if (hasTitlePlaceholder)
+        var resolvedTitle = hasTitlePlaceholder
+            ? template.With("n", profile.CurrentNumber.ToString(CultureInfo.InvariantCulture)).Render()
+            : profile.Title;
+
+        var profileToApply = BroadcastProfileSyncMatcher.WithResolvedTitle(profile, resolvedTitle);
+
+        _ = _eventBus.PublishAsync(new BroadcastProfileApplying(profileToApply), cancellationToken);
+
+        var targets = GetPlatforms(profile.Id).Order().ToArray();
+        var results = new List<BroadcastProfilePlatformApplyResult>(targets.Length);
+
+        foreach (var platform in targets)
         {
-            profileToApply = new()
+            if (_appliers.TryGetValue(platform, out var platformApplier))
             {
-                Id = profile.Id,
-                Name = profile.Name,
-                Title = template.With("n", profile.CurrentNumber.ToString(CultureInfo.InvariantCulture)).Render(),
-                GameId = profile.GameId,
-                GameName = profile.GameName,
-                BroadcasterLanguage = profile.BroadcasterLanguage,
-                Tags = profile.Tags.ToList(),
-                ObsSceneName = profile.ObsSceneName,
-                CurrentNumber = profile.CurrentNumber,
-                LastApplyAt = profile.LastApplyAt,
-                LastAutoAdvanceAt = profile.LastAutoAdvanceAt,
-            };
-        }
-        else
-        {
-            profileToApply = profile;
-        }
-
-        _ = eventBus.PublishAsync(new BroadcastProfileApplying(profileToApply), cancellationToken);
-
-        var targets = GetPlatforms(profile.Id);
-        var includeTwitch = targets.Contains(StreamingPlatform.Twitch);
-        var includeYouTube = targets.Contains(StreamingPlatform.YouTube);
-
-        bool success;
-        if (!includeYouTube)
-        {
-            success = await applier.ApplyAsync(profileToApply, cancellationToken);
-        }
-        else
-        {
-            var results = new List<BroadcastProfilePlatformApplyResult>();
-
-            if (includeTwitch)
-            {
-                var twitchSucceeded = await applier.ApplyAsync(profileToApply, cancellationToken);
-                results.Add(new(
-                    StreamingPlatform.Twitch,
-                    twitchSucceeded,
-                    twitchSucceeded ? null : "Не удалось обновить канал Twitch"));
-            }
-
-            var youtubeResult = youtubeApplier is not null
-                ? await youtubeApplier.ApplyAsync(profileToApply, youtubeMetadata, cancellationToken)
-                : new BroadcastProfilePlatformApplyResult(StreamingPlatform.YouTube, false, "Применение профилей YouTube недоступно");
-            results.Add(youtubeResult);
-
-            success = results.Any(static result => result.Succeeded);
-
-            if (success)
-            {
-                await eventBus.PublishAsync(new BroadcastProfileApplied(profileToApply, results), cancellationToken);
+                results.Add(await platformApplier.ApplyAsync(profileToApply, resolvedTitle, cancellationToken));
             }
             else
             {
-                var errorMessage = BroadcastProfileApplySummary.FormatFailureStatus(results);
-                await eventBus.PublishAsync(new BroadcastProfileApplyFailed(profileToApply, errorMessage, results), cancellationToken);
+                var platformName = _platformRegistry?.GetDisplayName(platform) ?? platform.ToString();
+                results.Add(new(platform, false, $"Применение профилей {platformName} недоступно"));
             }
         }
 
-        var written = profilesStore.Mutate(bp =>
+        var success = results.Any(static result => result.Succeeded);
+
+        if (success)
+        {
+            await _eventBus.PublishAsync(new BroadcastProfileApplied(profileToApply, results), cancellationToken);
+        }
+        else
+        {
+            var errorMessage = BroadcastProfileApplySummary.FormatFailureStatus(
+                results,
+                _platformRegistry is not null ? _platformRegistry.GetDisplayName : null);
+            await _eventBus.PublishAsync(new BroadcastProfileApplyFailed(profileToApply, errorMessage, results), cancellationToken);
+        }
+
+        var written = _profilesStore.Mutate(bp =>
         {
             bp.LastAppliedProfileId = profile.Id;
 
@@ -130,12 +173,12 @@ public class BroadcastProfilesManager(
                 var stored = bp.Profiles.FirstOrDefault(p => p.Id == profile.Id);
                 if (stored != null)
                 {
-                    stored.LastApplyAt = timeProvider.GetUtcNow();
+                    stored.LastApplyAt = _timeProvider.GetUtcNow();
                 }
             }
         });
 
-        logger.LogInformation("Профиль трансляции применён: {ProfileName} (Id={ProfileId}, success={Success}, {Outcome})",
+        _logger.LogInformation("Профиль трансляции применён: {ProfileName} (Id={ProfileId}, success={Success}, {Outcome})",
             profile.Name,
             profile.Id,
             success,
@@ -144,9 +187,61 @@ public class BroadcastProfilesManager(
         return profile;
     }
 
+    public virtual BroadcastProfileSyncSummary EvaluateSync(
+        BroadcastProfile profile,
+        IChatPlatformRegistry platformRegistry)
+    {
+        ArgumentNullException.ThrowIfNull(profile);
+        ArgumentNullException.ThrowIfNull(platformRegistry);
+
+        var targets = GetPlatforms(profile.Id).Order().ToArray();
+        if (targets.Length == 0)
+        {
+            return BroadcastProfileSyncSummary.Empty;
+        }
+
+        var drifted = new List<StreamingPlatform>();
+        var pending = new List<StreamingPlatform>();
+
+        foreach (var platform in targets)
+        {
+            var stream = platformRegistry.TryGet(platform, out var chatPlatform)
+                ? chatPlatform.StreamStatus.CurrentStream
+                : null;
+
+            var evaluation = _appliers.TryGetValue(platform, out var platformApplier)
+                ? platformApplier.EvaluateSync(profile, stream)
+                : BroadcastProfileSyncMatcher.EvaluateTitleOnly(platform, profile.Title?.Trim() ?? string.Empty, stream);
+
+            switch (evaluation.State)
+            {
+                case BroadcastProfileSyncState.Drifted:
+                    drifted.Add(platform);
+                    break;
+
+                case BroadcastProfileSyncState.Pending:
+                case BroadcastProfileSyncState.None:
+                    pending.Add(platform);
+                    break;
+            }
+        }
+
+        if (drifted.Count > 0)
+        {
+            return new(BroadcastProfileSyncState.Drifted, drifted, pending);
+        }
+
+        if (pending.Count > 0)
+        {
+            return new(BroadcastProfileSyncState.Pending, drifted, pending);
+        }
+
+        return new(BroadcastProfileSyncState.Synced, drifted, pending);
+    }
+
     public virtual BroadcastProfile? Find(Guid id)
     {
-        return profilesStore.Load()
+        return _profilesStore.Load()
             .Profiles
             .FirstOrDefault(p => p.Id == id);
     }
@@ -155,7 +250,7 @@ public class BroadcastProfilesManager(
     {
         var outcome = AdvanceOutcome.NotFound;
 
-        var written = profilesStore.Mutate(bp =>
+        var written = _profilesStore.Mutate(bp =>
         {
             var stored = bp.Profiles.FirstOrDefault(p => p.Id == id);
 
@@ -179,7 +274,7 @@ public class BroadcastProfilesManager(
         switch (outcome)
         {
             case AdvanceOutcome.Advanced:
-                logger.LogDebug("AdvanceCurrentNumber: профиль Id={ProfileId} → CurrentNumber={NextValue}, {Outcome}",
+                _logger.LogDebug("AdvanceCurrentNumber: профиль Id={ProfileId} → CurrentNumber={NextValue}, {Outcome}",
                     id,
                     nextValue,
                     written ? "записано" : "принято только в памяти до перезапуска");
@@ -187,7 +282,7 @@ public class BroadcastProfilesManager(
                 return true;
 
             case AdvanceOutcome.RaceDetected:
-                logger.LogDebug("AdvanceCurrentNumber: профиль Id={ProfileId} изменён вручную, авто-инкремент отменён", id);
+                _logger.LogDebug("AdvanceCurrentNumber: профиль Id={ProfileId} изменён вручную, авто-инкремент отменён", id);
                 return false;
 
             default:
@@ -197,18 +292,18 @@ public class BroadcastProfilesManager(
 
     public IReadOnlyList<BroadcastProfile> GetAll()
     {
-        return profilesStore.Load().Profiles.ToList();
+        return _profilesStore.Load().Profiles.ToList();
     }
 
     public IReadOnlySet<StreamingPlatform> GetPlatforms(Guid profileId)
     {
-        return profilePlatformsStore?.GetPlatformsOrDefault(profileId)
+        return _profilePlatformsStore?.GetPlatformsOrDefault(profileId)
                ?? new HashSet<StreamingPlatform> { StreamingPlatform.Twitch };
     }
 
     public BroadcastProfileYouTubeMetadata? GetYouTubeMetadata(Guid profileId)
     {
-        return youtubeStore?.GetMetadata(profileId);
+        return _youtubeStore?.GetMetadata(profileId);
     }
 
     public bool Upsert(BroadcastProfile profile)
@@ -236,9 +331,9 @@ public class BroadcastProfilesManager(
         var hadPreviousPlatforms = false;
         List<StreamingPlatform>? previousPlatforms = null;
 
-        if (platforms is not null && profilePlatformsStore is not null)
+        if (platforms is not null && _profilePlatformsStore is not null)
         {
-            var currentPlatforms = profilePlatformsStore.Load().Profiles;
+            var currentPlatforms = _profilePlatformsStore.Load().Profiles;
             if (currentPlatforms.TryGetValue(profile.Id, out var existingPlatforms))
             {
                 hadPreviousPlatforms = true;
@@ -246,7 +341,7 @@ public class BroadcastProfilesManager(
             }
         }
 
-        var written = profilesStore.Mutate(bp =>
+        var written = _profilesStore.Mutate(bp =>
         {
             var profiles = bp.Profiles;
 
@@ -286,17 +381,17 @@ public class BroadcastProfilesManager(
 
         if (!written)
         {
-            logger.LogWarning("Запись профиля трансляции {ProfileName} (Id={ProfileId}) отклонена затвором записи", profile.Name, profile.Id);
+            _logger.LogWarning("Запись профиля трансляции {ProfileName} (Id={ProfileId}) отклонена затвором записи", profile.Name, profile.Id);
             return false;
         }
 
         var platformsMutated = false;
-        if (platforms is not null && profilePlatformsStore is not null)
+        if (platforms is not null && _profilePlatformsStore is not null)
         {
             bool platformsWritten;
             try
             {
-                platformsWritten = profilePlatformsStore.SetPlatforms(profile.Id, platforms);
+                platformsWritten = _profilePlatformsStore.SetPlatforms(profile.Id, platforms);
             }
             catch
             {
@@ -307,19 +402,19 @@ public class BroadcastProfilesManager(
             if (!platformsWritten)
             {
                 RollbackProfile(profile.Id, previous, previousIndex);
-                logger.LogWarning("Не удалось сохранить площадки профиля {ProfileName} (Id={ProfileId}); изменения профиля откачены", profile.Name, profile.Id);
+                _logger.LogWarning("Не удалось сохранить площадки профиля {ProfileName} (Id={ProfileId}); изменения профиля откачены", profile.Name, profile.Id);
                 return false;
             }
 
             platformsMutated = true;
         }
 
-        if (youtubeMetadata is not null && youtubeStore is not null)
+        if (youtubeMetadata is not null && _youtubeStore is not null)
         {
             bool youtubeWritten;
             try
             {
-                youtubeWritten = youtubeStore.SetMetadata(profile.Id, youtubeMetadata);
+                youtubeWritten = _youtubeStore.SetMetadata(profile.Id, youtubeMetadata);
             }
             catch
             {
@@ -340,20 +435,20 @@ public class BroadcastProfilesManager(
                 }
 
                 RollbackProfile(profile.Id, previous, previousIndex);
-                logger.LogWarning("Не удалось сохранить метаданные YouTube профиля {ProfileName} (Id={ProfileId}); изменения профиля откачены", profile.Name, profile.Id);
+                _logger.LogWarning("Не удалось сохранить метаданные YouTube профиля {ProfileName} (Id={ProfileId}); изменения профиля откачены", profile.Name, profile.Id);
                 return false;
             }
         }
 
-        logger.LogInformation("Upsert профиля трансляции {ProfileName} (Id={ProfileId})", profile.Name, profile.Id);
-        _ = eventBus.PublishAsync(new BroadcastProfilesChanged());
+        _logger.LogInformation("Upsert профиля трансляции {ProfileName} (Id={ProfileId})", profile.Name, profile.Id);
+        _ = _eventBus.PublishAsync(new BroadcastProfilesChanged());
 
         return true;
     }
 
     private void RollbackPlatforms(Guid id, bool hadPrevious, List<StreamingPlatform>? previousPlatforms)
     {
-        if (profilePlatformsStore is null)
+        if (_profilePlatformsStore is null)
         {
             return;
         }
@@ -362,16 +457,16 @@ public class BroadcastProfilesManager(
         {
             if (hadPrevious && previousPlatforms is not null)
             {
-                profilePlatformsStore.SetPlatforms(id, previousPlatforms);
+                _profilePlatformsStore.SetPlatforms(id, previousPlatforms);
             }
             else
             {
-                profilePlatformsStore.RemoveProfile(id);
+                _profilePlatformsStore.RemoveProfile(id);
             }
         }
         catch (Exception rollbackException)
         {
-            logger.LogWarning(rollbackException, "Не удалось откатить площадки профиля трансляции Id={ProfileId}", id);
+            _logger.LogWarning(rollbackException, "Не удалось откатить площадки профиля трансляции Id={ProfileId}", id);
         }
     }
 
@@ -379,7 +474,7 @@ public class BroadcastProfilesManager(
     {
         try
         {
-            profilesStore.Mutate(bp =>
+            _profilesStore.Mutate(bp =>
             {
                 if (previous is null)
                 {
@@ -401,7 +496,7 @@ public class BroadcastProfilesManager(
         }
         catch (Exception rollbackException)
         {
-            logger.LogWarning(rollbackException, "Не удалось откатить профиль трансляции Id={ProfileId} после сбоя сохранения площадок", id);
+            _logger.LogWarning(rollbackException, "Не удалось откатить профиль трансляции Id={ProfileId} после сбоя сохранения площадок", id);
         }
     }
 
@@ -409,7 +504,7 @@ public class BroadcastProfilesManager(
     {
         var removed = 0;
 
-        var written = profilesStore.Mutate(bp =>
+        var written = _profilesStore.Mutate(bp =>
         {
             removed = bp.Profiles.RemoveAll(p => p.Id == id);
 
@@ -421,17 +516,63 @@ public class BroadcastProfilesManager(
 
         if (removed > 0)
         {
-            profilePlatformsStore?.RemoveProfile(id);
-            youtubeStore?.RemoveProfile(id);
-            logger.LogInformation("Удалён профиль трансляции Id={ProfileId}", id);
+            _profilePlatformsStore?.RemoveProfile(id);
+            _youtubeStore?.RemoveProfile(id);
+            _logger.LogInformation("Удалён профиль трансляции Id={ProfileId}", id);
         }
         else
         {
-            logger.LogDebug("Запрос на удаление профиля трансляции Id={ProfileId} – записей не найдено", id);
+            _logger.LogDebug("Запрос на удаление профиля трансляции Id={ProfileId} – записей не найдено", id);
         }
 
-        _ = eventBus.PublishAsync(new BroadcastProfilesChanged());
+        _ = _eventBus.PublishAsync(new BroadcastProfilesChanged());
 
         return written;
+    }
+
+    private sealed class LegacyTwitchPlatformApplier(IChannelInformationApplier inner) : IPlatformBroadcastProfileApplier
+    {
+        public StreamingPlatform Platform => StreamingPlatform.Twitch;
+
+        public async Task<BroadcastProfilePlatformApplyResult> ApplyAsync(
+            BroadcastProfile profile,
+            string resolvedTitle,
+            CancellationToken cancellationToken)
+        {
+            var effectiveProfile = BroadcastProfileSyncMatcher.WithResolvedTitle(profile, resolvedTitle);
+            var succeeded = await inner.ApplyAsync(effectiveProfile, cancellationToken);
+            return new(StreamingPlatform.Twitch, succeeded, succeeded ? null : "Не удалось обновить канал Twitch");
+        }
+
+        public BroadcastProfileSyncEvaluation EvaluateSync(BroadcastProfile profile, StreamInfo? stream)
+        {
+            return BroadcastProfileSyncMatcher.EvaluateTwitch(profile, stream);
+        }
+    }
+
+    private sealed class LegacyYouTubePlatformApplier(
+        IYouTubeBroadcastProfileApplier inner,
+        BroadcastProfileYouTubeStore? youtubeStore) : IPlatformBroadcastProfileApplier
+    {
+        public StreamingPlatform Platform => StreamingPlatform.YouTube;
+
+        public Task<BroadcastProfilePlatformApplyResult> ApplyAsync(
+            BroadcastProfile profile,
+            string resolvedTitle,
+            CancellationToken cancellationToken)
+        {
+            var effectiveProfile = BroadcastProfileSyncMatcher.WithResolvedTitle(profile, resolvedTitle);
+            return inner.ApplyAsync(effectiveProfile, youtubeStore?.GetMetadata(profile.Id), cancellationToken);
+        }
+
+        public BroadcastProfileSyncEvaluation EvaluateSync(BroadcastProfile profile, StreamInfo? stream)
+        {
+            var normalized = youtubeStore?.GetMetadata(profile.Id)?.Normalize();
+            var expectedTitle = !string.IsNullOrWhiteSpace(normalized?.TitleOverride)
+                ? normalized.TitleOverride
+                : profile.Title?.Trim() ?? string.Empty;
+
+            return BroadcastProfileSyncMatcher.EvaluateTitleOnly(StreamingPlatform.YouTube, expectedTitle, stream);
+        }
     }
 }

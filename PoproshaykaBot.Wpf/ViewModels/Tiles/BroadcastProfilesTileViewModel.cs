@@ -19,7 +19,6 @@ using PoproshaykaBot.Wpf.ViewModels.Dialogs;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
-using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -29,12 +28,9 @@ public sealed partial class BroadcastProfilesTileViewModel : DashboardTileViewMo
 {
     public const string NotWrittenNotice = "Профили изменены до перезапуска. В файл изменения не записаны: туда только что перенесены данные предыдущей версии. Перезапустите приложение и повторите правку.";
 
-    private static readonly TimeSpan TitleMatchTimeout = TimeSpan.FromMilliseconds(100);
-
     private readonly BroadcastProfilesManager _manager;
     private readonly BroadcastProfilesStore _profiles;
     private readonly IChatPlatformRegistry _platforms;
-    private readonly IStreamStatus _stream;
     private readonly IChannelInformationApplier _applier;
     private readonly ITwitchChannelsApi _channelsApi;
     private readonly IBroadcasterIdProvider _broadcasterId;
@@ -89,7 +85,7 @@ public sealed partial class BroadcastProfilesTileViewModel : DashboardTileViewMo
         _manager = manager;
         _profiles = profiles;
         _platforms = platforms;
-        _stream = stream;
+        _ = stream;
         _applier = applier;
         _channelsApi = channelsApi;
         _broadcasterId = broadcasterId;
@@ -106,10 +102,11 @@ public sealed partial class BroadcastProfilesTileViewModel : DashboardTileViewMo
         _subs.Add(bus.SubscribeOnUi<BroadcastProfileApplyFailed>(OnProfileApplyFailed));
         _subs.Add(bus.SubscribeOnUi<ChannelInformationPatched>(_ => ClearInFlightStates("✓ Применено", false)));
         _subs.Add(bus.SubscribeOnUi<ChannelInformationPatchFailed>(e => ShowStatus($"✗ {e.ErrorMessage}", true)));
-        _subs.Add(bus.SubscribePlatformOnUi<StreamWentOnline>(StreamingPlatform.Twitch, _ => ReloadItems()));
-        _subs.Add(bus.SubscribePlatformOnUi<StreamWentOffline>(StreamingPlatform.Twitch, _ => ReloadItems()));
-        _subs.Add(bus.SubscribePlatformOnUi<StreamMetadataResolved>(StreamingPlatform.Twitch, _ => ReloadItems()));
-        _subs.Add(bus.SubscribePlatformOnUi<ChannelUpdated>(StreamingPlatform.Twitch, _ => ReloadItems()));
+        _subs.Add(bus.SubscribeOnUi<StreamWentOnline>(_ => ReloadItems()));
+        _subs.Add(bus.SubscribeOnUi<StreamWentOffline>(_ => ReloadItems()));
+        _subs.Add(bus.SubscribeOnUi<StreamMetadataResolved>(_ => ReloadItems()));
+        _subs.Add(bus.SubscribeOnUi<ChannelUpdated>(_ => ReloadItems()));
+        _subs.Add(bus.SubscribeOnUi<YouTubeActiveBroadcastChanged>(_ => ReloadItems()));
 
         _activeProfileId = profiles.Load().LastAppliedProfileId;
         ReloadItems();
@@ -321,13 +318,12 @@ public sealed partial class BroadcastProfilesTileViewModel : DashboardTileViewMo
             activeId = null;
         }
 
-        var currentStream = _stream.CurrentStream;
-
         Items = new ObservableCollection<BroadcastProfileItemViewModel>(
             allProfiles.Select(p =>
             {
                 var isActive = activeId.HasValue && p.Id == activeId.Value;
-                var hasDrift = isActive && ProfileDivergesFromStream(p, currentStream);
+                var syncSummary = isActive ? _manager.EvaluateSync(p, _platforms) : BroadcastProfileSyncSummary.Empty;
+                var hasDrift = isActive && syncSummary.State == BroadcastProfileSyncState.Drifted;
                 return new BroadcastProfileItemViewModel(
                     p,
                     isActive,
@@ -341,7 +337,9 @@ public sealed partial class BroadcastProfilesTileViewModel : DashboardTileViewMo
                         .Order()
                         .Select(platform => new BroadcastProfileTarget(platform, _platforms.GetDisplayName(platform)))
                         .ToArray(),
-                    _manager.GetYouTubeMetadata(p.Id));
+                    _manager.GetYouTubeMetadata(p.Id),
+                    syncSummary,
+                    _platforms.GetDisplayName);
             }));
 
         if (_applyingProfileId.HasValue)
@@ -375,13 +373,29 @@ public sealed partial class BroadcastProfilesTileViewModel : DashboardTileViewMo
             return null;
         }
 
-        return active.HasDrift
-            ? new($"{active.Name} · расходится с каналом",
-                $"Применён профиль «{active.Name}», но название или категория на канале сейчас другие",
-                StatusSeverity.Warning)
-            : new(active.Name,
-                $"Применён профиль «{active.Name}»",
-                StatusSeverity.Success);
+        return active.SyncState switch
+        {
+            BroadcastProfileSyncState.Drifted when active.DriftedPlatformNames.Count > 0 =>
+                new($"{active.Name} · расходится: {string.Join(", ", active.DriftedPlatformNames)}",
+                    $"Применён профиль «{active.Name}», расхождение на: {string.Join(", ", active.DriftedPlatformNames)}",
+                    StatusSeverity.Warning),
+            BroadcastProfileSyncState.Drifted =>
+                new($"{active.Name} · расходится с каналом",
+                    $"Применён профиль «{active.Name}», но название или категория на канале сейчас другие",
+                    StatusSeverity.Warning),
+            BroadcastProfileSyncState.Pending when active.PendingPlatformNames.Count > 0 =>
+                new($"{active.Name} · ожидает данные: {string.Join(", ", active.PendingPlatformNames)}",
+                    $"Применён профиль «{active.Name}», ожидаются данные эфира: {string.Join(", ", active.PendingPlatformNames)}",
+                    StatusSeverity.None),
+            BroadcastProfileSyncState.Pending =>
+                new($"{active.Name} · ожидает данные",
+                    $"Применён профиль «{active.Name}», ожидаются данные эфира",
+                    StatusSeverity.None),
+            _ =>
+                new(active.Name,
+                    $"Применён профиль «{active.Name}»",
+                    StatusSeverity.Success),
+        };
     }
 
     private void RefreshHeaderStatus()
@@ -519,34 +533,6 @@ public sealed partial class BroadcastProfilesTileViewModel : DashboardTileViewMo
         IsStatusError = isError;
         IsStatusWarning = !isError && isWarning;
         HasStatusMessage = !string.IsNullOrEmpty(message);
-    }
-
-    private static bool ProfileDivergesFromStream(BroadcastProfile profile, StreamInfo? stream)
-    {
-        if (stream is null or { IsBare: true })
-        {
-            return false;
-        }
-
-        if (!TitleMatches(profile.Title?.Trim() ?? string.Empty, stream.Title?.Trim() ?? string.Empty))
-        {
-            return true;
-        }
-
-        return !string.Equals(profile.GameId ?? string.Empty, stream.GameId ?? string.Empty, StringComparison.Ordinal);
-    }
-
-    private static bool TitleMatches(string profileTitle, string streamTitle)
-    {
-        const string Placeholder = "{n}";
-
-        if (!profileTitle.Contains(Placeholder, StringComparison.Ordinal))
-        {
-            return string.Equals(profileTitle, streamTitle, StringComparison.Ordinal);
-        }
-
-        var pattern = "^" + Regex.Escape(profileTitle).Replace(Regex.Escape(Placeholder), "\\d+") + "$";
-        return Regex.IsMatch(streamTitle, pattern, RegexOptions.None, TitleMatchTimeout);
     }
 
     private static BroadcastProfile CloneProfile(BroadcastProfile source)

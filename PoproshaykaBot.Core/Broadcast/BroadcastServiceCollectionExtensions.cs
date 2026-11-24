@@ -15,6 +15,7 @@ public static class BroadcastServiceCollectionExtensions
         services.AddSingleton<IChannelUpdateConfirmation>(sp => sp.GetRequiredService<ChannelUpdateConfirmationService>());
         services.AddSingleton<ChannelInformationApplier>();
         services.AddSingleton<IChannelInformationApplier>(sp => sp.GetRequiredService<ChannelInformationApplier>());
+        services.AddSingleton<IPlatformBroadcastProfileApplier, TwitchBroadcastProfileApplier>();
         services.AddSingleton<GameCategoryResolver>();
         services.AddSingleton<IGameCategoryResolver>(sp => sp.GetRequiredService<GameCategoryResolver>());
         services.AddSingleton<BroadcastProfilesManager>();

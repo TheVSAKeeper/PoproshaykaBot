@@ -4,6 +4,7 @@ using PoproshaykaBot.Core.Platforms;
 using PoproshaykaBot.Core.Platforms.Auth;
 using PoproshaykaBot.Core.Settings;
 using PoproshaykaBot.Core.Settings.Stores;
+using PoproshaykaBot.Core.Streaming;
 using PoproshaykaBot.Core.YouTube.Client;
 using PoproshaykaBot.Core.YouTube.Streaming;
 using System.Globalization;
@@ -15,13 +16,40 @@ internal sealed class YouTubeBroadcastProfileApplier(
     YouTubeAccountsStore accountsStore,
     IYouTubeActiveBroadcastSource activeBroadcastSource,
     IYouTubeLiveBroadcastClient broadcastClient,
-    ILogger<YouTubeBroadcastProfileApplier> logger)
-    : IYouTubeBroadcastProfileApplier
+    ILogger<YouTubeBroadcastProfileApplier> logger,
+    BroadcastProfileYouTubeStore? youtubeStore = null)
+    : IYouTubeBroadcastProfileApplier, IPlatformBroadcastProfileApplier
 {
     private const string MissingAuthMessage = "Нет авторизации владельца канала YouTube";
     private const string MissingWriteScopeMessage = "Нет прав записи YouTube (нужен объединённый вход или право youtube.force-ssl)";
     private const string NoActiveBroadcastMessage = "На YouTube нет активной трансляции";
     private const string MissingTitleMessage = "Не указано название трансляции для YouTube";
+
+    public StreamingPlatform Platform => StreamingPlatform.YouTube;
+
+    Task<BroadcastProfilePlatformApplyResult> IPlatformBroadcastProfileApplier.ApplyAsync(
+        BroadcastProfile profile,
+        string resolvedTitle,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(profile);
+
+        var effectiveProfile = BroadcastProfileSyncMatcher.WithResolvedTitle(profile, resolvedTitle);
+        var metadata = youtubeStore?.GetMetadata(profile.Id);
+        return ApplyAsync(effectiveProfile, metadata, cancellationToken);
+    }
+
+    public BroadcastProfileSyncEvaluation EvaluateSync(BroadcastProfile profile, StreamInfo? stream)
+    {
+        ArgumentNullException.ThrowIfNull(profile);
+
+        var metadata = youtubeStore?.GetMetadata(profile.Id)?.Normalize();
+        var expectedTitle = !string.IsNullOrWhiteSpace(metadata?.TitleOverride)
+            ? metadata.TitleOverride
+            : profile.Title?.Trim() ?? string.Empty;
+
+        return BroadcastProfileSyncMatcher.EvaluateTitleOnly(StreamingPlatform.YouTube, expectedTitle, stream);
+    }
 
     public async Task<BroadcastProfilePlatformApplyResult> ApplyAsync(
         BroadcastProfile profile,

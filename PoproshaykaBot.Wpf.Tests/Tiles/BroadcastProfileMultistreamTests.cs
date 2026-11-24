@@ -1,23 +1,30 @@
 ﻿using KeepShell.Services;
 using KeepShell.Services.Modal;
 using KeepShell.Testing;
+using KeepShell.ViewModels;
 using Microsoft.Extensions.Logging.Abstractions;
 using PoproshaykaBot.Core.Broadcast.Profiles;
 using PoproshaykaBot.Core.Chat;
 using PoproshaykaBot.Core.Infrastructure.Events;
 using PoproshaykaBot.Core.Infrastructure.Events.Broadcasting;
+using PoproshaykaBot.Core.Infrastructure.Events.Streaming;
 using PoproshaykaBot.Core.Platforms;
 using PoproshaykaBot.Core.Platforms.Auth;
 using PoproshaykaBot.Core.Settings.Stores;
 using PoproshaykaBot.Core.Streaming;
 using PoproshaykaBot.Core.YouTube.Auth;
+using PoproshaykaBot.Core.YouTube.Streaming;
 using PoproshaykaBot.Wpf.Tests.Support;
 using PoproshaykaBot.Wpf.ViewModels.Controls;
 using PoproshaykaBot.Wpf.ViewModels.Dialogs;
 using PoproshaykaBot.Wpf.ViewModels.Tiles;
 using PoproshaykaBot.Wpf.Views.Dialogs;
+using PoproshaykaBot.Wpf.Views.Tiles;
 using System.Diagnostics.CodeAnalysis;
 using System.IO;
+using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Media;
 
 namespace PoproshaykaBot.Wpf.Tests.Tiles;
 
@@ -332,6 +339,154 @@ public sealed class BroadcastProfileMultistreamTests
         });
     }
 
+    [Test]
+    [Apartment(ApartmentState.STA)]
+    [NonParallelizable]
+    public async Task BroadcastProfilesTile_Tracks_Synced_Drifted_And_Pending_Across_All_Platforms()
+    {
+        TestResources.Ensure(Dictionaries);
+
+        var twitchPlatform = new StubChatPlatform(StreamingPlatform.Twitch, "Twitch");
+        var youtubePlatform = new StubChatPlatform(StreamingPlatform.YouTube, "YouTube");
+        var registry = new StubPlatformRegistry(twitchPlatform, youtubePlatform);
+        var bus = new InMemoryEventBus(NullLogger<InMemoryEventBus>.Instance);
+        var profilesStore = new BroadcastProfilesStore(null, Path.Combine(_root, "broadcast-profiles.json"));
+        var platformsStore = new BroadcastProfilePlatformsStore(null, Path.Combine(_root, "broadcast-profile-platforms.json"));
+        var youtubeStore = new BroadcastProfileYouTubeStore(null, Path.Combine(_root, "broadcast-profile-youtube.json"));
+
+        var twitchApplier = new StubSyncApplier(
+            StreamingPlatform.Twitch,
+            (profile, stream) =>
+            {
+                if (stream is null or { IsBare: true })
+                {
+                    return new(StreamingPlatform.Twitch, BroadcastProfileSyncState.Pending);
+                }
+
+                return string.Equals(profile.Title, stream.Title, StringComparison.Ordinal)
+                    && string.Equals(profile.GameId, stream.GameId, StringComparison.Ordinal)
+                    ? new(StreamingPlatform.Twitch, BroadcastProfileSyncState.Synced)
+                    : new(StreamingPlatform.Twitch, BroadcastProfileSyncState.Drifted);
+            });
+        var youtubeApplier = new StubSyncApplier(
+            StreamingPlatform.YouTube,
+            (profile, stream) =>
+            {
+                if (stream is null or { IsBare: true })
+                {
+                    return new(StreamingPlatform.YouTube, BroadcastProfileSyncState.Pending);
+                }
+
+                var expected = youtubeStore.GetMetadata(profile.Id)?.TitleOverride ?? profile.Title;
+                return string.Equals(expected, stream.Title, StringComparison.Ordinal)
+                    ? new(StreamingPlatform.YouTube, BroadcastProfileSyncState.Synced)
+                    : new(StreamingPlatform.YouTube, BroadcastProfileSyncState.Drifted);
+            });
+
+        var manager = new BroadcastProfilesManager(
+            profilesStore,
+            applier: null,
+            bus,
+            TimeProvider.System,
+            NullLogger<BroadcastProfilesManager>.Instance,
+            platformsStore,
+            youtubeStore,
+            youtubeApplier: null,
+            platformAppliers: [twitchApplier, youtubeApplier],
+            platformRegistry: registry);
+
+        var profile = new BroadcastProfile
+        {
+            Name = "Мультистрим",
+            Title = "Общий эфир",
+            GameId = "100",
+        };
+        manager.Upsert(
+            profile,
+            [StreamingPlatform.Twitch, StreamingPlatform.YouTube],
+            new BroadcastProfileYouTubeMetadata { TitleOverride = "YouTube эфир" });
+
+        profilesStore.Mutate(bp => bp.LastAppliedProfileId = profile.Id);
+
+        twitchPlatform.SetStream(new() { Title = "Общий эфир", GameId = "100", ViewerCount = 5 });
+        youtubePlatform.SetStream(null);
+
+        using var tile = new BroadcastProfilesTileViewModel(
+            manager,
+            profilesStore,
+            new IdleStreamStatus(),
+            null!,
+            null!,
+            null!,
+            new StubDialogService(),
+            null!,
+            bus,
+            registry);
+
+        var pendingItem = tile.Items.Single();
+        var pendingEdgeBrush = ResolveActiveEdgeBrush(pendingItem);
+        var successBrush = (Brush)Application.Current.FindResource("State.Success");
+        var warningBrush = (Brush)Application.Current.FindResource("State.Warning");
+        var neutralBrush = (Brush)Application.Current.FindResource("Border.Strong");
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(pendingItem.SyncState, Is.EqualTo(BroadcastProfileSyncState.Pending));
+            Assert.That(pendingItem.HasDrift, Is.False);
+            Assert.That(pendingItem.SyncToolTip, Does.Contain("Ожидает данные: YouTube"));
+            Assert.That(tile.HeaderStatus?.Severity, Is.EqualTo(StatusSeverity.None));
+            Assert.That(tile.HeaderStatus?.Text, Does.Contain("ожидает данные: YouTube"));
+            Assert.That(pendingEdgeBrush, Is.SameAs(neutralBrush), "Пока YouTube офлайн, зелёная полоса гореть не должна");
+            Assert.That(pendingEdgeBrush, Is.Not.SameAs(successBrush));
+        });
+
+        youtubePlatform.SetStream(new() { Title = "Другой заголовок", ViewerCount = 3 });
+        await bus.PublishAsync(new YouTubeActiveBroadcastChanged(
+            new YouTubeBroadcastSummary("vid-1", "UC1", "YT", "chat-1", "Другой заголовок", DateTimeOffset.UtcNow)));
+
+        var driftedItem = tile.Items.Single();
+        var driftedEdgeBrush = ResolveActiveEdgeBrush(driftedItem);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(driftedItem.SyncState, Is.EqualTo(BroadcastProfileSyncState.Drifted));
+            Assert.That(driftedItem.HasDrift, Is.True);
+            Assert.That(driftedItem.SyncToolTip, Is.EqualTo("Расходится: YouTube"));
+            Assert.That(tile.HeaderStatus?.Severity, Is.EqualTo(StatusSeverity.Warning));
+            Assert.That(tile.HeaderStatus?.Text, Is.EqualTo("Мультистрим · расходится: YouTube"));
+            Assert.That(driftedEdgeBrush, Is.SameAs(warningBrush));
+        });
+
+        youtubePlatform.SetStream(new() { Title = "YouTube эфир", ViewerCount = 8 });
+        await bus.PublishAsync(new StreamMetadataResolved(StreamingPlatform.YouTube, "UC1", youtubePlatform.StreamStatus.CurrentStream!));
+
+        var syncedItem = tile.Items.Single();
+        var syncedEdgeBrush = ResolveActiveEdgeBrush(syncedItem);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(syncedItem.SyncState, Is.EqualTo(BroadcastProfileSyncState.Synced));
+            Assert.That(syncedItem.HasDrift, Is.False);
+            Assert.That(tile.HeaderStatus?.Severity, Is.EqualTo(StatusSeverity.Success));
+            Assert.That(tile.HeaderStatus?.Text, Is.EqualTo("Мультистрим"));
+            Assert.That(syncedEdgeBrush, Is.SameAs(successBrush));
+        });
+    }
+
+    private static Brush? ResolveActiveEdgeBrush(BroadcastProfileItemViewModel item)
+    {
+        var template = (DataTemplate)new BroadcastProfilesTileView().Resources["ProfileCardTemplate"];
+        var card = (Border)template.LoadContent();
+        card.DataContext = item;
+        var host = new Grid { Width = 300 };
+        host.Children.Add(card);
+        host.Measure(new(300, double.PositiveInfinity));
+        host.Arrange(new(0, 0, 300, host.DesiredSize.Height));
+        host.UpdateLayout();
+        var edge = (Border)card.FindName("ActiveEdge");
+        return edge.Background;
+    }
+
     private static StubPlatformRegistry CreateRegistry()
     {
         return new(
@@ -339,15 +494,42 @@ public sealed class BroadcastProfileMultistreamTests
             new StubChatPlatform(StreamingPlatform.YouTube, "YouTube"));
     }
 
+    private sealed class StubSyncApplier(
+        StreamingPlatform platform,
+        Func<BroadcastProfile, StreamInfo?, BroadcastProfileSyncEvaluation> evaluate) : IPlatformBroadcastProfileApplier
+    {
+        public StreamingPlatform Platform => platform;
+
+        public Task<BroadcastProfilePlatformApplyResult> ApplyAsync(
+            BroadcastProfile profile,
+            string resolvedTitle,
+            CancellationToken cancellationToken)
+            => Task.FromResult(new BroadcastProfilePlatformApplyResult(platform, true));
+
+        public BroadcastProfileSyncEvaluation EvaluateSync(BroadcastProfile profile, StreamInfo? stream)
+            => evaluate(profile, stream);
+    }
+
     private sealed class StubChatPlatform(StreamingPlatform id, string displayName) : IChatPlatform
     {
+        private readonly MutableStreamStatus _streamStatus = new();
         public StreamingPlatform Id => id;
         public string DisplayName => displayName;
         public PlatformCapabilities Capabilities => PlatformCapabilities.None;
         public bool IsEnabled => true;
         public bool IsConnected => false;
-        public IStreamStatus StreamStatus => new IdleStreamStatus();
+        public IStreamStatus StreamStatus => _streamStatus;
         public IPlatformMessenger Messenger => null!;
+        public void SetStream(StreamInfo? stream) => _streamStatus.Stream = stream;
+    }
+
+    private sealed class MutableStreamStatus : IStreamStatus
+    {
+        public StreamInfo? Stream { get; set; }
+        public StreamStatus CurrentStatus => Stream is null ? StreamStatus.Offline : StreamStatus.Online;
+        public StreamInfo? CurrentStream => Stream;
+        public StreamStatusSnapshot GetSnapshot() => new(CurrentStatus, Stream, null);
+        public Task RefreshLiveSnapshotAsync() => Task.CompletedTask;
     }
 
     private sealed class StubPlatformRegistry(params IChatPlatform[] platforms) : IChatPlatformRegistry
