@@ -104,6 +104,9 @@ public sealed partial class ObsChatSettingsSectionViewModel : ObservableValidato
     private bool _messageImagesFromSubscribers;
 
     [ObservableProperty]
+    private bool _messageImagesFromBot;
+
+    [ObservableProperty]
     private bool _messageImagesFromEveryone;
 
     [ObservableProperty]
@@ -243,6 +246,7 @@ public sealed partial class ObsChatSettingsSectionViewModel : ObservableValidato
         MessageImagesFromModerators = settings.MessageImageRoles.HasFlag(MessageImageSenderRoles.Moderator);
         MessageImagesFromVips = settings.MessageImageRoles.HasFlag(MessageImageSenderRoles.Vip);
         MessageImagesFromSubscribers = settings.MessageImageRoles.HasFlag(MessageImageSenderRoles.Subscriber);
+        MessageImagesFromBot = settings.MessageImageRoles.HasFlag(MessageImageSenderRoles.Bot);
         MessageImagesFromEveryone = settings.MessageImageRoles.HasFlag(MessageImageSenderRoles.Everyone);
         MessageImageAllowedHostsText = string.Join(Environment.NewLine, settings.MessageImageAllowedHosts ?? []);
         MessageImageMaxHeightPixels = settings.MessageImageMaxHeightPixels;
@@ -558,6 +562,11 @@ public sealed partial class ObsChatSettingsSectionViewModel : ObservableValidato
         if (MessageImagesFromSubscribers)
         {
             roles |= MessageImageSenderRoles.Subscriber;
+        }
+
+        if (MessageImagesFromBot)
+        {
+            roles |= MessageImageSenderRoles.Bot;
         }
 
         if (MessageImagesFromEveryone)

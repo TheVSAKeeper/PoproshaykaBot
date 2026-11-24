@@ -6,8 +6,12 @@ using PoproshaykaBot.Core.Chat.Commands;
 using PoproshaykaBot.Core.Chat.History;
 using PoproshaykaBot.Core.Infrastructure.Events;
 using PoproshaykaBot.Core.Infrastructure.Events.Chat;
+using PoproshaykaBot.Core.Infrastructure.Events.Settings;
 using PoproshaykaBot.Core.Infrastructure.Events.Streaming;
 using PoproshaykaBot.Core.Platforms;
+using PoproshaykaBot.Core.Server.Images;
+using PoproshaykaBot.Core.Settings.Obs;
+using PoproshaykaBot.Core.Settings.Stores;
 using PoproshaykaBot.Core.Statistics;
 using PoproshaykaBot.Wpf.Bootstrap;
 using PoproshaykaBot.Wpf.Infrastructure;
@@ -34,11 +38,13 @@ public sealed partial class MultiplatformChatTileViewModel : DashboardTileViewMo
     private readonly IUiDispatcher? _uiDispatcher;
     private readonly ISettingsStore? _uiSettings;
     private readonly BroadcastHistoryStore? _broadcastHistoryStore;
+    private readonly ChatMessageImageProvider? _imageProvider;
     private readonly List<IDisposable> _subscriptions = [];
     private readonly List<ChatFeedItemViewModel> _allItems = [];
     private readonly ChatFeedHistoryBoundaryItemViewModel _historyBoundaryItem = new();
     private readonly Dictionary<string, ChatFeedStreamDividerItemViewModel> _streamDividers = new(StringComparer.Ordinal);
     private IReadOnlyList<BroadcastRecord> _knownBroadcasts = [];
+    private ObsChatSettings? _obsChatSettings;
 
     private double _feedFontSize;
     private bool _suppressPersist;
@@ -77,7 +83,9 @@ public sealed partial class MultiplatformChatTileViewModel : DashboardTileViewMo
         IUiDispatcher? uiDispatcher = null,
         IChatPlatformRegistry? platformRegistry = null,
         ISettingsStore? uiSettings = null,
-        BroadcastHistoryStore? broadcastHistoryStore = null)
+        BroadcastHistoryStore? broadcastHistoryStore = null,
+        ObsChatStore? obsChatStore = null,
+        ChatMessageImageProvider? imageProvider = null)
         : base(TileTypeId, "Общий чат", minWidth: 280, minHeight: 220)
     {
         ArgumentNullException.ThrowIfNull(chatHistory);
@@ -89,6 +97,8 @@ public sealed partial class MultiplatformChatTileViewModel : DashboardTileViewMo
         _uiDispatcher = uiDispatcher;
         _uiSettings = uiSettings;
         _broadcastHistoryStore = broadcastHistoryStore;
+        _imageProvider = imageProvider;
+        _obsChatSettings = obsChatStore?.Load();
         PlatformOptions = PlatformFilterOption.ForRegistry(platformRegistry);
 
         _feedFontSize = LoadFontSize();
@@ -110,6 +120,7 @@ public sealed partial class MultiplatformChatTileViewModel : DashboardTileViewMo
         _subscriptions.Add(eventBus.SubscribeOnUi<ActiveChannelChanged>(OnActiveChannelChanged));
         _subscriptions.Add(eventBus.SubscribeOnUi<YouTubeActiveBroadcastChanged>(_ => OnStreamContextChanged()));
         _subscriptions.Add(eventBus.SubscribeOnUi<StreamWentOnline>(_ => OnStreamContextChanged()));
+        _subscriptions.Add(eventBus.SubscribeOnUi<ChatSettingsChangedEvent>(OnObsChatSettingsChanged));
 
         if (_chatSettingsProvider is not null)
         {
@@ -350,6 +361,24 @@ public sealed partial class MultiplatformChatTileViewModel : DashboardTileViewMo
         }
     }
 
+    private void OnObsChatSettingsChanged(ChatSettingsChangedEvent @event)
+    {
+        void Apply()
+        {
+            _obsChatSettings = @event.Settings;
+            RefreshMessageImages();
+        }
+
+        if (_uiDispatcher is not null)
+        {
+            _uiDispatcher.Invoke(Apply);
+        }
+        else
+        {
+            Apply();
+        }
+    }
+
     private void LoadInitialHistory()
     {
         _allItems.Clear();
@@ -467,6 +496,7 @@ public sealed partial class MultiplatformChatTileViewModel : DashboardTileViewMo
         if (existing is not null)
         {
             existing.MessageText = entry.Message;
+            ApplyMessageImage(existing);
 
             if (messageEvent.IsReplacement)
             {
@@ -595,7 +625,7 @@ public sealed partial class MultiplatformChatTileViewModel : DashboardTileViewMo
 
     private ChatFeedMessageItemViewModel CreateMessageItem(ChatMessageData entry)
     {
-        return new ChatFeedMessageItemViewModel(
+        var item = new ChatFeedMessageItemViewModel(
             ChatFeedMessageItemViewModel.CreateKey(entry),
             entry.Channel,
             entry.Timestamp.Kind == DateTimeKind.Utc ? entry.Timestamp : entry.Timestamp.ToUniversalTime(),
@@ -613,7 +643,43 @@ public sealed partial class MultiplatformChatTileViewModel : DashboardTileViewMo
             entry.BroadcastId,
             entry.StreamId,
             entry.StreamStartedAtUtc,
-            entry.StreamTitle);
+            entry.StreamTitle,
+            entry.MessageType);
+
+        ApplyMessageImage(item);
+        return item;
+    }
+
+    private void RefreshMessageImages()
+    {
+        foreach (var item in _allItems)
+        {
+            if (item is ChatFeedMessageItemViewModel messageItem)
+            {
+                ApplyMessageImage(messageItem);
+            }
+        }
+    }
+
+    private void ApplyMessageImage(ChatFeedMessageItemViewModel item)
+    {
+        if (_imageProvider is null
+            || _obsChatSettings is null
+            || !MessageImagePolicy.TryBuildImageLink(
+                item.MessageType,
+                item.Status,
+                item.IsBot,
+                item.MessageText,
+                _obsChatSettings,
+                out var link))
+        {
+            item.ImageHandle = ChatMessageImageHandle.None;
+            item.ImageMaxHeight = 0;
+            return;
+        }
+
+        item.ImageMaxHeight = _obsChatSettings.MessageImageMaxHeightPixels;
+        item.ImageHandle = _imageProvider.Request(link.Uri, _obsChatSettings.MessageImageMaxHeightPixels, _obsChatSettings);
     }
 
     private bool ShouldDisplayEntry(ChatMessageData entry, CommandResponseMark? responseOverride = null)
@@ -650,6 +716,7 @@ public sealed partial class MultiplatformChatTileViewModel : DashboardTileViewMo
         if (FindMessageByKey(key) is { } existing)
         {
             existing.MessageText = entry.Message;
+            ApplyMessageImage(existing);
             return false;
         }
 

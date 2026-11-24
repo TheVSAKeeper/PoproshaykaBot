@@ -92,12 +92,11 @@ public sealed class MessageImagePolicyTests
         Assert.That(MessageImagePolicy.BuildImages(Message(UserStatus.Moderator, text), EnabledSettings()), Has.Count.EqualTo(1));
     }
 
-    [TestCase(ChatMessageType.BotResponse)]
-    [TestCase(ChatMessageType.SystemNotification)]
-    public void BuildImages_NonUserMessage_ReturnsNothing(ChatMessageType messageType)
+    [Test]
+    public void BuildImages_SystemNotification_ReturnsNothing()
     {
         var settings = EnabledSettings();
-        settings.MessageImageRoles = MessageImageSenderRoles.Everyone;
+        settings.MessageImageRoles = MessageImageSenderRoles.Everyone | MessageImageSenderRoles.Bot;
 
         var message = new ChatMessageData
         {
@@ -105,10 +104,100 @@ public sealed class MessageImagePolicyTests
             MessageId = "1",
             Timestamp = DateTime.UtcNow,
             Message = "смотри " + Link,
-            MessageType = messageType,
+            MessageType = ChatMessageType.SystemNotification,
         };
 
         Assert.That(MessageImagePolicy.BuildImages(message, settings), Is.Empty);
+    }
+
+    [TestCase(MessageImageSenderRoles.None, UserStatus.Moderator, false)]
+    [TestCase(MessageImageSenderRoles.Broadcaster | MessageImageSenderRoles.Moderator | MessageImageSenderRoles.Vip, UserStatus.Moderator, false)]
+    [TestCase(MessageImageSenderRoles.Bot, UserStatus.None, true)]
+    [TestCase(MessageImageSenderRoles.Bot, UserStatus.Moderator, true)]
+    [TestCase(MessageImageSenderRoles.Everyone, UserStatus.None, true)]
+    [TestCase(MessageImageSenderRoles.Broadcaster, UserStatus.Broadcaster, true)]
+    public void BuildImages_BotResponse_RespectsBotEveryoneAndBroadcasterRoles(
+        MessageImageSenderRoles roles,
+        UserStatus status,
+        bool expected)
+    {
+        var settings = EnabledSettings();
+        settings.MessageImageRoles = roles;
+
+        var message = new ChatMessageData
+        {
+            Platform = StreamingPlatform.Twitch,
+            MessageId = "1",
+            Timestamp = DateTime.UtcNow,
+            Message = "смотри " + Link,
+            MessageType = ChatMessageType.BotResponse,
+            Status = status,
+            IsBot = true,
+        };
+
+        var urls = MessageImagePolicy.BuildImages(message, settings);
+
+        Assert.That(urls.Count > 0, Is.EqualTo(expected));
+    }
+
+    [Test]
+    public void BuildImages_UserMessageMarkedIsBot_DoesNotLeakThroughModeratorRole()
+    {
+        var settings = EnabledSettings();
+        settings.MessageImageRoles = MessageImageSenderRoles.Moderator;
+
+        var message = new ChatMessageData
+        {
+            Platform = StreamingPlatform.Twitch,
+            MessageId = "1",
+            Timestamp = DateTime.UtcNow,
+            Message = "смотри " + Link,
+            MessageType = ChatMessageType.UserMessage,
+            Status = UserStatus.Moderator,
+            IsBot = true,
+        };
+
+        Assert.That(MessageImagePolicy.BuildImages(message, settings), Is.Empty);
+
+        settings.MessageImageRoles |= MessageImageSenderRoles.Bot;
+
+        Assert.That(MessageImagePolicy.BuildImages(message, settings), Has.Count.EqualTo(1));
+    }
+
+    [Test]
+    public void TryBuildImageLink_ReturnsSourceUriWithoutProxyPrefix()
+    {
+        var settings = EnabledSettings();
+        settings.MessageImageRoles = MessageImageSenderRoles.Bot;
+
+        var message = new ChatMessageData
+        {
+            Platform = StreamingPlatform.Twitch,
+            MessageId = "1",
+            Timestamp = DateTime.UtcNow,
+            Message = "смотри " + Link,
+            MessageType = ChatMessageType.BotResponse,
+            IsBot = true,
+        };
+
+        var allowed = MessageImagePolicy.TryBuildImageLink(message, settings, out var link);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(allowed, Is.True);
+            Assert.That(link.Uri.AbsoluteUri, Is.EqualTo(Link));
+        }
+    }
+
+    [Test]
+    public void Clamp_PreservesBotRoleFlag()
+    {
+        var clamped = ObsChatSettingsValidator.Clamp(new()
+        {
+            MessageImageRoles = MessageImageSenderRoles.Bot | (MessageImageSenderRoles)1024,
+        });
+
+        Assert.That(clamped.MessageImageRoles, Is.EqualTo(MessageImageSenderRoles.Bot));
     }
 
     [Test]

@@ -233,6 +233,35 @@ public sealed class ObsChatSettingsSectionTests
         }
     }
 
+    [Test]
+    public void MessageImagesFromBot_LoadsAppliesSavesAndResets()
+    {
+        var vm = CreateViewModel(out var obsChatStore, out _);
+
+        vm.LoadFrom(new() { MessageImageRoles = MessageImageSenderRoles.Broadcaster | MessageImageSenderRoles.Bot });
+        var loadedBot = vm.MessageImagesFromBot;
+        var loadedBroadcaster = vm.MessageImagesFromBroadcaster;
+
+        vm.MessageImagesFromBot = false;
+        var targetAfterUncheck = new ObsChatSettings();
+        vm.ApplyTo(targetAfterUncheck);
+
+        vm.MessageImagesFromBot = true;
+        vm.Save();
+        var reloaded = obsChatStore.Load();
+
+        vm.ResetAllCommand.Execute(null);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(loadedBot, Is.True);
+            Assert.That(loadedBroadcaster, Is.True);
+            Assert.That(targetAfterUncheck.MessageImageRoles.HasFlag(MessageImageSenderRoles.Bot), Is.False);
+            Assert.That(reloaded.MessageImageRoles.HasFlag(MessageImageSenderRoles.Bot), Is.True);
+            Assert.That(vm.MessageImagesFromBot, Is.False);
+        }
+    }
+
     private ObsChatSettingsSectionViewModel CreateViewModel(out ObsChatStore obsChatStore, out SettingsManager settingsManager)
     {
         var bus = new InMemoryEventBus(NullLogger<InMemoryEventBus>.Instance);

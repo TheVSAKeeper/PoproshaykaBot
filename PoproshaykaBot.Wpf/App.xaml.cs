@@ -644,6 +644,7 @@ public partial class App : Application
         services.AddSingleton<UserStatisticsPageViewModel>();
         services.AddSingleton<GameBoxArtProvider>();
         services.AddSingleton<UserAvatarProvider>();
+        services.AddSingleton<ChatMessageImageProvider>();
         services.AddSingleton<StreamHistoryPageViewModel>();
         services.AddSingleton<CommandsPageViewModel>();
         services.AddSingleton<ThemeViewModel>();

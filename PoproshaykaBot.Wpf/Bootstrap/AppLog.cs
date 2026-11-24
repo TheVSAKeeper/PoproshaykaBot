@@ -360,6 +360,28 @@ internal static partial class AppLog
     [LoggerMessage(EventId = 1324, Level = LogLevel.Debug, Message = "Аватарка пользователя не прочитана из кеша: {Path}")]
     public static partial void UserAvatarDecodeFailed(this ILogger logger, Exception? exception, string path);
 
+    [LoggerMessage(EventId = 1325, Level = LogLevel.Debug, Message = "Картинка из сообщения не загружена: {Address}")]
+    public static partial void ChatMessageImageLoadFailed(this ILogger logger, Exception? exception, string address);
+
+    public static void ChatMessageImageLoadFailed(this ILogger logger, Exception? exception, Uri address)
+    {
+        if (logger.IsEnabled(LogLevel.Debug))
+        {
+            logger.ChatMessageImageLoadFailed(exception, address.GetLeftPart(UriPartial.Path));
+        }
+    }
+
+    [LoggerMessage(EventId = 1326, Level = LogLevel.Debug, Message = "Картинка из сообщения не декодирована: {Address}")]
+    public static partial void ChatMessageImageDecodeFailed(this ILogger logger, Exception? exception, string address);
+
+    public static void ChatMessageImageDecodeFailed(this ILogger logger, Exception? exception, Uri address)
+    {
+        if (logger.IsEnabled(LogLevel.Debug))
+        {
+            logger.ChatMessageImageDecodeFailed(exception, address.GetLeftPart(UriPartial.Path));
+        }
+    }
+
     [LoggerMessage(EventId = 1600, Level = LogLevel.Information, Message = "Команда {Command} {State} на странице «Команды»")]
     public static partial void CommandEnabledChanged(this ILogger logger, string command, string state);
 

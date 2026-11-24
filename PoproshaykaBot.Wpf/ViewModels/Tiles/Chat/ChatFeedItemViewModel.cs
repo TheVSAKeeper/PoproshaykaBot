@@ -3,6 +3,7 @@ using CommunityToolkit.Mvvm.Input;
 using PoproshaykaBot.Core.Chat;
 using PoproshaykaBot.Core.Platforms;
 using PoproshaykaBot.Core.Users;
+using PoproshaykaBot.Wpf.Infrastructure;
 using System.Globalization;
 using System.Windows.Media;
 
@@ -25,6 +26,12 @@ public sealed partial class ChatFeedMessageItemViewModel : ChatFeedItemViewModel
     [ObservableProperty]
     private string _messageText;
 
+    [ObservableProperty]
+    private ChatMessageImageHandle _imageHandle = ChatMessageImageHandle.None;
+
+    [ObservableProperty]
+    private int _imageMaxHeight;
+
     public ChatFeedMessageItemViewModel(
         ChatFeedMessageKey key,
         string channel,
@@ -43,7 +50,8 @@ public sealed partial class ChatFeedMessageItemViewModel : ChatFeedItemViewModel
         Guid? broadcastId = null,
         string? streamId = null,
         DateTime? streamStartedAtUtc = null,
-        string? streamTitle = null)
+        string? streamTitle = null,
+        ChatMessageType? messageType = null)
     {
         Key = key;
         Channel = channel;
@@ -59,6 +67,8 @@ public sealed partial class ChatFeedMessageItemViewModel : ChatFeedItemViewModel
         StreamId = streamId;
         StreamStartedAtUtc = streamStartedAtUtc;
         StreamTitle = streamTitle;
+        Status = status;
+        MessageType = messageType ?? (isBot ? ChatMessageType.BotResponse : ChatMessageType.UserMessage);
         IsHistorical = isHistorical;
         IsBot = isBot;
         IsFirstTime = isFirstTime;
@@ -98,6 +108,10 @@ public sealed partial class ChatFeedMessageItemViewModel : ChatFeedItemViewModel
     public string DisplayName { get; }
 
     public bool IsHistorical { get; }
+
+    public UserStatus Status { get; }
+
+    public ChatMessageType MessageType { get; }
 
     public bool IsBot { get; }
 

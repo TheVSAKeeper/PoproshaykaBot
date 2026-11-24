@@ -9,4 +9,5 @@ public enum MessageImageSenderRoles
     Vip = 4,
     Subscriber = 8,
     Everyone = 16,
+    Bot = 32,
 }

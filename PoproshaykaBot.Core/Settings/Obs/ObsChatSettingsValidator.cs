@@ -74,7 +74,8 @@ public static class ObsChatSettingsValidator
             | MessageImageSenderRoles.Moderator
             | MessageImageSenderRoles.Vip
             | MessageImageSenderRoles.Subscriber
-            | MessageImageSenderRoles.Everyone;
+            | MessageImageSenderRoles.Everyone
+            | MessageImageSenderRoles.Bot;
 
         return source & Known;
     }

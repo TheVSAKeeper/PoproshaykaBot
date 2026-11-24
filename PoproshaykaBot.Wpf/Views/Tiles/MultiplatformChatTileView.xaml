@@ -30,79 +30,90 @@
                     </Style>
                 </Border.Style>
 
-                <TextBlock TextWrapping="Wrap"
-                           Foreground="{DynamicResource Fg.Primary}"
-                           FontSize="{Binding Data.FeedFontSize, Source={StaticResource ViewModelProxy}}"
-                           LineHeight="{Binding Data.FeedLineHeight, Source={StaticResource ViewModelProxy}}">
-                    <InlineUIContainer BaselineAlignment="Center">
-                        <TextBlock Text="{Binding TimestampText, Mode=OneWay}"
-                                   Foreground="{DynamicResource Fg.Muted}"
-                                   FontFamily="{DynamicResource Font.Mono}"
-                                   FontSize="{Binding Data.FeedMetaFontSize, Source={StaticResource ViewModelProxy}}"
-                                   Margin="0,0,5,0"
-                                   Visibility="{Binding Data.ShowTimestamps, Source={StaticResource ViewModelProxy}, Converter={StaticResource BoolToVisibility}}" />
-                    </InlineUIContainer>
-                    <InlineUIContainer BaselineAlignment="Center">
-                        <platformControls:PlatformIconView Platform="{Binding Platform, Mode=OneWay}"
-                                                           Width="{Binding Data.FeedPlatformIconSize, Source={StaticResource ViewModelProxy}}"
-                                                           Height="{Binding Data.FeedPlatformIconSize, Source={StaticResource ViewModelProxy}}"
-                                                           Margin="0,0,4,0"
-                                                           ToolTip="{Binding PlatformDisplayName, Mode=OneWay}"
-                                                           Visibility="{Binding Data.ShowPlatformIcons, Source={StaticResource ViewModelProxy}, Converter={StaticResource BoolToVisibility}}" />
-                    </InlineUIContainer>
-                    <InlineUIContainer BaselineAlignment="Center">
-                        <Grid Visibility="{Binding Data.ShowRoleBadges, Source={StaticResource ViewModelProxy}, Converter={StaticResource BoolToVisibility}}">
+                <StackPanel>
+                    <TextBlock TextWrapping="Wrap"
+                               Foreground="{DynamicResource Fg.Primary}"
+                               FontSize="{Binding Data.FeedFontSize, Source={StaticResource ViewModelProxy}}"
+                               LineHeight="{Binding Data.FeedLineHeight, Source={StaticResource ViewModelProxy}}">
+                        <InlineUIContainer BaselineAlignment="Center">
+                            <TextBlock Text="{Binding TimestampText, Mode=OneWay}"
+                                       Foreground="{DynamicResource Fg.Muted}"
+                                       FontFamily="{DynamicResource Font.Mono}"
+                                       FontSize="{Binding Data.FeedMetaFontSize, Source={StaticResource ViewModelProxy}}"
+                                       Margin="0,0,5,0"
+                                       Visibility="{Binding Data.ShowTimestamps, Source={StaticResource ViewModelProxy}, Converter={StaticResource BoolToVisibility}}" />
+                        </InlineUIContainer>
+                        <InlineUIContainer BaselineAlignment="Center">
+                            <platformControls:PlatformIconView Platform="{Binding Platform, Mode=OneWay}"
+                                                               Width="{Binding Data.FeedPlatformIconSize, Source={StaticResource ViewModelProxy}}"
+                                                               Height="{Binding Data.FeedPlatformIconSize, Source={StaticResource ViewModelProxy}}"
+                                                               Margin="0,0,4,0"
+                                                               ToolTip="{Binding PlatformDisplayName, Mode=OneWay}"
+                                                               Visibility="{Binding Data.ShowPlatformIcons, Source={StaticResource ViewModelProxy}, Converter={StaticResource BoolToVisibility}}" />
+                        </InlineUIContainer>
+                        <InlineUIContainer BaselineAlignment="Center">
+                            <Grid Visibility="{Binding Data.ShowRoleBadges, Source={StaticResource ViewModelProxy}, Converter={StaticResource BoolToVisibility}}">
+                                <Border Background="{DynamicResource Bg.SurfaceAlt}"
+                                        BorderBrush="{DynamicResource Border.Subtle}"
+                                        BorderThickness="1"
+                                        CornerRadius="4"
+                                        Padding="4,0"
+                                        Margin="0,0,4,0"
+                                        Visibility="{Binding HasRoleBadge, Converter={StaticResource BoolToVisibility}}">
+                                    <TextBlock Text="{Binding RoleBadgeText, Mode=OneWay}"
+                                               Foreground="{DynamicResource Fg.Secondary}"
+                                               FontSize="{Binding Data.FeedMetaFontSize, Source={StaticResource ViewModelProxy}}" />
+                                </Border>
+                            </Grid>
+                        </InlineUIContainer>
+                        <InlineUIContainer BaselineAlignment="Center">
                             <Border Background="{DynamicResource Bg.SurfaceAlt}"
-                                    BorderBrush="{DynamicResource Border.Subtle}"
-                                    BorderThickness="1"
                                     CornerRadius="4"
                                     Padding="4,0"
                                     Margin="0,0,4,0"
-                                    Visibility="{Binding HasRoleBadge, Converter={StaticResource BoolToVisibility}}">
-                                <TextBlock Text="{Binding RoleBadgeText, Mode=OneWay}"
-                                           Foreground="{DynamicResource Fg.Secondary}"
+                                    Visibility="{Binding IsHistorical, Converter={StaticResource BoolToVisibility}}">
+                                <TextBlock Text="История"
+                                           Foreground="{DynamicResource Fg.Muted}"
                                            FontSize="{Binding Data.FeedMetaFontSize, Source={StaticResource ViewModelProxy}}" />
                             </Border>
-                        </Grid>
-                    </InlineUIContainer>
-                    <InlineUIContainer BaselineAlignment="Center">
-                        <Border Background="{DynamicResource Bg.SurfaceAlt}"
-                                CornerRadius="4"
-                                Padding="4,0"
-                                Margin="0,0,4,0"
-                                Visibility="{Binding IsHistorical, Converter={StaticResource BoolToVisibility}}">
-                            <TextBlock Text="История"
-                                       Foreground="{DynamicResource Fg.Muted}"
-                                       FontSize="{Binding Data.FeedMetaFontSize, Source={StaticResource ViewModelProxy}}" />
-                        </Border>
-                    </InlineUIContainer>
-                    <InlineUIContainer BaselineAlignment="Center">
-                        <Button Style="{StaticResource Button.Ghost}"
-                                Padding="0"
-                                MinHeight="0"
-                                Margin="0,0,4,0"
-                                Cursor="Hand"
-                                VerticalAlignment="Center"
-                                IsEnabled="{Binding HasUserLink, Mode=OneWay}"
-                                Command="{Binding OpenUserCommand}">
-                            <TextBlock Text="{Binding DisplayName, Mode=OneWay}"
-                                       FontWeight="SemiBold"
-                                       FontSize="{Binding Data.FeedFontSize, Source={StaticResource ViewModelProxy}}">
-                                <TextBlock.Style>
-                                    <Style TargetType="TextBlock">
-                                        <Setter Property="Foreground" Value="{Binding AuthorBrush, Mode=OneWay}" />
-                                        <Style.Triggers>
-                                            <DataTrigger Binding="{Binding AuthorBrush}" Value="{x:Null}">
-                                                <Setter Property="Foreground" Value="{DynamicResource Fg.Primary}" />
-                                            </DataTrigger>
-                                        </Style.Triggers>
-                                    </Style>
-                                </TextBlock.Style>
-                            </TextBlock>
-                        </Button>
-                    </InlineUIContainer>
-                    <Run Text="{Binding MessageText, Mode=OneWay}" />
-                </TextBlock>
+                        </InlineUIContainer>
+                        <InlineUIContainer BaselineAlignment="Center">
+                            <Button Style="{StaticResource Button.Ghost}"
+                                    Padding="0"
+                                    MinHeight="0"
+                                    Margin="0,0,4,0"
+                                    Cursor="Hand"
+                                    VerticalAlignment="Center"
+                                    IsEnabled="{Binding HasUserLink, Mode=OneWay}"
+                                    Command="{Binding OpenUserCommand}">
+                                <TextBlock Text="{Binding DisplayName, Mode=OneWay}"
+                                           FontWeight="SemiBold"
+                                           FontSize="{Binding Data.FeedFontSize, Source={StaticResource ViewModelProxy}}">
+                                    <TextBlock.Style>
+                                        <Style TargetType="TextBlock">
+                                            <Setter Property="Foreground" Value="{Binding AuthorBrush, Mode=OneWay}" />
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding AuthorBrush}" Value="{x:Null}">
+                                                    <Setter Property="Foreground" Value="{DynamicResource Fg.Primary}" />
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </TextBlock.Style>
+                                </TextBlock>
+                            </Button>
+                        </InlineUIContainer>
+                        <Run Text="{Binding MessageText, Mode=OneWay}" />
+                    </TextBlock>
+
+                    <Image Source="{Binding ImageHandle.Image, Mode=OneWay}"
+                           MaxHeight="{Binding ImageMaxHeight, Mode=OneWay}"
+                           Stretch="Uniform"
+                           HorizontalAlignment="Left"
+                           Margin="0,4,0,0"
+                           RenderOptions.BitmapScalingMode="HighQuality"
+                           AutomationProperties.Name="Картинка из сообщения"
+                           Visibility="{Binding ImageHandle.HasImage, FallbackValue=Collapsed, Converter={StaticResource BoolToVisibility}}" />
+                </StackPanel>
             </Border>
         </DataTemplate>
 

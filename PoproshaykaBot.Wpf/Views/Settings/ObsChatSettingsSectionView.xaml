@@ -472,6 +472,10 @@
                               IsChecked="{Binding MessageImagesFromSubscribers, Mode=TwoWay}"
                               Margin="0,2,16,2" />
                     <CheckBox Style="{StaticResource CheckBox.Default}"
+                              Content="Бот"
+                              IsChecked="{Binding MessageImagesFromBot, Mode=TwoWay}"
+                              Margin="0,2,16,2" />
+                    <CheckBox Style="{StaticResource CheckBox.Default}"
                               Content="Все зрители"
                               IsChecked="{Binding MessageImagesFromEveryone, Mode=TwoWay}"
                               Margin="0,2,0,2" />

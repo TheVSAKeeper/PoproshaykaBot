@@ -21,16 +21,18 @@ public static class ServerServiceCollectionExtensions
                 infrastructure.SseDropNotifyThreshold);
         });
 
-        services.AddHttpClient(ImageProxyEndpoint.HttpClientName)
+        services.AddHttpClient(MessageImageFetcher.HttpClientName)
             .ConfigurePrimaryHttpMessageHandler(() => new SocketsHttpHandler
             {
                 AllowAutoRedirect = false,
                 UseCookies = false,
                 UseProxy = false,
                 Credentials = null,
-                ConnectTimeout = ImageProxyEndpoint.RequestTimeout,
+                ConnectTimeout = MessageImageFetcher.RequestTimeout,
                 ConnectCallback = PublicAddressConnector.ConnectAsync,
             });
+
+        services.AddSingleton<MessageImageFetcher>();
 
         services.AddSingleton(sp => new OverlayUserRankResolver(
             sp.GetService<IUserStatisticsRepository>(),
