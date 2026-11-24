@@ -166,7 +166,29 @@ public sealed class MultistreamLayoutTests
                 var catalogView = Descendants<ChannelCatalogSettingsSectionView>(view).Single();
                 var channelList = Descendants<ListBox>(catalogView).Single();
                 var cardGrid = Descendants<System.Windows.Controls.Primitives.UniformGrid>(channelList).Single();
-                Assert.That(cardGrid.Columns, Is.EqualTo(catalogView.IsTwoColumnCards ? 2 : 1));
+                var selectedEditor = (ContentControl)catalogView.FindName("SelectedChannelEditor")!;
+                Assert.That(cardGrid.Columns, Is.EqualTo(1));
+                var listBounds = channelList.TransformToAncestor(catalogView).TransformBounds(new(channelList.RenderSize));
+                var editorBounds = selectedEditor.TransformToAncestor(catalogView).TransformBounds(new(selectedEditor.RenderSize));
+                if (catalogView.IsTwoColumnCards)
+                {
+                    Assert.That(listBounds.Right, Is.LessThanOrEqualTo(editorBounds.Left + 0.5),
+                        $"При двухколоночной раскладке список каналов и редактор пересекаются при {width}x{height} @ {scale}: ListRight={listBounds.Right:F1}, EditorLeft={editorBounds.Left:F1}");
+                }
+                else
+                {
+                    Assert.That(listBounds.Bottom, Is.LessThanOrEqualTo(editorBounds.Top + 0.5),
+                        $"При одноколоночной раскладке редактор налезает на список каналов при {width}x{height} @ {scale}: ListBottom={listBounds.Bottom:F1}, EditorTop={editorBounds.Top:F1}");
+                }
+
+                var editorInDetail = selectedEditor.TransformToAncestor(detailScroll).TransformBounds(new(selectedEditor.RenderSize));
+                Assert.That(editorInDetail.Right, Is.LessThanOrEqualTo(detailScroll.ViewportWidth + 0.5),
+                    $"Редактор канала обрезан справа при {width}x{height} @ {scale}: Right={editorInDetail.Right:F1}, Viewport={detailScroll.ViewportWidth:F1}");
+                foreach (var roleCombo in Descendants<ComboBox>(selectedEditor).Where(IsEffectivelyVisible))
+                {
+                    Assert.That(roleCombo.ActualWidth, Is.GreaterThanOrEqualTo(140),
+                        $"Список аккаунта роли слишком узкий на {card.Status.DisplayName} при {width}x{height} @ {scale}: Width={roleCombo.ActualWidth:F1}");
+                }
                 List<double> rowHeights = [];
 
                 foreach (var channel in harness.Editor.VisibleChannels)
@@ -589,8 +611,7 @@ public sealed class MultistreamLayoutTests
             view.UpdateResponsiveLayout();
             foreach (var catalog in Descendants<ChannelCatalogSettingsSectionView>(view))
             {
-                catalog.IsNarrowLayout = ChannelCatalogSettingsSectionView.ResolveNarrowLayout(catalog.IsNarrowLayout, catalog.ActualWidth, FontScaleManager.Current);
-                catalog.IsTwoColumnCards = ChannelCatalogSettingsSectionView.ResolveTwoColumnCards(catalog.IsTwoColumnCards, catalog.ActualWidth, FontScaleManager.Current);
+                catalog.UpdateResponsiveLayout();
             }
         }
         host.Measure(size);

@@ -539,13 +539,13 @@ public sealed class MultistreamPageTests
             Is.EqualTo(expectedCompact));
     }
 
-    [TestCase(false, 559, 1.0, true)]
-    [TestCase(false, 560, 1.0, false)]
-    [TestCase(true, 589, 1.0, true)]
-    [TestCase(true, 590, 1.0, false)]
-    [TestCase(false, 800, 1.6, true)]
-    [TestCase(true, 943, 1.6, true)]
-    [TestCase(true, 944, 1.6, false)]
+    [TestCase(false, 699, 1.0, true)]
+    [TestCase(false, 700, 1.0, false)]
+    [TestCase(true, 729, 1.0, true)]
+    [TestCase(true, 730, 1.0, false)]
+    [TestCase(false, 1119, 1.6, true)]
+    [TestCase(true, 1167, 1.6, true)]
+    [TestCase(true, 1168, 1.6, false)]
     public void ChannelCatalogSettingsSectionView_narrow_layout_hysteresis_scales_with_font(
         bool currentNarrow, double width, double scale, bool expectedNarrow)
     {
@@ -554,13 +554,13 @@ public sealed class MultistreamPageTests
             Is.EqualTo(expectedNarrow));
     }
 
-    [TestCase(false, 779, 1.0, false)]
-    [TestCase(false, 780, 1.0, true)]
-    [TestCase(true, 740, 1.0, true)]
-    [TestCase(true, 739, 1.0, false)]
-    [TestCase(false, 1247, 1.6, false)]
-    [TestCase(false, 1248, 1.6, true)]
-    [TestCase(true, 1183, 1.6, false)]
+    [TestCase(false, 639, 1.0, false)]
+    [TestCase(false, 640, 1.0, true)]
+    [TestCase(true, 600, 1.0, true)]
+    [TestCase(true, 599, 1.0, false)]
+    [TestCase(false, 1023, 1.6, false)]
+    [TestCase(false, 1024, 1.6, true)]
+    [TestCase(true, 959, 1.6, false)]
     [TestCase(true, 0, 1.0, true)]
     public void ChannelCatalogSettingsSectionView_two_column_cards_hysteresis_scales_with_font(
         bool currentTwoColumn, double width, double scale, bool expectedTwoColumn)

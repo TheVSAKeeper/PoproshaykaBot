@@ -19,7 +19,7 @@
 
             <Style x:Key="ChannelListItemStyle" TargetType="ListBoxItem">
                 <Setter Property="Padding" Value="12,10" />
-                <Setter Property="Margin" Value="4,0,4,8" />
+                <Setter Property="Margin" Value="0,0,0,8" />
                 <Setter Property="HorizontalContentAlignment" Value="Stretch" />
                 <Setter Property="VerticalContentAlignment" Value="Center" />
                 <Setter Property="Cursor" Value="Hand" />
@@ -158,7 +158,40 @@
                     </Button>
                 </StackPanel>
 
-                <StackPanel Visibility="{Binding HasChannels, Converter={StaticResource BoolToVisibility}}">
+                <Grid Visibility="{Binding HasChannels, Converter={StaticResource BoolToVisibility}}">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="5*" />
+                        <ColumnDefinition>
+                            <ColumnDefinition.Style>
+                                <Style TargetType="ColumnDefinition">
+                                    <Setter Property="Width" Value="0" />
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding IsTwoColumnCards, RelativeSource={RelativeSource AncestorType=UserControl}}" Value="True">
+                                            <Setter Property="Width" Value="21" />
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </ColumnDefinition.Style>
+                        </ColumnDefinition>
+                        <ColumnDefinition>
+                            <ColumnDefinition.Style>
+                                <Style TargetType="ColumnDefinition">
+                                    <Setter Property="Width" Value="0" />
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding IsTwoColumnCards, RelativeSource={RelativeSource AncestorType=UserControl}}" Value="True">
+                                            <Setter Property="Width" Value="7*" />
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </ColumnDefinition.Style>
+                        </ColumnDefinition>
+                    </Grid.ColumnDefinitions>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+
                     <ListBox ItemsSource="{Binding VisibleChannels}"
                              SelectedItem="{Binding SelectedChannel, Mode=TwoWay}"
                              ItemContainerStyle="{StaticResource ChannelListItemStyle}"
@@ -170,6 +203,19 @@
                              ScrollViewer.VerticalScrollBarVisibility="Disabled"
                              AutomationProperties.Name="Список каналов площадки"
                              AutomationProperties.AutomationId="ChannelCatalogSelection">
+                        <ListBox.Style>
+                            <Style TargetType="ListBox">
+                                <Setter Property="Grid.Row" Value="0" />
+                                <Setter Property="Grid.Column" Value="0" />
+                                <Setter Property="Grid.ColumnSpan" Value="3" />
+                                <Setter Property="VerticalAlignment" Value="Top" />
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding IsTwoColumnCards, RelativeSource={RelativeSource AncestorType=UserControl}}" Value="True">
+                                        <Setter Property="Grid.ColumnSpan" Value="1" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </ListBox.Style>
                         <ListBox.Template>
                             <ControlTemplate TargetType="ListBox">
                                 <ItemsPresenter />
@@ -177,22 +223,7 @@
                         </ListBox.Template>
                         <ListBox.ItemsPanel>
                             <ItemsPanelTemplate>
-                                <UniformGrid>
-                                    <UniformGrid.Style>
-                                        <Style TargetType="UniformGrid">
-                                            <Setter Property="Columns" Value="1" />
-                                            <Style.Triggers>
-                                                <MultiDataTrigger>
-                                                    <MultiDataTrigger.Conditions>
-                                                        <Condition Binding="{Binding IsTwoColumnCards, RelativeSource={RelativeSource AncestorType=UserControl}}" Value="True" />
-                                                        <Condition Binding="{Binding DataContext.HasMultipleChannels, RelativeSource={RelativeSource AncestorType=ListBox}}" Value="True" />
-                                                    </MultiDataTrigger.Conditions>
-                                                    <Setter Property="Columns" Value="2" />
-                                                </MultiDataTrigger>
-                                            </Style.Triggers>
-                                        </Style>
-                                    </UniformGrid.Style>
-                                </UniformGrid>
+                                <UniformGrid Columns="1" />
                             </ItemsPanelTemplate>
                         </ListBox.ItemsPanel>
                         <ListBox.ItemTemplate>
@@ -268,13 +299,48 @@
                         </ListBox.ItemTemplate>
                     </ListBox>
 
-                    <Border BorderThickness="0,1,0,0"
-                            BorderBrush="{DynamicResource Border.Subtle}"
-                            Margin="0,10,0,14" />
+                    <Border BorderBrush="{DynamicResource Border.Subtle}">
+                        <Border.Style>
+                            <Style TargetType="Border">
+                                <Setter Property="Grid.Row" Value="1" />
+                                <Setter Property="Grid.Column" Value="0" />
+                                <Setter Property="Grid.ColumnSpan" Value="3" />
+                                <Setter Property="BorderThickness" Value="0,1,0,0" />
+                                <Setter Property="Margin" Value="0,6,0,14" />
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding IsTwoColumnCards, RelativeSource={RelativeSource AncestorType=UserControl}}" Value="True">
+                                        <Setter Property="Grid.Row" Value="0" />
+                                        <Setter Property="Grid.Column" Value="1" />
+                                        <Setter Property="Grid.ColumnSpan" Value="1" />
+                                        <Setter Property="BorderThickness" Value="1,0,0,0" />
+                                        <Setter Property="HorizontalAlignment" Value="Center" />
+                                        <Setter Property="VerticalAlignment" Value="Stretch" />
+                                        <Setter Property="Margin" Value="0" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Border.Style>
+                    </Border>
 
-                    <ContentControl Content="{Binding SelectedChannel}"
+                    <ContentControl x:Name="SelectedChannelEditor"
+                                    Content="{Binding SelectedChannel}"
                                     Focusable="False"
                                     Visibility="{Binding SelectedChannel, Converter={StaticResource NullToVisibility}}">
+                        <ContentControl.Style>
+                            <Style TargetType="ContentControl">
+                                <Setter Property="Grid.Row" Value="2" />
+                                <Setter Property="Grid.Column" Value="0" />
+                                <Setter Property="Grid.ColumnSpan" Value="3" />
+                                <Setter Property="VerticalAlignment" Value="Top" />
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding IsTwoColumnCards, RelativeSource={RelativeSource AncestorType=UserControl}}" Value="True">
+                                        <Setter Property="Grid.Row" Value="0" />
+                                        <Setter Property="Grid.Column" Value="2" />
+                                        <Setter Property="Grid.ColumnSpan" Value="1" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </ContentControl.Style>
                         <ContentControl.ContentTemplate>
                             <DataTemplate DataType="{x:Type vm:ChannelCatalogItemViewModel}">
                                 <StackPanel>
@@ -293,13 +359,50 @@
                                         </Border>
                                     </WrapPanel>
 
-                                    <DockPanel Margin="0,0,0,12">
-                                        <TextBlock Text="Название"
-                                                   Style="{StaticResource Setting.RowLabel}" />
+                                    <Grid Margin="0,0,0,12">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto" />
+                                            <ColumnDefinition Width="*" />
+                                        </Grid.ColumnDefinitions>
+                                        <Grid.RowDefinitions>
+                                            <RowDefinition Height="Auto" />
+                                            <RowDefinition Height="Auto" />
+                                        </Grid.RowDefinitions>
+                                        <TextBlock Text="Название">
+                                            <TextBlock.Style>
+                                                <Style TargetType="TextBlock" BasedOn="{StaticResource Setting.RowLabel}">
+                                                    <Setter Property="Grid.Row" Value="0" />
+                                                    <Setter Property="Grid.Column" Value="0" />
+                                                    <Setter Property="Grid.ColumnSpan" Value="1" />
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding IsNarrowLayout, RelativeSource={RelativeSource AncestorType=UserControl}}" Value="True">
+                                                            <Setter Property="Grid.ColumnSpan" Value="2" />
+                                                            <Setter Property="Width" Value="Auto" />
+                                                            <Setter Property="HorizontalAlignment" Value="Left" />
+                                                            <Setter Property="Margin" Value="0,0,0,6" />
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </TextBlock.Style>
+                                        </TextBlock>
                                         <TextBox Text="{Binding DisplayName, UpdateSourceTrigger=PropertyChanged}"
-                                                 Style="{StaticResource TextBox.Form}"
-                                                 AutomationProperties.Name="Название канала" />
-                                    </DockPanel>
+                                                 AutomationProperties.Name="Название канала">
+                                            <TextBox.Style>
+                                                <Style TargetType="TextBox" BasedOn="{StaticResource TextBox.Form}">
+                                                    <Setter Property="Grid.Row" Value="0" />
+                                                    <Setter Property="Grid.Column" Value="1" />
+                                                    <Setter Property="Grid.ColumnSpan" Value="1" />
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding IsNarrowLayout, RelativeSource={RelativeSource AncestorType=UserControl}}" Value="True">
+                                                            <Setter Property="Grid.Row" Value="1" />
+                                                            <Setter Property="Grid.Column" Value="0" />
+                                                            <Setter Property="Grid.ColumnSpan" Value="2" />
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </TextBox.Style>
+                                        </TextBox>
+                                    </Grid>
 
                                     <ItemsControl ItemsSource="{Binding Roles}"
                                                   Grid.IsSharedSizeScope="True"
@@ -463,14 +566,51 @@
                                         </ItemsControl.ItemTemplate>
                                     </ItemsControl>
 
-                                    <DockPanel Margin="0,0,0,4">
-                                        <TextBlock Text="Мониторинг"
-                                                   Style="{StaticResource Setting.RowLabel}" />
+                                    <Grid Margin="0,0,0,4">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto" />
+                                            <ColumnDefinition Width="*" />
+                                        </Grid.ColumnDefinitions>
+                                        <Grid.RowDefinitions>
+                                            <RowDefinition Height="Auto" />
+                                            <RowDefinition Height="Auto" />
+                                        </Grid.RowDefinitions>
+                                        <TextBlock Text="Мониторинг">
+                                            <TextBlock.Style>
+                                                <Style TargetType="TextBlock" BasedOn="{StaticResource Setting.RowLabel}">
+                                                    <Setter Property="Grid.Row" Value="0" />
+                                                    <Setter Property="Grid.Column" Value="0" />
+                                                    <Setter Property="Grid.ColumnSpan" Value="1" />
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding IsNarrowLayout, RelativeSource={RelativeSource AncestorType=UserControl}}" Value="True">
+                                                            <Setter Property="Grid.ColumnSpan" Value="2" />
+                                                            <Setter Property="Width" Value="Auto" />
+                                                            <Setter Property="HorizontalAlignment" Value="Left" />
+                                                            <Setter Property="Margin" Value="0,0,0,6" />
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </TextBlock.Style>
+                                        </TextBlock>
                                         <CheckBox Content="Фоновый мониторинг эфира"
-                                                  Style="{StaticResource CheckBox.Default}"
                                                   IsChecked="{Binding MonitoringEnabled, Mode=TwoWay}"
-                                                  IsEnabled="{Binding SupportsMonitoring}" />
-                                    </DockPanel>
+                                                  IsEnabled="{Binding SupportsMonitoring}">
+                                            <CheckBox.Style>
+                                                <Style TargetType="CheckBox" BasedOn="{StaticResource CheckBox.Default}">
+                                                    <Setter Property="Grid.Row" Value="0" />
+                                                    <Setter Property="Grid.Column" Value="1" />
+                                                    <Setter Property="Grid.ColumnSpan" Value="1" />
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding IsNarrowLayout, RelativeSource={RelativeSource AncestorType=UserControl}}" Value="True">
+                                                            <Setter Property="Grid.Row" Value="1" />
+                                                            <Setter Property="Grid.Column" Value="0" />
+                                                            <Setter Property="Grid.ColumnSpan" Value="2" />
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </CheckBox.Style>
+                                        </CheckBox>
+                                    </Grid>
 
                                     <Border BorderThickness="0,1,0,0"
                                             BorderBrush="{DynamicResource Border.Subtle}"
@@ -493,7 +633,7 @@
                             </DataTemplate>
                         </ContentControl.ContentTemplate>
                     </ContentControl>
-                </StackPanel>
+                </Grid>
             </StackPanel>
         </HeaderedContentControl>
 

@@ -20,10 +20,11 @@ public partial class ChannelCatalogSettingsSectionView : UserControl, IView<Chan
         typeof(ChannelCatalogSettingsSectionView),
         new PropertyMetadata(false));
 
-    private const double NarrowEnterWidth = 560;
-    private const double NarrowExitWidth = 590;
-    private const double TwoColumnEnterWidth = 780;
-    private const double TwoColumnExitWidth = 740;
+    private const double NarrowEnterWidth = 700;
+    private const double NarrowExitWidth = 730;
+    private const double TwoColumnEnterWidth = 640;
+    private const double TwoColumnExitWidth = 600;
+    private const double EditorColumnRatio = 7.0 / 12.0;
 
     public ChannelCatalogSettingsSectionView()
     {
@@ -59,19 +60,20 @@ public partial class ChannelCatalogSettingsSectionView : UserControl, IView<Chan
 
     private void OnFontScaleChanged(object? sender, double _) => UpdateResponsiveLayout();
 
-    private void UpdateResponsiveLayout()
+    internal void UpdateResponsiveLayout()
     {
         var scale = FontScaleManager.Current;
-        var nextNarrow = ResolveNarrowLayout(IsNarrowLayout, ActualWidth, scale);
-        if (nextNarrow != IsNarrowLayout)
-        {
-            IsNarrowLayout = nextNarrow;
-        }
-
         var nextTwoColumn = ResolveTwoColumnCards(IsTwoColumnCards, ActualWidth, scale);
         if (nextTwoColumn != IsTwoColumnCards)
         {
             IsTwoColumnCards = nextTwoColumn;
+        }
+
+        var editorWidth = nextTwoColumn ? ActualWidth * EditorColumnRatio : ActualWidth;
+        var nextNarrow = ResolveNarrowLayout(IsNarrowLayout, editorWidth, scale);
+        if (nextNarrow != IsNarrowLayout)
+        {
+            IsNarrowLayout = nextNarrow;
         }
     }
 
