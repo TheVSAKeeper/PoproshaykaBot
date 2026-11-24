@@ -295,7 +295,12 @@ public sealed partial class BroadcastStatusTileViewModel : DashboardTileViewMode
         var display = _platformRegistry.GetDisplayName(platform);
         if (_catalogStore is not null && _catalogStore.GetConfiguredChannels(platform).Count > 1)
         {
-            var active = _platformRegistry.GetConfiguredChannel(platform);
+            var active = _catalogStore.GetActiveChannel(platform)?.DisplayName;
+            if (string.IsNullOrWhiteSpace(active))
+            {
+                active = _platformRegistry.GetConfiguredChannel(platform);
+            }
+
             if (!string.IsNullOrWhiteSpace(active))
             {
                 display = $"{display} ({active})";

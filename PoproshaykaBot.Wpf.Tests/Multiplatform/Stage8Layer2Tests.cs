@@ -82,6 +82,39 @@ internal sealed class Stage8Layer2Tests
     }
 
     [Test]
+    public async Task StreamMonitoring_YouTube_ResetsSupersededRole_WhenSwitchingFromBotToBroadcaster()
+    {
+        var bus = new InMemoryEventBus(NullLogger<InMemoryEventBus>.Instance);
+        var twitch = new StubPlatform(StreamingPlatform.Twitch, "Twitch", PlatformCapabilities.ChannelMetadataEdit, true, StreamStatus.Offline, null, "streamer");
+        var youtube = new StubPlatform(StreamingPlatform.YouTube, "YouTube", PlatformCapabilities.None, true, StreamStatus.Offline, null, "UC_MAIN");
+        var registry = new StubPlatformRegistry(twitch, youtube);
+
+        using var vm = new StreamMonitoringViewModel(bus, registry);
+
+        await bus.PublishAsync(new StreamMonitoringStatusChanged(StreamingPlatform.YouTube, PlatformAuthRole.Bot, StreamMonitoringStatus.Connected));
+        await bus.PublishAsync(new StreamMonitoringStatusChanged(StreamingPlatform.YouTube, PlatformAuthRole.Bot, StreamMonitoringStatus.Disconnected));
+        await bus.PublishAsync(new StreamMonitoringStatusChanged(StreamingPlatform.YouTube, PlatformAuthRole.Broadcaster, StreamMonitoringStatus.Connected));
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(vm.Groups[1].Bot.IsReported, Is.False);
+            Assert.That(vm.Groups[1].Broadcaster.IsReported, Is.True);
+            Assert.That(vm.Groups[1].Broadcaster.Text, Is.EqualTo("Стример: работает"));
+        });
+
+        await bus.PublishAsync(new StreamMonitoringStatusChanged(StreamingPlatform.YouTube, PlatformAuthRole.Bot, StreamMonitoringStatus.Connected));
+        await bus.PublishAsync(new StreamMonitoringStatusChanged(StreamingPlatform.YouTube, PlatformAuthRole.Broadcaster, StreamMonitoringStatus.Connected));
+        await bus.PublishAsync(new StreamMonitoringStatusChanged(StreamingPlatform.YouTube, PlatformAuthRole.Bot, StreamMonitoringStatus.Disconnected));
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(vm.Groups[1].Bot.IsReported, Is.False);
+            Assert.That(vm.Groups[1].Broadcaster.IsReported, Is.True);
+            Assert.That(vm.Groups[1].Broadcaster.Text, Is.EqualTo("Стример: работает"));
+        });
+    }
+
+    [Test]
     public async Task MultiplatformChatTile_handles_history_gaps_replacements_deletes_clear_and_cap()
     {
         var bus = new InMemoryEventBus(NullLogger<InMemoryEventBus>.Instance);

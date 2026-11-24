@@ -133,13 +133,23 @@ public sealed partial class PlatformMonitoringGroupViewModel : ObservableObject
             _ => Bot,
         };
 
-        if (resetWhenDisconnected && status == StreamMonitoringStatus.Disconnected)
+        var other = role == PlatformAuthRole.Broadcaster ? Bot : Broadcaster;
+        var suppressSupersededYouTubeDisconnect = Platform == StreamingPlatform.YouTube
+            && status == StreamMonitoringStatus.Disconnected
+            && other.IsReported
+            && other.Severity != StatusSeverity.None;
+
+        if ((resetWhenDisconnected || suppressSupersededYouTubeDisconnect) && status == StreamMonitoringStatus.Disconnected)
         {
             indicator.Reset();
         }
         else
         {
             indicator.Apply(status, detail);
+            if (Platform == StreamingPlatform.YouTube && status != StreamMonitoringStatus.Disconnected)
+            {
+                other.Reset();
+            }
         }
 
         IsVisible = Bot.IsReported || Broadcaster.IsReported || Channels.IsReported;

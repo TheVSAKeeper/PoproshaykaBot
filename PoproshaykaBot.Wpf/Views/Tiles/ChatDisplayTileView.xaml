@@ -81,7 +81,7 @@
                                 Visibility="{Binding CanResetBrowserSession, Converter={StaticResource BoolToVisibility}}" />
                         <ComboBox ItemsSource="{Binding AccountChoices}"
                                   SelectedItem="{Binding SelectedAccount, Mode=TwoWay}"
-                                  DisplayMemberPath="Label"
+                                  TextSearch.TextPath="Label"
                                   AutomationProperties.Name="Аккаунт чата"
                                   ToolTip="{Binding SelectedAccount.Label}"
                                   Style="{StaticResource ComboBox.Form}"
@@ -89,7 +89,15 @@
                                   MinHeight="22" Padding="5,2"
                                   Background="Transparent"
                                   FontSize="{DynamicResource Font.Size.S}"
-                                  Visibility="{Binding HasAccountChoices, Converter={StaticResource BoolToVisibility}}" />
+                                  Visibility="{Binding HasAccountChoices, Converter={StaticResource BoolToVisibility}}">
+                            <ComboBox.ItemTemplate>
+                                <DataTemplate>
+                                    <TextBlock Text="{Binding Label}"
+                                               TextWrapping="NoWrap"
+                                               TextTrimming="CharacterEllipsis" />
+                                </DataTemplate>
+                            </ComboBox.ItemTemplate>
+                        </ComboBox>
                     </DockPanel>
                 </DataTemplate>
                 <DataTemplate x:Key="ChatMessageInput">

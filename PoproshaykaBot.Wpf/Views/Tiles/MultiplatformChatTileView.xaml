@@ -3,6 +3,7 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="clr-namespace:PoproshaykaBot.Wpf.ViewModels.Tiles"
              xmlns:chat="clr-namespace:PoproshaykaBot.Wpf.ViewModels.Tiles.Chat"
+             xmlns:infra="clr-namespace:PoproshaykaBot.Wpf.Infrastructure"
              xmlns:platformControls="clr-namespace:PoproshaykaBot.Wpf.Views.Controls"
              xmlns:keepshell="https://schemas.keepshell.dev/wpf"
              xmlns:controls="clr-namespace:KeepShell.Views.Controls;assembly=KeepShell"
@@ -14,9 +15,10 @@
              d:DesignHeight="420">
 
     <UserControl.Resources>
+        <infra:BindingProxy x:Key="ViewModelProxy" Data="{Binding}" />
         <DataTemplate DataType="{x:Type chat:ChatFeedMessageItemViewModel}">
             <Border Margin="0,0,4,0"
-                    Padding="{Binding DataContext.FeedItemPadding, RelativeSource={RelativeSource AncestorType=UserControl}}">
+                    Padding="{Binding Data.FeedItemPadding, Source={StaticResource ViewModelProxy}}">
                 <Border.Style>
                     <Style TargetType="Border">
                         <Setter Property="Opacity" Value="1" />
@@ -30,26 +32,26 @@
 
                 <TextBlock TextWrapping="Wrap"
                            Foreground="{DynamicResource Fg.Primary}"
-                           FontSize="{Binding DataContext.FeedFontSize, RelativeSource={RelativeSource AncestorType=UserControl}}"
-                           LineHeight="{Binding DataContext.FeedLineHeight, RelativeSource={RelativeSource AncestorType=UserControl}}">
+                           FontSize="{Binding Data.FeedFontSize, Source={StaticResource ViewModelProxy}}"
+                           LineHeight="{Binding Data.FeedLineHeight, Source={StaticResource ViewModelProxy}}">
                     <InlineUIContainer BaselineAlignment="Center">
                         <TextBlock Text="{Binding TimestampText, Mode=OneWay}"
                                    Foreground="{DynamicResource Fg.Muted}"
                                    FontFamily="{DynamicResource Font.Mono}"
-                                   FontSize="{Binding DataContext.FeedMetaFontSize, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                   FontSize="{Binding Data.FeedMetaFontSize, Source={StaticResource ViewModelProxy}}"
                                    Margin="0,0,5,0"
-                                   Visibility="{Binding DataContext.ShowTimestamps, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource BoolToVisibility}}" />
+                                   Visibility="{Binding Data.ShowTimestamps, Source={StaticResource ViewModelProxy}, Converter={StaticResource BoolToVisibility}}" />
                     </InlineUIContainer>
                     <InlineUIContainer BaselineAlignment="Center">
                         <platformControls:PlatformIconView Platform="{Binding Platform, Mode=OneWay}"
-                                                           Width="{Binding DataContext.FeedPlatformIconSize, RelativeSource={RelativeSource AncestorType=UserControl}}"
-                                                           Height="{Binding DataContext.FeedPlatformIconSize, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                           Width="{Binding Data.FeedPlatformIconSize, Source={StaticResource ViewModelProxy}}"
+                                                           Height="{Binding Data.FeedPlatformIconSize, Source={StaticResource ViewModelProxy}}"
                                                            Margin="0,0,4,0"
                                                            ToolTip="{Binding PlatformDisplayName, Mode=OneWay}"
-                                                           Visibility="{Binding DataContext.ShowPlatformIcons, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource BoolToVisibility}}" />
+                                                           Visibility="{Binding Data.ShowPlatformIcons, Source={StaticResource ViewModelProxy}, Converter={StaticResource BoolToVisibility}}" />
                     </InlineUIContainer>
                     <InlineUIContainer BaselineAlignment="Center">
-                        <Grid Visibility="{Binding DataContext.ShowRoleBadges, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource BoolToVisibility}}">
+                        <Grid Visibility="{Binding Data.ShowRoleBadges, Source={StaticResource ViewModelProxy}, Converter={StaticResource BoolToVisibility}}">
                             <Border Background="{DynamicResource Bg.SurfaceAlt}"
                                     BorderBrush="{DynamicResource Border.Subtle}"
                                     BorderThickness="1"
@@ -59,7 +61,7 @@
                                     Visibility="{Binding HasRoleBadge, Converter={StaticResource BoolToVisibility}}">
                                 <TextBlock Text="{Binding RoleBadgeText, Mode=OneWay}"
                                            Foreground="{DynamicResource Fg.Secondary}"
-                                           FontSize="{Binding DataContext.FeedMetaFontSize, RelativeSource={RelativeSource AncestorType=UserControl}}" />
+                                           FontSize="{Binding Data.FeedMetaFontSize, Source={StaticResource ViewModelProxy}}" />
                             </Border>
                         </Grid>
                     </InlineUIContainer>
@@ -71,7 +73,7 @@
                                 Visibility="{Binding IsHistorical, Converter={StaticResource BoolToVisibility}}">
                             <TextBlock Text="История"
                                        Foreground="{DynamicResource Fg.Muted}"
-                                       FontSize="{Binding DataContext.FeedMetaFontSize, RelativeSource={RelativeSource AncestorType=UserControl}}" />
+                                       FontSize="{Binding Data.FeedMetaFontSize, Source={StaticResource ViewModelProxy}}" />
                         </Border>
                     </InlineUIContainer>
                     <InlineUIContainer BaselineAlignment="Center">
@@ -85,7 +87,7 @@
                                 Command="{Binding OpenUserCommand}">
                             <TextBlock Text="{Binding DisplayName, Mode=OneWay}"
                                        FontWeight="SemiBold"
-                                       FontSize="{Binding DataContext.FeedFontSize, RelativeSource={RelativeSource AncestorType=UserControl}}">
+                                       FontSize="{Binding Data.FeedFontSize, Source={StaticResource ViewModelProxy}}">
                                 <TextBlock.Style>
                                     <Style TargetType="TextBlock">
                                         <Setter Property="Foreground" Value="{Binding AuthorBrush, Mode=OneWay}" />
@@ -105,7 +107,7 @@
         </DataTemplate>
 
         <DataTemplate DataType="{x:Type chat:ChatFeedHistoryBoundaryItemViewModel}">
-            <Border Padding="{Binding DataContext.FeedItemPadding, RelativeSource={RelativeSource AncestorType=UserControl}}">
+            <Border Padding="{Binding Data.FeedItemPadding, Source={StaticResource ViewModelProxy}}">
                 <Grid Margin="0,3">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*" />
@@ -119,7 +121,7 @@
                     <TextBlock Grid.Column="1"
                                Text="{Binding Label, Mode=OneWay}"
                                Margin="8,0"
-                               FontSize="{Binding DataContext.FeedMetaFontSize, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                               FontSize="{Binding Data.FeedMetaFontSize, Source={StaticResource ViewModelProxy}}"
                                Foreground="{DynamicResource Fg.Muted}" />
                     <Border Grid.Column="2"
                             Height="1"
@@ -130,7 +132,7 @@
         </DataTemplate>
 
         <DataTemplate DataType="{x:Type chat:ChatFeedStreamDividerItemViewModel}">
-            <Border Padding="{Binding DataContext.FeedItemPadding, RelativeSource={RelativeSource AncestorType=UserControl}}">
+            <Border Padding="{Binding Data.FeedItemPadding, Source={StaticResource ViewModelProxy}}">
                 <Grid Margin="0,5,0,3">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*" />
@@ -150,10 +152,11 @@
                             Margin="6,0">
                         <TextBlock Text="{Binding Label, Mode=OneWay}"
                                    FontWeight="SemiBold"
+                                   TextWrapping="NoWrap"
                                    TextTrimming="CharacterEllipsis"
                                    MaxWidth="260"
                                    ToolTip="{Binding Label, Mode=OneWay}"
-                                   FontSize="{Binding DataContext.FeedMetaFontSize, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                   FontSize="{Binding Data.FeedMetaFontSize, Source={StaticResource ViewModelProxy}}"
                                    Foreground="{DynamicResource Fg.Secondary}" />
                     </Border>
                     <Border Grid.Column="2"
@@ -166,7 +169,7 @@
 
         <DataTemplate DataType="{x:Type chat:ChatFeedGapItemViewModel}">
             <Border Margin="0,0,4,0"
-                    Padding="{Binding DataContext.FeedItemPadding, RelativeSource={RelativeSource AncestorType=UserControl}}">
+                    Padding="{Binding Data.FeedItemPadding, Source={StaticResource ViewModelProxy}}">
                 <Border Background="{DynamicResource Bg.SurfaceAlt}"
                         BorderBrush="{DynamicResource Border.Subtle}"
                         BorderThickness="1"
@@ -174,22 +177,22 @@
                         Padding="8,5">
                     <StackPanel Orientation="Horizontal">
                         <platformControls:PlatformIconView Platform="{Binding Platform, Mode=OneWay}"
-                                                           Width="{Binding DataContext.FeedPlatformIconSize, RelativeSource={RelativeSource AncestorType=UserControl}}"
-                                                           Height="{Binding DataContext.FeedPlatformIconSize, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                           Width="{Binding Data.FeedPlatformIconSize, Source={StaticResource ViewModelProxy}}"
+                                                           Height="{Binding Data.FeedPlatformIconSize, Source={StaticResource ViewModelProxy}}"
                                                            VerticalAlignment="Center"
                                                            Margin="0,0,6,0"
                                                            ToolTip="{Binding PlatformDisplayName, Mode=OneWay}"
-                                                           Visibility="{Binding DataContext.ShowPlatformIcons, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource BoolToVisibility}}" />
+                                                           Visibility="{Binding Data.ShowPlatformIcons, Source={StaticResource ViewModelProxy}, Converter={StaticResource BoolToVisibility}}" />
                         <TextBlock Text="{Binding TimestampText, Mode=OneWay}"
                                    Foreground="{DynamicResource Fg.Muted}"
                                    FontFamily="{DynamicResource Font.Mono}"
-                                   FontSize="{Binding DataContext.FeedMetaFontSize, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                   FontSize="{Binding Data.FeedMetaFontSize, Source={StaticResource ViewModelProxy}}"
                                    VerticalAlignment="Center"
                                    Margin="0,0,6,0"
-                                   Visibility="{Binding DataContext.ShowTimestamps, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource BoolToVisibility}}" />
+                                   Visibility="{Binding Data.ShowTimestamps, Source={StaticResource ViewModelProxy}, Converter={StaticResource BoolToVisibility}}" />
                         <TextBlock Text="{Binding Text, Mode=OneWay}"
                                    Foreground="{DynamicResource State.WarningText}"
-                                   FontSize="{Binding DataContext.FeedMetaFontSize, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                   FontSize="{Binding Data.FeedMetaFontSize, Source={StaticResource ViewModelProxy}}"
                                    TextWrapping="Wrap"
                                    VerticalAlignment="Center" />
                     </StackPanel>
