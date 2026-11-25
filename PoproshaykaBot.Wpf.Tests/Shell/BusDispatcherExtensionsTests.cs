@@ -8,23 +8,24 @@ using PoproshaykaBot.Wpf.Tests.Support;
 namespace PoproshaykaBot.Wpf.Tests.Shell;
 
 [TestFixture]
+[Apartment(ApartmentState.STA)]
+[NonParallelizable]
 public class BusDispatcherExtensionsTests
 {
     [Test]
     public async Task Доставляет_событие_когда_тестовый_Application_создан_на_другом_потоке()
     {
-        var thread = new Thread(() => TestResources.Ensure([]));
+        TestResources.Ensure([]);
 
-        thread.SetApartmentState(ApartmentState.STA);
-        thread.Start();
-        thread.Join();
-
-        var bus = new InMemoryEventBus(NullLogger<InMemoryEventBus>.Instance);
         var received = 0;
 
-        using var subscription = bus.SubscribeOnUi<StreamWentOffline>(_ => received++);
+        await Task.Run(async () =>
+        {
+            var bus = new InMemoryEventBus(NullLogger<InMemoryEventBus>.Instance);
+            using var subscription = bus.SubscribeOnUi<StreamWentOffline>(_ => received++);
 
-        await bus.PublishAsync(new StreamWentOffline(StreamingPlatform.Twitch, "channel"));
+            await bus.PublishAsync(new StreamWentOffline(StreamingPlatform.Twitch, "channel"));
+        });
 
         Assert.That(received, Is.EqualTo(1));
     }

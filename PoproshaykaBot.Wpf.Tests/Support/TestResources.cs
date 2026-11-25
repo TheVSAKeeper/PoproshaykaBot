@@ -1,4 +1,5 @@
 ﻿using KeepShell.Testing;
+using PoproshaykaBot.Wpf.Bootstrap;
 using System.Windows;
 using System.IO;
 using System.Windows.Media;
@@ -8,20 +9,41 @@ namespace PoproshaykaBot.Wpf.Tests.Support;
 
 internal static class TestResources
 {
+    public static Application Ensure()
+    {
+        return EnsureCore(AppResources.All);
+    }
+
     public static void Ensure(IEnumerable<string> sources)
+    {
+        var uris = sources
+            .Select(static source => new Uri(source, UriKind.RelativeOrAbsolute))
+            .ToArray();
+
+        _ = EnsureCore(uris);
+    }
+
+    private static Application EnsureCore(Uri[] uris)
     {
         PackScheme.Ensure();
 
-        var application = Application.Current ?? new Application { ShutdownMode = ShutdownMode.OnExplicitShutdown };
-        var merged = application.Resources.MergedDictionaries;
-
-        foreach (var source in sources)
+        var existing = Application.Current;
+        if (existing is null || existing.Dispatcher.CheckAccess())
         {
-            if (merged.All(dictionary => dictionary.Source?.OriginalString != source))
+            return TestApplication.Ensure(uris);
+        }
+
+        var merged = existing.Resources.MergedDictionaries;
+        foreach (var source in uris)
+        {
+            if (merged.All(dictionary => dictionary.Source != source))
             {
-                merged.Add(new ResourceDictionary { Source = new(source) });
+                merged.Add(new ResourceDictionary { Source = source });
             }
         }
+
+        ScreenGuard.Install();
+        return existing;
     }
 
     public static void CaptureAccountLayout(FrameworkElement host, string name, int width, int height)

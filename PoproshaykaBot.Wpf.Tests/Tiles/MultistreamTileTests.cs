@@ -1114,12 +1114,7 @@ public sealed class MultistreamTileTests
 
     private static void EnsureWpfResources()
     {
-        if (Application.Current is null)
-        {
-            _ = new Application { ShutdownMode = ShutdownMode.OnExplicitShutdown };
-        }
-
-        string[] dictionaries =
+        TestResources.Ensure(
         [
             "pack://application:,,,/KeepShell;component/Resources/Themes/Light.xaml",
             "pack://application:,,,/KeepShell;component/Resources/Themes/Tokens.xaml",
@@ -1128,15 +1123,7 @@ public sealed class MultistreamTileTests
             "pack://application:,,,/PoproshaykaBot.Wpf;component/Infrastructure/Converters/AppConverters.xaml",
             "pack://application:,,,/PoproshaykaBot.Wpf;component/Resources/TableStyles.xaml",
             "pack://application:,,,/PoproshaykaBot.Wpf;component/Resources/PlatformIcons.xaml",
-        ];
-        var merged = Application.Current!.Resources.MergedDictionaries;
-        foreach (var uri in dictionaries)
-        {
-            if (!merged.Any(d => string.Equals(d.Source?.OriginalString, uri, StringComparison.OrdinalIgnoreCase)))
-            {
-                merged.Add(new() { Source = new(uri) });
-            }
-        }
+        ]);
     }
 
     private static IEnumerable<T> Descendants<T>(DependencyObject root)
