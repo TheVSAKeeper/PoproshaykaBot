@@ -134,7 +134,7 @@ public partial class LegacyImportWindow : Window
         if (e.PropertyName == nameof(LegacyImportViewModel.IsCompleted) && _viewModel.IsCompleted)
         {
             ContentScroll.ScrollToTop();
-            ContinueButton.Focus();
+            _ = Dispatcher.BeginInvoke(() => (_viewModel.CanConfigure ? ConfigureButton : ContinueButton).Focus(), DispatcherPriority.Input);
         }
     }
 

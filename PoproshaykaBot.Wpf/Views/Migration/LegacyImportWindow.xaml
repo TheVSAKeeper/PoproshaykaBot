@@ -332,16 +332,23 @@
                 </WrapPanel>
                 <WrapPanel HorizontalAlignment="Right"
                            Visibility="{Binding IsCompleted, Converter={StaticResource BoolToVisibility}}">
-                    <Button Content="Настроить"
+                    <Button Content="Пропустить"
                             Style="{StaticResource Button.Secondary}"
-                            Command="{Binding ConfigureCommand}"
+                            Command="{Binding CloseCommand}"
                             Visibility="{Binding CanConfigure, Converter={StaticResource BoolToVisibility}}"
                             MinWidth="120"
                             Margin="0,0,8,0" />
+                    <Button x:Name="ConfigureButton"
+                            Content="Настроить"
+                            Style="{StaticResource Button.Primary}"
+                            Command="{Binding ConfigureCommand}"
+                            Visibility="{Binding CanConfigure, Converter={StaticResource BoolToVisibility}}"
+                            MinWidth="120" />
                     <Button x:Name="ContinueButton"
                             Content="Продолжить"
                             Style="{StaticResource Button.Primary}"
                             Command="{Binding CloseCommand}"
+                            Visibility="{Binding CanConfigure, Converter={StaticResource InverseBoolToVisibility}}"
                             MinWidth="120" />
                 </WrapPanel>
             </StackPanel>
