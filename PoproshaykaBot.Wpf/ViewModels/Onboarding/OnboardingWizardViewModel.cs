@@ -8,6 +8,7 @@ using PoproshaykaBot.Core.Platforms;
 using PoproshaykaBot.Core.Platforms.Auth;
 using PoproshaykaBot.Core.Server;
 using PoproshaykaBot.Core.Settings;
+using PoproshaykaBot.Core.Settings.Onboarding;
 using PoproshaykaBot.Core.Settings.Stores;
 using PoproshaykaBot.Core.Twitch.Auth;
 using PoproshaykaBot.Core.YouTube;
@@ -29,8 +30,7 @@ public sealed partial class OnboardingWizardViewModel : ObservableObject
     private readonly ILogger<OnboardingWizardViewModel> _logger;
     private readonly OnboardingContext _context;
     private readonly List<IOnboardingPageViewModel> _pages;
-    private readonly int _originalHttpServerPort;
-    private readonly string _originalChannel;
+    private readonly TwitchSettings _originalTwitch;
     private readonly TwitchAccountSettings _originalBotAccount;
     private readonly TwitchAccountSettings _originalBroadcasterAccount;
     private readonly YouTubeSettings _originalYouTubeSettings;
@@ -81,8 +81,7 @@ public sealed partial class OnboardingWizardViewModel : ObservableObject
 
         _pages = [.. pages];
 
-        _originalHttpServerPort = settingsManager.Current.Twitch.HttpServerPort;
-        _originalChannel = settingsManager.Current.Twitch.Channel;
+        _originalTwitch = DeepClone(settingsManager.Current.Twitch);
         _originalBotAccount = DeepClone(accountsStore.LoadBot());
         _originalBroadcasterAccount = DeepClone(accountsStore.LoadBroadcaster());
         _originalYouTubeSettings = youtubeSettingsStore is not null ? DeepClone(youtubeSettingsStore.Load()) : new();
@@ -119,6 +118,24 @@ public sealed partial class OnboardingWizardViewModel : ObservableObject
 
     public string NextButtonText => IsLastPage ? "Готово" : "Далее →";
 
+    internal void StartAt(OnboardingStep step)
+    {
+        if (step == OnboardingStep.None)
+        {
+            return;
+        }
+
+        _context.AutoDetectChannel = string.IsNullOrWhiteSpace(_context.Settings.Twitch.Channel);
+        var index = _pages.FindIndex(page => step switch
+        {
+            OnboardingStep.Credentials => page is CredentialsPageViewModel,
+            OnboardingStep.BotAuthorization => page is BotAuthorizationPageViewModel,
+            OnboardingStep.YouTube => page is YouTubeOnboardingPageViewModel,
+            _ => false,
+        });
+        NavigateTo(index);
+    }
+
     public async Task<bool> RequestCloseAsync()
     {
         if (_completed || _rollbackPerformed)
@@ -129,10 +146,14 @@ public sealed partial class OnboardingWizardViewModel : ObservableObject
 
         _rollbackPerformed = true;
 
-        await StopBotIfRunningAsync();
-        RollbackChannel();
+        if (_context.TwitchSettingsWritten)
+        {
+            await StopBotIfRunningAsync();
+        }
+
         RollbackYouTubeSettings();
         await RollbackHttpServerPortAsync();
+        RollbackTwitchSettings();
         await RollbackAccountsAsync();
         await RollbackYouTubeAccountsAsync();
 
@@ -379,23 +400,44 @@ public sealed partial class OnboardingWizardViewModel : ObservableObject
         }
     }
 
-    private void RollbackChannel()
+    private void RollbackTwitchSettings()
     {
-        var liveChannel = _settingsManager.Current.Twitch.Channel;
-        if (string.Equals(liveChannel, _originalChannel, StringComparison.Ordinal))
+        if (!_context.TwitchSettingsWritten)
         {
+            var channel = _originalTwitch.Channel;
+            if (!string.Equals(_settingsManager.Current.Twitch.Channel, channel, StringComparison.Ordinal))
+            {
+                _settingsManager.UpdateCurrent(settings => settings.Twitch.Channel = channel);
+                _logger.OnboardingChannelRolledBack(channel);
+            }
+
             return;
         }
 
-        _settingsManager.UpdateCurrent(settings => settings.Twitch.Channel = _originalChannel);
-        _logger.OnboardingChannelRolledBack(_originalChannel);
+        try
+        {
+            _settingsManager.Mutate(settings =>
+            {
+                settings.Twitch.ClientId = _originalTwitch.ClientId;
+                settings.Twitch.ClientSecret = _originalTwitch.ClientSecret;
+                settings.Twitch.Channel = _originalTwitch.Channel;
+                settings.Twitch.RedirectUri = _originalTwitch.RedirectUri;
+                settings.Twitch.HttpServerPort = _originalTwitch.HttpServerPort;
+                settings.Twitch.ChatDisplayAccount = _originalTwitch.ChatDisplayAccount;
+            });
+        }
+        catch (Exception exception)
+        {
+            _logger.OnboardingSettingsSaveFailed(exception);
+        }
     }
 
     private async Task RollbackHttpServerPortAsync()
     {
         var currentPort = _settingsManager.Current.Twitch.HttpServerPort;
+        var originalPort = _originalTwitch.HttpServerPort;
 
-        if (currentPort == _originalHttpServerPort)
+        if (currentPort == originalPort)
         {
             return;
         }
@@ -407,15 +449,15 @@ public sealed partial class OnboardingWizardViewModel : ObservableObject
                 await _kestrelHttpServer.StopAsync();
             }
 
-            _settingsManager.UpdateCurrent(settings => settings.Twitch.HttpServerPort = _originalHttpServerPort);
+            _settingsManager.UpdateCurrent(settings => settings.Twitch.HttpServerPort = originalPort);
 
             await _kestrelHttpServer.StartAsync();
 
-            _logger.OnboardingHttpServerRolledBack(_originalHttpServerPort);
+            _logger.OnboardingHttpServerRolledBack(originalPort);
         }
         catch (Exception exception)
         {
-            _logger.OnboardingHttpServerRollbackFailed(exception, _originalHttpServerPort);
+            _logger.OnboardingHttpServerRollbackFailed(exception, originalPort);
         }
     }
 }

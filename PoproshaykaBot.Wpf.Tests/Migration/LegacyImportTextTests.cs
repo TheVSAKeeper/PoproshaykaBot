@@ -17,8 +17,8 @@ public class LegacyImportTextTests
                 "Ничего не переехало, поэтому «перенесено» было бы неправдой.");
             Assert.That(LegacyImportText.DescribeUnmigrated(result), Does.Contain("данные входа в Twitch"),
                 "Файл называется по назначению, а не путём.");
-            Assert.That(LegacyImportText.DescribeUnmigrated(result), Does.Contain("Ничего не потеряно"),
-                "Человеку нужно знать, что делать ничего не надо.");
+            Assert.That(LegacyImportText.DescribeUnmigrated(result),
+                Does.Contain("Исходные и рабочие файлы сохранены").And.Not.Contain("свеж"));
         });
     }
 
@@ -111,8 +111,8 @@ public class LegacyImportTextTests
             CopiedFiles = copied ?? [],
             SkippedFiles = [],
             Failures = failures ?? [],
-            RequiresReauthorization = false,
             IsInPlaceMigration = inPlace,
+            MigratedSettingsFiles = inPlace ? ["settings.json"] : [],
             UnmigratedLegacyFiles = unmigrated ?? [],
         };
     }

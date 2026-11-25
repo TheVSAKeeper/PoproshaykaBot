@@ -2,12 +2,14 @@
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.Extensions.Logging;
 using PoproshaykaBot.Core.Chat.History;
+using PoproshaykaBot.Core.Infrastructure;
 using PoproshaykaBot.Core.Settings.Migrations.LegacyImport;
 using PoproshaykaBot.Core.Settings.Stores;
 using PoproshaykaBot.Core.Statistics;
+using PoproshaykaBot.Wpf.Bootstrap;
 using PoproshaykaBot.Wpf.Infrastructure;
 using System.Collections.ObjectModel;
-using System.ComponentModel;
+using System.Diagnostics;
 using System.IO;
 
 namespace PoproshaykaBot.Wpf.ViewModels.Migration;
@@ -22,10 +24,14 @@ public sealed partial class LegacyImportViewModel : ObservableObject
     private readonly UiSettingsWriteGuard? _uiSettingsGuard;
     private readonly ChatHistoryCacheStore? _chatHistoryCache;
     private readonly Func<string, bool, ILogger?, LegacyImportResult> _import;
+    private readonly Func<string, LegacyDataSummary?> _inspect;
+    private HashSet<string> _targetFiles = new(StringComparer.OrdinalIgnoreCase);
 
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(ImportCommand))]
     [NotifyPropertyChangedFor(nameof(AuthorizationNotice))]
+    [NotifyPropertyChangedFor(nameof(CanOverwriteExisting))]
+    [NotifyPropertyChangedFor(nameof(ConflictNotice))]
     private LegacyImportSourceViewModel? _selectedSource;
 
     [ObservableProperty]
@@ -35,7 +41,21 @@ public sealed partial class LegacyImportViewModel : ObservableObject
     private bool _neverAskAgain;
 
     [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(ImportCommand))]
+    [NotifyCanExecuteChangedFor(nameof(PickFolderCommand))]
     private bool _isCompleted;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsBusy))]
+    [NotifyPropertyChangedFor(nameof(CanSelectSource))]
+    [NotifyCanExecuteChangedFor(nameof(ImportCommand))]
+    [NotifyCanExecuteChangedFor(nameof(PickFolderCommand))]
+    [NotifyCanExecuteChangedFor(nameof(CloseCommand))]
+    private string? _busyMessage;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(Explanation))]
+    private bool _hasSources;
 
     [ObservableProperty]
     private string? _pickerNotice;
@@ -54,7 +74,7 @@ public sealed partial class LegacyImportViewModel : ObservableObject
 
     public LegacyImportViewModel(
         IReadOnlyList<LegacyDataSummary> candidates,
-        bool hasOwnData,
+        LegacyDataSummary? target,
         bool isSettingsEntry,
         IFilePicker filePicker,
         ILogger logger,
@@ -62,7 +82,8 @@ public sealed partial class LegacyImportViewModel : ObservableObject
         SettingsWriteGate? settingsWriteGate = null,
         UiSettingsWriteGuard? uiSettingsGuard = null,
         ChatHistoryCacheStore? chatHistoryCache = null,
-        Func<string, bool, ILogger?, LegacyImportResult>? import = null)
+        Func<string, bool, ILogger?, LegacyImportResult>? import = null,
+        Func<string, LegacyDataSummary?>? inspect = null)
     {
         _filePicker = filePicker;
         _logger = logger;
@@ -72,19 +93,9 @@ public sealed partial class LegacyImportViewModel : ObservableObject
         _uiSettingsGuard = uiSettingsGuard;
         _chatHistoryCache = chatHistoryCache;
         _import = import ?? LegacyDataImporter.Import;
-        CanOverwriteExisting = hasOwnData;
+        _inspect = inspect ?? (path => LegacyDataScanner.Inspect(path, _logger));
         CanDismiss = !isSettingsEntry;
-
-        foreach (var candidate in candidates)
-        {
-            Add(candidate);
-        }
-
-        Explanation = candidates.Count > 0
-            ? "Похоже, бот уже работал на этом компьютере. Настройки и накопленную статистику можно перенести сюда."
-            : "Если бот уже работал на этом компьютере, укажите папку с его данными – настройки и статистика переедут сюда. Либо начните с чистого листа.";
-
-        SkipButtonText = candidates.Count > 0 ? "Пропустить" : "Начать с чистого листа";
+        SetSources(candidates, target);
     }
 
     public event EventHandler? CloseRequested;
@@ -95,36 +106,96 @@ public sealed partial class LegacyImportViewModel : ObservableObject
 
     public ObservableCollection<string> ResultFailures { get; } = [];
 
-    public bool CanOverwriteExisting { get; }
+    public bool IsBusy => BusyMessage is not null;
+
+    public bool CanSelectSource => !IsBusy;
+
+    public bool CanOverwriteExisting => SelectedSource is { Summary.Kind: not LegacyDataSourceKind.CurrentBaseDirectory } source
+        && source.Summary.Files.Any(file =>
+            _targetFiles.Contains(Normalize(Path.Combine(AppPaths.BaseDirectory, file.RelativeTargetPath))));
+
+    public string? ConflictNotice => SelectedSource?.Summary.Kind == LegacyDataSourceKind.CurrentBaseDirectory
+        ? "При переносе на месте исправные рабочие файлы сохраняются. Одноимённые старые файлы останутся в исходной папке."
+        : CanOverwriteExisting
+            ? "По умолчанию существующие файлы сохраняются. При замене рядом останутся резервные копии без секретов."
+            : null;
 
     public bool CanDismiss { get; }
 
-    public string Explanation { get; }
+    public string Explanation => HasSources
+        ? "Выберите папку, чтобы перенести настройки и накопленную статистику."
+        : "Укажите папку с данными предыдущей версии бота.";
 
-    public string SkipButtonText { get; }
+    public string SkipButtonText => _isSettingsEntry ? "Закрыть" : "Пропустить";
 
     public LegacyImportResult? Result { get; private set; }
 
-    public string? AuthorizationNotice => SelectedSource?.Summary.HasOAuthTokens == true
-        ? "Доступ к Twitch придётся выдать заново: набор разрешений изменился, и прежний вход больше не подойдёт."
-        : null;
+    public string? AuthorizationNotice => SelectedSource?.Summary switch
+    {
+        { HasFlatTwitchTokens: true } => "Старые токены из общего файла настроек не переносятся. После переноса проверим, нужно ли снова войти в Twitch.",
+        { HasOAuthTokens: true } => "После переноса проверим, подходят ли сохранённые разрешения Twitch.",
+        _ => null,
+    };
 
-    private bool HasSelection => SelectedSource is not null;
+    private bool CanPickFolder() => !IsBusy && !IsCompleted;
 
-    [RelayCommand(CanExecute = nameof(HasSelection))]
+    private bool CanImport() => CanPickFolder() && SelectedSource is not null;
+
+    private bool CanClose() => !IsBusy;
+
+    partial void OnSelectedSourceChanged(LegacyImportSourceViewModel? value)
+    {
+        OverwriteExisting = false;
+    }
+
+    internal static Task<(IReadOnlyList<LegacyDataSummary> Candidates, LegacyDataSummary? Target)> ScanAsync(ILogger logger)
+    {
+        return Task.Run(() =>
+        {
+            var start = Stopwatch.GetTimestamp();
+            var candidates = LegacyDataScanner.Scan(logger);
+            var target = candidates.FirstOrDefault(candidate => candidate.Kind == LegacyDataSourceKind.CurrentBaseDirectory)
+                ?? LegacyDataScanner.Inspect(AppPaths.BaseDirectory, logger);
+            if (logger.IsEnabled(LogLevel.Information))
+            {
+                logger.LegacyImportSearchCompleted(Stopwatch.GetElapsedTime(start).TotalMilliseconds);
+            }
+            return (candidates, target);
+        });
+    }
+
+    internal async Task LoadSourcesAsync()
+    {
+        BusyMessage = "Идёт поиск данных предыдущей версии…";
+        try
+        {
+            var (candidates, target) = await ScanAsync(_logger);
+            SetSources(candidates, target);
+            _logger.LegacyImportOpenedFromSettings(candidates.Count);
+        }
+        catch (Exception exception)
+        {
+            _logger.LegacyImportSourceSearchFailed(exception);
+            PickerNotice = "Не удалось выполнить поиск. Попробуйте выбрать папку вручную.";
+        }
+        finally
+        {
+            BusyMessage = null;
+        }
+    }
+
+    [RelayCommand(CanExecute = nameof(CanImport))]
     private async Task ImportAsync()
     {
-        if (SelectedSource is not { } source)
+        if (!CanImport() || SelectedSource is not { } source)
         {
             return;
         }
 
         var path = source.Path;
-        var overwrite = OverwriteExisting;
+        var overwrite = CanOverwriteExisting && OverwriteExisting;
+        BusyMessage = "Идёт перенос данных…";
 
-        // TODO: перенос идёт на UI-потоке – окно не отвечает, пока копируются файлы, и прогресса не видно –
-        // уводить в фоновую задачу с индикатором, когда появится источник, у которого статистика зрителей
-        // и история стримов копируются достаточно долго, чтобы застывшее окно бросалось в глаза
         LegacyImportResult Import()
         {
             return _import(path, overwrite, _logger);
@@ -150,17 +221,24 @@ public sealed partial class LegacyImportViewModel : ObservableObject
 
         try
         {
-            result = _settingsWriteGate is null
-                ? await WithCacheScopeAsync().ConfigureAwait(true)
-                : await _settingsWriteGate
-                    .RunExternalWriteAsync(WithCacheScopeAsync, static imported => imported.RewrittenSettingsFiles)
-                    .ConfigureAwait(true);
+            result = await Task.Run(() => _settingsWriteGate is null
+                ? WithCacheScopeAsync()
+                : _settingsWriteGate.RunExternalWriteAsync(WithCacheScopeAsync, static imported => imported.RewrittenSettingsFiles));
 
             uiPreferencesKept = !result.CopiedUiPreferences;
+        }
+        catch (Exception exception)
+        {
+            _logger.LegacyImportInterrupted(exception);
+            ResultHeadline = "Перенос прервался";
+            ResultRestartNotice = "Часть файлов могла перенестись. Перезапустите приложение, чтобы оно перечитало рабочую папку.";
+            IsCompleted = true;
+            return;
         }
         finally
         {
             _uiSettingsGuard?.Resume(rewritten: !uiPreferencesKept);
+            BusyMessage = null;
         }
 
         Result = result;
@@ -168,9 +246,7 @@ public sealed partial class LegacyImportViewModel : ObservableObject
         Fill(ResultCounts, LegacyImportText.BuildCounts(result));
         Fill(ResultFailures, LegacyImportText.BuildFailures(result));
 
-        ResultAuthorizationNotice = result.RequiresReauthorization
-            ? "После запуска нужно будет заново разрешить доступ к Twitch – и для бота, и для стримера."
-            : null;
+        ResultAuthorizationNotice = LegacyImportText.BuildAuthorizationNotice(result, _isSettingsEntry);
 
         ResultUnmigratedNotice = LegacyImportText.DescribeUnmigrated(result);
 
@@ -179,8 +255,8 @@ public sealed partial class LegacyImportViewModel : ObservableObject
         IsCompleted = true;
     }
 
-    [RelayCommand]
-    private void PickFolder()
+    [RelayCommand(CanExecute = nameof(CanPickFolder))]
+    private async Task PickFolderAsync()
     {
         var path = _filePicker.PickFolder("Папка с данными предыдущей версии");
 
@@ -194,21 +270,37 @@ public sealed partial class LegacyImportViewModel : ObservableObject
         if (known is not null)
         {
             PickerNotice = null;
-            known.IsSelected = true;
+            SelectedSource = known;
             return;
         }
 
-        if (LegacyDataScanner.Inspect(path, _logger) is not { } summary)
+        BusyMessage = "Проверяем выбранную папку…";
+        try
         {
-            PickerNotice = "В этой папке нет данных бота. Обычно они лежат в папке PoproshaykaBot.";
-            return;
-        }
+            if (await Task.Run(() => _inspect(path)) is not { } summary)
+            {
+                PickerNotice = "В этой папке нет данных бота. Обычно они лежат в папке PoproshaykaBot.";
+                return;
+            }
 
-        PickerNotice = null;
-        Add(summary).IsSelected = true;
+            PickerNotice = null;
+            var source = new LegacyImportSourceViewModel(summary);
+            Sources.Add(source);
+            HasSources = true;
+            SelectedSource = source;
+        }
+        catch (Exception exception)
+        {
+            _logger.LegacyImportSourceSearchFailed(exception);
+            PickerNotice = "Не удалось проверить папку. Выберите другую папку или попробуйте снова.";
+        }
+        finally
+        {
+            BusyMessage = null;
+        }
     }
 
-    [RelayCommand]
+    [RelayCommand(CanExecute = nameof(CanClose))]
     private void Close()
     {
         CloseRequested?.Invoke(this, EventArgs.Empty);
@@ -241,20 +333,15 @@ public sealed partial class LegacyImportViewModel : ObservableObject
         }
     }
 
-    private LegacyImportSourceViewModel Add(LegacyDataSummary summary)
+    private void SetSources(IReadOnlyList<LegacyDataSummary> candidates, LegacyDataSummary? target)
     {
-        var source = new LegacyImportSourceViewModel(summary);
-        source.PropertyChanged += OnSourcePropertyChanged;
-        Sources.Add(source);
+        _targetFiles = new(target?.Files.Select(file => Normalize(file.SourcePath)) ?? [], StringComparer.OrdinalIgnoreCase);
 
-        return source;
-    }
-
-    private void OnSourcePropertyChanged(object? sender, PropertyChangedEventArgs e)
-    {
-        if (e.PropertyName == nameof(LegacyImportSourceViewModel.IsSelected))
+        foreach (var candidate in candidates)
         {
-            SelectedSource = Sources.FirstOrDefault(source => source.IsSelected);
+            Sources.Add(new(candidate));
         }
+
+        HasSources = Sources.Count > 0;
     }
 }

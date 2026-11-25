@@ -316,6 +316,15 @@ internal static partial class AppLog
     [LoggerMessage(EventId = 1208, Level = LogLevel.Warning, Message = "Перенос данных предыдущей версии недоступен в автоматическом режиме")]
     public static partial void LegacyImportSuppressedHeadless(this ILogger logger);
 
+    [LoggerMessage(EventId = 1330, Level = LogLevel.Warning, Message = "Поиск данных предыдущей версии не завершился")]
+    public static partial void LegacyImportSourceSearchFailed(this ILogger logger, Exception exception);
+
+    [LoggerMessage(EventId = 1331, Level = LogLevel.Error, Message = "Перенос данных предыдущей версии прервался")]
+    public static partial void LegacyImportInterrupted(this ILogger logger, Exception exception);
+
+    [LoggerMessage(EventId = 1332, Level = LogLevel.Information, Message = "Поиск данных предыдущей версии занял {ElapsedMs:F0} мс")]
+    public static partial void LegacyImportSearchCompleted(this ILogger logger, double elapsedMs);
+
     [LoggerMessage(EventId = 1209, Level = LogLevel.Information, Message = "Пользователь подставил недавний канал отладки {Channel}")]
     public static partial void RecentDebugChannelChosen(this ILogger logger, string channel);
 

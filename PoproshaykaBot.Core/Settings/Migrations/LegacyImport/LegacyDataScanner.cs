@@ -123,6 +123,7 @@ public static class LegacyDataScanner
             UserStatisticsCount = userStatisticsCount,
             TotalMessagesProcessed = LegacyDataReader.ReadUInt64(botStatistics, "totalMessagesProcessed"),
             HasOAuthTokens = LegacyDataReader.HasTokens(accountsRoot) || LegacyDataReader.HasTokens(twitch),
+            HasFlatTwitchTokens = LegacyDataReader.HasFlatTwitchTokens(twitch),
             Files = files,
         };
     }

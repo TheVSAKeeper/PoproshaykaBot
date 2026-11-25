@@ -78,7 +78,7 @@ public sealed partial class OnboardingBannerViewModel : ObservableObject, IDispo
     [RelayCommand]
     private void OpenWizard()
     {
-        _wizardLauncher.Show();
+        _wizardLauncher.Show(_checklist.RequiresWizard ? OnboardingStep.None : _checklist.FirstMissingStep);
     }
 
     private void OnWizardClosed(object? sender, EventArgs e)

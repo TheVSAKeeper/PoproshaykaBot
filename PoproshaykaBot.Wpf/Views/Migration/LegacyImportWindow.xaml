@@ -9,7 +9,7 @@
         mc:Ignorable="d"
         d:DataContext="{d:DesignInstance vm:LegacyImportViewModel}"
         Title="Перенос данных предыдущей версии"
-        Width="560"
+        Width="600"
         SizeToContent="Height"
         WindowStartupLocation="CenterScreen"
         WindowStyle="None"
@@ -36,16 +36,20 @@
 
     <Window.Resources>
         <Style x:Key="Import.SourceCard"
-               TargetType="RadioButton">
+               TargetType="ListBoxItem">
             <Setter Property="Margin"
                     Value="0,0,0,8" />
             <Setter Property="HorizontalContentAlignment"
                     Value="Stretch" />
+            <Setter Property="Foreground"
+                    Value="{DynamicResource Fg.Primary}" />
+            <Setter Property="AutomationProperties.Name"
+                    Value="{Binding Path}" />
             <Setter Property="Cursor"
                     Value="Hand" />
             <Setter Property="Template">
                 <Setter.Value>
-                    <ControlTemplate TargetType="RadioButton">
+                    <ControlTemplate TargetType="ListBoxItem">
                         <Border x:Name="Card"
                                 Background="{DynamicResource Bg.Surface}"
                                 BorderBrush="{DynamicResource Border.Default}"
@@ -77,6 +81,7 @@
 
                                 <StackPanel Grid.Column="1">
                                     <TextBlock Text="{Binding Title}"
+                                               TextWrapping="Wrap"
                                                FontWeight="SemiBold" />
                                     <TextBlock Text="{Binding Path}"
                                                Foreground="{DynamicResource Fg.Secondary}"
@@ -84,6 +89,7 @@
                                                TextWrapping="Wrap"
                                                Margin="0,3,0,0" />
                                     <TextBlock Text="{Binding Modified}"
+                                               TextWrapping="Wrap"
                                                Foreground="{DynamicResource Fg.Muted}"
                                                FontSize="{DynamicResource Font.Size.S}"
                                                Margin="0,3,0,0" />
@@ -106,13 +112,7 @@
                                         Property="BorderBrush"
                                         Value="{DynamicResource Border.Strong}" />
                             </Trigger>
-                            <Trigger Property="IsKeyboardFocused"
-                                     Value="True">
-                                <Setter TargetName="Card"
-                                        Property="BorderBrush"
-                                        Value="{DynamicResource Accent.Focus}" />
-                            </Trigger>
-                            <Trigger Property="IsChecked"
+                            <Trigger Property="IsSelected"
                                      Value="True">
                                 <Setter TargetName="Card"
                                         Property="BorderBrush"
@@ -127,6 +127,12 @@
                                         Property="Visibility"
                                         Value="Visible" />
                             </Trigger>
+                            <Trigger Property="IsKeyboardFocused"
+                                     Value="True">
+                                <Setter TargetName="Card"
+                                        Property="BorderBrush"
+                                        Value="{DynamicResource Accent.Focus}" />
+                            </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
                 </Setter.Value>
@@ -137,6 +143,8 @@
     <Grid>
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
@@ -152,7 +160,7 @@
                 </Grid.ColumnDefinitions>
 
                 <TextBlock Grid.Column="0"
-                           Text="Перенос данных предыдущей версии"
+                           Text="Перенос данных"
                            Margin="14,0"
                            VerticalAlignment="Center"
                            FontWeight="SemiBold" />
@@ -161,7 +169,7 @@
                             Orientation="Horizontal"
                             shell:WindowChrome.IsHitTestVisibleInChrome="True">
                     <Button Style="{StaticResource Chrome.Button.Close}"
-                            keepshell:ChromeAction.Action="Close"
+                            Command="{Binding CloseCommand}"
                             ToolTip="Закрыть"
                             AutomationProperties.Name="Закрыть">
                         <Path Style="{StaticResource Chrome.Glyph.Close}" />
@@ -170,133 +178,166 @@
             </Grid>
         </Border>
 
-        <StackPanel Grid.Row="1"
-                    Margin="20,16,20,16"
-                    Visibility="{Binding IsCompleted, Converter={StaticResource InverseBoolToVisibility}}">
+        <Grid Grid.Row="1"
+              Margin="20,14,20,4">
             <TextBlock Text="Перенести данные предыдущей версии?"
-                       Style="{StaticResource TextBlock.Heading}" />
-
-            <TextBlock Text="{Binding Explanation}"
-                       Foreground="{DynamicResource Fg.Secondary}"
-                       TextWrapping="Wrap"
-                       Margin="0,6,0,14" />
-
-            <ItemsControl ItemsSource="{Binding Sources}">
-                <ItemsControl.ItemTemplate>
-                    <DataTemplate DataType="{x:Type vm:LegacyImportSourceViewModel}">
-                        <RadioButton Style="{StaticResource Import.SourceCard}"
-                                     GroupName="LegacyImportSource"
-                                     AutomationProperties.Name="{Binding Path}"
-                                     IsChecked="{Binding IsSelected, Mode=TwoWay}" />
-                    </DataTemplate>
-                </ItemsControl.ItemTemplate>
-            </ItemsControl>
-
-            <Button Content="Выбрать другую папку…"
-                    Style="{StaticResource Button.Secondary}"
-                    Command="{Binding PickFolderCommand}"
-                    HorizontalAlignment="Left"
-                    Margin="0,4,0,0" />
-
-            <TextBlock Text="{Binding PickerNotice}"
-                       Visibility="{Binding PickerNotice, Converter={StaticResource NullToVisibility}}"
-                       Foreground="{DynamicResource State.WarningText}"
-                       TextWrapping="Wrap"
-                       Margin="0,8,0,0" />
-
-            <TextBlock Text="{Binding AuthorizationNotice}"
-                       Visibility="{Binding AuthorizationNotice, Converter={StaticResource NullToVisibility}}"
-                       Foreground="{DynamicResource Fg.Secondary}"
-                       TextWrapping="Wrap"
-                       Margin="0,12,0,0" />
-
-            <CheckBox Content="Заменить файлы, которые уже есть"
-                      IsChecked="{Binding OverwriteExisting, Mode=TwoWay}"
-                      Visibility="{Binding CanOverwriteExisting, Converter={StaticResource BoolToVisibility}}"
-                      Margin="0,16,0,0" />
-
-            <TextBlock Text="Заменённые файлы останутся рядом резервными копиями."
-                       Visibility="{Binding CanOverwriteExisting, Converter={StaticResource BoolToVisibility}}"
-                       Style="{StaticResource Form.CheckHint}" />
-
-            <CheckBox Content="Больше не предлагать"
-                      IsChecked="{Binding NeverAskAgain, Mode=TwoWay}"
-                      Visibility="{Binding CanDismiss, Converter={StaticResource BoolToVisibility}}"
-                      Margin="0,12,0,0" />
-
-            <StackPanel Orientation="Horizontal"
-                        HorizontalAlignment="Right"
-                        Margin="0,20,0,0">
-                <Button Content="Перенести"
-                        Style="{StaticResource Button.Primary}"
-                        Command="{Binding ImportCommand}"
-                        MinWidth="120"
-                        Margin="0,0,8,0" />
-                <Button Content="{Binding SkipButtonText}"
-                        Style="{StaticResource Button.Secondary}"
-                        Command="{Binding CloseCommand}"
-                        MinWidth="120" />
-            </StackPanel>
-        </StackPanel>
-
-        <StackPanel Grid.Row="1"
-                    Margin="20,16,20,16"
-                    Visibility="{Binding IsCompleted, Converter={StaticResource BoolToVisibility}}">
-            <TextBlock Text="{Binding ResultHeadline}"
+                       Visibility="{Binding IsCompleted, Converter={StaticResource InverseBoolToVisibility}}"
                        Style="{StaticResource TextBlock.Heading}"
                        TextWrapping="Wrap" />
+            <TextBlock Text="{Binding ResultHeadline}"
+                       Visibility="{Binding IsCompleted, Converter={StaticResource BoolToVisibility}}"
+                       Style="{StaticResource TextBlock.Heading}"
+                       TextWrapping="Wrap" />
+        </Grid>
 
-            <ItemsControl ItemsSource="{Binding ResultCounts}"
-                          Margin="0,12,0,0">
-                <ItemsControl.ItemTemplate>
-                    <DataTemplate>
-                        <TextBlock Text="{Binding}"
+        <ScrollViewer Grid.Row="2"
+                      x:Name="ContentScroll"
+                      VerticalScrollBarVisibility="Auto"
+                      HorizontalScrollBarVisibility="Disabled">
+            <Grid Margin="20,2,20,8">
+                <StackPanel Visibility="{Binding IsCompleted, Converter={StaticResource InverseBoolToVisibility}}">
+                        <TextBlock Text="{Binding Explanation}"
+                                   Foreground="{DynamicResource Fg.Secondary}"
                                    TextWrapping="Wrap"
-                                   Margin="0,0,0,4" />
-                    </DataTemplate>
-                </ItemsControl.ItemTemplate>
-            </ItemsControl>
+                                   Margin="0,6,0,14" />
 
-            <ScrollViewer MaxHeight="160"
-                          AutomationProperties.Name="Ошибки переноса данных"
-                          VerticalScrollBarVisibility="Auto"
-                          Margin="0,8,0,0">
-                <ItemsControl ItemsSource="{Binding ResultFailures}">
-                    <ItemsControl.ItemTemplate>
-                        <DataTemplate>
-                            <TextBlock Text="{Binding}"
-                                       Foreground="{DynamicResource State.ErrorText}"
-                                       TextWrapping="Wrap"
-                                       Margin="0,0,0,4" />
-                        </DataTemplate>
-                    </ItemsControl.ItemTemplate>
-                </ItemsControl>
-            </ScrollViewer>
+                        <Button Content="Выбрать папку…"
+                                Style="{StaticResource Button.Secondary}"
+                                Command="{Binding PickFolderCommand}"
+                                HorizontalAlignment="Left"
+                                Margin="0,4,0,0" />
 
-            <TextBlock Text="{Binding ResultUnmigratedNotice}"
-                       Visibility="{Binding ResultUnmigratedNotice, Converter={StaticResource NullToVisibility}}"
-                       Foreground="{DynamicResource Fg.Secondary}"
-                       TextWrapping="Wrap"
-                       Margin="0,12,0,0" />
+                        <TextBlock Text="{Binding PickerNotice}"
+                                   Visibility="{Binding PickerNotice, Converter={StaticResource NullToVisibility}}"
+                                   Foreground="{DynamicResource State.WarningText}"
+                                   TextWrapping="Wrap"
+                                   Margin="0,8,0,0" />
 
-            <TextBlock Text="{Binding ResultAuthorizationNotice}"
-                       Visibility="{Binding ResultAuthorizationNotice, Converter={StaticResource NullToVisibility}}"
-                       Foreground="{DynamicResource Fg.Secondary}"
-                       TextWrapping="Wrap"
-                       Margin="0,12,0,0" />
+                        <ListBox x:Name="SourceList"
+                                 ItemsSource="{Binding Sources}"
+                                 SelectedItem="{Binding SelectedSource, Mode=TwoWay}"
+                                 ItemContainerStyle="{StaticResource Import.SourceCard}"
+                                 Background="Transparent"
+                                 BorderThickness="0"
+                                 Padding="0"
+                                 Margin="0,12,0,0"
+                                 ScrollViewer.VerticalScrollBarVisibility="Disabled"
+                                 ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                                 AutomationProperties.Name="Папки с данными предыдущей версии"
+                                 IsEnabled="{Binding CanSelectSource}"
+                                 SelectionChanged="OnSourceSelectionChanged">
+                            <ListBox.Template>
+                                <ControlTemplate TargetType="ListBox">
+                                    <ItemsPresenter />
+                                </ControlTemplate>
+                            </ListBox.Template>
+                        </ListBox>
 
-            <TextBlock Text="{Binding ResultRestartNotice}"
-                       Visibility="{Binding ResultRestartNotice, Converter={StaticResource NullToVisibility}}"
-                       Foreground="{DynamicResource Fg.Secondary}"
-                       TextWrapping="Wrap"
-                       Margin="0,12,0,0" />
+                        <TextBlock Text="{Binding AuthorizationNotice}"
+                                   Visibility="{Binding AuthorizationNotice, Converter={StaticResource NullToVisibility}}"
+                                   Foreground="{DynamicResource Fg.Secondary}"
+                                   TextWrapping="Wrap"
+                                   Margin="0,12,0,0" />
 
-            <Button Content="Продолжить"
-                    Style="{StaticResource Button.Primary}"
-                    Command="{Binding CloseCommand}"
-                    HorizontalAlignment="Right"
-                    MinWidth="120"
-                    Margin="0,20,0,0" />
-        </StackPanel>
+                        <CheckBox Content="Заменить файлы, которые уже есть"
+                                  IsChecked="{Binding OverwriteExisting, Mode=TwoWay}"
+                                  Visibility="{Binding CanOverwriteExisting, Converter={StaticResource BoolToVisibility}}"
+                                  Margin="0,16,0,0" />
+
+                        <TextBlock Text="{Binding ConflictNotice}"
+                                   Visibility="{Binding ConflictNotice, Converter={StaticResource NullToVisibility}}"
+                                   Style="{StaticResource Form.CheckHint}"
+                                   TextWrapping="Wrap" />
+
+                        <CheckBox Content="Больше не предлагать"
+                                  IsChecked="{Binding NeverAskAgain, Mode=TwoWay}"
+                                  Visibility="{Binding CanDismiss, Converter={StaticResource BoolToVisibility}}"
+                                  Margin="0,12,0,0" />
+
+                </StackPanel>
+
+                <StackPanel Visibility="{Binding IsCompleted, Converter={StaticResource BoolToVisibility}}">
+                        <ItemsControl ItemsSource="{Binding ResultCounts}"
+                                      Margin="0,12,0,0">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <TextBlock Text="{Binding}"
+                                               TextWrapping="Wrap"
+                                               Margin="0,0,0,4" />
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+
+                        <ItemsControl ItemsSource="{Binding ResultFailures}"
+                                      AutomationProperties.Name="Ошибки переноса данных"
+                                      Margin="0,8,0,0">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <TextBlock Text="{Binding}"
+                                               Foreground="{DynamicResource State.ErrorText}"
+                                               TextWrapping="Wrap"
+                                               Margin="0,0,0,4" />
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+
+                        <TextBlock Text="{Binding ResultUnmigratedNotice}"
+                                   Visibility="{Binding ResultUnmigratedNotice, Converter={StaticResource NullToVisibility}}"
+                                   Foreground="{DynamicResource Fg.Secondary}"
+                                   TextWrapping="Wrap"
+                                   Margin="0,12,0,0" />
+
+                        <TextBlock Text="{Binding ResultAuthorizationNotice}"
+                                   Visibility="{Binding ResultAuthorizationNotice, Converter={StaticResource NullToVisibility}}"
+                                   Foreground="{DynamicResource Fg.Secondary}"
+                                   TextWrapping="Wrap"
+                                   Margin="0,12,0,0" />
+
+                        <TextBlock Text="{Binding ResultRestartNotice}"
+                                   Visibility="{Binding ResultRestartNotice, Converter={StaticResource NullToVisibility}}"
+                                   Foreground="{DynamicResource Fg.Secondary}"
+                                   TextWrapping="Wrap"
+                                   Margin="0,12,0,0" />
+
+                </StackPanel>
+            </Grid>
+        </ScrollViewer>
+
+        <Border Grid.Row="3"
+                Background="{DynamicResource Bg.Surface}"
+                BorderBrush="{DynamicResource Border.Subtle}"
+                BorderThickness="0,1,0,0"
+                Padding="20,12">
+            <StackPanel>
+                <StackPanel Visibility="{Binding BusyMessage, Converter={StaticResource NullToVisibility}}"
+                            Margin="0,0,0,8">
+                    <TextBlock Text="{Binding BusyMessage}"
+                               AutomationProperties.LiveSetting="Polite"
+                               TextWrapping="Wrap" />
+                    <ProgressBar IsIndeterminate="True"
+                                 Height="4"
+                                 Margin="0,6,0,0" />
+                </StackPanel>
+                <WrapPanel HorizontalAlignment="Right"
+                           Visibility="{Binding IsCompleted, Converter={StaticResource InverseBoolToVisibility}}">
+                    <Button Content="Перенести"
+                            Style="{StaticResource Button.Primary}"
+                            Command="{Binding ImportCommand}"
+                            MinWidth="120"
+                            Margin="0,0,8,0" />
+                    <Button Content="{Binding SkipButtonText}"
+                            Style="{StaticResource Button.Secondary}"
+                            Command="{Binding CloseCommand}"
+                            MinWidth="120" />
+                </WrapPanel>
+                <Button x:Name="ContinueButton"
+                        Content="Продолжить"
+                        Style="{StaticResource Button.Primary}"
+                        Command="{Binding CloseCommand}"
+                        Visibility="{Binding IsCompleted, Converter={StaticResource BoolToVisibility}}"
+                        HorizontalAlignment="Right"
+                        MinWidth="120" />
+            </StackPanel>
+        </Border>
     </Grid>
 </Window>

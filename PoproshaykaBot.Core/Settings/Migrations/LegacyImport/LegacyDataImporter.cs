@@ -2,6 +2,7 @@
 using PoproshaykaBot.Core.Infrastructure;
 using PoproshaykaBot.Core.Infrastructure.Persistence;
 using PoproshaykaBot.Core.Settings.Stores;
+using System.Diagnostics;
 
 namespace PoproshaykaBot.Core.Settings.Migrations.LegacyImport;
 
@@ -12,12 +13,28 @@ public static class LegacyDataImporter
     private static readonly string MonolithRelativePath =
         Path.Combine(LegacyDataCatalog.SettingsFolderName, LegacyDataCatalog.SettingsFileName);
 
+    private static readonly string[] AuthorizationFiles =
+        [LegacyDataCatalog.SettingsFileName, LegacyDataCatalog.AccountsFileName, LegacyDataCatalog.ChannelsFileName];
+
     public static LegacyImportResult Import(string sourcePath, bool overwrite = false, ILogger? logger = null)
     {
         return Import(sourcePath, AppPaths.BaseDirectory, overwrite, logger);
     }
 
     internal static LegacyImportResult Import(string sourcePath, string targetBaseDirectory, bool overwrite, ILogger? logger)
+    {
+        var start = Stopwatch.GetTimestamp();
+        try
+        {
+            return ImportCore(sourcePath, targetBaseDirectory, overwrite, logger);
+        }
+        finally
+        {
+            logger?.LogInformation("Запись данных предыдущей версии заняла {ElapsedMs:F0} мс", Stopwatch.GetElapsedTime(start).TotalMilliseconds);
+        }
+    }
+
+    private static LegacyImportResult ImportCore(string sourcePath, string targetBaseDirectory, bool overwrite, ILogger? logger)
     {
         ArgumentException.ThrowIfNullOrEmpty(sourcePath);
         ArgumentException.ThrowIfNullOrEmpty(targetBaseDirectory);
@@ -38,18 +55,19 @@ public static class LegacyDataImporter
         {
             logger?.LogError(exception, "Импорт данных: путь {Path} не удалось разобрать", sourcePath);
             failures.Add(new(string.Empty, $"Не удалось разобрать путь: {sourcePath}"));
-            return Build(sourcePath, targetBaseDirectory, copied, skipped, failures, false, false, [], []);
+            return Build(sourcePath, targetBaseDirectory, copied, skipped, failures, false, false, false, [], []);
         }
 
         if (!Directory.Exists(fullSource))
         {
             logger?.LogWarning("Импорт данных: папка-источник {Source} недоступна – переносить нечего", fullSource);
             failures.Add(new(string.Empty, $"Папка-источник недоступна: {fullSource}"));
-            return Build(fullSource, fullTarget, copied, skipped, failures, false, false, [], []);
+            return Build(fullSource, fullTarget, copied, skipped, failures, false, false, false, [], []);
         }
 
         var settingsDirectory = Path.Combine(fullTarget, LegacyDataCatalog.SettingsFolderName);
-        var hadTokens = LegacyDataReader.HasOAuthTokens(fullSource, logger);
+        var sourceAuthorization = LegacyDataReader.ReadTwitchAuthorization(fullSource, logger);
+        var targetAuthorizationBefore = LegacyDataReader.ReadTwitchAuthorization(fullTarget, logger);
         var inPlace = PathComparison.AreEqual(fullSource, fullTarget);
         var snapshot = inPlace || overwrite
             ? new Dictionary<string, byte[]>(StringComparer.OrdinalIgnoreCase)
@@ -57,7 +75,7 @@ public static class LegacyDataImporter
 
         if (inPlace)
         {
-            // TODO: при импорте на месте legacy-файл из корня не заменяет одноимённый в settings/ даже с overwrite – только попадает в UnmigratedLegacyFiles; менять, когда появятся жалобы на «импорт не перенёс старые настройки»
+            // Перенос на месте сохраняет действующие файлы настроек, конфликты входят в итог.
             logger?.LogInformation("Импорт данных: источник совпадает с рабочей папкой {Target} – копирование не требуется, выполняется только миграция раскладки",
                 fullTarget);
         }
@@ -68,7 +86,7 @@ public static class LegacyDataImporter
             ResetStaleUserCatalogAfterLegacyOverwrite(fullSource, fullTarget, overwrite, copied, failures, logger);
         }
 
-        var migratedSettingsFiles = new List<string>(LegacySettingsLayoutMigrator.Run(fullTarget, settingsDirectory, logger));
+        var migratedSettingsFiles = new List<string>(LegacySettingsLayoutMigrator.Run(fullTarget, settingsDirectory, logger, failures.Add));
 
         if (copied.Contains(MonolithRelativePath, StringComparer.OrdinalIgnoreCase))
         {
@@ -77,22 +95,26 @@ public static class LegacyDataImporter
 
         var leftovers = CollectUnmigratedLegacyFiles(fullTarget, logger);
 
-        var tokensSurvived = LegacyDataReader.HasTokens(
-            LegacyDataReader.TryRead(Path.Combine(settingsDirectory, LegacyDataCatalog.AccountsFileName), logger));
-
-        var requiresReauthorization = hadTokens && !tokensSurvived;
+        var authorizationTouched = copied.Select(Path.GetFileName).Concat(migratedSettingsFiles)
+            .Any(file => AuthorizationFiles.Contains(file, StringComparer.OrdinalIgnoreCase));
+        var targetAuthorization = authorizationTouched ? LegacyDataReader.ReadTwitchAuthorization(fullTarget, logger) : default;
+        var botAuthorizationRequired = authorizationTouched && !targetAuthorization.BotReady;
+        var broadcasterAuthorizationRecommended = authorizationTouched && !targetAuthorization.BroadcasterReady
+            && (sourceAuthorization.HasBroadcasterCredentials || targetAuthorizationBefore.HasBroadcasterCredentials);
 
         logger?.LogInformation("Импорт данных завершён: скопировано {Copied}, пропущено {Skipped}, с ошибками {Failed}",
             copied.Count,
             skipped.Count,
             failures.Count);
 
-        if (requiresReauthorization)
+        if (botAuthorizationRequired || broadcasterAuthorizationRecommended)
         {
-            logger?.LogWarning("Импорт данных: сохранённые токены доступа не перенесены – потребуется повторная авторизация в Twitch");
+            logger?.LogWarning("Импорт данных: требуется авторизация Twitch – бот: {Bot}, стример (необязательно): {Broadcaster}",
+                botAuthorizationRequired, broadcasterAuthorizationRecommended);
         }
 
-        return Build(fullSource, fullTarget, copied, skipped, failures, requiresReauthorization, inPlace, leftovers, migratedSettingsFiles);
+        return Build(fullSource, fullTarget, copied, skipped, failures, botAuthorizationRequired,
+            broadcasterAuthorizationRecommended, inPlace, leftovers, migratedSettingsFiles);
     }
 
     internal static void CopyAll(
@@ -302,7 +324,8 @@ public static class LegacyDataImporter
     private static IReadOnlyList<string> CollectUnmigratedLegacyFiles(string target, ILogger? logger)
     {
         var leftovers = LegacyDataCatalog.SettingsFiles
-            .Where(name => File.Exists(Path.Combine(target, name)))
+            .Where(name => File.Exists(Path.Combine(target, name))
+                && File.Exists(Path.Combine(target, LegacyDataCatalog.SettingsFolderName, name)))
             .ToList();
 
         if (leftovers.Count > 0)
@@ -333,7 +356,8 @@ public static class LegacyDataImporter
         List<string> copied,
         List<LegacyImportSkip> skipped,
         List<LegacyImportFailure> failures,
-        bool requiresReauthorization,
+        bool botAuthorizationRequired,
+        bool broadcasterAuthorizationRecommended,
         bool inPlace,
         IReadOnlyList<string> unmigratedLegacyFiles,
         IReadOnlyList<string> migratedSettingsFiles)
@@ -345,7 +369,8 @@ public static class LegacyDataImporter
             CopiedFiles = copied,
             SkippedFiles = skipped,
             Failures = failures,
-            RequiresReauthorization = requiresReauthorization,
+            BotAuthorizationRequired = botAuthorizationRequired,
+            BroadcasterAuthorizationRecommended = broadcasterAuthorizationRecommended,
             IsInPlaceMigration = inPlace,
             UnmigratedLegacyFiles = unmigratedLegacyFiles,
             MigratedSettingsFiles = migratedSettingsFiles,

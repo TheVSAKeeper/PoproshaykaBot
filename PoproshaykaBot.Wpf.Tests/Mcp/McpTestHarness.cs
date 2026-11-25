@@ -717,7 +717,7 @@ internal sealed class McpTestHarness : IAsyncDisposable
 
         public bool IsOpen { get; set; }
 
-        public void Show()
+        public void Show(OnboardingStep step = OnboardingStep.None)
         {
             HasBeenShown = true;
             IsOpen = true;

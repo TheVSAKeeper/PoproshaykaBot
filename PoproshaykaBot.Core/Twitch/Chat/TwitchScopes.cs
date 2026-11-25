@@ -2,6 +2,8 @@
 
 namespace PoproshaykaBot.Core.Twitch.Chat;
 
+using Platforms.Auth;
+
 public static class TwitchScopes
 {
     public const string UserReadChat = "user:read:chat";
@@ -51,5 +53,18 @@ public static class TwitchScopes
     {
         return new HashSet<string>(left, StringComparer.Ordinal)
             .SetEquals(new HashSet<string>(right, StringComparer.Ordinal));
+    }
+
+    public static bool HasUsableAuthorization(PlatformAuthRole role, TwitchAccountSettings? account)
+    {
+        if (account is null || !PlatformAuthRoles.HasCredentials(account.AccessToken, account.RefreshToken))
+        {
+            return false;
+        }
+
+        var required = role == PlatformAuthRole.Bot ? BotRequired : BroadcasterRequired;
+        return account.StoredScopes is not null
+            && required.All(scope => IsGranted(account, scope))
+            && (account.Scopes is not { Length: > 0 } || SetEquals(account.StoredScopes, account.Scopes));
     }
 }

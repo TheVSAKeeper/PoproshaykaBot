@@ -6,7 +6,7 @@ internal static class LegacyDataFixture
 
     public const string SettingsWithTokens = """{"twitch":{"channel":"bobito217","botAccount":{"login":"thebot"},"accessToken":"legacy-access","refreshToken":"legacy-refresh"}}""";
 
-    public const string Accounts = """{"botAccount":{"login":"thebot","accessToken":"secret-access","refreshToken":"secret-refresh"}}""";
+    public const string Accounts = """{"botAccount":{"login":"thebot","accessToken":"secret-access","refreshToken":"secret-refresh","scopes":["user:read:chat","user:write:chat","user:bot"],"storedScopes":["user:read:chat","user:write:chat","user:bot"]}}""";
 
     public const string LocalAccounts = """{"botAccount":{"login":"local","accessToken":"local-access","refreshToken":"local-refresh"}}""";
 

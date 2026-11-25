@@ -1,12 +1,12 @@
 ﻿using Microsoft.Extensions.Logging;
 using PoproshaykaBot.Core.Chat.History;
-using PoproshaykaBot.Core.Infrastructure;
 using PoproshaykaBot.Core.Settings.Migrations.LegacyImport;
 using PoproshaykaBot.Core.Settings.Stores;
 using PoproshaykaBot.Core.Statistics;
 using PoproshaykaBot.Wpf.Bootstrap;
 using PoproshaykaBot.Wpf.ViewModels.Migration;
 using PoproshaykaBot.Wpf.Views.Migration;
+using System.Windows;
 
 namespace PoproshaykaBot.Wpf.Infrastructure;
 
@@ -26,14 +26,9 @@ public sealed class LegacyImportDialog(
             return null;
         }
 
-        var candidates = LegacyDataScanner.Scan(logger);
-        var hasOwnData = LegacyDataScanner.Inspect(AppPaths.BaseDirectory, logger) is not null;
-
-        logger.LegacyImportOpenedFromSettings(candidates.Count);
-
         var viewModel = new LegacyImportViewModel(
-            candidates,
-            hasOwnData,
+            [],
+            null,
             isSettingsEntry: true,
             filePicker,
             logger,
@@ -46,9 +41,16 @@ public sealed class LegacyImportDialog(
         {
             Owner = DialogOwner.Resolve(),
         };
+        window.Loaded += LoadSources;
 
         window.ShowDialog();
 
         return viewModel.Result;
+
+        async void LoadSources(object sender, RoutedEventArgs args)
+        {
+            window.Loaded -= LoadSources;
+            await viewModel.LoadSourcesAsync();
+        }
     }
 }

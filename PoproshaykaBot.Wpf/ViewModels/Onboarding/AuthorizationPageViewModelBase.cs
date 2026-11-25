@@ -375,7 +375,7 @@ public abstract partial class AuthorizationPageViewModelBase : OnboardingPageVie
     private void RefreshFromContext()
     {
         var account = GetAccount();
-        HasToken = !string.IsNullOrWhiteSpace(account.AccessToken);
+        HasToken = TwitchScopes.HasUsableAuthorization(_role, account);
 
         if (HasToken)
         {
@@ -396,7 +396,9 @@ public abstract partial class AuthorizationPageViewModelBase : OnboardingPageVie
             var canSkip = _role == PlatformAuthRole.Broadcaster && !string.IsNullOrWhiteSpace(_context?.Settings.Twitch.Channel);
             if (_authCts is null)
             {
-                ResultText = "Не авторизован";
+                ResultText = PlatformAuthRoles.HasCredentials(account.AccessToken, account.RefreshToken)
+                    ? "Нужно выдать разрешения заново"
+                    : "Не авторизован";
                 ResultSeverity = canSkip ? StatusSeverity.None : StatusSeverity.Error;
                 StatusMessage = canSkip ? "Можно продолжить с аккаунтом бота." : "Откройте ссылку в браузере и подтвердите доступ.";
                 StatusMessageSeverity = StatusSeverity.None;

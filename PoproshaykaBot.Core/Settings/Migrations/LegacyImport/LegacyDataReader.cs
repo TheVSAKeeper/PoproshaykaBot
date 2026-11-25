@@ -1,5 +1,11 @@
 ﻿using Microsoft.Extensions.Logging;
 using System.Text.Json.Nodes;
+using System.Text.Json;
+using PoproshaykaBot.Core.Platforms;
+using PoproshaykaBot.Core.Platforms.Auth;
+using PoproshaykaBot.Core.Settings.Stores;
+using PoproshaykaBot.Core.Twitch.Auth;
+using PoproshaykaBot.Core.Twitch.Chat;
 
 namespace PoproshaykaBot.Core.Settings.Migrations.LegacyImport;
 
@@ -83,12 +89,63 @@ internal static class LegacyDataReader
         };
     }
 
-    public static bool HasOAuthTokens(string directory, ILogger? logger)
+    public static bool HasFlatTwitchTokens(JsonNode? twitch)
     {
-        var accounts = TryRead(LegacyDataCatalog.ResolveSettingsFile(directory, LegacyDataCatalog.AccountsFileName), logger);
-        var settings = TryRead(LegacyDataCatalog.ResolveSettingsFile(directory, LegacyDataCatalog.SettingsFileName), logger);
+        return TokenKeys.Any(key => ReadString(twitch, key) is not null);
+    }
 
-        return HasTokens(accounts) || HasTokens(Property(settings, "twitch"));
+    public static (bool BotReady, bool BroadcasterReady, bool HasBroadcasterCredentials) ReadTwitchAuthorization(
+        string directory, ILogger? logger)
+    {
+        var accounts = ReadSettings<AccountsStore.AccountsFileDto>(directory, LegacyDataCatalog.AccountsFileName, logger);
+        var channels = ReadSettings<ChannelsSettings>(directory, LegacyDataCatalog.ChannelsFileName, logger);
+        var channel = channels is null ? null : ChannelCatalogStore.GetActiveChannel(channels, StreamingPlatform.Twitch);
+
+        var bot = GetRoleAccount(PlatformAuthRole.Bot, accounts, channel);
+        var broadcaster = GetRoleAccount(PlatformAuthRole.Broadcaster, accounts, channel);
+        var hadBroadcaster = HasCredentials(broadcaster) || HasCredentials(accounts?.BroadcasterAccount)
+            || accounts?.Contexts?.Any(context => context.Role == PlatformAuthRole.Broadcaster && HasCredentials(context.Account)) == true;
+
+        return (TwitchScopes.HasUsableAuthorization(PlatformAuthRole.Bot, bot),
+            TwitchScopes.HasUsableAuthorization(PlatformAuthRole.Broadcaster, broadcaster), hadBroadcaster);
+    }
+
+    private static T? ReadSettings<T>(string directory, string fileName, ILogger? logger) where T : class
+    {
+        var path = LegacyDataCatalog.ResolveSettingsFile(directory, fileName);
+        try
+        {
+            return TryRead(path, logger)?.Deserialize<T>(JsonStoreOptions.Default);
+        }
+        catch (JsonException exception)
+        {
+            logger?.LogWarning(exception, "Импорт данных: сведения об авторизации из {FilePath} не прочитаны", path);
+            return null;
+        }
+    }
+
+    private static TwitchAccountSettings? GetRoleAccount(
+        PlatformAuthRole role, AccountsStore.AccountsFileDto? accounts, ChannelCatalogEntry? channel)
+    {
+        var isBot = role == PlatformAuthRole.Bot;
+        var contextId = AuthContextIds.Normalize(isBot ? channel?.BotContextId : channel?.BroadcasterContextId);
+        var account = AuthContextIds.IsDefault(contextId)
+            ? isBot ? accounts?.BotAccount : accounts?.BroadcasterAccount
+            : accounts?.Contexts?.FirstOrDefault(context => context.Role == role && context.ContextId == contextId)?.Account;
+        if (channel is null)
+        {
+            return account;
+        }
+
+        var assignment = channel.GetAccountAssignment(role);
+        return account is not null && assignment is { IsVerified: true } && assignment.Account.AccountId == account.UserId
+            ? account
+            : null;
+    }
+
+    private static bool HasCredentials(TwitchAccountSettings? account)
+    {
+        return PlatformAuthRoles.HasCredentials(account?.AccessToken, account?.RefreshToken);
     }
 
     public static bool HasTokens(JsonNode? node)

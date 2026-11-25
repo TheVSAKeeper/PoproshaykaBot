@@ -22,6 +22,7 @@ using PoproshaykaBot.Core.Polls;
 using PoproshaykaBot.Core.Server;
 using PoproshaykaBot.Core.Settings;
 using PoproshaykaBot.Core.Settings.Migrations;
+using PoproshaykaBot.Core.Settings.Migrations.LegacyImport;
 using PoproshaykaBot.Core.Statistics;
 using PoproshaykaBot.Core.Streaming;
 using PoproshaykaBot.Core.Twitch;
@@ -245,6 +246,7 @@ public partial class App : Application
             using var splash = IsHeadless ? null : new StartupSplash(
                 AppInfo.Name, AppInfo.Version, "Запуск приложения", 4, splashLoggerFactory.CreateLogger<App>());
 
+            LegacyImportResult? startupImport = null;
             using (await BeginStartupPhaseAsync(splash, "Подготовка настроек…"))
             {
                 if (_isFinalizeUpdate)
@@ -260,7 +262,7 @@ public partial class App : Application
                 }
                 else
                 {
-                    uiSettings = OfferLegacyDataImport(uiSettings, uiSettingsPath, themePackLoader, out var modalWait);
+                    (uiSettings, var modalWait, startupImport) = await OfferLegacyDataImportAsync(uiSettings, uiSettingsPath, themePackLoader);
                     interactiveWait += modalWait;
                     await Task.Run(MigrateLegacySettingsLayout);
                 }
@@ -382,7 +384,7 @@ public partial class App : Application
                 _services.GetRequiredService<ShellViewModel>().ReportUncleanPreviousRun();
             }
 
-            MaybeLaunchOnboardingWizard();
+            MaybeLaunchOnboardingWizard(startupImport);
         }
         catch (Exception ex)
         {
@@ -766,6 +768,7 @@ public partial class App : Application
         services.AddSingleton<SettingsPageViewModel>();
 
         services.AddTransient<IOnboardingPageViewModel, WelcomePageViewModel>();
+        services.AddTransient<IOnboardingPageViewModel, AppearancePageViewModel>();
         services.AddTransient<IOnboardingPageViewModel, CredentialsPageViewModel>();
         services.AddTransient<IOnboardingPageViewModel, HttpServerCheckPageViewModel>();
         services.AddTransient<IOnboardingPageViewModel, BotAuthorizationPageViewModel>();

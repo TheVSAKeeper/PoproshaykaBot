@@ -12,33 +12,31 @@ namespace PoproshaykaBot.Wpf;
 
 public partial class App
 {
-    private static ISettingsStore OfferLegacyDataImport(
+    private static async Task<(ISettingsStore Settings, TimeSpan ModalWait, LegacyImportResult? Result)> OfferLegacyDataImportAsync(
         ISettingsStore uiSettings,
         string uiSettingsPath,
-        ThemePackLoader themePackLoader,
-        out TimeSpan modalWait)
+        ThemePackLoader themePackLoader)
     {
-        modalWait = TimeSpan.Zero;
-
         if (uiSettings.GetBool(SettingsKeys.LegacyImportDismissed))
         {
-            return uiSettings;
+            return (uiSettings, TimeSpan.Zero, null);
         }
 
+        var modalWait = TimeSpan.Zero;
+        LegacyImportResult? result = null;
         using var loggerFactory = new SerilogLoggerFactory(Log.Logger);
         var logger = loggerFactory.CreateLogger(nameof(LegacyDataImporter));
 
         try
         {
-            var candidates = LegacyDataScanner.Scan(logger);
-            var hasOwnData = LegacyDataScanner.Inspect(AppPaths.BaseDirectory, logger) is not null;
+            var (candidates, target) = await LegacyImportViewModel.ScanAsync(logger);
 
-            if (candidates.Count == 0 && hasOwnData)
+            if (candidates.Count == 0 && target is not null)
             {
-                return uiSettings;
+                return (uiSettings, modalWait, result);
             }
 
-            var viewModel = new LegacyImportViewModel(candidates, hasOwnData, isSettingsEntry: false, new FilePicker(), logger);
+            var viewModel = new LegacyImportViewModel(candidates, target, isSettingsEntry: false, new FilePicker(), logger);
             var window = new LegacyImportWindow(viewModel);
 
             HostLog.Information("Предложен перенос данных предыдущей версии: источников – {Count}", candidates.Count);
@@ -46,8 +44,9 @@ public partial class App
             var modalStart = Stopwatch.GetTimestamp();
             window.ShowDialog();
             modalWait = Stopwatch.GetElapsedTime(modalStart);
+            result = viewModel.Result;
 
-            if (viewModel.Result is null)
+            if (result is null)
             {
                 HostLog.Information("Пользователь отказался от переноса данных предыдущей версии");
             }
@@ -58,12 +57,12 @@ public partial class App
                 HostLog.Information("Предложение переноса данных отключено пользователем");
             }
 
-            return ReloadUiSettingsIfImported(uiSettings, uiSettingsPath, viewModel.Result, themePackLoader);
+            return (ReloadUiSettingsIfImported(uiSettings, uiSettingsPath, result, themePackLoader), modalWait, result);
         }
         catch (Exception exception)
         {
             HostLog.Error(exception, "Диалог переноса данных предыдущей версии не открылся");
-            return uiSettings;
+            return (uiSettings, modalWait, result);
         }
     }
 

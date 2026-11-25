@@ -14,13 +14,19 @@ public sealed class LegacyImportResult
 
     public required IReadOnlyList<LegacyImportFailure> Failures { get; init; }
 
-    public required bool RequiresReauthorization { get; init; }
+    public bool RequiresReauthorization => BotAuthorizationRequired || BroadcasterAuthorizationRecommended;
+
+    public bool BotAuthorizationRequired { get; init; }
+
+    public bool BroadcasterAuthorizationRecommended { get; init; }
 
     public bool IsInPlaceMigration { get; init; }
 
     public IReadOnlyList<string> UnmigratedLegacyFiles { get; init; } = [];
 
     public IReadOnlyList<string> MigratedSettingsFiles { get; init; } = [];
+
+    public bool HasChanges => CopiedFiles.Count > 0 || MigratedSettingsFiles.Count > 0;
 
     public bool CopiedTwitchUserStatistics => Copied(LegacyDataCatalog.UserStatisticsFileName);
 

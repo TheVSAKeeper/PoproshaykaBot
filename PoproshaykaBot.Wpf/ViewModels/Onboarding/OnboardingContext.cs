@@ -32,6 +32,8 @@ public sealed class OnboardingContext(
 
     public bool AutoDetectChannel { get; set; } = true;
 
+    internal bool TwitchSettingsWritten { get; set; }
+
     public void RaiseCredentialsChanged()
     {
         CredentialsChanged?.Invoke(this, EventArgs.Empty);

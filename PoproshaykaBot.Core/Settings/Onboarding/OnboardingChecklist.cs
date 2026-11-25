@@ -1,7 +1,9 @@
 ﻿using PoproshaykaBot.Core.Platforms.Auth;
 using PoproshaykaBot.Core.Settings.Stores;
 using PoproshaykaBot.Core.Platforms;
+using PoproshaykaBot.Core.Server;
 using PoproshaykaBot.Core.Twitch;
+using PoproshaykaBot.Core.Twitch.Chat;
 
 namespace PoproshaykaBot.Core.Settings.Onboarding;
 
@@ -17,11 +19,18 @@ public sealed class OnboardingChecklist(
 
     public bool RequiresWizard => string.IsNullOrWhiteSpace(settingsManager.Current.Twitch.ClientId);
 
+    public OnboardingStep FirstMissingStep => Check([]);
+
     public IReadOnlyList<string> GetMissingItems()
     {
-        var twitch = settingsManager.Current.Twitch;
         var missing = new List<string>();
+        Check(missing);
+        return missing;
+    }
 
+    private OnboardingStep Check(List<string> missing)
+    {
+        var twitch = settingsManager.Current.Twitch;
         if (string.IsNullOrWhiteSpace(twitch.ClientId) || string.IsNullOrWhiteSpace(twitch.ClientSecret))
         {
             missing.Add("Client ID/Secret");
@@ -32,11 +41,19 @@ public sealed class OnboardingChecklist(
             missing.Add("канал");
         }
 
-        if (!HasAuthorization(PlatformAuthRole.Bot))
+        if (!RedirectUriPortResolver.TryResolve(twitch.RedirectUri, out _))
+        {
+            missing.Add("адрес перенаправления Twitch");
+        }
+
+        var credentialsMissing = missing.Count > 0;
+        var botAuthorizationMissing = !HasAuthorization(PlatformAuthRole.Bot);
+        if (botAuthorizationMissing)
         {
             missing.Add("авторизация бота");
         }
 
+        var beforeYouTube = missing.Count;
         if (youtubeSettings?.Load() is { Enabled: true } youtube)
         {
             var channel = channelCatalog?.GetActiveChannel(StreamingPlatform.YouTube);
@@ -57,12 +74,22 @@ public sealed class OnboardingChecklist(
             }
         }
 
-        return missing;
+        if (credentialsMissing)
+        {
+            return OnboardingStep.Credentials;
+        }
+
+        if (botAuthorizationMissing)
+        {
+            return OnboardingStep.BotAuthorization;
+        }
+
+        return missing.Count > beforeYouTube ? OnboardingStep.YouTube : OnboardingStep.None;
     }
 
     private bool HasAuthorization(PlatformAuthRole role)
     {
         var account = authorization is null ? accountsStore.Load(role) : authorization.GetAccount(role);
-        return PlatformAuthRoles.HasCredentials(account?.AccessToken, account?.RefreshToken);
+        return TwitchScopes.HasUsableAuthorization(role, account);
     }
 }

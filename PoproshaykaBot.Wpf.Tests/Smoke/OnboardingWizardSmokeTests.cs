@@ -68,10 +68,10 @@ public class OnboardingWizardSmokeTests
         Assert.That(wizard, Is.Not.Null, "Мастер должен быть найден перед проверкой шага");
 
         var stepLabel = wizard!.FindFirstDescendant(cf =>
-            cf.ByControlType(ControlType.Text).And(cf.ByName("Шаг 1 из 9")));
+            cf.ByControlType(ControlType.Text).And(cf.ByName("Шаг 1 из 10")));
 
         Assert.That(stepLabel, Is.Not.Null,
-            "Мастер должен открываться на первом шаге из 9 – текст 'Шаг 1 из 9' должен быть в окне");
+            "Мастер должен открываться на первом шаге из 10");
     }
 
     [Test]

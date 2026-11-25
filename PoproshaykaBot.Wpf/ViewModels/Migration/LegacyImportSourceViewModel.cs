@@ -3,11 +3,8 @@ using PoproshaykaBot.Core.Settings.Migrations.LegacyImport;
 
 namespace PoproshaykaBot.Wpf.ViewModels.Migration;
 
-public sealed partial class LegacyImportSourceViewModel : ObservableObject
+public sealed class LegacyImportSourceViewModel
 {
-    [ObservableProperty]
-    private bool _isSelected;
-
     public LegacyImportSourceViewModel(LegacyDataSummary summary)
     {
         Summary = summary;

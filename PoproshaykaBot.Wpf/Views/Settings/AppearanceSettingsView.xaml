@@ -17,7 +17,7 @@
                                ShowPreviews="True"
                                Margin="0,8,0,0" />
         <TextBlock Style="{StaticResource Form.Hint}"
-                   Text="Применяется сразу, как и переключатель в заголовке окна." />
+                   Text="Тема меняется сразу." />
 
         <StackPanel Margin="0,20,0,0"
                     Visibility="{Binding ThemePacks, Converter={StaticResource NullToVisibility}}">

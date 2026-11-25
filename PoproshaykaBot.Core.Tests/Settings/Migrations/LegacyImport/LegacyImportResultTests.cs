@@ -108,7 +108,6 @@ public class LegacyImportResultTests
             CopiedFiles = ["settings/settings.json", "settings/accounts.json"],
             SkippedFiles = [],
             Failures = [],
-            RequiresReauthorization = false,
             MigratedSettingsFiles = ["ACCOUNTS.JSON", "polls.json"],
         };
 
@@ -134,7 +133,6 @@ public class LegacyImportResultTests
             CopiedFiles = copied,
             SkippedFiles = [],
             Failures = [],
-            RequiresReauthorization = false,
         };
     }
 }

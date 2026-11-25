@@ -100,7 +100,7 @@ public static class LegacyImportText
 
         if (result.Failures.Count > 0)
         {
-            return result.CopiedFiles.Count > 0
+            return result.HasChanges
                 ? "Данные перенесены не полностью."
                 : "Перенести данные не удалось.";
         }
@@ -110,7 +110,7 @@ public static class LegacyImportText
             return "Часть данных осталась на прежнем месте.";
         }
 
-        if (result.IsInPlaceMigration)
+        if (result.IsInPlaceMigration && result.HasChanges)
         {
             return "Данные остались на месте и подготовлены к работе.";
         }
@@ -124,7 +124,7 @@ public static class LegacyImportText
     {
         ArgumentNullException.ThrowIfNull(result);
 
-        if (!isSettingsEntry || result.CopiedFiles.Count == 0)
+        if (!isSettingsEntry || !result.HasChanges)
         {
             return null;
         }
@@ -134,7 +134,7 @@ public static class LegacyImportText
         var frozen = new List<string>();
         var pluralName = false;
 
-        if (result.CopiedSettings)
+        if (result.RewrittenSettingsFiles.Count > 0)
         {
             frozen.Add("настройки");
             pluralName = true;
@@ -190,6 +190,11 @@ public static class LegacyImportText
             lines.Add($"Перенесено: {Count(result.CopiedFiles.Count, "файл", "файла", "файлов")}.");
         }
 
+        if (result.IsInPlaceMigration && result.MigratedSettingsFiles.Count > 0)
+        {
+            lines.Add($"Подготовлено на месте: {Count(result.MigratedSettingsFiles.Count, "файл", "файла", "файлов")}.");
+        }
+
         if (result.SkippedFiles.Count > 0)
         {
             lines.Add($"Оставлено без изменений: {Count(result.SkippedFiles.Count, "файл", "файла", "файлов")} – такие данные здесь уже есть.");
@@ -198,6 +203,15 @@ public static class LegacyImportText
         if (result.Failures.Count > 0)
         {
             lines.Add($"Не удалось перенести: {Count(result.Failures.Count, "файл", "файла", "файлов")}.");
+        }
+
+        if (result.HasChanges && (result.Failures.Count > 0 || result.UnmigratedLegacyFiles.Count > 0))
+        {
+            var written = result.CopiedFiles.Concat(result.MigratedSettingsFiles)
+                .Select(DescribeFile)
+                .Select(Decapitalize)
+                .Distinct(StringComparer.CurrentCulture);
+            lines.Add($"Записано: {string.Join(", ", written)}.");
         }
 
         return lines;
@@ -226,7 +240,23 @@ public static class LegacyImportText
             .ToList();
 
         return $"Осталось на прежнем месте: {string.Join(", ", names)}. "
-               + "Эти данные не пригодились: такие же, только более свежие, уже используются. Ничего не потеряно, делать ничего не нужно.";
+               + "В рабочей папке уже есть одноимённые файлы. Исходные и рабочие файлы сохранены.";
+    }
+
+    public static string? BuildAuthorizationNotice(LegacyImportResult result, bool isSettingsEntry)
+    {
+        var bot = result.BotAuthorizationRequired
+            ? isSettingsEntry ? "После перезапуска войдите в Twitch с аккаунтом бота." : "Для работы бота нужно войти в Twitch."
+            : null;
+        var broadcaster = result.BroadcasterAuthorizationRecommended
+            ? "Вход с аккаунтом стримера можно восстановить отдельно, если нужны опросы и управление эфиром."
+            : null;
+
+        return (bot, broadcaster) switch
+        {
+            (not null, not null) => $"{bot} {broadcaster}",
+            _ => bot ?? broadcaster,
+        };
     }
 
     public static string DescribeFailure(LegacyImportFailure failure)

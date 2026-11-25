@@ -20,5 +20,7 @@ public sealed class LegacyDataSummary
 
     public required bool HasOAuthTokens { get; init; }
 
+    public bool HasFlatTwitchTokens { get; init; }
+
     public required IReadOnlyList<LegacyDataFile> Files { get; init; }
 }

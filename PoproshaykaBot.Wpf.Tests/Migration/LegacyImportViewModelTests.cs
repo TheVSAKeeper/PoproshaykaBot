@@ -31,16 +31,16 @@ public class LegacyImportViewModelTests
 
     [TestCase(true, 1, false)]
     [TestCase(false, 0, true)]
-    public void A_chosen_folder_becomes_a_card_only_when_it_holds_data(bool seedData, int expectedSources, bool expectsNotice)
+    public async Task A_chosen_folder_becomes_a_card_only_when_it_holds_data(bool seedData, int expectedSources, bool expectsNotice)
     {
         if (seedData)
         {
-            File.WriteAllText(Path.Combine(_folder, "settings.json"), """{"twitch":{"channel":"bobito"}}""");
+            await File.WriteAllTextAsync(Path.Combine(_folder, "settings.json"), """{"twitch":{"channel":"bobito"}}""");
         }
 
-        var viewModel = new LegacyImportViewModel([], false, false, new FakeFilePicker(_folder), NullLogger.Instance);
+        var viewModel = new LegacyImportViewModel([], null, false, new FakeFilePicker(_folder), NullLogger.Instance);
 
-        viewModel.PickFolderCommand.Execute(null);
+        await viewModel.PickFolderCommand.ExecuteAsync(null);
 
         Assert.Multiple(() =>
         {
@@ -53,21 +53,26 @@ public class LegacyImportViewModelTests
         });
     }
 
-    [TestCase(true)]
-    [TestCase(false)]
-    public void Replacing_files_is_offered_only_where_there_is_something_to_replace(bool hasOwnData)
+    [TestCase(LegacyDataSourceKind.CurrentBaseDirectory, true, false)]
+    [TestCase(LegacyDataSourceKind.SelectedFolder, false, false)]
+    [TestCase(LegacyDataSourceKind.SelectedFolder, true, true)]
+    public void Replacing_files_is_offered_only_for_the_selected_source_with_replaceable_files(
+        LegacyDataSourceKind kind, bool conflict, bool expected)
     {
-        var viewModel = new LegacyImportViewModel([], hasOwnData, false, new FakeFilePicker(_folder), NullLogger.Instance);
+        var relative = Path.Combine("settings", "settings.json");
+        var source = Summary(_folder, kind, relative);
+        var target = conflict ? Summary(AppPaths.BaseDirectory, LegacyDataSourceKind.CurrentBaseDirectory, relative) : null;
+        var viewModel = new LegacyImportViewModel([source], target, false, new FakeFilePicker(_folder), NullLogger.Instance);
+        viewModel.SelectedSource = viewModel.Sources[0];
 
-        Assert.That(viewModel.CanOverwriteExisting, Is.EqualTo(hasOwnData),
-            "На чистой установке заменять нечего, и флажок замены там только сбивает с толку.");
+        Assert.That(viewModel.CanOverwriteExisting, Is.EqualTo(expected));
     }
 
     [TestCase(true, false)]
     [TestCase(false, true)]
     public void Dismissing_the_offer_belongs_to_the_startup_window_only(bool isSettingsEntry, bool expectsDismissCheckbox)
     {
-        var viewModel = new LegacyImportViewModel([], false, isSettingsEntry, new FakeFilePicker(_folder), NullLogger.Instance);
+        var viewModel = new LegacyImportViewModel([], null, isSettingsEntry, new FakeFilePicker(_folder), NullLogger.Instance);
 
         Assert.That(viewModel.CanDismiss, Is.EqualTo(expectsDismissCheckbox),
             "Из настроек окно открывают сами, и «Больше не предлагать» там нечего отключать.");
@@ -89,14 +94,14 @@ public class LegacyImportViewModelTests
 
         var viewModel = new LegacyImportViewModel(
             [summary],
-            hasOwnData: true,
+            target: null,
             isSettingsEntry: true,
             new FakeFilePicker(_folder),
             NullLogger.Instance,
             chatHistoryCache: cacheStore,
             import: (src, overwrite, log) => LegacyDataImporter.Import(src, targetDir, overwrite, log));
 
-        viewModel.Sources[0].IsSelected = true;
+        viewModel.SelectedSource = viewModel.Sources[0];
         await viewModel.ImportCommand.ExecuteAsync(null);
 
         using (Assert.EnterMultipleScope())
@@ -108,11 +113,58 @@ public class LegacyImportViewModelTests
         }
     }
 
+    [Test]
+    public async Task Picking_new_and_existing_folders_changes_the_actual_import_source()
+    {
+        var paths = new[] { Path.Combine(_folder, "first"), Path.Combine(_folder, "second"), Path.Combine(_folder, "empty") };
+        foreach (var folder in paths)
+        {
+            Directory.CreateDirectory(folder);
+        }
+
+        foreach (var folder in paths.Take(2))
+        {
+            await File.WriteAllTextAsync(Path.Combine(folder, "settings.json"), """{"twitch":{"channel":"bobito"}}""");
+        }
+
+        var picker = new FakeFilePicker(paths[1]);
+        var first = LegacyDataScanner.Inspect(paths[0])!;
+        var target = Path.Combine(_folder, "target");
+        var viewModel = new LegacyImportViewModel([first], null, false, picker, NullLogger.Instance,
+            import: (path, overwrite, log) => LegacyDataImporter.Import(path, target, overwrite, log));
+        viewModel.SelectedSource = viewModel.Sources[0];
+        await viewModel.PickFolderCommand.ExecuteAsync(null);
+        Assert.That(viewModel.SelectedSource?.Path, Is.EqualTo(paths[1]));
+
+        picker.Folder = paths[2];
+        await viewModel.PickFolderCommand.ExecuteAsync(null);
+        Assert.That(viewModel.SelectedSource?.Path, Is.EqualTo(paths[1]));
+        Assert.That(viewModel.PickerNotice, Is.Not.Null);
+
+        picker.Folder = paths[0];
+        await viewModel.PickFolderCommand.ExecuteAsync(null);
+        await viewModel.ImportCommand.ExecuteAsync(null);
+        Assert.That(viewModel.Sources, Has.Count.EqualTo(2));
+        Assert.That(viewModel.Result?.SourcePath, Is.EqualTo(paths[0]));
+    }
+
+    private static LegacyDataSummary Summary(string path, LegacyDataSourceKind kind, string relative) => new()
+    {
+        SourcePath = path,
+        Kind = kind,
+        HasMonolithicSettings = false,
+        HasSettingsDirectory = true,
+        HasOAuthTokens = false,
+        Files = [new(Path.GetFileName(relative), Path.Combine(path, relative), relative, 100, DateTime.UtcNow)],
+    };
+
     private sealed class FakeFilePicker(string folder) : IFilePicker
     {
+        public string Folder { get; set; } = folder;
+
         public string? PickFolder(string title, string? initialDirectory = null)
         {
-            return folder;
+            return Folder;
         }
 
         public string? PickFile(FileOpenRequest request)

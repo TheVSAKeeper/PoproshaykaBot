@@ -1,5 +1,6 @@
 ﻿using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using PoproshaykaBot.Core.Settings.Onboarding;
 using PoproshaykaBot.Wpf.Bootstrap;
 using PoproshaykaBot.Wpf.Views.Onboarding;
 using System.Windows;
@@ -18,7 +19,7 @@ public sealed class OnboardingWizardLauncher(
 
     public bool IsOpen => Volatile.Read(ref _isOpen) != 0;
 
-    public void Show()
+    public void Show(OnboardingStep step = OnboardingStep.None)
     {
         if (Interlocked.CompareExchange(ref _isOpen, 1, 0) != 0)
         {
@@ -30,6 +31,7 @@ public sealed class OnboardingWizardLauncher(
         try
         {
             var wizard = services.GetRequiredService<OnboardingWizardWindow>();
+            wizard.StartAt(step);
             wizard.Owner = Application.Current.MainWindow;
 
             if (App.IsHeadless)

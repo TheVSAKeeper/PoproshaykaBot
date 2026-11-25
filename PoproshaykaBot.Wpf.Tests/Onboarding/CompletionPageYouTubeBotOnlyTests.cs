@@ -68,7 +68,7 @@ public sealed class CompletionPageYouTubeBotOnlyTests
                 {
                     Twitch = new TwitchSettings { ClientId = "tw-client", ClientSecret = "tw-secret", Channel = "streamer" },
                 },
-                new TwitchAccountSettings { Login = "twbot", AccessToken = "tw-bot-token", Scopes = [.. TwitchScopes.BotRequired] },
+                new TwitchAccountSettings { Login = "twbot", AccessToken = "tw-bot-token", Scopes = [.. TwitchScopes.BotRequired], StoredScopes = [.. TwitchScopes.BotRequired] },
                 twitchBroadcasterAuthorized
                     ? new TwitchAccountSettings { Login = "streamer", AccessToken = "tw-streamer-token", Scopes = [.. TwitchScopes.BroadcasterRequired] }
                     : new TwitchAccountSettings(),

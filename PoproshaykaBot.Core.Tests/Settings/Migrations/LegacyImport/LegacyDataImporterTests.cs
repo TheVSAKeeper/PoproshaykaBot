@@ -410,6 +410,28 @@ public sealed class LegacyDataImporterTests
         }
     }
 
+    [TestCase("", true, false)]
+    [TestCase("""{"accessToken":"bot","storedScopes":["chat:read"]}""", true, false)]
+    [TestCase("""{"refreshToken":"bot","storedScopes":["user:read:chat","user:write:chat","user:bot"]}""", false, false)]
+    [TestCase("""{"accessToken":"bot","storedScopes":["user:read:chat","user:write:chat","user:bot"]}""", false, true)]
+    public void Import_AssessesBotAndBroadcasterIndependently(string bot, bool botRequired, bool broadcasterOutdated)
+    {
+        var broadcasterScopes = broadcasterOutdated
+            ? """["channel:bot"]"""
+            : """["channel:bot","channel:read:polls","channel:manage:polls","channel:manage:broadcast"]""";
+        var botAccount = string.IsNullOrEmpty(bot) ? "{}" : bot;
+        var accounts = $$"""{"botAccount":{{botAccount}},"broadcasterAccount":{"accessToken":"streamer","storedScopes":{{broadcasterScopes}}} }""";
+        LegacyDataFixture.Write(_source, Path.Combine("settings", "accounts.json"), accounts);
+
+        var result = LegacyDataImporter.Import(_source, _target, false, null);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.BotAuthorizationRequired, Is.EqualTo(botRequired));
+            Assert.That(result.BroadcasterAuthorizationRecommended, Is.EqualTo(broadcasterOutdated));
+        }
+    }
+
     [Test]
     public void Import_MissingSource_ReportsFailureWithoutThrowing()
     {

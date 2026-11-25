@@ -92,6 +92,7 @@ public sealed partial class BotConnectionPageViewModel : OnboardingPageViewModel
                 ShowRetry = false;
                 return;
             }
+            context.TwitchSettingsWritten = true;
 
             if (!_accountsStore.SaveAll(context.BotAccount, context.BroadcasterAccount))
             {

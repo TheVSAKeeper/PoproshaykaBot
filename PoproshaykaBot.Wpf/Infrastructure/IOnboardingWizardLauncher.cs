@@ -1,5 +1,7 @@
 ﻿namespace PoproshaykaBot.Wpf.Infrastructure;
 
+using Core.Settings.Onboarding;
+
 public interface IOnboardingWizardLauncher
 {
     event EventHandler? Closed;
@@ -8,5 +10,5 @@ public interface IOnboardingWizardLauncher
 
     bool IsOpen => false;
 
-    void Show();
+    void Show(OnboardingStep step = OnboardingStep.None);
 }

@@ -95,7 +95,12 @@ public sealed class ChannelCatalogStore
 
     public ChannelCatalogEntry? GetActiveChannel(StreamingPlatform platform)
     {
-        var settings = Normalize(_store.Load());
+        return GetActiveChannel(_store.Load(), platform);
+    }
+
+    internal static ChannelCatalogEntry? GetActiveChannel(ChannelsSettings settings, StreamingPlatform platform)
+    {
+        settings = Normalize(settings);
         var activeId = settings.Platforms.FirstOrDefault(p => p.Platform == platform)?.ActiveChannelId;
         var configured = settings.Channels.Where(c => c.Platform == platform && c.IsConfigured);
         return configured.FirstOrDefault(c => c.ChannelId == activeId) ?? configured.FirstOrDefault();

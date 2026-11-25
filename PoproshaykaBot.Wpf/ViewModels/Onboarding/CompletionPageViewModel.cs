@@ -149,6 +149,7 @@ public sealed partial class CompletionPageViewModel : OnboardingPageViewModelBas
         try
         {
             settingsWritten = _settingsManager.SaveSettings(context.Settings);
+            context.TwitchSettingsWritten |= settingsWritten;
             twitchAccountsWritten = _accountsStore.SaveAll(context.BotAccount, context.BroadcasterAccount);
             if (_youtubeSettingsStore is not null)
             {
