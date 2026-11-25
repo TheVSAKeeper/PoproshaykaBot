@@ -29,39 +29,21 @@
 
             <DockPanel Grid.Column="1"
                        Margin="10,0,0,0"
-                       LastChildFill="True"
-                       VerticalAlignment="Center">
-                <Border DockPanel.Dock="Right"
-                        Style="{StaticResource Badge}"
-                        Padding="6,1"
-                        Margin="6,0,0,0"
-                        VerticalAlignment="Center"
-                        Visibility="{Binding IsToastVisible, Converter={StaticResource BoolToVisibility}}"
-                        keepshell:SeverityBrushBehavior.SoftBackground="{Binding ToastSeverity}"
-                        keepshell:SeverityBrushBehavior.BorderBrush="{Binding ToastSeverity}">
-                    <TextBlock Text="{Binding ToastText}"
-                               FontSize="{DynamicResource Font.Size.Caption}"
-                               TextTrimming="CharacterEllipsis"
-                               ToolTip="{Binding ToastText}"
-                               keepshell:SeverityBrushBehavior.Foreground="{Binding ToastSeverity}" />
-                </Border>
-
-                <DockPanel HorizontalAlignment="Right"
-                           VerticalAlignment="Center"
-                           LastChildFill="True">
-                    <TextBlock DockPanel.Dock="Left"
-                               Text="Сцена:"
-                               Style="{StaticResource TextBlock.Subtle}"
-                               FontSize="{DynamicResource Font.Size.XS}"
-                               Margin="0,0,4,0"
-                               VerticalAlignment="Center" />
-                    <TextBlock Text="{Binding SceneName}"
-                               ToolTip="{Binding SceneName}"
-                               FontWeight="SemiBold"
-                               FontSize="{DynamicResource Font.Size.S}"
-                               TextTrimming="CharacterEllipsis"
-                               VerticalAlignment="Center" />
-                </DockPanel>
+                       HorizontalAlignment="Right"
+                       VerticalAlignment="Center"
+                       LastChildFill="True">
+                <TextBlock DockPanel.Dock="Left"
+                           Text="Сцена:"
+                           Style="{StaticResource TextBlock.Subtle}"
+                           FontSize="{DynamicResource Font.Size.XS}"
+                           Margin="0,0,4,0"
+                           VerticalAlignment="Center" />
+                <TextBlock Text="{Binding SceneName}"
+                           ToolTip="{Binding SceneName}"
+                           FontWeight="SemiBold"
+                           FontSize="{DynamicResource Font.Size.S}"
+                           TextTrimming="CharacterEllipsis"
+                           VerticalAlignment="Center" />
             </DockPanel>
         </Grid>
 

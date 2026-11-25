@@ -584,6 +584,7 @@ public partial class App : Application
         services.AddSingleton<IBotConnectionController>(provider => provider.GetRequiredService<BotConnectionManager>());
 
         services.AddKeepShell();
+        services.AddKeepShellToasts();
 
         services.AddKeepShellDiagnostics(new DiagnosticsOptions
         {

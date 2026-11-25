@@ -133,13 +133,15 @@ public sealed partial class ShellViewModel : ShellViewModelBase, IDisposable
         ChannelSwitchPromptBannerViewModel? channelSwitchBanner = null,
         UpdateSettingsSectionViewModel? updateSettings = null,
         MultistreamPageViewModel? multistreamPage = null,
-        IMcpConnectNotificationGate? mcpConnectNotificationGate = null)
+        IMcpConnectNotificationGate? mcpConnectNotificationGate = null,
+        ToastHostViewModel? toasts = null)
         : base(modal)
     {
         _unsavedChangesPrompt = unsavedChangesPrompt;
         _mainWindow = mainWindow;
         _updateSettings = updateSettings;
         _mcpConnectNotificationGate = mcpConnectNotificationGate ?? new McpConnectNotificationGate();
+        Toasts = toasts ?? new ToastHostViewModel(uiDispatcher);
         _connectionManager = connectionManager;
         _platformRegistry = platformRegistry;
         _logger = logger;
@@ -222,6 +224,8 @@ public sealed partial class ShellViewModel : ShellViewModelBase, IDisposable
     }
 
     public ThemeSelectionViewModel Theme { get; }
+
+    public ToastHostViewModel Toasts { get; }
 
     public UpdateBannerViewModel UpdateBanner { get; }
 
@@ -443,7 +447,7 @@ public sealed partial class ShellViewModel : ShellViewModelBase, IDisposable
 
         if (!found)
         {
-            SetStatus("Этого пользователя нет в статистике", StatusSeverity.Info);
+            SetTransientStatus("Этого пользователя нет в статистике", StatusSeverity.Info, TimeSpan.FromSeconds(4));
             return;
         }
 
@@ -454,7 +458,7 @@ public sealed partial class ShellViewModel : ShellViewModelBase, IDisposable
     {
         if (!_statisticsPage.TrySelect(key))
         {
-            SetStatus("Этого пользователя нет в статистике", StatusSeverity.Info);
+            SetTransientStatus("Этого пользователя нет в статистике", StatusSeverity.Info, TimeSpan.FromSeconds(4));
             return;
         }
 
@@ -482,7 +486,10 @@ public sealed partial class ShellViewModel : ShellViewModelBase, IDisposable
         if (!clearResult.IsComplete)
         {
             _logger.ChatHistoryClearIncomplete();
-            SetStatus("История чата очищена не полностью: часть файлов кэша на диске не удалось обновить", StatusSeverity.Warning);
+            const string warning = "История чата очищена не полностью: часть файлов кэша на диске не удалось обновить";
+            var warningDuration = TimeSpan.FromSeconds(6);
+            SetTransientStatus(warning, StatusSeverity.Warning, warningDuration);
+            Toasts.ShowIfEnabled(_preferences, warning, StatusSeverity.Warning, warningDuration);
         }
     }
 

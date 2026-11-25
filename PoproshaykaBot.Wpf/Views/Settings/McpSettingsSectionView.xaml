@@ -213,12 +213,5 @@
                                           VerticalAlignment="Center" />
             </Button>
         </Grid>
-
-        <TextBlock Text="{Binding CopyFeedback}"
-                   Foreground="{DynamicResource State.SuccessText}"
-                   FontSize="{DynamicResource Font.Size.S}"
-                   Margin="200,8,0,0"
-                   TextWrapping="Wrap"
-                   Visibility="{Binding CopyFeedback, Converter={StaticResource NullToVisibility}}" />
     </StackPanel>
 </UserControl>

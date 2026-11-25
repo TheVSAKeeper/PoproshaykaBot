@@ -74,7 +74,7 @@ public sealed class AppearanceSettingsSectionContributor(AppearanceSettingsSecti
         "appearance",
         "Оформление",
         PackIconLucideKind.Palette,
-        "тема масштаб шрифта размер текста заголовок страницы внешний вид пакеты каталог",
+        "тема масштаб шрифта размер текста заголовок страницы внешний вид пакеты каталог уведомления тосты",
         appearance,
         static () => string.Join(' ', ThemeManager.Themes.Select(theme => $"{theme.DisplayName} {theme.Key}")));
 

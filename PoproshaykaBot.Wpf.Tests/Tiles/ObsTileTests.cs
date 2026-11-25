@@ -1,10 +1,14 @@
-﻿using Microsoft.Extensions.Logging.Abstractions;
+﻿using KeepShell.Bootstrap;
+using KeepShell.Testing;
+using KeepShell.ViewModels;
+using Microsoft.Extensions.Logging.Abstractions;
 using PoproshaykaBot.Core.Infrastructure.Events;
 using PoproshaykaBot.Core.Obs;
 using PoproshaykaBot.Core.Settings;
 using PoproshaykaBot.Core.Settings.Obs;
 using PoproshaykaBot.Core.Settings.Stores;
 using PoproshaykaBot.Wpf.Tests.Support;
+using PoproshaykaBot.Wpf.ViewModels;
 using PoproshaykaBot.Wpf.ViewModels.Tiles;
 using System.IO;
 using System.Text.Json;
@@ -162,6 +166,9 @@ public class ObsTileTests
             var client = new FakeTileObsClient();
             using var integration = new ObsIntegrationService(client, settingsManager, NullLogger<ObsIntegrationService>.Instance);
             var dispatcher = new ManualUiDispatcher();
+            var toasts = new ToastHostViewModel(dispatcher);
+            var settingsStore = new MemorySettings();
+            var preferences = new ShellPreferences(settingsStore);
 
             using var tile = new ObsInfoTileViewModel(
                 store,
@@ -169,7 +176,9 @@ public class ObsTileTests
                 client,
                 bus,
                 NullLogger<ObsInfoTileViewModel>.Instance,
-                dispatcher);
+                dispatcher,
+                toasts,
+                preferences);
 
             Assert.That(tile.MaxWidth, Is.Null);
 
@@ -219,11 +228,16 @@ public class ObsTileTests
 
             using (Assert.EnterMultipleScope())
             {
-                Assert.That(tile.IsToastVisible, Is.True);
-                Assert.That(tile.ToastSeverity, Is.EqualTo("Warning"));
-                Assert.That(tile.ToastText, Is.EqualTo("Сначала запустите основной эфир OBS"));
+                Assert.That(toasts.Toasts, Has.Count.EqualTo(1));
+                Assert.That(toasts.Toasts[0].Severity, Is.EqualTo(StatusSeverity.Warning));
+                Assert.That(toasts.Toasts[0].Message, Is.EqualTo("Сначала запустите основной эфир OBS"));
                 Assert.That(client.VendorRequestsSent("start_output"), Is.Zero);
             }
+
+            toasts.DismissCommand.Execute(toasts.Toasts[0]);
+            preferences.EnableToastNotifications = false;
+            await tile.SecondaryOutputs[0].ToggleCommand.ExecuteAsync(null);
+            Assert.That(toasts.Toasts, Is.Empty);
 
             using var doc = JsonDocument.Parse("""{"vendorName":"aitum-multistream","eventType":"output_started","eventData":{"name":"aitum_multi_output_YouTube"}}""");
             client.RaiseEvent(new("VendorEvent", 512, doc.RootElement.Clone()));

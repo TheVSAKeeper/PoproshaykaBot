@@ -1,6 +1,7 @@
 ﻿using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using KeepShell.Mcp;
+using PoproshaykaBot.Wpf.Infrastructure;
 using System.ComponentModel;
 using System.Globalization;
 
@@ -22,7 +23,8 @@ public sealed partial class McpSettingsSectionViewModel : ObservableObject, IDis
     private readonly McpServerOptions _options;
     private readonly IDialogService _dialogService;
     private readonly IClipboardService _clipboard;
-    private readonly IUiTimer? _copyFeedbackTimer;
+    private readonly ToastHostViewModel? _toasts;
+    private readonly ShellPreferences? _shellPreferences;
 
     private string _portText;
     private bool _syncingPort;
@@ -34,9 +36,6 @@ public sealed partial class McpSettingsSectionViewModel : ObservableObject, IDis
     private int _selectedSnippetFormatIndex;
 
     [ObservableProperty]
-    private string? _copyFeedback;
-
-    [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasPortError))]
     private string? _portError;
 
@@ -46,15 +45,17 @@ public sealed partial class McpSettingsSectionViewModel : ObservableObject, IDis
         McpServerOptions options,
         IDialogService dialogService,
         IClipboardService clipboard,
-        IUiDispatcher? uiDispatcher = null)
+        ToastHostViewModel? toasts = null,
+        ShellPreferences? shellPreferences = null)
     {
         Preferences = preferences;
         Server = server;
         _options = options;
         _dialogService = dialogService;
         _clipboard = clipboard;
+        _toasts = toasts;
+        _shellPreferences = shellPreferences;
         _portText = preferences.Port.ToString(CultureInfo.InvariantCulture);
-        _copyFeedbackTimer = uiDispatcher?.CreateTimer(CopyFeedbackDuration, ClearCopyFeedback);
 
         Preferences.PropertyChanged += OnPreferencesPropertyChanged;
         Server.PropertyChanged += OnServerPropertyChanged;
@@ -82,7 +83,6 @@ public sealed partial class McpSettingsSectionViewModel : ObservableObject, IDis
 
             _portText = next;
             OnPropertyChanged();
-            ClearCopyFeedback();
             ApplyPortText(next);
         }
     }
@@ -164,7 +164,6 @@ public sealed partial class McpSettingsSectionViewModel : ObservableObject, IDis
 
     public void Dispose()
     {
-        _copyFeedbackTimer?.Stop();
         Preferences.PropertyChanged -= OnPreferencesPropertyChanged;
         Server.PropertyChanged -= OnServerPropertyChanged;
     }
@@ -174,11 +173,10 @@ public sealed partial class McpSettingsSectionViewModel : ObservableObject, IDis
     {
         if (_clipboard.TrySetText(DisplayToken))
         {
-            ShowCopyFeedback("Токен скопирован в буфер обмена");
+            _toasts.ShowIfEnabled(_shellPreferences, "Токен скопирован в буфер обмена", StatusSeverity.Success, CopyFeedbackDuration);
             return;
         }
 
-        ClearCopyFeedback();
         _dialogService.Error("Ошибка", "Не удалось скопировать токен в буфер обмена.");
     }
 
@@ -194,17 +192,11 @@ public sealed partial class McpSettingsSectionViewModel : ObservableObject, IDis
 
         if (_clipboard.TrySetText(ConnectSnippet))
         {
-            ShowCopyFeedback("Строка подключения скопирована");
+            _toasts.ShowIfEnabled(_shellPreferences, "Строка подключения скопирована", StatusSeverity.Success, CopyFeedbackDuration);
             return;
         }
 
-        ClearCopyFeedback();
         _dialogService.Error("Ошибка", "Не удалось скопировать строку подключения в буфер обмена.");
-    }
-
-    partial void OnSelectedSnippetFormatIndexChanged(int value)
-    {
-        ClearCopyFeedback();
     }
 
     private void ApplyPortText(string text)
@@ -261,23 +253,6 @@ public sealed partial class McpSettingsSectionViewModel : ObservableObject, IDis
         }
     }
 
-    private void ShowCopyFeedback(string message)
-    {
-        CopyFeedback = message;
-
-        if (_copyFeedbackTimer is not null)
-        {
-            _copyFeedbackTimer.Stop();
-            _copyFeedbackTimer.Start();
-        }
-    }
-
-    private void ClearCopyFeedback()
-    {
-        _copyFeedbackTimer?.Stop();
-        CopyFeedback = null;
-    }
-
     private void OnPreferencesPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
         var all = string.IsNullOrEmpty(e.PropertyName);
@@ -310,15 +285,6 @@ public sealed partial class McpSettingsSectionViewModel : ObservableObject, IDis
         {
             OnPropertyChanged(nameof(AllowMutations));
             OnPropertyChanged(nameof(StatusText));
-        }
-
-        if (all || e.PropertyName is nameof(McpPreferences.Port)
-                or nameof(McpPreferences.Token)
-                or nameof(McpPreferences.EffectiveToken)
-                or nameof(McpPreferences.Enabled)
-                or nameof(McpPreferences.AllowMutations))
-        {
-            ClearCopyFeedback();
         }
     }
 

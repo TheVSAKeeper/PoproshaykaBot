@@ -224,8 +224,7 @@ public sealed class McpSecurityRedactionTests
             server,
             options,
             new StubDialogService(),
-            new StubClipboardService(),
-            new ManualUiDispatcher());
+            new StubClipboardService());
 
         var view = new McpSettingsSectionView { DataContext = viewModel };
         var window = new Window

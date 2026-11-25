@@ -153,6 +153,34 @@ public sealed class SettingsNavigationSaveTests
         });
     }
 
+    [Test]
+    public async Task SetTransientStatus_updates_status_and_restores_previous_status_when_timer_ticks()
+    {
+        await using var harness = new Harness();
+        var shell = harness.Shell;
+        var initialStatus = shell.StatusText;
+        var initialSeverity = shell.StatusSeverity;
+
+        shell.SetTransientStatus("Этого пользователя нет в статистике", StatusSeverity.Info, TimeSpan.FromMilliseconds(50));
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(shell.StatusText, Is.EqualTo("Этого пользователя нет в статистике"));
+            Assert.That(shell.StatusSeverity, Is.EqualTo(StatusSeverity.Info));
+        });
+
+        await Task.Delay(150);
+        System.Windows.Threading.Dispatcher.CurrentDispatcher.Invoke(
+            System.Windows.Threading.DispatcherPriority.Background,
+            static () => { });
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(shell.StatusText, Is.EqualTo(initialStatus));
+            Assert.That(shell.StatusSeverity, Is.EqualTo(initialSeverity));
+        });
+    }
+
     private sealed class Harness : IAsyncDisposable
     {
         private readonly DirectoryInfo _root = Directory.CreateTempSubdirectory("poproshayka-settings-navigation-");

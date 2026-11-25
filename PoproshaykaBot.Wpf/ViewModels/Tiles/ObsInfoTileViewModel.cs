@@ -31,7 +31,6 @@ public sealed partial class ObsInfoTileViewModel : DashboardTileViewModel, IDisp
     private const double MaxAutoConnectIntervalSeconds = 300;
     private static readonly TimeSpan AutoConnectRetryInterval = TimeSpan.FromSeconds(30);
     private static readonly TimeSpan SnapshotTimeout = TimeSpan.FromSeconds(8);
-    private static readonly TimeSpan ToastDuration = TimeSpan.FromSeconds(4);
     private static readonly TimeSpan SecondaryRefreshDelay = TimeSpan.FromMilliseconds(500);
 
     private readonly ObsIntegrationStore _store;
@@ -40,6 +39,8 @@ public sealed partial class ObsInfoTileViewModel : DashboardTileViewModel, IDisp
     private readonly IEventBus _bus;
     private readonly ILogger<ObsInfoTileViewModel> _logger;
     private readonly IUiDispatcher _uiDispatcher;
+    private readonly ToastHostViewModel? _toasts;
+    private readonly ShellPreferences? _preferences;
 
     private readonly List<IDisposable> _subs = [];
     private readonly Lock _volumeMeterLock = new();
@@ -49,7 +50,6 @@ public sealed partial class ObsInfoTileViewModel : DashboardTileViewModel, IDisp
 
     private readonly IUiTimer _refreshTimer;
     private readonly IUiTimer _volumeMeterTimer;
-    private readonly IUiTimer _toastTimer;
     private readonly IUiTimer _secondaryRefreshTimer;
 
     private readonly CancellationTokenSource _disposeCts = new();
@@ -86,22 +86,15 @@ public sealed partial class ObsInfoTileViewModel : DashboardTileViewModel, IDisp
     [NotifyPropertyChangedFor(nameof(ShowSecondaryOutputs))]
     private bool _secondaryOutputsEmpty = true;
 
-    [ObservableProperty]
-    private bool _isToastVisible;
-
-    [ObservableProperty]
-    private string? _toastText;
-
-    [ObservableProperty]
-    private string? _toastSeverity;
-
     public ObsInfoTileViewModel(
         ObsIntegrationStore store,
         ObsIntegrationService obsIntegration,
         IObsWebSocketClient obsClient,
         IEventBus bus,
         ILogger<ObsInfoTileViewModel> logger,
-        IUiDispatcher uiDispatcher)
+        IUiDispatcher uiDispatcher,
+        ToastHostViewModel? toasts = null,
+        ShellPreferences? preferences = null)
         : base("obs-info", "OBS", maxHeight: 720, minHeight: 154)
     {
         _store = store;
@@ -110,6 +103,8 @@ public sealed partial class ObsInfoTileViewModel : DashboardTileViewModel, IDisp
         _bus = bus;
         _logger = logger;
         _uiDispatcher = uiDispatcher;
+        _toasts = toasts;
+        _preferences = preferences;
 
         StreamCard = new(ObsOutputCardKind.Stream, obsIntegration, logger);
         RecordCard = new(ObsOutputCardKind.Record, obsIntegration, logger);
@@ -119,7 +114,6 @@ public sealed partial class ObsInfoTileViewModel : DashboardTileViewModel, IDisp
 
         _refreshTimer = uiDispatcher.CreateTimer(TimeSpan.FromMilliseconds(DisconnectedRefreshIntervalMs), OnRefreshTimerTick);
         _volumeMeterTimer = uiDispatcher.CreateTimer(TimeSpan.FromMilliseconds(MinVolumeMeterDelayMs), OnVolumeMeterTimerTick);
-        _toastTimer = uiDispatcher.CreateTimer(ToastDuration, OnToastTimerTick);
         _secondaryRefreshTimer = uiDispatcher.CreateTimer(SecondaryRefreshDelay, OnSecondaryRefreshTimerTick);
 
         Initialize();
@@ -190,12 +184,6 @@ public sealed partial class ObsInfoTileViewModel : DashboardTileViewModel, IDisp
     // TODO: уровень присваивается напрямую и прыгает скачками – сглаживание WinForms-хоста (33 мс) не перенесено –
     //  вернуть через CompositionTarget.Rendering, когда пожалуются на дёрганые индикаторы
 
-    private void OnToastTimerTick()
-    {
-        _toastTimer.Stop();
-        IsToastVisible = false;
-    }
-
     private void OnObsEventReceived(object? sender, ObsWebSocketEventArgs evt)
     {
         if (string.Equals(evt.EventType, "InputVolumeMeters", StringComparison.Ordinal))
@@ -241,43 +229,38 @@ public sealed partial class ObsInfoTileViewModel : DashboardTileViewModel, IDisp
 
             if (configuredCount == 0)
             {
-                ShowToast("🔁 источники не настроены", "Warning");
+                ShowToast("Источники чата OBS не настроены", StatusSeverity.Warning);
                 _logger.ObsChatSourcesNotConfigured();
             }
             else if (refreshed == 0)
             {
-                ShowToast($"🔁 ни один из {configuredCount} не обновлён", "Error");
+                ShowToast($"Ни один из {configuredCount} источников чата OBS не обновлён", StatusSeverity.Error);
                 _logger.ObsChatSourcesAllRejected(configuredCount);
             }
             else if (refreshed < configuredCount)
             {
-                ShowToast($"🔁 обновлено {refreshed}/{configuredCount}", "Warning");
+                ShowToast($"Обновлено источников чата OBS: {refreshed}/{configuredCount}", StatusSeverity.Warning);
             }
             else
             {
-                ShowToast($"🔁 обновлено: {refreshed}", "Success");
+                ShowToast($"Обновлено источников чата OBS: {refreshed}", StatusSeverity.Success);
             }
         }
         catch (OperationCanceledException exception)
         {
-            ShowToast("🔁 таймаут", "Error");
+            ShowToast("Таймаут обновления источников чата OBS", StatusSeverity.Error);
             _logger.ObsChatSourcesRefreshTimeout(exception);
         }
         catch (Exception exception)
         {
-            ShowToast("🔁 ошибка", "Error");
+            ShowToast("Не удалось обновить источники чата OBS", StatusSeverity.Error);
             _logger.ObsChatSourcesRefreshFailed(exception);
         }
     }
 
-    private void ShowToast(string text, string severity)
+    private void ShowToast(string text, StatusSeverity severity)
     {
-        ToastText = text;
-        ToastSeverity = severity;
-        IsToastVisible = true;
-
-        _toastTimer.Stop();
-        _toastTimer.Start();
+        _toasts.ShowIfEnabled(_preferences, text, severity);
     }
 
     private void OnObsIntegrationSettingsChanged(ObsIntegrationSettingsChangedEvent evt)
@@ -528,7 +511,7 @@ public sealed partial class ObsInfoTileViewModel : DashboardTileViewModel, IDisp
             }
 
             _logger.ObsSecondaryOutputActionFailed(exception, row.Name);
-            ShowToast("Превышено время ожидания OBS", "Error");
+            ShowToast("Превышено время ожидания OBS", StatusSeverity.Error);
         }
         catch (InvalidOperationException exception)
         {
@@ -538,7 +521,7 @@ public sealed partial class ObsInfoTileViewModel : DashboardTileViewModel, IDisp
             }
 
             _logger.ObsSecondaryOutputActionFailed(exception, row.Name);
-            ShowToast(exception.Message, "Warning");
+            ShowToast(exception.Message, StatusSeverity.Warning);
         }
         catch (Exception exception)
         {
@@ -548,7 +531,7 @@ public sealed partial class ObsInfoTileViewModel : DashboardTileViewModel, IDisp
             }
 
             _logger.ObsSecondaryOutputActionFailed(exception, row.Name);
-            ShowToast("Не удалось управлять дополнительным выходом", "Error");
+            ShowToast("Не удалось управлять дополнительным выходом", StatusSeverity.Error);
         }
         finally
         {
@@ -583,7 +566,7 @@ public sealed partial class ObsInfoTileViewModel : DashboardTileViewModel, IDisp
                 && vendorEvent.ErrorCode is not null and not 0
                 && !string.IsNullOrWhiteSpace(vendorEvent.LastError))
             {
-                ShowToast($"Выход «{vendorEvent.OutputName}» остановлен", "Warning");
+                ShowToast($"Выход «{vendorEvent.OutputName}» остановлен", StatusSeverity.Warning);
             }
 
             ScheduleDelayedSecondaryRefresh();
@@ -912,7 +895,6 @@ public sealed partial class ObsInfoTileViewModel : DashboardTileViewModel, IDisp
 
         _refreshTimer.Stop();
         _volumeMeterTimer.Stop();
-        _toastTimer.Stop();
         _secondaryRefreshTimer.Stop();
 
         _obsClient.EventReceived -= OnObsEventReceived;

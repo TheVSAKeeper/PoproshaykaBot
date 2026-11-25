@@ -52,5 +52,8 @@
                 <views:UpdateBannerView DataContext="{Binding UpdateBanner}" />
             </StackPanel>
         </keepshell:ShellLayout.ContentBanner>
+        <keepshell:ShellLayout.ContentOverlay>
+            <keepshell:ToastHost DataContext="{Binding Toasts}" />
+        </keepshell:ShellLayout.ContentOverlay>
     </keepshell:ShellLayout>
 </Window>

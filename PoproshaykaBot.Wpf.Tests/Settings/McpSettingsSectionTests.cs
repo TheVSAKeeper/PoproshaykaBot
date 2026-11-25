@@ -8,6 +8,7 @@ using KeepShell.ViewModels;
 using MahApps.Metro.IconPacks;
 using Microsoft.Extensions.Logging.Abstractions;
 using PoproshaykaBot.Wpf.Bootstrap;
+using PoproshaykaBot.Wpf.ViewModels;
 using PoproshaykaBot.Wpf.ViewModels.Settings;
 using PoproshaykaBot.Wpf.ViewModels.Settings.Contributors;
 using PoproshaykaBot.Wpf.Views.Settings;
@@ -58,8 +59,7 @@ public sealed class McpSettingsSectionTests
             server,
             options,
             new RecordingDialogService(),
-            new RecordingClipboardService(),
-            new ManualUiDispatcher()))
+            new RecordingClipboardService()))
         {
             var observedStatuses = new List<string> { vm.StatusText };
             vm.PropertyChanged += (_, e) =>
@@ -96,8 +96,7 @@ public sealed class McpSettingsSectionTests
             elevatedServer,
             elevatedOptions,
             new RecordingDialogService(),
-            new RecordingClipboardService(),
-            new ManualUiDispatcher()))
+            new RecordingClipboardService()))
         {
             elevatedPreferences.ApplyRuntimeOverrides(enabled: true, port: 0);
             elevatedServer.Apply();
@@ -125,8 +124,7 @@ public sealed class McpSettingsSectionTests
                 failedServer,
                 failedOptions,
                 new RecordingDialogService(),
-                new RecordingClipboardService(),
-                new ManualUiDispatcher()))
+                new RecordingClipboardService()))
             {
                 failedServer.Apply();
                 WaitOnDispatcher(() => failedServer.LastError is not null && !failedServer.IsStarting, StateTimeout);
@@ -151,8 +149,7 @@ public sealed class McpSettingsSectionTests
             server,
             options,
             new RecordingDialogService(),
-            new RecordingClipboardService(),
-            new ManualUiDispatcher());
+            new RecordingClipboardService());
 
         using (Assert.EnterMultipleScope())
         {
@@ -169,7 +166,7 @@ public sealed class McpSettingsSectionTests
     }
 
     [Test]
-    public void CopyCommands_ShowInlineFeedbackWithoutDialog_AndClearOnTimerEditOrDispose()
+    public void CopyCommands_ShowToastWithoutDialog_ExpireOnTimer_AndRespectPreference()
     {
         var options = CreateOptions();
         var preferences = CreatePreferences(options, enabled: false, isElevated: false);
@@ -177,42 +174,53 @@ public sealed class McpSettingsSectionTests
         var dialog = new RecordingDialogService();
         var clipboard = new RecordingClipboardService();
         var dispatcher = new ManualUiDispatcher();
+        var toasts = new ToastHostViewModel(dispatcher);
+        var shellPreferences = new ShellPreferences(new MemorySettings());
 
-        using var vm = new McpSettingsSectionViewModel(preferences, server, options, dialog, clipboard, dispatcher);
-
-        Assert.That(dispatcher.Timers, Has.Count.EqualTo(1));
-        var feedbackTimer = dispatcher.Timers[0];
+        using var vm = new McpSettingsSectionViewModel(
+            preferences,
+            server,
+            options,
+            dialog,
+            clipboard,
+            toasts,
+            shellPreferences);
 
         vm.CopyTokenCommand.Execute(null);
 
         using (Assert.EnterMultipleScope())
         {
             Assert.That(clipboard.LastText, Is.EqualTo(vm.DisplayToken));
-            Assert.That(vm.CopyFeedback, Is.Not.Null.And.Not.Empty);
+            Assert.That(toasts.Toasts, Has.Count.EqualTo(1));
+            Assert.That(toasts.Toasts[0].Message, Is.EqualTo("Токен скопирован в буфер обмена"));
+            Assert.That(toasts.Toasts[0].Severity, Is.EqualTo(StatusSeverity.Success));
             Assert.That(dialog.ErrorCalls, Is.Zero);
-            Assert.That(feedbackTimer.IsRunning, Is.True);
+            Assert.That(dispatcher.Timers, Has.Count.EqualTo(1));
+            Assert.That(dispatcher.Timers[0].Interval, Is.EqualTo(TimeSpan.FromSeconds(3)));
+            Assert.That(dispatcher.Timers[0].IsRunning, Is.True);
         }
 
-        feedbackTimer.Tick();
-        Assert.That(vm.CopyFeedback, Is.Null);
+        dispatcher.Timers[0].Tick();
+        Assert.That(toasts.Toasts, Is.Empty);
+        Assert.That(dispatcher.Timers[0].IsRunning, Is.False);
 
         vm.CopyConnectSnippetCommand.Execute(null);
-        Assert.That(vm.CopyFeedback, Is.Not.Null.And.Not.Empty);
-        Assert.That(clipboard.LastText, Is.EqualTo(vm.ConnectSnippet));
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(clipboard.LastText, Is.EqualTo(vm.ConnectSnippet));
+            Assert.That(toasts.Toasts, Has.Count.EqualTo(1));
+            Assert.That(toasts.Toasts[0].Message, Is.EqualTo("Строка подключения скопирована"));
+            Assert.That(toasts.Toasts[0].Severity, Is.EqualTo(StatusSeverity.Success));
+            Assert.That(dispatcher.Timers, Has.Count.EqualTo(2));
+            Assert.That(dispatcher.Timers[1].IsRunning, Is.True);
+        }
 
-        vm.SelectedSnippetFormatIndex = 2;
-        Assert.That(vm.CopyFeedback, Is.Null);
+        dispatcher.Timers[1].Tick();
+        Assert.That(toasts.Toasts, Is.Empty);
 
+        shellPreferences.EnableToastNotifications = false;
         vm.CopyTokenCommand.Execute(null);
-        Assert.That(vm.CopyFeedback, Is.Not.Null.And.Not.Empty);
-
-        vm.PortText = "7778";
-        Assert.That(vm.CopyFeedback, Is.Null);
-
-        vm.CopyTokenCommand.Execute(null);
-        Assert.That(feedbackTimer.IsRunning, Is.True);
-        vm.Dispose();
-        Assert.That(feedbackTimer.IsRunning, Is.False);
+        Assert.That(toasts.Toasts, Is.Empty);
     }
 
     [Test]
@@ -226,8 +234,7 @@ public sealed class McpSettingsSectionTests
             server,
             options,
             new RecordingDialogService(),
-            new RecordingClipboardService(),
-            new ManualUiDispatcher());
+            new RecordingClipboardService());
 
         using var bindingErrors = BindingErrorSink.Attach();
         var view = new McpSettingsSectionView { DataContext = vm };
@@ -269,8 +276,7 @@ public sealed class McpSettingsSectionTests
             server,
             options,
             new RecordingDialogService(),
-            new RecordingClipboardService(),
-            new ManualUiDispatcher());
+            new RecordingClipboardService());
 
         vm.AllowMutations = true;
 
@@ -306,8 +312,7 @@ public sealed class McpSettingsSectionTests
             server,
             options,
             new RecordingDialogService(),
-            new RecordingClipboardService(),
-            new ManualUiDispatcher());
+            new RecordingClipboardService());
 
         var raised = 0;
         vm.PropertyChanged += (_, _) => raised++;
@@ -332,8 +337,7 @@ public sealed class McpSettingsSectionTests
             server,
             options,
             new RecordingDialogService(),
-            new RecordingClipboardService(),
-            new ManualUiDispatcher());
+            new RecordingClipboardService());
 
         var contributor = new McpSettingsSectionContributor(vm);
         var section = contributor.CreateSection();
@@ -360,8 +364,7 @@ public sealed class McpSettingsSectionTests
             server,
             options,
             new RecordingDialogService(),
-            clipboard,
-            new ManualUiDispatcher());
+            clipboard);
 
         using (Assert.EnterMultipleScope())
         {

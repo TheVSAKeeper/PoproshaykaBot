@@ -26,7 +26,12 @@ public class ShellPreferencesTests
         var prefs = new ShellPreferences(store);
 
         prefs.NavCollapsed = true;
+        prefs.EnableToastNotifications = false;
 
-        Assert.That(store.GetStringValue(SettingsKeys.NavCollapsed), Is.EqualTo("true"));
+        Assert.Multiple(() =>
+        {
+            Assert.That(store.GetStringValue(SettingsKeys.NavCollapsed), Is.EqualTo("true"));
+            Assert.That(store.GetStringValue(SettingsKeys.EnableToastNotifications), Is.EqualTo("false"));
+        });
     }
 }
