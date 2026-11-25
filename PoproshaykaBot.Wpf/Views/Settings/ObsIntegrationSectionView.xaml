@@ -55,7 +55,7 @@
                 <Setter Property="BorderThickness"
                         Value="1" />
                 <Setter Property="CornerRadius"
-                        Value="4" />
+                        Value="{DynamicResource Radius.S}" />
                 <Setter Property="MaxHeight"
                         Value="180" />
                 <Setter Property="Margin"

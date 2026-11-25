@@ -9,7 +9,8 @@ public abstract class DraftlessSettingsSectionContributorBase(
     string title,
     PackIconLucideKind icon,
     string searchKeywords,
-    object content) : ISettingsSectionContributor
+    object content,
+    Func<string>? dynamicKeywords = null) : ISettingsSectionContributor
 {
     public int Order { get; } = order;
 
@@ -19,7 +20,7 @@ public abstract class DraftlessSettingsSectionContributorBase(
 
     public SettingsSection CreateSection()
     {
-        return new(SectionKey, title, icon, searchKeywords);
+        return new(SectionKey, title, icon, searchKeywords, [], dynamicKeywords);
     }
 
     public IReadOnlyList<SettingsSectionBlockDescriptor> GetBlocks()
@@ -73,8 +74,9 @@ public sealed class AppearanceSettingsSectionContributor(AppearanceSettingsSecti
         "appearance",
         "Оформление",
         PackIconLucideKind.Palette,
-        "тема масштаб шрифта размер текста заголовок страницы внешний вид",
-        appearance);
+        "тема масштаб шрифта размер текста заголовок страницы внешний вид пакеты каталог",
+        appearance,
+        static () => string.Join(' ', ThemeManager.Themes.Select(theme => $"{theme.DisplayName} {theme.Key}")));
 
 public sealed class MiscSettingsSectionContributor(MiscSettingsSectionViewModel misc)
     : DraftlessSettingsSectionContributorBase(

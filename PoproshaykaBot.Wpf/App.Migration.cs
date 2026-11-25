@@ -12,7 +12,11 @@ namespace PoproshaykaBot.Wpf;
 
 public partial class App
 {
-    private static ISettingsStore OfferLegacyDataImport(ISettingsStore uiSettings, string uiSettingsPath, out TimeSpan modalWait)
+    private static ISettingsStore OfferLegacyDataImport(
+        ISettingsStore uiSettings,
+        string uiSettingsPath,
+        ThemePackLoader themePackLoader,
+        out TimeSpan modalWait)
     {
         modalWait = TimeSpan.Zero;
 
@@ -54,7 +58,7 @@ public partial class App
                 HostLog.Information("Предложение переноса данных отключено пользователем");
             }
 
-            return ReloadUiSettingsIfImported(uiSettings, uiSettingsPath, viewModel.Result);
+            return ReloadUiSettingsIfImported(uiSettings, uiSettingsPath, viewModel.Result, themePackLoader);
         }
         catch (Exception exception)
         {
@@ -63,7 +67,11 @@ public partial class App
         }
     }
 
-    private static ISettingsStore ReloadUiSettingsIfImported(ISettingsStore uiSettings, string uiSettingsPath, LegacyImportResult? result)
+    private static ISettingsStore ReloadUiSettingsIfImported(
+        ISettingsStore uiSettings,
+        string uiSettingsPath,
+        LegacyImportResult? result,
+        ThemePackLoader themePackLoader)
     {
         if (result?.CopiedUiPreferences != true)
         {
@@ -79,8 +87,8 @@ public partial class App
 
         ISettingsStore reloaded = new SettingsStore(uiSettingsPath);
 
-        var themeKey = reloaded.GetStringValue(SettingsKeys.Theme);
-        ThemeManager.Apply(string.IsNullOrWhiteSpace(themeKey) ? AppThemes.LightKey : themeKey);
+        var themeKey = themePackLoader.Restore(reloaded);
+        ThemeManager.Apply(themeKey ?? ThemeManager.DefaultLight.Key);
         FontScaleManager.Apply(reloaded.GetDouble(SettingsKeys.FontScale, FontScaleManager.DefaultScale));
 
         HostLog.Information("Перенесённые настройки вида перечитаны из {Path}", uiSettingsPath);

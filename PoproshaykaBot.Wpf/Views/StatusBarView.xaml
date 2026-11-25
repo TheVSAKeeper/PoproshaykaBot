@@ -54,8 +54,11 @@
     <Border Background="{DynamicResource Bg.Surface}"
             BorderBrush="{DynamicResource Border.Subtle}"
             BorderThickness="0,1,0,0"
-            Padding="14,5">
-        <DockPanel LastChildFill="True">
+            ClipToBounds="True">
+        <Grid>
+            <keepshell:ThemeChromeHost Part="StatusBarBackdrop" />
+            <DockPanel LastChildFill="True"
+                       Margin="14,5">
             <StackPanel DockPanel.Dock="Right"
                         Orientation="Horizontal"
                         Margin="16,0,0,0"
@@ -165,5 +168,6 @@
                 </TextBlock.Style>
             </TextBlock>
         </DockPanel>
+        </Grid>
     </Border>
 </UserControl>

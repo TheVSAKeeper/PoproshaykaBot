@@ -23,7 +23,7 @@
             <Setter Property="Height"
                     Value="32" />
             <Setter Property="CornerRadius"
-                    Value="3" />
+                    Value="{DynamicResource Radius.S}" />
             <Setter Property="Background"
                     Value="{DynamicResource Bg.SurfaceMute}" />
             <Setter Property="BorderBrush"
@@ -48,7 +48,7 @@
             <Setter Property="Height"
                     Value="72" />
             <Setter Property="CornerRadius"
-                    Value="4" />
+                    Value="{DynamicResource Radius.S}" />
             <Setter Property="VerticalAlignment"
                     Value="Top" />
         </Style>
@@ -168,14 +168,15 @@
                             <Border Grid.Row="1"
                                     Grid.RowSpan="2"
                                     Background="{DynamicResource Bg.SurfaceMute}"
-                                    CornerRadius="2" />
+                                    CornerRadius="{DynamicResource Radius.S}" />
 
                             <Border x:Name="Fill"
                                     Grid.Row="2"
                                     Background="{TemplateBinding Background}"
                                     BorderBrush="Transparent"
                                     BorderThickness="0"
-                                    CornerRadius="2,2,0,0" />
+                                    Tag="{DynamicResource Radius.S}"
+                                    CornerRadius="{Binding Tag, RelativeSource={RelativeSource Self}, Converter={StaticResource CornerRadiusMask}, ConverterParameter=Top}" />
 
                             <Border x:Name="Break"
                                     Grid.Row="2"
@@ -291,7 +292,7 @@
         <Style x:Key="SegmentBlock"
                TargetType="Border">
             <Setter Property="CornerRadius"
-                    Value="3" />
+                    Value="{DynamicResource Radius.S}" />
             <Setter Property="Padding"
                     Value="6,0" />
             <Setter Property="BorderBrush"
@@ -300,6 +301,10 @@
                     Value="0" />
             <Setter Property="Background"
                     Value="{DynamicResource Bg.SurfaceMute}" />
+            <Setter Property="infrastructure:DataScaleBrushBehavior.SegmentSlot"
+                    Value="{Binding PaletteIndex}" />
+            <Setter Property="infrastructure:DataScaleBrushBehavior.SlotRole"
+                    Value="SoftFill" />
             <Style.Triggers>
                 <DataTrigger Binding="{Binding PaletteIndex}"
                              Value="0">
@@ -348,6 +353,10 @@
                     Value="CharacterEllipsis" />
             <Setter Property="Foreground"
                     Value="{DynamicResource Fg.Secondary}" />
+            <Setter Property="infrastructure:DataScaleBrushBehavior.SegmentSlot"
+                    Value="{Binding PaletteIndex}" />
+            <Setter Property="infrastructure:DataScaleBrushBehavior.SlotRole"
+                    Value="Foreground" />
             <Style.Triggers>
                 <DataTrigger Binding="{Binding PaletteIndex}"
                              Value="0">
@@ -511,9 +520,13 @@
         <Style x:Key="SessionCardStripe"
                TargetType="Border">
             <Setter Property="CornerRadius"
-                    Value="2" />
+                    Value="{DynamicResource Radius.S}" />
             <Setter Property="Background"
                     Value="{DynamicResource Bg.SurfaceMute}" />
+            <Setter Property="infrastructure:DataScaleBrushBehavior.SegmentSlot"
+                    Value="{Binding PaletteIndex}" />
+            <Setter Property="infrastructure:DataScaleBrushBehavior.SlotRole"
+                    Value="Stripe" />
             <Style.Triggers>
                 <DataTrigger Binding="{Binding PaletteIndex}"
                              Value="0">

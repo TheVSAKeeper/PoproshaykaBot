@@ -72,7 +72,7 @@
                             Width="3"
                             Margin="-8,-4,0,-4"
                             HorizontalAlignment="Left"
-                            CornerRadius="1.5"
+                            CornerRadius="{DynamicResource Radius.S}"
                             IsHitTestVisible="False"
                             Visibility="{Binding IsActive, Converter={StaticResource BoolToVisibility}}">
                         <Border.Style>

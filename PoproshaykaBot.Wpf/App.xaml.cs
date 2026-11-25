@@ -2,6 +2,7 @@
 using KeepShell.Mcp;
 using KeepShell.Bootstrap;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging;
 using PoproshaykaBot.Core.Broadcast;
 using PoproshaykaBot.Core.Chat;
@@ -83,6 +84,7 @@ public partial class App : Application
     private volatile bool _mcpStopFailed;
     private AppExitReason _exitReason = AppExitReason.None;
     private string? _startupErrorDetails;
+    private CancellationTokenSource? _themeUpdatesCts;
 
     internal static bool IsFatalShutdown => Volatile.Read(ref _fatalErrorHandled) == 1;
 
@@ -200,15 +202,18 @@ public partial class App : Application
             var uiSettingsPath = AppPaths.SettingsFile("ui-preferences.toml");
             ISettingsStore uiSettings = new SettingsStore(uiSettingsPath);
 
-            AppThemes.Register();
+            ThemeManager.Register(ThemeManager.DefaultLight);
+            ThemeManager.Register(ThemeManager.DefaultDark);
+
+            var themePackLoader = CreateThemePackLoader();
+            var restoredThemeKey = themePackLoader.Restore(uiSettings);
 
             if (_galleryArgs is not null && _galleryWorkspace is not null)
             {
                 _galleryArguments = GalleryHost.Parse(_galleryArgs, System.IO.Path.Combine(_galleryWorkspace.OutputRoot, GalleryRunner.FolderName));
             }
 
-            var themeKey = uiSettings.GetStringValue(SettingsKeys.Theme);
-            ThemeManager.Apply(string.IsNullOrWhiteSpace(themeKey) ? AppThemes.LightKey : themeKey);
+            ThemeManager.Apply(restoredThemeKey ?? ThemeManager.DefaultLight.Key);
             FontScaleManager.Initialize(uiSettings.GetDouble(SettingsKeys.FontScale, FontScaleManager.DefaultScale));
             AppScaledSizes.Register(this);
 
@@ -254,7 +259,7 @@ public partial class App : Application
                 }
                 else
                 {
-                    uiSettings = OfferLegacyDataImport(uiSettings, uiSettingsPath, out var modalWait);
+                    uiSettings = OfferLegacyDataImport(uiSettings, uiSettingsPath, themePackLoader, out var modalWait);
                     interactiveWait += modalWait;
                     await Task.Run(MigrateLegacySettingsLayout);
                 }
@@ -263,6 +268,7 @@ public partial class App : Application
             using (await BeginStartupPhaseAsync(splash, "Подготовка приложения…"))
             {
                 var services = new ServiceCollection();
+                services.AddSingleton(themePackLoader);
                 ConfigureServices(
                     services,
                     coreUiLogSink,
@@ -357,6 +363,19 @@ public partial class App : Application
 
             _services.GetRequiredService<PerformanceMonitor>().ReportStartup(ComputeStartupElapsed(startupTimestamp, interactiveWait));
 
+            if (!IsHeadless && !IsGallery)
+            {
+                _themeUpdatesCts = new CancellationTokenSource();
+                var themeUpdates = _services.GetRequiredService<ThemePackUpdateService>();
+                var themeUpdatesToken = _themeUpdatesCts.Token;
+                _ = UiAsync.RunGuardedAsync(
+                    async () =>
+                    {
+                        _ = await themeUpdates.CheckOnStartupAsync(themeUpdatesToken);
+                    },
+                    static exception => HostLog.Warning(exception, "Не удалось проверить обновления пакетов тем"));
+            }
+
             if (_previousRunState.WasUnclean && !IsHeadless)
             {
                 _services.GetRequiredService<ShellViewModel>().ReportUncleanPreviousRun();
@@ -395,6 +414,9 @@ public partial class App : Application
     protected override void OnExit(ExitEventArgs e)
     {
         _memoryWatchdog?.Dispose();
+        _themeUpdatesCts?.Cancel();
+        _themeUpdatesCts?.Dispose();
+        _themeUpdatesCts = null;
 
         var stoppedCleanly = true;
 
@@ -499,6 +521,13 @@ public partial class App : Application
 
             Shutdown(code);
         });
+    }
+
+    private static ThemePackLoader CreateThemePackLoader()
+    {
+        return new(
+            AppPaths.Combine("themes"),
+            static (path, error) => HostLog.Warning(error, "Пакет темы отклонён: {Path}", path));
     }
 
     private static void MigrateLegacySettingsLayout()
@@ -639,7 +668,31 @@ public partial class App : Application
         services.AddSingleton<ChatMessageImageProvider>();
         services.AddSingleton<StreamHistoryPageViewModel>();
         services.AddSingleton<CommandsPageViewModel>();
-        services.AddSingleton<ThemeViewModel>();
+        services.TryAddSingleton(static _ => CreateThemePackLoader());
+        services.AddSingleton<ThemeSelectionViewModel>();
+        services.AddSingleton(static _ => new ThemePackCatalog(
+            new Uri("https://github.com/TheVSAKeeper/KeepShell.Themes/releases/latest/download/themes.json")));
+        services.AddSingleton<ThemePackUpdateService>();
+        services.AddSingleton(static provider => new ThemePacksViewModel(
+            provider.GetRequiredService<ThemePackLoader>(),
+            provider.GetRequiredService<ThemeSelectionViewModel>(),
+            provider.GetRequiredService<IFilePicker>(),
+            provider.GetRequiredService<ILogger<ThemePacksViewModel>>(),
+            provider.GetRequiredService<ThemePackCatalog>(),
+            provider.GetRequiredService<IThemeCatalogWindowService>(),
+            provider.GetRequiredService<IDialogService>(),
+            provider.GetRequiredService<IClipboardService>(),
+            provider.GetRequiredService<ThemePackUpdateService>(),
+            restartApp: () =>
+            {
+                if (IsHeadless || !TryRequestRestart())
+                {
+                    return Task.FromResult(false);
+                }
+
+                provider.GetRequiredService<IMainWindowController>().RequestClose();
+                return Task.FromResult(true);
+            }));
         services.AddSingleton<ShellPreferences>();
         services.AddSingleton<UpdateBannerViewModel>();
         services.AddSingleton<OnboardingBannerViewModel>();

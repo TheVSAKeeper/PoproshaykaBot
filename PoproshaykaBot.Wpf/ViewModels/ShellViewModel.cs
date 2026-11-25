@@ -114,7 +114,7 @@ public sealed partial class ShellViewModel : ShellViewModelBase, IDisposable
         CommandsPageViewModel commandsPage,
         LogsViewModel logsPage,
         DiagnosticsViewModel diagnosticsPage,
-        ThemeViewModel theme,
+        ThemeSelectionViewModel theme,
         ShellPreferences preferences,
         IBotConnectionController connectionManager,
         IEventBus eventBus,
@@ -221,7 +221,7 @@ public sealed partial class ShellViewModel : ShellViewModelBase, IDisposable
         RefreshPartialFailureStatus();
     }
 
-    public ThemeViewModel Theme { get; }
+    public ThemeSelectionViewModel Theme { get; }
 
     public UpdateBannerViewModel UpdateBanner { get; }
 

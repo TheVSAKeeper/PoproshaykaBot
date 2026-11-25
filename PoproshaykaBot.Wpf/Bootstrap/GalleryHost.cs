@@ -44,7 +44,7 @@ public sealed class GalleryHost : IGalleryHost
         var defaults = new GalleryDefaults
         {
             Directory = defaultDirectory,
-            Themes = [AppThemes.LightKey, AppThemes.DarkKey],
+            Themes = [ThemeManager.DefaultLight.Key, ThemeManager.DefaultDark.Key],
             Width = AppDefaults.GalleryWidthDefault,
             Height = AppDefaults.GalleryHeightDefault,
         };

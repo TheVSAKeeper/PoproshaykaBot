@@ -10,7 +10,7 @@ public class AppLogEventIdTests
     [Test]
     public void All_LoggerMessage_EventIds_are_unique()
     {
-        var appLogType = typeof(AppThemes).Assembly.GetType("PoproshaykaBot.Wpf.Bootstrap.AppLog", throwOnError: true)!;
+        var appLogType = typeof(AppInfo).Assembly.GetType("PoproshaykaBot.Wpf.Bootstrap.AppLog", throwOnError: true)!;
 
         var ids = appLogType
             .GetMethods(BindingFlags.Public | BindingFlags.Static)

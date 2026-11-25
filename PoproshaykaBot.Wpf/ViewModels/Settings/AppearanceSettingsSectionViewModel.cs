@@ -2,16 +2,22 @@
 
 public sealed class AppearanceSettingsSectionViewModel
 {
-    public AppearanceSettingsSectionViewModel(ThemeViewModel theme, ShellPreferences shell)
+    public AppearanceSettingsSectionViewModel(
+        ThemeSelectionViewModel theme,
+        ShellPreferences shell,
+        ThemePacksViewModel? themePacks = null)
     {
         ArgumentNullException.ThrowIfNull(theme);
         ArgumentNullException.ThrowIfNull(shell);
 
         Theme = theme;
         Shell = shell;
+        ThemePacks = themePacks;
     }
 
-    public ThemeViewModel Theme { get; }
+    public ThemeSelectionViewModel Theme { get; }
 
     public ShellPreferences Shell { get; }
+
+    public ThemePacksViewModel? ThemePacks { get; }
 }

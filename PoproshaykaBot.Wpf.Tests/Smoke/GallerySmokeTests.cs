@@ -1,4 +1,5 @@
 ﻿using KeepShell.Automation;
+using KeepShell.Bootstrap;
 using PoproshaykaBot.Wpf.Bootstrap;
 using PoproshaykaBot.Core.Platforms;
 using PoproshaykaBot.Core.Settings.Stores;
@@ -52,7 +53,7 @@ public class GallerySmokeTests
             Path.Combine(_baseDirectory, "settings", "ui-preferences.toml"),
             $"[ui.settings]\nsection = \"{settingsSection}\"\n");
 
-        var (exitCode, output) = RunGallery(SectionKeys.Settings, $"{AppThemes.LightKey},{AppThemes.DarkKey}");
+        var (exitCode, output) = RunGallery(SectionKeys.Settings, $"{ThemeManager.DefaultLight.Key},{ThemeManager.DefaultDark.Key}");
 
         Assert.That(exitCode, Is.Zero, $"Раздел {settingsSection} должен открыться в WPF.{Environment.NewLine}{output}");
         Assert.That(ReadFrame("settings-light.png"), Is.Not.Empty);
@@ -67,7 +68,7 @@ public class GallerySmokeTests
             Path.Combine(_baseDirectory, "settings", "ui-preferences.toml"),
             "[ui.settings]\nsection = \"mcp\"\n");
 
-        var (exitCode, output) = RunGallery(SectionKeys.Settings, $"{AppThemes.LightKey},{AppThemes.DarkKey}");
+        var (exitCode, output) = RunGallery(SectionKeys.Settings, $"{ThemeManager.DefaultLight.Key},{ThemeManager.DefaultDark.Key}");
 
         Assert.That(exitCode, Is.Zero, $"Раздел mcp должен открыться в WPF в обеих темах.{Environment.NewLine}{output}");
         Assert.That(ReadFrame("settings-light.png"), Is.Not.Empty);
@@ -81,7 +82,7 @@ public class GallerySmokeTests
         var watch = Stopwatch.StartNew();
         var (exitCode, output) = RunGallery(
             SectionKeys.Overview,
-            AppThemes.LightKey,
+            ThemeManager.DefaultLight.Key,
             [GalleryArguments.ElementKey, "__nonexistent_gallery_element__"],
             FailedRunTimeout);
         watch.Stop();
@@ -98,7 +99,7 @@ public class GallerySmokeTests
     public void Gallery_ShouldCaptureOverviewAndDialogs()
     {
         var pages = string.Join(',', GalleryDialogs.BroadcastProfile, SectionKeys.Overview, GalleryDialogs.ChatBlockers);
-        var (exitCode, output) = RunGallery(pages, AppThemes.LightKey);
+        var (exitCode, output) = RunGallery(pages, ThemeManager.DefaultLight.Key);
 
         Assert.That(exitCode, Is.Zero, $"Прогон галереи должен завершиться кодом 0. Вывод процесса:{Environment.NewLine}{output}");
 
@@ -155,7 +156,7 @@ public class GallerySmokeTests
     public void Gallery_ShouldCaptureUsersWithAndWithoutSelection()
     {
         var pages = string.Join(',', SectionKeys.UsersSelected, SectionKeys.Users);
-        var (exitCode, output) = RunGallery(pages, AppThemes.LightKey);
+        var (exitCode, output) = RunGallery(pages, ThemeManager.DefaultLight.Key);
 
         Assert.That(exitCode, Is.Zero, $"Прогон галереи должен завершиться кодом 0. Вывод процесса:{Environment.NewLine}{output}");
 
@@ -189,7 +190,7 @@ public class GallerySmokeTests
     public void Gallery_ShouldSkipUnknownKeysAndFinishSuccessfully()
     {
         var pages = string.Join(',', SectionKeys.Overview, "dialog:no-such-dialog", "no-such-page");
-        var (exitCode, output) = RunGallery(pages, AppThemes.LightKey);
+        var (exitCode, output) = RunGallery(pages, ThemeManager.DefaultLight.Key);
 
         Assert.That(exitCode, Is.Zero, $"Неизвестный ключ не должен ронять прогон. Вывод процесса:{Environment.NewLine}{output}");
 

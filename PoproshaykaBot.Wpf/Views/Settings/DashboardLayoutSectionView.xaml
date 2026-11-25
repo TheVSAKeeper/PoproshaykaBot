@@ -126,7 +126,7 @@
                     Background="{DynamicResource Bg.Surface}"
                     BorderBrush="{DynamicResource Border.Subtle}"
                     BorderThickness="1"
-                    CornerRadius="6"
+                    CornerRadius="{DynamicResource Radius.S}"
                     Padding="8"
                     Margin="0,0,12,0">
                 <DockPanel>
@@ -156,7 +156,7 @@
             <Border Grid.Column="1"
                     BorderBrush="{DynamicResource Border.Subtle}"
                     BorderThickness="1"
-                    CornerRadius="6"
+                    CornerRadius="{DynamicResource Radius.S}"
                     Background="{DynamicResource Bg.Base}"
                     Padding="4"
                     AllowDrop="True"

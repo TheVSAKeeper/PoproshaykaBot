@@ -13,7 +13,7 @@
 
     <Border Margin="20,12,20,0"
             Padding="0"
-            CornerRadius="8"
+            CornerRadius="{DynamicResource Radius.M}"
             Background="{DynamicResource State.WarningSoft}"
             BorderBrush="{DynamicResource State.Warning}"
             BorderThickness="1">
@@ -26,7 +26,8 @@
 
             <Border Grid.Column="0"
                     Width="4"
-                    CornerRadius="8,0,0,8"
+                    Tag="{DynamicResource Radius.M}"
+                    CornerRadius="{Binding Tag, RelativeSource={RelativeSource Self}, Converter={StaticResource CornerRadiusMask}, ConverterParameter=Left}"
                     Background="{DynamicResource State.Warning}" />
 
             <Grid Grid.Column="1"

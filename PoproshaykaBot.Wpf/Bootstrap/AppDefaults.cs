@@ -2,7 +2,7 @@
 
 public static class AppDefaults
 {
-    public const AppTheme ThemeDefault = AppTheme.Light;
+    public static string ThemeDefault => ThemeManager.DefaultLight.Key;
     public const bool ShowPageHeaderDefault = true;
     public const bool EnableToastNotificationsDefault = true;
 

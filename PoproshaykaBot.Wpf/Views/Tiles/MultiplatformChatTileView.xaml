@@ -56,7 +56,7 @@
                                 <Border Background="{DynamicResource Bg.SurfaceAlt}"
                                         BorderBrush="{DynamicResource Border.Subtle}"
                                         BorderThickness="1"
-                                        CornerRadius="4"
+                                        CornerRadius="{DynamicResource Radius.S}"
                                         Padding="4,0"
                                         Margin="0,0,4,0"
                                         Visibility="{Binding HasRoleBadge, Converter={StaticResource BoolToVisibility}}">
@@ -68,7 +68,7 @@
                         </InlineUIContainer>
                         <InlineUIContainer BaselineAlignment="Center">
                             <Border Background="{DynamicResource Bg.SurfaceAlt}"
-                                    CornerRadius="4"
+                                    CornerRadius="{DynamicResource Radius.S}"
                                     Padding="4,0"
                                     Margin="0,0,4,0"
                                     Visibility="{Binding IsHistorical, Converter={StaticResource BoolToVisibility}}">
@@ -158,7 +158,7 @@
                             Background="{DynamicResource Bg.SurfaceAlt}"
                             BorderBrush="{DynamicResource Border.Subtle}"
                             BorderThickness="1"
-                            CornerRadius="10"
+                            CornerRadius="{DynamicResource Radius.M}"
                             Padding="8,1"
                             Margin="6,0">
                         <TextBlock Text="{Binding Label, Mode=OneWay}"
@@ -184,7 +184,7 @@
                 <Border Background="{DynamicResource Bg.SurfaceAlt}"
                         BorderBrush="{DynamicResource Border.Subtle}"
                         BorderThickness="1"
-                        CornerRadius="6"
+                        CornerRadius="{DynamicResource Radius.S}"
                         Padding="8,5">
                     <StackPanel Orientation="Horizontal">
                         <platformControls:PlatformIconView Platform="{Binding Platform, Mode=OneWay}"

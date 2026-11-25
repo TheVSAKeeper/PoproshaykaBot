@@ -5,5 +5,6 @@
     <conv:TimecodeConverter x:Key="Timecode" />
     <conv:DrawingColorToBrushConverter x:Key="DrawingColorToBrush" />
     <conv:ScaledWidthFitsConverter x:Key="ScaledWidthFits" />
+    <conv:CornerRadiusMaskConverter x:Key="CornerRadiusMask" />
 
 </ResourceDictionary>

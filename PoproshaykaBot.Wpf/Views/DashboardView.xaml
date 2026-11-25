@@ -123,7 +123,8 @@
                             Background="{DynamicResource Bg.SurfaceAlt}"
                             BorderBrush="{DynamicResource Border.Subtle}"
                             BorderThickness="0,0,0,1"
-                            CornerRadius="9,9,0,0"
+                            Tag="{DynamicResource Radius.M}"
+                            CornerRadius="{Binding Tag, RelativeSource={RelativeSource Self}, Converter={StaticResource CornerRadiusMask}, ConverterParameter='Top,1'}"
                             Padding="12,7,8,7"
                             SnapsToDevicePixels="True">
                     <DockPanel x:Name="TileHeader"
@@ -257,7 +258,7 @@
 
                 <Border x:Name="TileStrip"
                         Background="{DynamicResource Bg.SurfaceAlt}"
-                        CornerRadius="9"
+                        CornerRadius="{DynamicResource Radius.M}"
                         Width="{Binding Path=(tiles:DashboardTileViewModel.ScaledCollapsedStripWidth), Mode=OneWay}"
                         Padding="0,8,0,8"
                         Visibility="Collapsed"
