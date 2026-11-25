@@ -6,6 +6,8 @@ namespace PoproshaykaBot.Core.Chat;
 public readonly record struct BroadcastSendResult(
     IReadOnlyDictionary<StreamingPlatform, ChatEnqueueResult> PerPlatform)
 {
+    public IReadOnlyDictionary<StreamingPlatform, Task<ChatAccountSendResult>>? Deliveries { get; init; }
+
     public bool AnyQueued => PerPlatform.Values.Any(x => x == ChatEnqueueResult.Queued);
 
     public ChatEnqueueResult FirstRefusalOr(ChatEnqueueResult fallback = ChatEnqueueResult.NotConnected)
@@ -42,4 +44,9 @@ public interface IBroadcastMessenger
         Func<IChatPlatform, string?> messageFactory,
         IReadOnlySet<StreamingPlatform>? platforms = null,
         ChatSendCategory category = ChatSendCategory.None);
+
+    BroadcastSendResult SendTracked(
+        Func<IChatPlatform, string?> messageFactory,
+        IReadOnlySet<StreamingPlatform> platforms,
+        ChatSendCategory category) => Send(messageFactory, platforms, category);
 }

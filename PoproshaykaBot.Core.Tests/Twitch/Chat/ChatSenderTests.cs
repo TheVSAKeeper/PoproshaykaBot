@@ -97,6 +97,33 @@ public class ChatSenderTests
         Assert.That(delivered, Is.EqualTo("hello"));
     }
 
+    [TestCase(false, ChatDeliveryStatus.Sent)]
+    [TestCase(true, ChatDeliveryStatus.ChatUnavailable)]
+    public async Task TrackedSend_QueueDoesNotConfirmDeliveryAndDoesNotFollowChannelSwitch(bool switchChannel, ChatDeliveryStatus expected)
+    {
+        _helix.SendChatMessageAsync("1", "2", "рассылка", null, Arg.Any<CancellationToken>()).Returns("sent-id");
+        var receipt = _sender.EnqueueTracked("рассылка");
+        Assert.That(receipt.EnqueueResult, Is.EqualTo(ChatEnqueueResult.Queued));
+        Assert.That(receipt.Delivery!.IsCompleted, Is.False);
+        if (switchChannel)
+        {
+            _targetChannel.Login = "new-channel";
+        }
+
+        var progress = new Progress<string>();
+        await _sender.StartAsync(progress, CancellationToken.None);
+        await _sender.StopAsync(progress, CancellationToken.None);
+
+        var delivery = await receipt.Delivery.WaitAsync(TimeSpan.FromSeconds(5));
+        Assert.Multiple(() =>
+        {
+            Assert.That(delivery.DeliveryStatus, Is.EqualTo(expected));
+            Assert.That(delivery.SentParts, Is.EqualTo(switchChannel ? 0 : 1));
+        });
+        await _helix.Received(switchChannel ? 0 : 1)
+            .SendChatMessageAsync("1", "2", "рассылка", null, Arg.Any<CancellationToken>());
+    }
+
     [Test]
     public async Task EnqueueAsync_InObserverMode_DoesNotReachTwitch()
     {

@@ -370,6 +370,24 @@ public class YouTubeMessengerTests
     }
 
     [Test]
+    public async Task TrackedBroadcast_ConfirmsOnlyAfterYouTubeAcceptsMessage()
+    {
+        var response = new TaskCompletionSource<YouTubeInsertMessageResult>(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var messenger = CreateMessenger(new StubSendClient((_, _, _, _) => response.Task));
+        var progress = new Progress<string>();
+        await messenger.StartAsync(progress, CancellationToken.None);
+        var receipt = messenger.SendTracked("рассылка", ChatSendCategory.ScheduledBroadcast);
+
+        Assert.That(receipt.EnqueueResult, Is.EqualTo(ChatEnqueueResult.Queued));
+        Assert.That(receipt.Delivery!.IsCompleted, Is.False);
+        response.SetResult(new("confirmed-id", _clock.GetUtcNow()));
+
+        var delivery = await receipt.Delivery.WaitAsync(TimeSpan.FromSeconds(5));
+        Assert.That(delivery, Is.EqualTo(new ChatAccountSendResult(ChatEnqueueResult.Queued, ChatDeliveryStatus.Sent, 1)));
+        await messenger.StopAsync(progress, CancellationToken.None);
+    }
+
+    [Test]
     public async Task Send_Refuses_Response_From_Previous_Live_Chat_Even_Before_Queueing()
     {
         var sends = new List<string>();

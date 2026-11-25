@@ -93,7 +93,7 @@ public class BroadcastSchedulerTests
     [TestCase(false, true, 1)]
     [TestCase(true, false, 0)]
     [TestCase(false, false, 0)]
-    public async Task Отправка_считается_отправленной_только_когда_ChatSender_её_принял(bool manual, bool sendingAllowed, int expectedSent)
+    public async Task Счётчик_растёт_только_когда_ChatSender_принял_сообщение_в_очередь(bool manual, bool sendingAllowed, int expectedSent)
     {
         _sendingAllowed = sendingAllowed;
 
@@ -110,7 +110,7 @@ public class BroadcastSchedulerTests
             await WaitForPublishAsync();
         }
 
-        var sentLines = _logger.Entries.Count(e => e.Level == LogLevel.Information && e.Message.Contains("Всего отправлено"));
+        var sentLines = _logger.Entries.Count(e => e.Level == LogLevel.Information && e.Message.Contains("принята в очередь"));
         var refusalLines = _logger.Entries.Count(e => e.Level == LogLevel.Debug && e.Message.Contains("режим наблюдателя"));
 
         Assert.Multiple(() =>
@@ -138,7 +138,7 @@ public class BroadcastSchedulerTests
         Assert.Multiple(() =>
         {
             Assert.That(_scheduler.SentMessagesCount, Is.EqualTo(1));
-            Assert.That(_logger.Entries.Any(e => e.Message.Contains("Всего отправлено: 1")), Is.True);
+            Assert.That(_logger.Entries.Any(e => e.Message.Contains("Номер рассылки: 1")), Is.True);
         });
     }
 

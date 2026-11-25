@@ -185,6 +185,13 @@ internal sealed class YouTubeMessenger(
             && PlatformAuthRoles.HasCredentials(settings.AccessToken, settings.RefreshToken);
     }
 
+    public TrackedChatSend SendTracked(string text, ChatSendCategory category)
+    {
+        var completion = new TaskCompletionSource<ChatAccountSendResult>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var result = Enqueue(text, null, category, null, null, null, completion);
+        return new(result, result == ChatEnqueueResult.Queued ? completion.Task : null);
+    }
+
     public async Task<ChatAccountSendResult> SendAsAsync(ChatSenderAccount account, string streamId, string text)
     {
         if (!CanSendAs(account))

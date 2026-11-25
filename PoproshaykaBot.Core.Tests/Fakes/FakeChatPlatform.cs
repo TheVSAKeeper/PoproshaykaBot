@@ -96,6 +96,8 @@ internal sealed class FakeChatPlatform : IChatPlatform
     public sealed class PlatformMessengerStub : IPlatformMessenger
     {
         public ChatEnqueueResult EnqueueResult { get; set; } = ChatEnqueueResult.Queued;
+        public Task<ChatAccountSendResult>? Delivery { get; set; }
+        public Action<string>? OnQueued { get; set; }
 
         public List<(string Text, CommandResponseMark? Mark)> Sent { get; } = [];
 
@@ -119,9 +121,16 @@ internal sealed class FakeChatPlatform : IChatPlatform
             {
                 Sent.Add((text, commandResponse));
                 SentCategories.Add(category);
+                OnQueued?.Invoke(text);
             }
 
             return EnqueueResult;
+        }
+
+        public TrackedChatSend SendTracked(string text, ChatSendCategory category)
+        {
+            var result = Send(text, category: category);
+            return new(result, result == ChatEnqueueResult.Queued ? Delivery : null);
         }
 
         public void Reply(

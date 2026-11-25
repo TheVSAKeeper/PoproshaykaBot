@@ -47,10 +47,20 @@ public sealed class BroadcastMessenger(
         Func<IChatPlatform, string?> messageFactory,
         IReadOnlySet<StreamingPlatform>? platforms = null,
         ChatSendCategory category = ChatSendCategory.None)
+        => SendCore(messageFactory, platforms, category, trackDelivery: false);
+
+    public BroadcastSendResult SendTracked(
+        Func<IChatPlatform, string?> messageFactory, IReadOnlySet<StreamingPlatform> platforms, ChatSendCategory category)
+        => SendCore(messageFactory, platforms, category, trackDelivery: true);
+
+    private BroadcastSendResult SendCore(
+        Func<IChatPlatform, string?> messageFactory, IReadOnlySet<StreamingPlatform>? platforms,
+        ChatSendCategory category, bool trackDelivery)
     {
         ArgumentNullException.ThrowIfNull(messageFactory);
 
         var results = new Dictionary<StreamingPlatform, ChatEnqueueResult>();
+        Dictionary<StreamingPlatform, Task<ChatAccountSendResult>>? deliveries = trackDelivery ? [] : null;
         IReadOnlyCollection<IChatPlatform> targets;
 
         if (platforms is null)
@@ -85,9 +95,20 @@ public sealed class BroadcastMessenger(
                 continue;
             }
 
-            results[adapter.Id] = adapter.Messenger.Send(text, category: category);
+            if (deliveries is null)
+            {
+                results[adapter.Id] = adapter.Messenger.Send(text, category: category);
+                continue;
+            }
+
+            var receipt = adapter.Messenger.SendTracked(text, category);
+            results[adapter.Id] = receipt.EnqueueResult;
+            if (receipt.Delivery is { } delivery)
+            {
+                deliveries.Add(adapter.Id, delivery);
+            }
         }
 
-        return new(results);
+        return new(results) { Deliveries = deliveries };
     }
 }

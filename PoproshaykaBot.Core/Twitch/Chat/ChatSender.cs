@@ -40,12 +40,6 @@ public sealed class ChatSender(
     private long _failedCount;
     private long _lastSentAtUtcTicks;
 
-    private enum SendOutcome
-    {
-        Done = 0,
-        RateLimited = 1,
-    }
-
     public string Name => "Отправитель сообщений чата (Helix)";
 
     public int StartOrder => 50;
@@ -75,7 +69,7 @@ public sealed class ChatSender(
         }
 
         _cts = new();
-        _backgroundTask = RunAsync(_cts.Token);
+        _backgroundTask = RunAsync(_channel, _cts.Token);
         _ = WarmupAsync(_cts.Token);
         logger.LogInformation("ChatSender запущен");
         return Task.CompletedTask;
@@ -89,6 +83,7 @@ public sealed class ChatSender(
 
         if (_backgroundTask == null)
         {
+            CompletePending(_channel);
             return;
         }
 
@@ -149,6 +144,22 @@ public sealed class ChatSender(
         return Enqueue(message, replyParentMessageId, commandResponse, null, origin);
     }
 
+    public TrackedChatSend EnqueueTracked(string message)
+    {
+        List<Task<ChatDeliveryStatus>> parts = [];
+        var result = Enqueue(message, null, null, null, null, parts);
+        return new(result, result == ChatEnqueueResult.Queued ? AggregateDeliveryAsync(parts) : null);
+    }
+
+    private static async Task<ChatAccountSendResult> AggregateDeliveryAsync(List<Task<ChatDeliveryStatus>> parts)
+    {
+        var outcomes = await Task.WhenAll(parts).ConfigureAwait(false);
+        var sent = outcomes.Count(outcome => outcome == ChatDeliveryStatus.Sent);
+        var result = sent == outcomes.Length ? ChatDeliveryStatus.Sent
+            : outcomes.First(outcome => outcome != ChatDeliveryStatus.Sent);
+        return new(ChatEnqueueResult.Queued, result, sent);
+    }
+
     public Task EnqueueWhisperAsync(
         string message,
         string toUserId,
@@ -177,7 +188,8 @@ public sealed class ChatSender(
         string? replyParentMessageId,
         CommandResponseMark? commandResponse,
         WhisperRoute? whisper,
-        ChatOrigin? origin)
+        ChatOrigin? origin,
+        List<Task<ChatDeliveryStatus>>? parts = null)
     {
         if (string.IsNullOrWhiteSpace(message))
         {
@@ -206,7 +218,14 @@ public sealed class ChatSender(
 
         foreach (var chunk in SplitByLength(message, MaxMessageLength))
         {
-            var item = new ChatSendItem(chunk, replyParentMessageId, target.Login, commandResponse, whisper, origin);
+            var completion = parts is null ? null
+                : new TaskCompletionSource<ChatDeliveryStatus>(TaskCreationOptions.RunContinuationsAsynchronously);
+            if (completion is not null)
+            {
+                parts!.Add(completion.Task);
+            }
+
+            var item = new ChatSendItem(chunk, replyParentMessageId, target.Login, commandResponse, whisper, origin, completion);
 
             if (channel.Writer.TryWrite(item))
             {
@@ -226,6 +245,9 @@ public sealed class ChatSender(
                 logger.LogWarning("ChatSender: очередь переполнена, сообщение отброшено (длина сообщения {Length} символов)", chunk.Length);
                 refusal = ChatEnqueueResult.QueueFull;
             }
+
+            completion?.TrySetResult(refusal == ChatEnqueueResult.QueueClosed
+                ? ChatDeliveryStatus.QueueClosed : ChatDeliveryStatus.Rejected);
         }
 
         return anyQueued ? ChatEnqueueResult.Queued : refusal;
@@ -286,39 +308,62 @@ public sealed class ChatSender(
         }
     }
 
-    private async Task RunAsync(CancellationToken ct)
+    private async Task RunAsync(Channel<ChatSendItem> channel, CancellationToken ct)
     {
         var lastSendStartedAt = DateTimeOffset.MinValue;
 
         try
         {
-            await foreach (var item in _channel.Reader.ReadAllAsync(ct))
+            await foreach (var item in channel.Reader.ReadAllAsync(ct))
             {
-                var elapsed = DateTimeOffset.UtcNow - lastSendStartedAt;
-
-                if (elapsed < SendInterval)
+                try
                 {
-                    try
+                    var elapsed = DateTimeOffset.UtcNow - lastSendStartedAt;
+                    if (elapsed < SendInterval)
                     {
                         await Task.Delay(SendInterval - elapsed, ct);
                     }
-                    catch (OperationCanceledException)
-                    {
-                        return;
-                    }
+
+                }
+                catch (OperationCanceledException)
+                {
+                    item.Completion?.TrySetResult(ChatDeliveryStatus.QueueClosed);
+                    throw;
                 }
 
                 lastSendStartedAt = DateTimeOffset.UtcNow;
-                await SendWithRetryAsync(item, ct);
+                try
+                {
+                    var outcome = await SendWithRetryAsync(item, ct);
+                    item.Completion?.TrySetResult(outcome);
+                }
+                catch
+                {
+                    item.Completion?.TrySetResult(ChatDeliveryStatus.Unconfirmed);
+                    throw;
+                }
             }
         }
         catch (OperationCanceledException)
         {
             // expected on stop
         }
+        finally
+        {
+            channel.Writer.TryComplete();
+            CompletePending(channel);
+        }
     }
 
-    private async Task SendWithRetryAsync(ChatSendItem item, CancellationToken ct)
+    private static void CompletePending(Channel<ChatSendItem> channel)
+    {
+        while (channel.Reader.TryRead(out var pending))
+        {
+            pending.Completion?.TrySetResult(ChatDeliveryStatus.QueueClosed);
+        }
+    }
+
+    private async Task<ChatDeliveryStatus> SendWithRetryAsync(ChatSendItem item, CancellationToken ct)
     {
         var rateLimitDelay = RateLimitInitialDelay;
 
@@ -326,27 +371,29 @@ public sealed class ChatSender(
         {
             var outcome = await TrySendOnceAsync(item, ct);
 
-            if (outcome != SendOutcome.RateLimited)
+            if (outcome is { } status)
             {
-                return;
+                return status;
             }
 
             if (!await WaitForRateLimitAsync(attempt, rateLimitDelay, ct))
             {
-                return;
+                return ChatDeliveryStatus.Rejected;
             }
 
             rateLimitDelay = TimeSpan.FromSeconds(Math.Min(rateLimitDelay.TotalSeconds * 2, RateLimitMaxDelaySeconds));
         }
+
+        return ChatDeliveryStatus.Rejected;
     }
 
-    private async Task<SendOutcome> TrySendOnceAsync(ChatSendItem item, CancellationToken ct)
+    private async Task<ChatDeliveryStatus?> TrySendOnceAsync(ChatSendItem item, CancellationToken ct)
     {
         try
         {
             if (!CanSend(item))
             {
-                return SendOutcome.Done;
+                return ChatDeliveryStatus.ChatUnavailable;
             }
 
             var botContextId = channelRegistry?.GetBinding(StreamingPlatform.Twitch)?.BotContextId;
@@ -358,7 +405,7 @@ public sealed class ChatSender(
             {
                 Interlocked.Increment(ref _failedCount);
                 logger.LogWarning("ChatSender: broadcaster id не получен, сообщение пропущено");
-                return SendOutcome.Done;
+                return ChatDeliveryStatus.ChatUnavailable;
             }
 
             var senderId = await botUserIdProvider.GetAsync(ct);
@@ -367,23 +414,23 @@ public sealed class ChatSender(
             {
                 Interlocked.Increment(ref _failedCount);
                 logger.LogWarning("ChatSender: sender id не получен, сообщение пропущено");
-                return SendOutcome.Done;
+                return ChatDeliveryStatus.AuthorizationRequired;
             }
 
             if (!CanSend(item))
             {
-                return SendOutcome.Done;
+                return ChatDeliveryStatus.ChatUnavailable;
             }
 
             if (item.Whisper is { Refused: false } whisper
                 && await TryWhisperAsync(item.Message, whisper, senderId, ct))
             {
-                return SendOutcome.Done;
+                return ChatDeliveryStatus.Sent;
             }
 
             if (!CanSend(item))
             {
-                return SendOutcome.Done;
+                return ChatDeliveryStatus.ChatUnavailable;
             }
 
             var messageId = await helix.SendChatMessageAsync(broadcasterId, senderId, item.Message, item.ReplyParentMessageId, ct);
@@ -410,33 +457,33 @@ public sealed class ChatSender(
                     item.Message);
             }
 
-            return SendOutcome.Done;
+            return string.IsNullOrEmpty(messageId) ? ChatDeliveryStatus.Unconfirmed : ChatDeliveryStatus.Sent;
         }
         catch (HelixMessageDroppedException ex)
         {
             Interlocked.Increment(ref _failedCount);
             logger.LogWarning(ex, "Сообщение отклонено Twitch: {Code} {Reason}", ex.ReasonCode, ex.ReasonMessage);
-            return SendOutcome.Done;
+            return ChatDeliveryStatus.Rejected;
         }
         catch (HelixRequestException ex) when (ex.StatusCode == HttpStatusCode.TooManyRequests)
         {
-            return SendOutcome.RateLimited;
+            return null;
         }
         catch (HelixRequestException ex)
         {
             Interlocked.Increment(ref _failedCount);
             logger.LogError(ex, "ChatSender: ошибка Helix {Status} при отправке сообщения", (int)ex.StatusCode);
-            return SendOutcome.Done;
+            return ChatDeliveryStatus.Rejected;
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {
-            return SendOutcome.Done;
+            return ChatDeliveryStatus.Unconfirmed;
         }
         catch (Exception ex)
         {
             Interlocked.Increment(ref _failedCount);
             logger.LogError(ex, "ChatSender: неожиданная ошибка при отправке сообщения");
-            return SendOutcome.Done;
+            return ChatDeliveryStatus.Unconfirmed;
         }
     }
 
@@ -531,7 +578,8 @@ public sealed class ChatSender(
         string TargetLogin,
         CommandResponseMark? CommandResponse,
         WhisperRoute? Whisper,
-        ChatOrigin? Origin);
+        ChatOrigin? Origin,
+        TaskCompletionSource<ChatDeliveryStatus>? Completion);
 
     private sealed class WhisperRoute(string toUserId)
     {

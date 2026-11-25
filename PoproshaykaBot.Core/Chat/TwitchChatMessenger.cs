@@ -35,6 +35,8 @@ public sealed class TwitchChatMessenger(
         _ = chatSender.Enqueue(text, replyToMessageId, commandResponse, origin);
     }
 
+    public TrackedChatSend SendTracked(string text, ChatSendCategory category) => chatSender.EnqueueTracked(text);
+
     public void Whisper(
         string toUserId,
         string fallbackReplyToMessageId,

@@ -8,6 +8,9 @@ using PoproshaykaBot.Core.Twitch.Chat;
 
 namespace PoproshaykaBot.Core.Broadcast;
 
+public sealed record BroadcastPlatformDelivery(
+    ChatEnqueueResult EnqueueResult, bool AwaitingConfirmation, ChatAccountSendResult? Delivery = null);
+
 public sealed class BroadcastScheduler(
     IBroadcastMessenger messenger,
     IBroadcastPlatformTargetsProvider platformTargetsProvider,
@@ -23,6 +26,8 @@ public sealed class BroadcastScheduler(
     private int _runEpoch;
     private DateTimeOffset? _lastBroadcastAt;
     private string? _lastError;
+    private long _dispatchVersion;
+    private Dictionary<StreamingPlatform, BroadcastPlatformDelivery> _lastDispatch = [];
 
     private TimeSpan _interval = TimeSpan.FromMinutes(15);
     private PeriodicTimer? _timer;
@@ -34,7 +39,16 @@ public sealed class BroadcastScheduler(
     public bool IsActive => _runnerTask is { IsCompleted: false } && _stopCts is { IsCancellationRequested: false };
 
     public int SentMessagesCount => _sentMessagesCount;
+    public int QueuedDispatchCount => Volatile.Read(ref _sentMessagesCount);
     public DateTime? NextBroadcastTime { get; private set; }
+
+    public IReadOnlyDictionary<StreamingPlatform, BroadcastPlatformDelivery> GetLastDispatch()
+    {
+        lock (_stateLock)
+        {
+            return new Dictionary<StreamingPlatform, BroadcastPlatformDelivery>(_lastDispatch);
+        }
+    }
 
     public TimeSpan Interval
     {
@@ -84,6 +98,8 @@ public sealed class BroadcastScheduler(
             _channel = channel;
             _lastError = null;
             _runEpoch++;
+            _dispatchVersion++;
+            _lastDispatch.Clear();
             Interlocked.Exchange(ref _sentMessagesCount, 0);
 
             var minutes = Math.Max(1, settingsManager.Current.Twitch.AutoBroadcast.BroadcastIntervalMinutes);
@@ -115,6 +131,8 @@ public sealed class BroadcastScheduler(
 
             _channel = null;
             _runEpoch++;
+            _dispatchVersion++;
+            _lastDispatch.Clear();
             Interlocked.Exchange(ref _sentMessagesCount, 0);
             NextBroadcastTime = null;
             _stopCts?.Cancel();
@@ -139,16 +157,7 @@ public sealed class BroadcastScheduler(
             return Task.CompletedTask;
         }
 
-        if (TrySend(currentChannel, true) is not ChatEnqueueResult.Queued)
-        {
-            return Task.CompletedTask;
-        }
-
-        lock (_stateLock)
-        {
-            _lastBroadcastAt = timeProvider.GetUtcNow();
-        }
-
+        TrySend(currentChannel, true);
         PublishStateChanged();
         return Task.CompletedTask;
     }
@@ -203,10 +212,34 @@ public sealed class BroadcastScheduler(
             }
 
             var targetPlatforms = platformTargetsProvider.GetTargetPlatforms();
-            var sendResult = messenger.Send(
+            var sendResult = messenger.SendTracked(
                 platform => GetMessage(number, platform),
                 targetPlatforms,
                 ChatSendCategory.ScheduledBroadcast);
+
+            long? version = null;
+            lock (_stateLock)
+            {
+                if (_runEpoch == epoch)
+                {
+                    version = ++_dispatchVersion;
+                    _lastDispatch = sendResult.PerPlatform.ToDictionary(entry => entry.Key, entry =>
+                        new BroadcastPlatformDelivery(entry.Value, sendResult.Deliveries?.ContainsKey(entry.Key) == true));
+                    if (sendResult.AnyQueued)
+                    {
+                        Interlocked.Exchange(ref _sentMessagesCount, number);
+                        _lastBroadcastAt = timeProvider.GetUtcNow();
+                    }
+                }
+            }
+
+            if (version is { } dispatch && sendResult.Deliveries is { } deliveries)
+            {
+                foreach (var (platform, delivery) in deliveries)
+                {
+                    _ = ObserveDeliveryAsync(dispatch, platform, delivery);
+                }
+            }
 
             if (!sendResult.AnyQueued)
             {
@@ -238,25 +271,43 @@ public sealed class BroadcastScheduler(
                 return refusal;
             }
 
-            lock (_stateLock)
-            {
-                if (_runEpoch == epoch)
-                {
-                    Interlocked.Exchange(ref _sentMessagesCount, number);
-                }
-            }
-
             if (manual)
             {
-                logger.LogInformation("Сообщение отправлено вручную в канал {Channel}. Всего отправлено: {SentMessagesCount}", channel, number);
+                logger.LogInformation("Ручная рассылка для канала {Channel} принята в очередь. Номер рассылки: {BroadcastNumber}", channel, number);
             }
             else
             {
-                logger.LogInformation("Запланированное сообщение отправлено в канал {Channel}. Всего отправлено: {SentMessagesCount}", channel, number);
+                logger.LogInformation("Плановая рассылка для канала {Channel} принята в очередь. Номер рассылки: {BroadcastNumber}", channel, number);
             }
 
             return ChatEnqueueResult.Queued;
         }
+    }
+
+    private async Task ObserveDeliveryAsync(long version, StreamingPlatform platform, Task<ChatAccountSendResult> delivery)
+    {
+        ChatAccountSendResult outcome;
+        try
+        {
+            outcome = await delivery.ConfigureAwait(false);
+        }
+        catch (Exception exception)
+        {
+            logger.LogWarning(exception, "Не получен результат рассылки для {Platform}", platform);
+            outcome = new(ChatEnqueueResult.Queued, ChatDeliveryStatus.Unconfirmed);
+        }
+
+        lock (_stateLock)
+        {
+            if (_dispatchVersion != version || !_lastDispatch.TryGetValue(platform, out var queued))
+            {
+                return;
+            }
+
+            _lastDispatch[platform] = queued with { AwaitingConfirmation = false, Delivery = outcome };
+        }
+
+        PublishStateChanged();
     }
 
     private string GetMessage(int counter, IChatPlatform platform)
@@ -319,6 +370,7 @@ public sealed class BroadcastScheduler(
 
                 if (attempt is ChatEnqueueResult.EmptyMessage)
                 {
+                    PublishStateChanged();
                     continue;
                 }
 
@@ -326,10 +378,6 @@ public sealed class BroadcastScheduler(
                 {
                     NextBroadcastTime = timeProvider.GetLocalNow().DateTime + _interval;
 
-                    if (attempt is ChatEnqueueResult.Queued)
-                    {
-                        _lastBroadcastAt = timeProvider.GetUtcNow();
-                    }
                 }
 
                 PublishStateChanged();
