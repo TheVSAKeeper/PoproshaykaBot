@@ -40,6 +40,8 @@ internal sealed class JsonStore<T>
 
     public event EventHandler<JsonStoreWriteFailedEventArgs>? WriteFailed;
 
+    internal bool IsWriteRevoked => _gate?.IsRevoked(_filePath) == true;
+
     public T Load()
     {
         lock (_syncLock)
@@ -76,7 +78,7 @@ internal sealed class JsonStore<T>
         return false;
     }
 
-    public bool Save(T value)
+    public bool Save(T value, bool applyWhenBlocked = true, Func<T, bool>? matches = null)
     {
         ArgumentNullException.ThrowIfNull(value);
 
@@ -86,10 +88,15 @@ internal sealed class JsonStore<T>
 
         lock (_syncLock)
         {
+            if (matches is not null && !matches(_state))
+            {
+                return false;
+            }
+
             var json = JsonSerializer.Serialize(snapshot, JsonStoreOptions.Default);
             written = TryWrite(json, out failure);
 
-            if (failure == null)
+            if (failure == null && (written || applyWhenBlocked))
             {
                 _state = snapshot;
             }
@@ -140,15 +147,15 @@ internal sealed class JsonStore<T>
         return MutateCore(mutator, applied => applied, out _);
     }
 
-    public (bool Applied, bool Written) MutateIfWithResult(Func<T, bool> mutator)
+    public (bool Applied, bool Written) MutateIfWithResult(Func<T, bool> mutator, bool applyWhenBlocked = true)
     {
         ArgumentNullException.ThrowIfNull(mutator);
 
-        var applied = MutateCore(mutator, static result => result, out var written);
+        var applied = MutateCore(mutator, static result => result, out var written, applyWhenBlocked);
         return (applied, written);
     }
 
-    private TResult MutateCore<TResult>(Func<T, TResult> mutator, Func<TResult, bool> shouldWrite, out bool written)
+    private TResult MutateCore<TResult>(Func<T, TResult> mutator, Func<TResult, bool> shouldWrite, out bool written, bool applyWhenBlocked = true)
     {
         TResult result;
         Exception? failure = null;
@@ -168,7 +175,7 @@ internal sealed class JsonStore<T>
                 written = TryWrite(json, out failure);
                 blocked = !written && failure == null;
 
-                if (failure == null)
+                if (failure == null && (written || applyWhenBlocked))
                 {
                     _state = draft;
                 }

@@ -36,12 +36,13 @@ namespace PoproshaykaBot.Wpf.Tests.Onboarding;
 [TestFixture]
 public sealed class CompletionPageYouTubeBotOnlyTests
 {
-    [TestCase(false, false, false)]
-    [TestCase(true, false, false)]
-    [TestCase(true, true, false)]
-    [TestCase(true, false, true)]
+    [TestCase(false, false, false, false)]
+    [TestCase(true, false, false, false)]
+    [TestCase(true, true, false, false)]
+    [TestCase(true, false, true, false)]
+    [TestCase(false, false, false, true)]
     public async Task TwitchCompletionKeepsBroadcasterOptionalAndRequiresUsableBot(
-        bool hasStaleBroadcaster, bool expiredBot, bool changeActiveChannel)
+        bool hasStaleBroadcaster, bool expiredBot, bool changeActiveChannel, bool warnWhilePending)
     {
         var tempDir = Path.Combine(Path.GetTempPath(), $"yt-onboard-{Guid.NewGuid():N}");
         Directory.CreateDirectory(tempDir);
@@ -53,13 +54,18 @@ public sealed class CompletionPageYouTubeBotOnlyTests
             var accountsStore = new AccountsStore(filePath: Path.Combine(tempDir, "accounts.json"));
             var ytSettingsStore = new YouTubeSettingsStore(NullLogger<YouTubeSettingsStore>.Instance, Path.Combine(tempDir, "youtube.json"));
             var ytAccountsStore = new YouTubeAccountsStore(NullLogger<YouTubeAccountsStore>.Instance, Path.Combine(tempDir, "youtube-accounts.json"));
-            var validator = new StubChannelValidator();
+            var pending = warnWhilePending
+                ? new TaskCompletionSource<ChannelValidationResult>(TaskCreationOptions.RunContinuationsAsynchronously)
+                : null;
+            var validator = new StubChannelValidator(pending?.Task);
             var dialogs = new NoOpDialogService();
             var catalog = new ChannelCatalogStore(filePath: Path.Combine(tempDir, "channels.json"));
             catalog.Save(new() { Channels = [new()
             {
                 Platform = StreamingPlatform.Twitch, ChannelId = "42", IsConfigured = true,
                 BotAccountId = "1", BotVerifiedSubjectId = "1",
+                BroadcasterAccountId = warnWhilePending ? "42" : null,
+                BroadcasterVerifiedSubjectId = warnWhilePending ? "42" : null,
             }] });
 
             using var page = new CompletionPageViewModel(
@@ -89,7 +95,9 @@ public sealed class CompletionPageYouTubeBotOnlyTests
                     Scopes = [.. TwitchScopes.BotRequired],
                     StoredScopes = [.. TwitchScopes.BotRequired],
                 },
-                hasStaleBroadcaster
+                warnWhilePending
+                    ? new TwitchAccountSettings { UserId = "42", Login = "renamed", RefreshToken = "streamer-refresh", StoredScopes = [.. TwitchScopes.BroadcasterRequired] }
+                    : hasStaleBroadcaster
                     ? new TwitchAccountSettings { Login = "streamer", RefreshToken = "streamer-refresh", StoredScopes = [TwitchScopes.ChannelBot] }
                     : new TwitchAccountSettings(),
                 new YouTubeSettings { Enabled = true, ClientId = "yt-client", Channel = "@foreign" },
@@ -113,14 +121,24 @@ public sealed class CompletionPageYouTubeBotOnlyTests
             var doneTcs = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
             page.PropertyChanged += (_, args) =>
             {
-                if (args.PropertyName == nameof(CompletionPageViewModel.IsValidationPending) && !page.IsValidationPending)
+                if (warnWhilePending ? page.CanAdvance : !page.IsValidationPending)
                 {
                     doneTcs.TrySetResult();
                 }
             };
 
             page.OnEnter(context);
-            if (page.IsValidationPending)
+            if (pending is not null)
+            {
+                using (Assert.EnterMultipleScope())
+                {
+                    Assert.That(page.IsValidationWarning, Is.True);
+                    Assert.That(page.IsValidationPending, Is.True);
+                    Assert.That(page.CanAdvance, Is.False);
+                }
+                pending.SetResult(ChannelValidationResult.Found);
+            }
+            if (page.IsValidationPending || (warnWhilePending && !page.CanAdvance))
             {
                 await doneTcs.Task.WaitAsync(TimeSpan.FromSeconds(5));
             }
@@ -129,7 +147,10 @@ public sealed class CompletionPageYouTubeBotOnlyTests
             {
                 Assert.That(page.CanAdvance, Is.EqualTo(!expiredBot));
                 Assert.That(page.IsValidationFailure, Is.EqualTo(expiredBot));
-                Assert.That(page.ValidationText, Does.Contain("Доступы аккаунта стримера: не подключён (режим «только бот»)"));
+                if (!warnWhilePending)
+                {
+                    Assert.That(page.ValidationText, Does.Contain("Доступы аккаунта стримера: не подключён (режим «только бот»)"));
+                }
             });
 
             if (changeActiveChannel)
@@ -156,7 +177,7 @@ public sealed class CompletionPageYouTubeBotOnlyTests
     }
 
     [Test]
-    public async Task CancelRestoresTheInMemoryCredentialsWhenSettingsWriteWasDenied()
+    public async Task DeniedWriteKeepsOriginalCredentialsBeforeAndAfterCancel()
     {
         var dir = Directory.CreateTempSubdirectory("gated-onboarding-");
         try
@@ -175,7 +196,7 @@ public sealed class CompletionPageYouTubeBotOnlyTests
                 provider.GetRequiredService<KestrelHttpServer>(), controller, bus, NullLogger<OnboardingWizardViewModel>.Instance);
 
             await wizard.NextCommand.ExecuteAsync(null);
-            Assert.That(manager.Current.Twitch.ClientId, Is.EqualTo("draft"));
+            Assert.That(manager.Current.Twitch.ClientId, Is.EqualTo("original"));
             Assert.That(await wizard.RequestCloseAsync(), Is.True);
 
             using (Assert.EnterMultipleScope())
@@ -232,13 +253,13 @@ public sealed class CompletionPageYouTubeBotOnlyTests
         });
     }
 
-    private sealed class StubChannelValidator : IOnboardingChannelValidator
+    private sealed class StubChannelValidator(Task<ChannelValidationResult>? pending = null) : IOnboardingChannelValidator
     {
         public Task<ChannelValidationResult> ValidateAsync(string login, string clientId, string accessToken, CancellationToken cancellationToken)
-            => Task.FromResult(ChannelValidationResult.Found);
+            => pending ?? Task.FromResult(ChannelValidationResult.Found);
 
         public Task<ChannelValidationResult> ValidateWithAppTokenAsync(string login, string clientId, string clientSecret, CancellationToken cancellationToken)
-            => Task.FromResult(ChannelValidationResult.Found);
+            => pending ?? Task.FromResult(ChannelValidationResult.Found);
     }
 
     private sealed class NoOpDialogService : IDialogService

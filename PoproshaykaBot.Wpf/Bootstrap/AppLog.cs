@@ -97,14 +97,8 @@ internal static partial class AppLog
     [LoggerMessage(EventId = 1104, Level = LogLevel.Warning, Message = "Запуск подключения отклонён: уже выполняется")]
     public static partial void BotConnectionStartRejected(this ILogger logger, Exception? exception);
 
-    [LoggerMessage(EventId = 1133, Level = LogLevel.Warning, Message = "Шаг подключения остановлен. Настройки мастера не записаны")]
-    public static partial void BotConnectionSettingsNotWritten(this ILogger logger);
-
-    [LoggerMessage(EventId = 1135, Level = LogLevel.Warning, Message = "Шаг подключения остановлен. Вход не сохранён")]
-    public static partial void BotConnectionAccountsNotWritten(this ILogger logger);
-
-    [LoggerMessage(EventId = 1136, Level = LogLevel.Information, Message = "Аккаунты возвращены к состоянию до мастера в памяти, файл accounts.json не переписан: туда перенесены данные предыдущей версии")]
-    public static partial void OnboardingAccountsRolledBackInMemory(this ILogger logger);
+    [LoggerMessage(EventId = 1135, Level = LogLevel.Warning, Message = "Шаг подключения остановлен. {Reason}")]
+    public static partial void BotConnectionSetupNotSaved(this ILogger logger, string reason);
 
     [LoggerMessage(EventId = 1134, Level = LogLevel.Warning, Message = "Настройка не завершена. {Reason}")]
     public static partial void OnboardingCompletionNotWritten(this ILogger logger, string reason);
@@ -154,7 +148,7 @@ internal static partial class AppLog
     [LoggerMessage(EventId = 1120, Level = LogLevel.Error, Message = "Не удалось остановить бота при откате мастера")]
     public static partial void OnboardingBotStopFailed(this ILogger logger, Exception? exception);
 
-    [LoggerMessage(EventId = 1121, Level = LogLevel.Information, Message = "Отменены изменения мастера в аккаунтах и назначениях Twitch")]
+    [LoggerMessage(EventId = 1121, Level = LogLevel.Information, Message = "Отменены предварительные записи мастера")]
     public static partial void OnboardingAccountsRolledBack(this ILogger logger);
 
     [LoggerMessage(EventId = 1122, Level = LogLevel.Error, Message = "Не удалось восстановить аккаунты Twitch после отмены мастера")]

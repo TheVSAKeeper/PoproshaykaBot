@@ -15,4 +15,8 @@ public static class JsonStoreClone
     {
         return value == null ? null : DeepClone(value);
     }
+
+    public static bool SameValues<T>(T left, T right) =>
+        string.Equals(JsonSerializer.Serialize(left, JsonStoreOptions.Default),
+            JsonSerializer.Serialize(right, JsonStoreOptions.Default), StringComparison.Ordinal);
 }

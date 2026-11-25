@@ -150,28 +150,17 @@ public sealed partial class CompletionPageViewModel : OnboardingPageViewModelBas
 
         try
         {
-            if (context.SaveTwitchSetup(_accountsStore, () => context.SaveSettings(_settingsManager)) is { } twitchError)
+            if (context.SaveSetup(_settingsManager, _accountsStore, _youtubeSettingsStore, _youtubeAccountsStore) is { } error)
             {
-                return ReportNotWritten(twitchError);
-            }
-
-            if (_youtubeSettingsStore is not null && !_youtubeSettingsStore.Save(context.YouTubeSettings))
-            {
-                return ReportNotWritten("Не удалось сохранить настройки YouTube. Если вы только что перенесли данные, перезапустите приложение.");
-            }
-
-            if (_youtubeAccountsStore is not null && !_youtubeAccountsStore.SaveAll(
-                    context.YouTubeClientSecret,
-                    context.YouTubeBotAccount,
-                    context.YouTubeBroadcasterAccount))
-            {
-                return ReportNotWritten("Не удалось сохранить вход в YouTube. Если вы только что перенесли данные, перезапустите приложение.");
+                return ReportNotWritten(error);
             }
         }
         catch (Exception exception)
         {
             _logger.OnboardingSettingsSaveFailed(exception);
-            _dialogService.Error("Настройки не сохранены", "Не удалось завершить сохранение. Повторите попытку или отмените настройку.");
+            _dialogService.Error("Настройки не сохранены", context.HasIncompleteRollback
+                ? OnboardingContext.RollbackIncomplete
+                : "Не удалось завершить сохранение. Повторите попытку или отмените настройку.");
             return false;
         }
 
@@ -229,8 +218,14 @@ public sealed partial class CompletionPageViewModel : OnboardingPageViewModelBas
         catch (Exception exception)
         {
             _logger.OnboardingCompletionCheckFailed(exception);
-            _hasCriticalIssue = false;
-            CanAdvance = true;
+            if (cancellationToken.IsCancellationRequested)
+            {
+                return;
+            }
+
+            _hasCriticalIssue = true;
+            UpdateValidation([new("Проверка настроек", ValidationStatus.Failure, "вернитесь на предыдущий шаг и повторите проверку")]);
+            CanAdvance = false;
         }
     }
 
@@ -353,7 +348,7 @@ public sealed partial class CompletionPageViewModel : OnboardingPageViewModelBas
 
         IsValidationFailure = anyFailure;
         IsValidationWarning = !anyFailure && anyWarning;
-        IsValidationPending = !anyFailure && !anyWarning && anyPending;
+        IsValidationPending = anyPending;
     }
 
     private bool ConfirmIgnoreChannelNotFound(OnboardingContext context)

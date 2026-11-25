@@ -36,7 +36,13 @@ public class SettingsManager
         }
     }
 
-    public virtual bool SaveSettings(AppSettings settings)
+    public bool IsWriteRevoked => _store.IsWriteRevoked;
+
+    public virtual bool SaveSettings(AppSettings settings) => SaveSettingsCore(settings, applyWhenBlocked: true);
+
+    public bool SaveSettingsIfWritable(AppSettings settings) => SaveSettingsCore(settings, applyWhenBlocked: false);
+
+    private bool SaveSettingsCore(AppSettings settings, bool applyWhenBlocked)
     {
         ArgumentNullException.ThrowIfNull(settings);
 
@@ -46,9 +52,12 @@ public class SettingsManager
         {
             try
             {
-                var written = _store.Save(settings);
-                _currentSettings = _store.Load();
-                LogApplied(written);
+                var written = _store.Save(settings, applyWhenBlocked);
+                if (written || applyWhenBlocked)
+                {
+                    _currentSettings = _store.Load();
+                    LogApplied(written);
+                }
 
                 return written;
             }

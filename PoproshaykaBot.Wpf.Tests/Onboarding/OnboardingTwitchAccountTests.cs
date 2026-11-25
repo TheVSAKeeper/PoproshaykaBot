@@ -1,5 +1,6 @@
 ﻿using PoproshaykaBot.Core.Platforms;
 using PoproshaykaBot.Core.Platforms.Auth;
+using Microsoft.Extensions.Logging.Abstractions;
 using PoproshaykaBot.Core.Settings;
 using PoproshaykaBot.Core.Settings.Stores;
 using PoproshaykaBot.Core.Twitch.Auth;
@@ -12,16 +13,24 @@ namespace PoproshaykaBot.Wpf.Tests.Onboarding;
 [TestFixture]
 public sealed class OnboardingTwitchAccountTests
 {
-    [TestCase(null)]
-    [TestCase("channel-bot")]
-    public void Login_AssignsActiveChannelAndKeepsOtherContexts(string? contextId)
+    [TestCase(null, false)]
+    [TestCase("channel-bot", false)]
+    [TestCase("channel-bot", true)]
+    public void Login_AssignsActiveChannelAndKeepsOtherContexts(string? contextId, bool legacyWhitespace)
     {
         var folder = Directory.CreateTempSubdirectory("onboarding-twitch-");
         try
         {
             var accounts = new AccountsStore(filePath: Path.Combine(folder.FullName, "accounts.json"));
             accounts.UpsertContext(PlatformAuthRole.Bot, "other-bot", "Другой бот", new() { UserId = "2" });
-            var catalog = new ChannelCatalogStore(filePath: Path.Combine(folder.FullName, "channels.json"));
+            var channelPath = Path.Combine(folder.FullName, "channels.json");
+            if (legacyWhitespace)
+            {
+                File.WriteAllText(channelPath, """
+                    {"channels":[{"platform":"twitch","channelId":" 42 ","isConfigured":true,"botAccountId":" 1 ","botContextId":" channel-bot ","botVerifiedSubjectId":" "}]}
+                    """);
+            }
+            var catalog = new ChannelCatalogStore(filePath: channelPath);
             var channel = new ChannelCatalogEntry
             {
                 Platform = StreamingPlatform.Twitch,
@@ -30,7 +39,11 @@ public sealed class OnboardingTwitchAccountTests
                 BotAccountId = "1",
                 BotContextId = contextId,
             };
-            catalog.Save(new() { Channels = [channel] });
+            if (!legacyWhitespace)
+            {
+                catalog.Save(new() { Channels = [channel] });
+            }
+            var manager = CreateSettingsManager(folder);
             var context = new OnboardingContext(new() { Twitch = new() { Channel = "" } }, new(), new())
             {
                 TwitchCatalog = catalog,
@@ -42,7 +55,7 @@ public sealed class OnboardingTwitchAccountTests
                 new("access", "refresh", [.. TwitchScopes.BotRequired], "wrong", "2", 3600)), Is.False);
             Assert.That(context.AcceptTwitchLogin(PlatformAuthRole.Bot, context.BotAccount,
                 new("access", "refresh", [.. TwitchScopes.BotRequired], "bot", "1", 3600)), Is.True);
-            Assert.That(context.SaveTwitchSetup(accounts, () => true), Is.Null);
+            Assert.That(context.SaveSetup(manager, accounts), Is.Null);
 
             using (Assert.EnterMultipleScope())
             {
@@ -55,7 +68,7 @@ public sealed class OnboardingTwitchAccountTests
                 }
             }
 
-            Assert.That(context.RestoreTwitchChanges(accounts), Is.True);
+            context.RestoreProvisionalWrites();
             Assert.That(catalog.GetActiveChannel(StreamingPlatform.Twitch)?.GetAccountAssignment(PlatformAuthRole.Bot)?.IsVerified, Is.False);
         }
         finally
@@ -96,7 +109,8 @@ public sealed class OnboardingTwitchAccountTests
 
             Assert.That(context.AcceptTwitchLogin(PlatformAuthRole.Bot, context.BotAccount,
                 new("access", "refresh", [.. TwitchScopes.BotRequired], "first", "1", 3600)), Is.True);
-            Assert.That(context.SaveTwitchSetup(accounts, () => true), Is.Null);
+            var manager = CreateSettingsManager(folder);
+            Assert.That(context.SaveSetup(manager, accounts), Is.Null);
             Assert.That(context.CanUseTwitchRole(PlatformAuthRole.Bot, accounts.Load(PlatformAuthRole.Bot, botContext)), Is.True);
             Assert.That(context.CanUseTwitchRole(PlatformAuthRole.Bot, new() { UserId = "999" }), Is.False);
             accounts.Mutate(PlatformAuthRole.Bot, botContext, bot => bot.RefreshToken = "bot-rotated");
@@ -112,11 +126,11 @@ public sealed class OnboardingTwitchAccountTests
                 });
             }
 
-            var settingsSaved = false;
-            var error = context.SaveTwitchSetup(accounts, () => settingsSaved = true);
+            context.Settings.Twitch.ClientId = "draft";
+            var error = context.SaveSetup(manager, accounts);
             Assert.That(error is null, Is.EqualTo(!reassign));
-            Assert.That(settingsSaved, Is.EqualTo(!reassign));
-            Assert.That(context.RestoreTwitchChanges(accounts), Is.True);
+            Assert.That(manager.Current.Twitch.ClientId == "draft", Is.EqualTo(!reassign));
+            context.RestoreProvisionalWrites();
 
             using (Assert.EnterMultipleScope())
             {
@@ -133,10 +147,12 @@ public sealed class OnboardingTwitchAccountTests
         }
     }
 
-    [TestCase("accounts.json")]
-    [TestCase("channels.json")]
-    [TestCase("settings.json")]
-    public async Task RejectedWriteIsCompensatedAndKeepsOriginalAccount(string revokedFile)
+    [TestCase("accounts.json", false)]
+    [TestCase("channels.json", false)]
+    [TestCase("settings.json", false)]
+    [TestCase("youtube-accounts.json", false)]
+    [TestCase("youtube-accounts.json", true)]
+    public async Task RejectedWriteIsCompensatedAndKeepsOriginalAccount(string revokedFile, bool blockFirstRollback)
     {
         var folder = Directory.CreateTempSubdirectory("onboarding-write-rejection-");
         try
@@ -146,6 +162,12 @@ public sealed class OnboardingTwitchAccountTests
             var channelPath = Path.Combine(folder.FullName, "channels.json");
             var accounts = new AccountsStore(filePath: accountPath, gate: gate);
             var catalog = new ChannelCatalogStore(filePath: channelPath, gate: gate);
+            var manager = CreateSettingsManager(folder, gate);
+            manager.SaveSettings(new() { Twitch = new() { ClientId = "original" } });
+            var ytSettingsPath = Path.Combine(folder.FullName, "youtube.json");
+            var ytSettings = new YouTubeSettingsStore(filePath: ytSettingsPath, gate: gate);
+            ytSettings.Save(new() { ClientId = "original" });
+            var ytAccounts = new YouTubeAccountsStore(filePath: Path.Combine(folder.FullName, "youtube-accounts.json"), gate: gate);
             const string botContext = "named-bot";
             catalog.Save(new() { Channels = [new()
             {
@@ -156,27 +178,51 @@ public sealed class OnboardingTwitchAccountTests
                 BotAccountId = "1",
             }] });
             accounts.UpsertContext(PlatformAuthRole.Bot, botContext, botContext, new() { UserId = "1", RefreshToken = "original" });
-            var context = new OnboardingContext(new(), accounts.Load(PlatformAuthRole.Bot, botContext), new())
+            var context = new OnboardingContext(new() { Twitch = new() { ClientId = "draft" } },
+                accounts.Load(PlatformAuthRole.Bot, botContext), new(), ytSettings.Load())
             {
                 TwitchCatalog = catalog,
                 TwitchChannel = catalog.GetActiveChannel(StreamingPlatform.Twitch),
             };
             await gate.RunExternalWriteAsync(() => Task.FromResult(0), _ => new[] { revokedFile });
+            context.YouTubeSettings.ClientId = "draft";
+            context.YouTubeClientSecret = "draft-secret";
 
             Assert.That(context.AcceptTwitchLogin(PlatformAuthRole.Bot, context.BotAccount,
                 new("access", "new", [.. TwitchScopes.BotRequired], "bot", "1", 3600)), Is.True);
-            var settingsAttempted = false;
-            var error = context.SaveTwitchSetup(accounts, () =>
+            if (blockFirstRollback)
             {
-                settingsAttempted = true;
-                return false;
-            });
+                FileStream? channelLock = null;
+                ytSettings.Changed += () => channelLock ??= File.Open(channelPath, FileMode.Open, FileAccess.Read, FileShare.None);
+                try
+                {
+                    Assert.Throws<AggregateException>(() => context.SaveSetup(manager, accounts, ytSettings, ytAccounts));
+                    Assert.That(context.HasProvisionalWrites, Is.True);
+                    Assert.That(accounts.Load(PlatformAuthRole.Bot, botContext).RefreshToken, Is.EqualTo("original"));
+                }
+                finally
+                {
+                    if (channelLock is not null)
+                    {
+                        await channelLock.DisposeAsync();
+                    }
+                }
+
+                context.RestoreProvisionalWrites();
+            }
+            else
+            {
+                Assert.That(context.SaveSetup(manager, accounts, ytSettings, ytAccounts), Is.Not.Null);
+            }
 
             using (Assert.EnterMultipleScope())
             {
-                Assert.That(error, Is.Not.Null);
-                Assert.That(settingsAttempted, Is.EqualTo(revokedFile == "settings.json"));
-                Assert.That(context.TwitchAccountsApplied, Is.False);
+                Assert.That(context.HasProvisionalWrites, Is.False);
+                Assert.That(manager.Current.Twitch.ClientId, Is.EqualTo("original"));
+                Assert.That(CreateSettingsManager(folder).Current.Twitch.ClientId, Is.EqualTo("original"));
+                Assert.That(ytSettings.Load().ClientId, Is.EqualTo("original"));
+                Assert.That(new YouTubeSettingsStore(filePath: ytSettingsPath).Load().ClientId, Is.EqualTo("original"));
+                Assert.That(ytAccounts.LoadClientSecret(), Is.Empty);
                 Assert.That(accounts.Load(PlatformAuthRole.Bot, botContext).RefreshToken, Is.EqualTo("original"));
                 Assert.That(new AccountsStore(filePath: accountPath).Load(PlatformAuthRole.Bot, botContext).RefreshToken, Is.EqualTo("original"));
                 Assert.That(catalog.GetActiveChannel(StreamingPlatform.Twitch)?.GetAccountAssignment(PlatformAuthRole.Bot)?.IsVerified, Is.False);
@@ -188,6 +234,9 @@ public sealed class OnboardingTwitchAccountTests
             folder.Delete(recursive: true);
         }
     }
+
+    private static SettingsManager CreateSettingsManager(DirectoryInfo directory, SettingsWriteGate? gate = null) =>
+        new(NullLogger<SettingsManager>.Instance, Path.Combine(directory.FullName, "settings.json"), gate);
 
     [TestCase("42", "42", "renamed", false, true)]
     [TestCase("42", "999", "streamer", true, false)]

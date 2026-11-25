@@ -17,10 +17,6 @@ namespace PoproshaykaBot.Wpf.ViewModels.Onboarding;
 
 public sealed partial class BotConnectionPageViewModel : OnboardingPageViewModelBase, IDisposable
 {
-    private const string SettingsNotWrittenDetails = "Настройки применены и работают до перезапуска. В файл они не записаны: туда только что перенесены данные предыдущей версии. Закройте приложение, запустите его заново и пройдите настройку ещё раз.";
-
-    private const string YouTubeAccountsNotWrittenDetails = "Вход в YouTube применён и работает до перезапуска. В файл он не записан: туда только что перенесены данные предыдущей версии. Закройте приложение, запустите его заново и пройдите настройку ещё раз.";
-
     private readonly IBotConnectionController _botConnectionManager;
     private readonly IEventBus _eventBus;
     private readonly SettingsManager _settingsManager;
@@ -32,6 +28,7 @@ public sealed partial class BotConnectionPageViewModel : OnboardingPageViewModel
     private readonly List<IDisposable> _subs = [];
 
     private OnboardingContext? _context;
+    private bool _setupSaved;
     private string _joinedChannel = string.Empty;
     private string _lastStatusMessage = string.Empty;
 
@@ -77,45 +74,17 @@ public sealed partial class BotConnectionPageViewModel : OnboardingPageViewModel
     public override void OnEnter(OnboardingContext context)
     {
         _context = context;
+        _setupSaved = false;
         Phase = _botConnectionManager.CurrentPhase;
-        CanAdvance = Phase == BotLifecyclePhase.Connected;
+        CanAdvance = false;
 
         try
         {
-            if (context.SaveTwitchSetup(_accountsStore, () => context.SaveSettings(_settingsManager)) is { } twitchError)
+            if (context.SaveSetup(_settingsManager, _accountsStore, _youtubeSettingsStore, _youtubeAccountsStore) is { } error)
             {
-                if (twitchError == OnboardingContext.TwitchSettingsNotWritten)
-                {
-                    _logger.BotConnectionSettingsNotWritten();
-                }
-                else
-                {
-                    _logger.BotConnectionAccountsNotWritten();
-                }
-
-                ApplyPhase(BotLifecyclePhase.Failed, twitchError);
+                _logger.BotConnectionSetupNotSaved(error);
+                ApplyPhase(BotLifecyclePhase.Failed, error);
                 StatusText = "Подключение не запущено";
-                ShowRetry = false;
-                return;
-            }
-            if (_youtubeSettingsStore is not null && !_youtubeSettingsStore.Save(context.YouTubeSettings))
-            {
-                _logger.BotConnectionSettingsNotWritten();
-                ApplyPhase(BotLifecyclePhase.Failed, SettingsNotWrittenDetails);
-                StatusText = "Настройки YouTube не записаны в файл";
-                ShowRetry = false;
-                return;
-            }
-
-            if (_youtubeAccountsStore is not null
-                && !_youtubeAccountsStore.SaveAll(
-                    context.YouTubeClientSecret,
-                    context.YouTubeBotAccount,
-                    context.YouTubeBroadcasterAccount))
-            {
-                _logger.BotConnectionAccountsNotWritten();
-                ApplyPhase(BotLifecyclePhase.Failed, YouTubeAccountsNotWrittenDetails);
-                StatusText = "Вход в YouTube не записан в файл";
                 ShowRetry = false;
                 return;
             }
@@ -123,11 +92,15 @@ public sealed partial class BotConnectionPageViewModel : OnboardingPageViewModel
         catch (Exception exception)
         {
             _logger.BotConnectionSaveSettingsFailed(exception);
-            ApplyPhase(BotLifecyclePhase.Failed, exception.Message);
-            ShowRetry = true;
+            ApplyPhase(BotLifecyclePhase.Failed, context.HasIncompleteRollback
+                ? OnboardingContext.RollbackIncomplete
+                : "Не удалось сохранить настройки. Повторите попытку.");
+            StatusText = "Подключение не запущено";
+            ShowRetry = !context.HasIncompleteRollback;
             return;
         }
 
+        _setupSaved = true;
         _ = _eventBus.PublishAsync(new PlatformAuthorizationRefreshed(StreamingPlatform.Twitch, PlatformAuthRole.Bot,
             context.TwitchContextId(PlatformAuthRole.Bot)));
         _ = _eventBus.PublishAsync(new PlatformAuthorizationRefreshed(StreamingPlatform.Twitch, PlatformAuthRole.Broadcaster,
@@ -185,6 +158,12 @@ public sealed partial class BotConnectionPageViewModel : OnboardingPageViewModel
     private void Retry()
     {
         ShowRetry = false;
+        if (!_setupSaved && _context is { } context)
+        {
+            OnEnter(context);
+            return;
+        }
+
         TryStartConnection();
     }
 
@@ -192,6 +171,11 @@ public sealed partial class BotConnectionPageViewModel : OnboardingPageViewModel
 
     private void OnPhaseChanged(BotLifecyclePhaseChanged @event)
     {
+        if (!_setupSaved)
+        {
+            return;
+        }
+
         Phase = @event.Phase;
 
         if (@event.Phase == BotLifecyclePhase.Failed && @event.Exception is not null)
@@ -205,13 +189,19 @@ public sealed partial class BotConnectionPageViewModel : OnboardingPageViewModel
     private void OnStatusUpdated(BotConnectionStatusUpdated @event)
     {
         _lastStatusMessage = @event.Message;
-        DetailsText = @event.Message;
+        if (_setupSaved)
+        {
+            DetailsText = @event.Message;
+        }
     }
 
     private void OnJoinedChannel(BotJoinedChannel @event)
     {
         _joinedChannel = @event.Channel;
-        ApplyPhase(Phase);
+        if (_setupSaved)
+        {
+            ApplyPhase(Phase);
+        }
     }
 
     private void ApplyPhase(BotLifecyclePhase phase, string? overrideDetails = null)

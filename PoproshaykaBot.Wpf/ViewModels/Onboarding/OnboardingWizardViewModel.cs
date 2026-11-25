@@ -12,7 +12,6 @@ using PoproshaykaBot.Core.Settings.Onboarding;
 using PoproshaykaBot.Core.Settings.Stores;
 using PoproshaykaBot.Core.Twitch.Auth;
 using PoproshaykaBot.Core.YouTube;
-using PoproshaykaBot.Core.YouTube.Auth;
 using PoproshaykaBot.Wpf.Bootstrap;
 using System.Text.Json;
 
@@ -21,9 +20,6 @@ namespace PoproshaykaBot.Wpf.ViewModels.Onboarding;
 public sealed partial class OnboardingWizardViewModel : ObservableObject
 {
     private readonly SettingsManager _settingsManager;
-    private readonly AccountsStore _accountsStore;
-    private readonly YouTubeSettingsStore? _youtubeSettingsStore;
-    private readonly YouTubeAccountsStore? _youtubeAccountsStore;
     private readonly KestrelHttpServer _kestrelHttpServer;
     private readonly BotConnectionManager _botConnectionManager;
     private readonly IEventBus _eventBus;
@@ -31,10 +27,7 @@ public sealed partial class OnboardingWizardViewModel : ObservableObject
     private readonly OnboardingContext _context;
     private readonly List<IOnboardingPageViewModel> _pages;
     private readonly TwitchSettings _originalTwitch;
-    private readonly YouTubeSettings _originalYouTubeSettings;
-    private readonly string _originalYouTubeClientSecret;
-    private readonly YouTubeAccountSettings _originalYouTubeBotAccount;
-    private readonly YouTubeAccountSettings _originalYouTubeBroadcasterAccount;
+    private readonly IDialogService? _dialogService;
 
     private int _currentPageIndex = -1;
     private bool _completed;
@@ -67,12 +60,11 @@ public sealed partial class OnboardingWizardViewModel : ObservableObject
         ILogger<OnboardingWizardViewModel> logger,
         YouTubeSettingsStore? youtubeSettingsStore = null,
         YouTubeAccountsStore? youtubeAccountsStore = null,
-        ChannelCatalogStore? twitchCatalog = null)
+        ChannelCatalogStore? twitchCatalog = null,
+        IDialogService? dialogService = null)
     {
         _settingsManager = settingsManager;
-        _accountsStore = accountsStore;
-        _youtubeSettingsStore = youtubeSettingsStore;
-        _youtubeAccountsStore = youtubeAccountsStore;
+        _dialogService = dialogService;
         _kestrelHttpServer = kestrelHttpServer;
         _botConnectionManager = botConnectionManager;
         _eventBus = eventBus;
@@ -84,19 +76,14 @@ public sealed partial class OnboardingWizardViewModel : ObservableObject
         var twitchChannel = twitchCatalog?.GetActiveChannel(StreamingPlatform.Twitch);
         accountsStore.TryLoadContext(PlatformAuthRole.Bot, twitchChannel?.BotContextId, out var originalBot);
         accountsStore.TryLoadContext(PlatformAuthRole.Broadcaster, twitchChannel?.BroadcasterContextId, out var originalBroadcaster);
-        _originalYouTubeSettings = youtubeSettingsStore is not null ? DeepClone(youtubeSettingsStore.Load()) : new();
-        _originalYouTubeClientSecret = youtubeAccountsStore?.LoadClientSecret() ?? string.Empty;
-        _originalYouTubeBotAccount = youtubeAccountsStore is not null ? DeepClone(youtubeAccountsStore.LoadBot()) : new();
-        _originalYouTubeBroadcasterAccount = youtubeAccountsStore is not null ? DeepClone(youtubeAccountsStore.LoadBroadcaster()) : new();
-
         _context = new(
             DeepClone(settingsManager.Current),
             originalBot is null ? new() : DeepClone(originalBot),
             originalBroadcaster is null ? new() : DeepClone(originalBroadcaster),
-            DeepClone(_originalYouTubeSettings),
-            _originalYouTubeClientSecret,
-            DeepClone(_originalYouTubeBotAccount),
-            DeepClone(_originalYouTubeBroadcasterAccount))
+            youtubeSettingsStore?.Load(),
+            youtubeAccountsStore?.LoadClientSecret() ?? string.Empty,
+            youtubeAccountsStore?.LoadBot(),
+            youtubeAccountsStore?.LoadBroadcaster())
         {
             TwitchCatalog = twitchCatalog,
             TwitchChannel = twitchChannel,
@@ -161,11 +148,9 @@ public sealed partial class OnboardingWizardViewModel : ObservableObject
             await StopBotIfRunningAsync();
         }
 
-        RollbackYouTubeSettings();
         await RollbackHttpServerPortAsync();
         RollbackTwitchSettings();
         await RollbackAccountsAsync();
-        await RollbackYouTubeAccountsAsync();
 
         DisposePages();
 
@@ -317,92 +302,33 @@ public sealed partial class OnboardingWizardViewModel : ObservableObject
 
     private async Task RollbackAccountsAsync()
     {
-        if (!_context.TwitchAccountsApplied)
+        if (!_context.HasProvisionalWrites)
         {
             return;
         }
 
         try
         {
-            var written = _context.RestoreTwitchChanges(_accountsStore);
+            _context.RestoreProvisionalWrites();
             await _eventBus.PublishAsync(new PlatformAuthorizationRefreshed(StreamingPlatform.Twitch, PlatformAuthRole.Bot,
                 _context.TwitchContextId(PlatformAuthRole.Bot)));
             await _eventBus.PublishAsync(new PlatformAuthorizationRefreshed(StreamingPlatform.Twitch, PlatformAuthRole.Broadcaster,
                 _context.TwitchContextId(PlatformAuthRole.Broadcaster)));
 
-            if (written)
-            {
-                _logger.OnboardingAccountsRolledBack();
-            }
-            else
-            {
-                _logger.OnboardingAccountsRolledBackInMemory();
-            }
-        }
-        catch (Exception exception)
-        {
-            _logger.OnboardingAccountsRollbackFailed(exception);
-        }
-    }
-
-    private void RollbackYouTubeSettings()
-    {
-        if (_youtubeSettingsStore is null)
-        {
-            return;
-        }
-
-        var live = _youtubeSettingsStore.Load();
-        if (string.Equals(JsonSerializer.Serialize(live), JsonSerializer.Serialize(_originalYouTubeSettings), StringComparison.Ordinal))
-        {
-            return;
-        }
-
-        try
-        {
-            _youtubeSettingsStore.Save(DeepClone(_originalYouTubeSettings));
-        }
-        catch (Exception exception)
-        {
-            _logger.OnboardingAccountsRollbackFailed(exception);
-        }
-    }
-
-    private async Task RollbackYouTubeAccountsAsync()
-    {
-        if (_youtubeAccountsStore is null)
-        {
-            return;
-        }
-
-        var liveSecret = _youtubeAccountsStore.LoadClientSecret();
-        var liveBot = _youtubeAccountsStore.LoadBot();
-        var liveBroadcaster = _youtubeAccountsStore.LoadBroadcaster();
-        if (string.Equals(liveSecret, _originalYouTubeClientSecret, StringComparison.Ordinal)
-            && string.Equals(JsonSerializer.Serialize(liveBot), JsonSerializer.Serialize(_originalYouTubeBotAccount), StringComparison.Ordinal)
-            && string.Equals(JsonSerializer.Serialize(liveBroadcaster), JsonSerializer.Serialize(_originalYouTubeBroadcasterAccount), StringComparison.Ordinal))
-        {
-            return;
-        }
-
-        try
-        {
-            _youtubeAccountsStore.SaveAll(
-                _originalYouTubeClientSecret,
-                DeepClone(_originalYouTubeBotAccount),
-                DeepClone(_originalYouTubeBroadcasterAccount));
             await _eventBus.PublishAsync(new PlatformAuthorizationRefreshed(StreamingPlatform.YouTube, PlatformAuthRole.Bot));
             await _eventBus.PublishAsync(new PlatformAuthorizationRefreshed(StreamingPlatform.YouTube, PlatformAuthRole.Broadcaster));
+            _logger.OnboardingAccountsRolledBack();
         }
         catch (Exception exception)
         {
             _logger.OnboardingAccountsRollbackFailed(exception);
+            _dialogService?.Warning("Часть изменений осталась", "Не удалось полностью отменить настройки. Перезапустите приложение и проверьте аккаунты.");
         }
     }
 
     private void RollbackTwitchSettings()
     {
-        if (!_context.TwitchSettingsApplied)
+        if (!_context.TwitchSettingsWritten)
         {
             return;
         }

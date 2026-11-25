@@ -38,6 +38,8 @@ public sealed class YouTubeSettingsStore : IPlatformEnablementSource
 
     public event Action? Changed;
 
+    public bool IsWriteRevoked => _store.IsWriteRevoked;
+
     StreamingPlatform IPlatformEnablementSource.Platform => StreamingPlatform.YouTube;
 
     bool IPlatformEnablementSource.IsEnabledInSettings => Load().Enabled;
@@ -59,6 +61,19 @@ public sealed class YouTubeSettingsStore : IPlatformEnablementSource
         }
 
         return saved;
+    }
+
+    public (bool Matched, bool Written) TryReplace(YouTubeSettings expected, YouTubeSettings replacement)
+    {
+        var matched = false;
+        var written = _store.Save(replacement, applyWhenBlocked: false,
+            matches: current => matched = JsonStoreClone.SameValues(current, expected));
+        if (written)
+        {
+            Changed?.Invoke();
+        }
+
+        return (matched, written);
     }
 
     public bool Mutate(Action<YouTubeSettings> mutator)

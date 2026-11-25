@@ -5,6 +5,7 @@ using PoproshaykaBot.Core.Platforms.Auth;
 using PoproshaykaBot.Core.Settings.Stores;
 using PoproshaykaBot.Core.YouTube;
 using PoproshaykaBot.Core.YouTube.Auth;
+using System.Runtime.ExceptionServices;
 
 namespace PoproshaykaBot.Wpf.ViewModels.Onboarding;
 
@@ -37,8 +38,6 @@ public sealed class OnboardingContext(
 
     internal bool TwitchSettingsWritten { get; set; }
 
-    internal bool TwitchSettingsApplied { get; set; }
-
     internal ChannelCatalogStore? TwitchCatalog { get; init; }
 
     internal ChannelCatalogEntry? TwitchChannel { get; init; }
@@ -46,16 +45,24 @@ public sealed class OnboardingContext(
     private readonly HashSet<PlatformAuthRole> _reauthorizedTwitchRoles = [];
     private readonly HashSet<PlatformAuthRole> _pendingTwitchRoles = [];
     private readonly Dictionary<PlatformAuthRole, TwitchAccountSettings?> _expectedTwitchAccounts = [];
-    private readonly Dictionary<PlatformAuthRole, TwitchAccountChange> _appliedTwitchAccounts = [];
     private readonly Dictionary<PlatformAuthRole, TwitchAssignment> _appliedTwitchAssignments = [];
+    private readonly List<Func<bool>> _provisionalWrites = [];
+    private bool _rollbackIncomplete;
+    private YouTubeSettings _savedYouTubeSettings = JsonStoreClone.DeepClone(youTubeSettings ?? new());
+    private (string Secret, YouTubeAccountSettings Bot, YouTubeAccountSettings Broadcaster) _savedYouTubeAccounts =
+        (youTubeClientSecret, JsonStoreClone.DeepClone(youTubeBotAccount ?? new()), JsonStoreClone.DeepClone(youTubeBroadcasterAccount ?? new()));
 
     private const string ChannelChanged = "Канал или назначенный аккаунт Twitch изменились. Закройте мастер и откройте его снова.";
     private const string AccountChanged = "Аккаунт Twitch изменился во время настройки. Закройте мастер и откройте его снова.";
     private const string AccountNotWritten = "Не удалось сохранить вход в Twitch. Если вы только что перенесли настройки, перезапустите приложение.";
     private const string AssignmentNotWritten = "Не удалось сохранить назначение аккаунта Twitch. Если вы только что перенесли настройки, перезапустите приложение.";
-    internal const string TwitchSettingsNotWritten = "Не удалось сохранить настройки приложения. Если вы только что перенесли данные, перезапустите приложение.";
+    private const string TwitchSettingsNotWritten = "Не удалось сохранить настройки приложения. Если вы только что перенесли данные, перезапустите приложение.";
+    private const string YouTubeSettingsNotWritten = "Не удалось сохранить настройки YouTube. Проверьте их и повторите попытку.";
+    private const string YouTubeAccountsNotWritten = "Не удалось сохранить вход в YouTube. Проверьте аккаунты и повторите попытку.";
+    internal const string RollbackIncomplete = "Часть изменений не удалось отменить. Закройте мастер, чтобы повторить восстановление.";
 
-    internal bool TwitchAccountsApplied => _appliedTwitchAccounts.Count > 0 || _appliedTwitchAssignments.Count > 0;
+    internal bool HasProvisionalWrites => _provisionalWrites.Count > 0;
+    internal bool HasIncompleteRollback => _rollbackIncomplete;
 
     internal string TwitchContextId(PlatformAuthRole role) => AuthContextIds.Normalize(
         role == PlatformAuthRole.Bot ? TwitchChannel?.BotContextId : TwitchChannel?.BroadcasterContextId);
@@ -144,8 +151,19 @@ public sealed class OnboardingContext(
         }
     }
 
-    internal string? SaveTwitchSetup(AccountsStore accounts, Func<bool> saveSettings)
+    internal string? SaveSetup(SettingsManager settingsManager, AccountsStore accounts,
+        YouTubeSettingsStore? youtubeSettingsStore = null, YouTubeAccountsStore? youtubeAccountsStore = null)
     {
+        if (_rollbackIncomplete)
+        {
+            return RollbackIncomplete;
+        }
+
+        if (settingsManager.IsWriteRevoked)
+        {
+            return TwitchSettingsNotWritten;
+        }
+
         if (accounts.IsWriteRevoked)
         {
             return AccountNotWritten;
@@ -161,114 +179,152 @@ public sealed class OnboardingContext(
             return ChannelChanged;
         }
 
-        var accountsWritten = new Dictionary<PlatformAuthRole, TwitchAccountChange>();
-        var assignmentsWritten = new Dictionary<PlatformAuthRole, TwitchAssignment>();
-        var assignmentsApplied = false;
-        var succeeded = false;
+        var undo = new List<Func<bool>>();
+        var accountSnapshots = new Dictionary<PlatformAuthRole, TwitchAccountSettings>();
+        var assignments = new Dictionary<PlatformAuthRole, TwitchAssignment>();
+        var youtubeDraft = (YouTubeClientSecret, YouTubeBotAccount, YouTubeBroadcasterAccount);
+        string? error = null;
+        Exception? failure = null;
         try
         {
-            foreach (var role in _pendingTwitchRoles)
+            error = WriteTwitchAccounts(accounts, undo, accountSnapshots, assignments)
+                ?? WriteYouTube(youtubeSettingsStore, youtubeAccountsStore, youtubeDraft, undo);
+            if (error is null && !settingsManager.SaveSettingsIfWritable(Settings))
             {
-                var contextId = TwitchContextId(role);
-                var draft = DraftTwitchAccount(role);
-                if (!_expectedTwitchAccounts.TryGetValue(role, out var previous))
+                error = TwitchSettingsNotWritten;
+            }
+        }
+        catch (Exception exception)
+        {
+            failure = exception;
+        }
+
+        if (error is not null || failure is not null)
+        {
+            var rollbackErrors = UndoWrites(undo);
+            if (undo.Count > 0)
+            {
+                _rollbackIncomplete = true;
+                _provisionalWrites.AddRange(undo);
+                if (failure is not null)
                 {
-                    accounts.TryLoadContext(role, contextId, out previous);
+                    rollbackErrors.Insert(0, failure);
+                }
+                else if (error is not null)
+                {
+                    rollbackErrors.Insert(0, new InvalidOperationException(error));
                 }
 
-                var result = accounts.TryReplaceContext(role, contextId, current => SameAccount(current, previous), draft);
-                if (!result.Applied)
-                {
-                    return AccountChanged;
-                }
+                throw new AggregateException(RollbackIncomplete, rollbackErrors);
+            }
 
-                accountsWritten.Add(role, new(previous, result.Snapshot!));
-                if (!result.Written)
+            if (failure is not null)
+            {
+                ExceptionDispatchInfo.Throw(failure);
+            }
+
+            return error;
+        }
+
+        TwitchSettingsWritten = true;
+        foreach (var (role, snapshot) in accountSnapshots)
+        {
+            _expectedTwitchAccounts[role] = snapshot;
+        }
+
+        foreach (var (role, binding) in assignments)
+        {
+            _appliedTwitchAssignments[role] = binding;
+        }
+
+        _savedYouTubeSettings = JsonStoreClone.DeepClone(YouTubeSettings);
+        _savedYouTubeAccounts = (YouTubeClientSecret, JsonStoreClone.DeepClone(YouTubeBotAccount), JsonStoreClone.DeepClone(YouTubeBroadcasterAccount));
+        _pendingTwitchRoles.Clear();
+        _provisionalWrites.AddRange(undo);
+        return null;
+    }
+
+    private string? WriteTwitchAccounts(AccountsStore accounts, List<Func<bool>> undo,
+        Dictionary<PlatformAuthRole, TwitchAccountSettings> snapshots, Dictionary<PlatformAuthRole, TwitchAssignment> assignments)
+    {
+        foreach (var role in _pendingTwitchRoles)
+        {
+            var contextId = TwitchContextId(role);
+            var draft = DraftTwitchAccount(role);
+            if (!_expectedTwitchAccounts.TryGetValue(role, out var previous))
+            {
+                accounts.TryLoadContext(role, contextId, out previous);
+            }
+
+            var result = accounts.TryReplaceContext(role, contextId, current => SameAccount(current, previous), draft);
+            if (!result.Applied || !result.Written)
+            {
+                return result.Applied ? AccountNotWritten : AccountChanged;
+            }
+
+            var written = result.Snapshot!;
+            snapshots.Add(role, written);
+            undo.Add(() =>
+            {
+                var restore = accounts.TryReplaceContext(role, contextId, current => SameAccount(current, written), previous);
+                return !restore.Applied || restore.Written;
+            });
+
+            if (TwitchChannel is not null && _reauthorizedTwitchRoles.Contains(role))
+            {
+                if (!accounts.VerifyPersistedAuthorization(role, contextId, draft.UserId))
                 {
                     return AccountNotWritten;
                 }
 
-                if (TwitchChannel is not null && _reauthorizedTwitchRoles.Contains(role))
-                {
-                    if (!accounts.VerifyPersistedAuthorization(role, contextId, draft.UserId))
-                    {
-                        return AccountNotWritten;
-                    }
-
-                    assignmentsWritten.Add(role, new(draft.UserId, contextId, draft.UserId));
-                }
+                assignments.Add(role, new(draft.UserId, contextId, draft.UserId));
             }
+        }
 
-            if (TwitchCatalog is not null && TwitchChannel is { } channel && assignmentsWritten.Count > 0)
-            {
-                var (applied, written) = TwitchCatalog.TryMutateChannel(channel.Key, requireActive: true, entry =>
-                {
-                    if (!MatchesTwitchChannel(entry))
-                    {
-                        return false;
-                    }
-
-                    foreach (var (role, binding) in assignmentsWritten)
-                    {
-                        binding.Apply(entry, role);
-                    }
-
-                    return true;
-                });
-                assignmentsApplied = applied;
-                if (!applied || !written)
-                {
-                    return applied ? AssignmentNotWritten : ChannelChanged;
-                }
-            }
-
-            if (!saveSettings())
-            {
-                return TwitchSettingsNotWritten;
-            }
-
-            foreach (var (role, change) in accountsWritten)
-            {
-                _expectedTwitchAccounts[role] = change.Written;
-                _appliedTwitchAccounts[role] = _appliedTwitchAccounts.TryGetValue(role, out var earlier)
-                    ? change with { Original = earlier.Original }
-                    : change;
-            }
-
-            foreach (var (role, binding) in assignmentsWritten)
-            {
-                _appliedTwitchAssignments[role] = binding;
-            }
-
-            _pendingTwitchRoles.Clear();
-            succeeded = true;
+        if (TwitchCatalog is not { } catalog || TwitchChannel is not { } channel || assignments.Count == 0)
+        {
             return null;
         }
-        finally
+
+        var before = assignments.Keys.ToDictionary(role => role, ExpectedTwitchAssignment);
+        var (applied, saved) = catalog.TryMutateChannel(channel.Key, requireActive: true, entry =>
         {
-            if (!succeeded)
+            if (!MatchesTwitchChannel(entry))
             {
-                try
+                return false;
+            }
+
+            foreach (var (role, binding) in assignments)
+            {
+                binding.Apply(entry, role);
+            }
+
+            return true;
+        });
+        if (!applied || !saved)
+        {
+            return applied ? AssignmentNotWritten : ChannelChanged;
+        }
+
+        undo.Add(() =>
+        {
+            var restored = catalog.TryMutateChannel(channel.Key, requireActive: false, entry =>
+            {
+                var changed = false;
+                foreach (var (role, binding) in assignments)
                 {
-                    if (assignmentsApplied)
+                    if (TwitchAssignment.From(entry, role) == binding && before[role] != binding)
                     {
-                        RestoreTwitchAssignments(assignmentsWritten, useOriginal: false);
+                        before[role].Apply(entry, role);
+                        changed = true;
                     }
                 }
-                finally
-                {
-                    RestoreTwitchAccounts(accounts, accountsWritten);
-                }
-            }
-        }
-    }
 
-    internal bool SaveSettings(SettingsManager settingsManager)
-    {
-        var written = settingsManager.SaveSettings(Settings);
-        TwitchSettingsApplied = true;
-        TwitchSettingsWritten |= written;
-        return written;
+                return changed;
+            });
+            return !restored.Applied || restored.Written;
+        });
+        return null;
     }
 
     private bool MatchesTwitchChannel(ChannelCatalogEntry? entry) =>
@@ -278,50 +334,79 @@ public sealed class OnboardingContext(
     private TwitchAssignment ExpectedTwitchAssignment(PlatformAuthRole role) =>
         _appliedTwitchAssignments.TryGetValue(role, out var applied) ? applied : TwitchAssignment.From(TwitchChannel!, role);
 
-    internal bool RestoreTwitchChanges(AccountsStore accounts)
+    private string? WriteYouTube(YouTubeSettingsStore? settingsStore, YouTubeAccountsStore? accountsStore,
+        (string Secret, YouTubeAccountSettings Bot, YouTubeAccountSettings Broadcaster) accounts, List<Func<bool>> undo)
     {
-        var bindingsWritten = RestoreTwitchAssignments(_appliedTwitchAssignments, useOriginal: true);
-        return RestoreTwitchAccounts(accounts, _appliedTwitchAccounts) && bindingsWritten;
-    }
-
-    private bool RestoreTwitchAssignments(Dictionary<PlatformAuthRole, TwitchAssignment> changes, bool useOriginal)
-    {
-        if (TwitchCatalog is null || TwitchChannel is not { } original || changes.Count == 0)
+        if (settingsStore is not null && !JsonStoreClone.SameValues(YouTubeSettings, _savedYouTubeSettings))
         {
-            return true;
-        }
-
-        var (applied, written) = TwitchCatalog.TryMutateChannel(original.Key, requireActive: false, entry =>
-        {
-            var changed = false;
-            foreach (var (role, binding) in changes)
+            var original = _savedYouTubeSettings;
+            var replacement = JsonStoreClone.DeepClone(YouTubeSettings);
+            if (!settingsStore.TryReplace(original, replacement).Written)
             {
-                if (TwitchAssignment.From(entry, role) == binding)
-                {
-                    var restore = useOriginal ? TwitchAssignment.From(original, role) : ExpectedTwitchAssignment(role);
-                    if (restore != binding)
-                    {
-                        restore.Apply(entry, role);
-                        changed = true;
-                    }
-                }
+                return YouTubeSettingsNotWritten;
             }
 
-            return changed;
-        });
-        return !applied || written;
-    }
-
-    private bool RestoreTwitchAccounts(AccountsStore accounts, Dictionary<PlatformAuthRole, TwitchAccountChange> changes)
-    {
-        var written = true;
-        foreach (var (role, change) in changes)
-        {
-            var result = accounts.TryReplaceContext(role, TwitchContextId(role), current => SameAccount(current, change.Written), change.Original);
-            written &= !result.Applied || result.Written;
+            undo.Add(() =>
+            {
+                var result = settingsStore.TryReplace(replacement, original);
+                return !result.Matched || result.Written;
+            });
         }
 
-        return written;
+        if (accountsStore is not null &&
+            (!string.Equals(accounts.Secret, _savedYouTubeAccounts.Secret, StringComparison.Ordinal)
+             || !JsonStoreClone.SameValues(accounts.Bot, _savedYouTubeAccounts.Bot)
+             || !JsonStoreClone.SameValues(accounts.Broadcaster, _savedYouTubeAccounts.Broadcaster)))
+        {
+            var original = _savedYouTubeAccounts;
+            var replacement = (accounts.Secret, JsonStoreClone.DeepClone(accounts.Bot), JsonStoreClone.DeepClone(accounts.Broadcaster));
+            if (!accountsStore.TryReplaceDefaultAccounts(original, replacement).Written)
+            {
+                return YouTubeAccountsNotWritten;
+            }
+
+            undo.Add(() =>
+            {
+                var result = accountsStore.TryReplaceDefaultAccounts(replacement, original);
+                return !result.Matched || result.Written;
+            });
+        }
+
+        return null;
+    }
+
+    internal void RestoreProvisionalWrites()
+    {
+        var errors = UndoWrites(_provisionalWrites);
+        if (errors.Count > 0)
+        {
+            throw new AggregateException(RollbackIncomplete, errors);
+        }
+    }
+
+    private static List<Exception> UndoWrites(List<Func<bool>> writes)
+    {
+        var errors = new List<Exception>();
+        for (var index = writes.Count - 1; index >= 0; index--)
+        {
+            try
+            {
+                if (writes[index]())
+                {
+                    writes.RemoveAt(index);
+                }
+                else
+                {
+                    errors.Add(new InvalidOperationException("Хранилище отклонило восстановление настроек."));
+                }
+            }
+            catch (Exception exception)
+            {
+                errors.Add(exception);
+            }
+        }
+
+        return errors;
     }
 
     private static bool SameAccount(TwitchAccountSettings? left, TwitchAccountSettings? right) =>
@@ -334,8 +419,6 @@ public sealed class OnboardingContext(
             && left.Scopes.SequenceEqual(right.Scopes, StringComparer.Ordinal)
             && left.StoredScopes.SequenceEqual(right.StoredScopes, StringComparer.Ordinal)
             && string.Equals(left.BrowserProfileName, right.BrowserProfileName, StringComparison.Ordinal);
-
-    private sealed record TwitchAccountChange(TwitchAccountSettings? Original, TwitchAccountSettings Written);
 
     private readonly record struct TwitchAssignment(string? AccountId, string? ContextId, string? VerifiedSubject)
     {

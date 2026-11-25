@@ -68,6 +68,30 @@ public sealed class YouTubeAccountsStore : RoleAccountsStoreBase<YouTubeAccounts
         return MutateFile(state => { state.ClientSecret = clientSecret; });
     }
 
+    public (bool Matched, bool Written) TryReplaceDefaultAccounts(
+        (string Secret, YouTubeAccountSettings Bot, YouTubeAccountSettings Broadcaster) expected,
+        (string Secret, YouTubeAccountSettings Bot, YouTubeAccountSettings Broadcaster) replacement)
+    {
+        var expectedBot = JsonStoreClone.DeepClone(expected.Bot);
+        var expectedBroadcaster = JsonStoreClone.DeepClone(expected.Broadcaster);
+        EnsureDefaultScopes(expectedBot, PlatformAuthRole.Bot);
+        EnsureDefaultScopes(expectedBroadcaster, PlatformAuthRole.Broadcaster);
+        return TryMutateFile(state =>
+        {
+            if (!string.Equals(state.ClientSecret ?? string.Empty, expected.Secret, StringComparison.Ordinal)
+                || !JsonStoreClone.SameValues(TakeAccount(state, PlatformAuthRole.Bot), expectedBot)
+                || !JsonStoreClone.SameValues(TakeAccount(state, PlatformAuthRole.Broadcaster), expectedBroadcaster))
+            {
+                return false;
+            }
+
+            state.ClientSecret = replacement.Secret;
+            state.BotAccount = JsonStoreClone.DeepClone(replacement.Bot);
+            state.BroadcasterAccount = JsonStoreClone.DeepClone(replacement.Broadcaster);
+            return true;
+        });
+    }
+
     public bool SaveAll(string clientSecret, YouTubeAccountSettings bot, YouTubeAccountSettings broadcaster)
     {
         ArgumentNullException.ThrowIfNull(clientSecret);

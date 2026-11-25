@@ -14,7 +14,6 @@ public abstract class RoleAccountsStoreBase<TFile, TAccount> : IPlatformAccountD
     where TAccount : class, IRoleAccountSettings, new()
 {
     private readonly JsonStore<TFile> _store;
-    private readonly SettingsWriteGate? _gate;
 
     protected RoleAccountsStoreBase(
         string filePath,
@@ -27,7 +26,6 @@ public abstract class RoleAccountsStoreBase<TFile, TAccount> : IPlatformAccountD
 
         FilePath = filePath;
         Logger = logger;
-        _gate = gate;
         _store = new(filePath, logger, redact, describe: describe, gate: gate);
     }
 
@@ -35,7 +33,7 @@ public abstract class RoleAccountsStoreBase<TFile, TAccount> : IPlatformAccountD
 
     protected ILogger? Logger { get; }
 
-    public bool IsWriteRevoked => _gate?.IsRevoked(FilePath) == true;
+    public bool IsWriteRevoked => _store.IsWriteRevoked;
 
     public TAccount LoadBot()
     {
@@ -374,9 +372,9 @@ public abstract class RoleAccountsStoreBase<TFile, TAccount> : IPlatformAccountD
             }
 
             return true;
-        });
+        }, applyWhenBlocked: false);
 
-        if (applied)
+        if (written)
         {
             OnRoleMutated(role, written);
         }
@@ -695,6 +693,11 @@ public abstract class RoleAccountsStoreBase<TFile, TAccount> : IPlatformAccountD
         return _store.Mutate(mutator);
     }
 
+    protected (bool Applied, bool Written) TryMutateFile(Func<TFile, bool> mutator)
+    {
+        return _store.MutateIfWithResult(mutator, applyWhenBlocked: false);
+    }
+
     protected bool SaveFile(TFile state)
     {
         return _store.Save(state);
@@ -816,7 +819,7 @@ public abstract class RoleAccountsStoreBase<TFile, TAccount> : IPlatformAccountD
         };
     }
 
-    private void EnsureDefaultScopes(TAccount account, PlatformAuthRole role)
+    protected void EnsureDefaultScopes(TAccount account, PlatformAuthRole role)
     {
         account.StoredScopes ??= [];
         if (account.Scopes is not { Length: > 0 })

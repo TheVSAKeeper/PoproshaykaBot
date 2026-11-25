@@ -9,22 +9,19 @@ namespace PoproshaykaBot.Core.Settings.Stores;
 public sealed class ChannelCatalogStore
 {
     private readonly JsonStore<ChannelsSettings> _store;
-    private readonly SettingsWriteGate? _gate;
-    private readonly string _path;
 
     public ChannelCatalogStore(
         ILogger<ChannelCatalogStore>? logger = null,
         string? filePath = null,
         SettingsWriteGate? gate = null)
     {
-        _path = filePath ?? AppPaths.SettingsFile(LegacyDataCatalog.ChannelsFileName);
-        _gate = gate;
-        _store = new(_path, logger, describe: Describe, gate: gate);
+        var path = filePath ?? AppPaths.SettingsFile(LegacyDataCatalog.ChannelsFileName);
+        _store = new(path, logger, describe: Describe, gate: gate);
     }
 
     public event EventHandler? Changed;
 
-    public bool IsWriteRevoked => _gate?.IsRevoked(_path) == true;
+    public bool IsWriteRevoked => _store.IsWriteRevoked;
 
     public ChannelsSettings Load()
     {
@@ -52,10 +49,7 @@ public sealed class ChannelCatalogStore
         var written = _store.Mutate(settings =>
         {
             mutator(settings);
-            var normalized = Normalize(settings);
-            settings.Channels = normalized.Channels;
-            settings.Groups = normalized.Groups;
-            settings.Platforms = normalized.Platforms;
+            NormalizeInPlace(settings);
         });
 
         Changed?.Invoke(this, EventArgs.Empty);
@@ -74,21 +68,36 @@ public sealed class ChannelCatalogStore
 
         var result = _store.MutateIfWithResult(settings =>
         {
+            NormalizeInPlace(settings);
             if (requireActive && GetActiveChannel(settings, key.Platform)?.Key != key)
             {
                 return false;
             }
 
             var entry = settings.Channels.Find(channel => channel.Key == key);
-            return entry is not null && mutator(entry);
-        });
+            if (entry is null || !mutator(entry))
+            {
+                return false;
+            }
 
-        if (result.Applied)
+            NormalizeInPlace(settings);
+            return true;
+        }, applyWhenBlocked: false);
+
+        if (result.Written)
         {
             Changed?.Invoke(this, EventArgs.Empty);
         }
 
         return result;
+    }
+
+    private static void NormalizeInPlace(ChannelsSettings settings)
+    {
+        var normalized = Normalize(settings);
+        settings.Channels = normalized.Channels;
+        settings.Groups = normalized.Groups;
+        settings.Platforms = normalized.Platforms;
     }
 
     public PlatformChannelRoutingSettings GetPlatformSettings(StreamingPlatform platform)

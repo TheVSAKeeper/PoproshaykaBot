@@ -166,6 +166,33 @@ public class SettingsWriteGateNoticeTests
     }
 
     [Test]
+    public async Task Повтор_подключения_сначала_сохраняет_вход_после_ошибки_записи()
+    {
+        var settingsManager = new SettingsManager(NullLogger<SettingsManager>.Instance, Path.Combine(_root, "settings.json"));
+        var accountPath = Path.Combine(_root, "accounts.json");
+        var accounts = new AccountsStore(filePath: accountPath);
+        accounts.SaveAll(new(), new());
+        var connection = new FakeBotConnectionController();
+        using var page = new BotConnectionPageViewModel(connection, new InMemoryEventBus(NullLogger<InMemoryEventBus>.Instance),
+            settingsManager, accounts, NullLogger<BotConnectionPageViewModel>.Instance);
+        var context = new OnboardingContext(new(), new(), new());
+        Assert.That(context.AcceptTwitchLogin(PlatformAuthRole.Bot, context.BotAccount,
+            new("token", "refresh", [.. TwitchScopes.BotRequired], "bot", "1", 3600)), Is.True);
+
+        await using (var handle = File.Open(accountPath, FileMode.Open, FileAccess.Read, FileShare.None))
+        {
+            page.OnEnter(context);
+            Assert.That(connection.StartCount, Is.Zero);
+            Assert.That(page.DetailsText, Is.EqualTo("Не удалось сохранить настройки. Повторите попытку."));
+            Assert.That(page.RetryCommand.CanExecute(null), Is.True);
+        }
+
+        page.RetryCommand.Execute(null);
+        Assert.That(accounts.LoadBot().AccessToken, Is.EqualTo("token"));
+        Assert.That(connection.StartCount, Is.EqualTo(1));
+    }
+
+    [Test]
     public async Task Раздел_опросов_называет_незаписанный_файл()
     {
         var pollsPath = Path.Combine(_root, "polls.json");
