@@ -39,6 +39,7 @@ public sealed partial class CommandsPageViewModel : ObservableObject, IPageHeade
     private readonly TwitchChannelAuthorization? _authorization;
     private readonly IChatPlatformRegistry? _platformRegistry;
     private readonly ILogger<CommandsPageViewModel> _logger;
+    private readonly IUiTimer? _usageTimer;
     private readonly List<CommandRowViewModel> _allRows = [];
     private readonly ObservableCollection<CommandRowViewModel> _rows = [];
     private readonly Dictionary<string, IChatCommand> _commands = new(StringComparer.OrdinalIgnoreCase);
@@ -96,7 +97,8 @@ public sealed partial class CommandsPageViewModel : ObservableObject, IPageHeade
         AccountsStore accountsStore,
         ILogger<CommandsPageViewModel> logger,
         IChatPlatformRegistry? platformRegistry = null,
-        TwitchChannelAuthorization? authorization = null)
+        TwitchChannelAuthorization? authorization = null,
+        IUiDispatcher? uiDispatcher = null)
     {
         ArgumentNullException.ThrowIfNull(processor);
 
@@ -108,6 +110,7 @@ public sealed partial class CommandsPageViewModel : ObservableObject, IPageHeade
         _unsavedChangesPrompt = unsavedChangesPrompt;
         _platformRegistry = platformRegistry;
         _logger = logger;
+        _usageTimer = uiDispatcher?.CreateTimer(TimeSpan.FromSeconds(5), RefreshUsage);
 
         CommandScopes = PlatformFilterOption.ForRegistry(platformRegistry, GeneralScope);
 
@@ -239,6 +242,19 @@ public sealed partial class CommandsPageViewModel : ObservableObject, IPageHeade
     public void DiscardUnsavedChanges()
     {
         ReloadParameters();
+    }
+
+    public void SetUsagePollingActive(bool isActive)
+    {
+        if (isActive)
+        {
+            RefreshUsage();
+            _usageTimer?.Start();
+        }
+        else
+        {
+            _usageTimer?.Stop();
+        }
     }
 
     public void RefreshUsage()

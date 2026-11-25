@@ -63,6 +63,7 @@ public partial class App : Application
     private static RunStateStore? _runStateStore;
     private static readonly UnobservedTaskExceptionTracker UnobservedTaskExceptions = new();
 
+    private readonly UnhandledExceptionJournal _unhandledExceptionJournal = new();
     private ServiceProvider? _services;
     private KeepShellLogging? _logging;
     private KeepShellLoggingOptions? _loggingOptions;
@@ -269,8 +270,8 @@ public partial class App : Application
                     _loggingOptions!,
                     _bindingErrors,
                     IsGallery ? null : _mcpStartupOptions.DiscoveryFilePath);
-                services.AddSingleton(_logging!.Sink);
-                services.AddSingleton(_loggingOptions!);
+                services.AddKeepShellLogging(_logging!);
+                services.AddSingleton(_unhandledExceptionJournal);
                 services.AddSingleton(_previousRunState);
                 services.AddSingleton(UnobservedTaskExceptions);
 
@@ -533,7 +534,7 @@ public partial class App : Application
         }
 
         services
-            .AddCoreInfrastructure(uiLogSink, disposeSerilog: false)
+            .AddCoreInfrastructure(uiLogSink, disposeSerilog: false, registerLogging: false)
             .AddStatistics()
             .AddSettingsStores()
             .AddDebugChannel(DebugChannel)
@@ -627,16 +628,7 @@ public partial class App : Application
 
         services.AddSingleton<StatisticsPreload>(static provider => new(
             provider.GetRequiredService<UserStatisticsLoader>(),
-            static action =>
-            {
-                if (Current?.Dispatcher is { HasShutdownStarted: false, HasShutdownFinished: false } dispatcher)
-                {
-                    _ = dispatcher.BeginInvoke(DispatcherPriority.Background, action);
-                    return;
-                }
-
-                action();
-            }));
+            provider.GetRequiredService<IUiDispatcher>().Invoke));
         services.AddSingleton<DashboardViewModel>();
         services.AddSingleton<IMultistreamPlatformControls, YouTubeMultistreamPlatformControls>();
         services.AddSingleton<MultistreamPageViewModel>();
@@ -1034,6 +1026,7 @@ public partial class App : Application
 
             if (exception is not null)
             {
+                _unhandledExceptionJournal.Record("AppDomain.UnhandledException", exception, handled: false);
                 HostLog.Fatal(exception, "Приложение завершило работу из-за непредвиденной ошибки");
             }
 
@@ -1041,7 +1034,7 @@ public partial class App : Application
         };
     }
 
-    private static void OnUnobservedTaskException(object? sender, UnobservedTaskExceptionEventArgs args)
+    private void OnUnobservedTaskException(object? sender, UnobservedTaskExceptionEventArgs args)
     {
         args.SetObserved();
 
@@ -1054,6 +1047,8 @@ public partial class App : Application
                 recorded.TotalCount);
             return;
         }
+
+        _unhandledExceptionJournal.Record("TaskScheduler.UnobservedTaskException", args.Exception, handled: true);
 
         HostLog.Error(
             "Необработанное исключение фоновой задачи: {ExceptionType} @ {TopFrame} (вложенных: {InnerCount}, всего сбоев: {FailureCount})",
@@ -1071,6 +1066,8 @@ public partial class App : Application
         {
             return;
         }
+
+        _unhandledExceptionJournal.Record("Dispatcher.UnhandledException", args.Exception, handled: true);
 
         _exitReason = AppExitReason.Failed;
         _runStateStore?.MarkFailure(RunStateStatus.FatalShutdown, args.Exception);

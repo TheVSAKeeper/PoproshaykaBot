@@ -4,7 +4,6 @@
              xmlns:sys="clr-namespace:System;assembly=mscorlib"
              xmlns:controls="clr-namespace:PoproshaykaBot.Wpf.Views.Controls"
              xmlns:keepshell="https://schemas.keepshell.dev/wpf"
-             xmlns:keepshellVm="clr-namespace:KeepShell.ViewModels;assembly=KeepShell"
              xmlns:iconPacks="http://metro.mahapps.com/winfx/xaml/iconpacks"
              xmlns:localVm="clr-namespace:PoproshaykaBot.Wpf.ViewModels"
              xmlns:settingsVm="clr-namespace:PoproshaykaBot.Wpf.ViewModels.Settings"
@@ -141,23 +140,9 @@
             </Style>
 
             <Style x:Key="PlatformBadgeStyle" TargetType="Border" BasedOn="{StaticResource Badge.Info}">
-                <Style.Triggers>
-                    <DataTrigger Binding="{Binding Status.StatusBadgeSeverity}" Value="{x:Static keepshellVm:StatusSeverity.Warning}">
-                        <Setter Property="Background" Value="{DynamicResource State.WarningSoft}" />
-                        <Setter Property="BorderBrush" Value="{DynamicResource State.Warning}" />
-                        <Setter Property="TextElement.Foreground" Value="{DynamicResource State.WarningText}" />
-                    </DataTrigger>
-                    <DataTrigger Binding="{Binding Status.StatusBadgeSeverity}" Value="{x:Static keepshellVm:StatusSeverity.Error}">
-                        <Setter Property="Background" Value="{DynamicResource State.ErrorSoft}" />
-                        <Setter Property="BorderBrush" Value="{DynamicResource State.Error}" />
-                        <Setter Property="TextElement.Foreground" Value="{DynamicResource State.ErrorText}" />
-                    </DataTrigger>
-                    <DataTrigger Binding="{Binding Status.StatusBadgeSeverity}" Value="{x:Static keepshellVm:StatusSeverity.Success}">
-                        <Setter Property="Background" Value="{DynamicResource State.SuccessSoft}" />
-                        <Setter Property="BorderBrush" Value="{DynamicResource State.Success}" />
-                        <Setter Property="TextElement.Foreground" Value="{DynamicResource State.SuccessText}" />
-                    </DataTrigger>
-                </Style.Triggers>
+                <Setter Property="keepshell:SeverityBrushBehavior.SoftBackground" Value="{Binding Status.StatusBadgeSeverity}" />
+                <Setter Property="keepshell:SeverityBrushBehavior.BorderBrush" Value="{Binding Status.StatusBadgeSeverity}" />
+                <Setter Property="keepshell:SeverityBrushBehavior.Foreground" Value="{Binding Status.StatusBadgeSeverity}" />
             </Style>
         </ResourceDictionary>
     </UserControl.Resources>

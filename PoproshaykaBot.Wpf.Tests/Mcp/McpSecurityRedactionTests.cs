@@ -4,10 +4,16 @@ using KeepShell.Services;
 using KeepShell.Services.Modal;
 using KeepShell.Services.Platform;
 using KeepShell.Testing;
+using KeepShell.Views.Controls;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using PoproshaykaBot.Core.Settings.Obs;
+using PoproshaykaBot.Core.Twitch.Auth;
+using PoproshaykaBot.Core.Twitch.Onboarding;
 using PoproshaykaBot.Wpf.Bootstrap;
+using PoproshaykaBot.Wpf.ViewModels.Onboarding;
 using PoproshaykaBot.Wpf.ViewModels.Settings;
+using PoproshaykaBot.Wpf.Views.Onboarding;
 using PoproshaykaBot.Wpf.Views.Settings;
 using Serilog.Events;
 using Serilog.Parsing;
@@ -16,6 +22,7 @@ using System.IO.Compression;
 using System.Text;
 using System.Text.Json;
 using System.Windows;
+using System.Windows.Media;
 using KeepShellMcpOptions = KeepShell.Mcp.McpServerOptions;
 
 namespace PoproshaykaBot.Wpf.Tests.Mcp;
@@ -240,6 +247,107 @@ public sealed class McpSecurityRedactionTests
         }
     }
 
+    [Test]
+    [Apartment(ApartmentState.STA)]
+    public void CredentialsPageView_ViewSnapshot_RedactsRevealableTextBoxWhenMaskedAndRevealed()
+    {
+        TestResources.Ensure(ViewResourceDictionaries);
+        AppScaledSizes.Register(Application.Current!);
+
+        using var viewModel = new CredentialsPageViewModel(
+            new StubClientCredentialsValidator(),
+            new StubOnboardingChannelValidator(),
+            NullLogger<CredentialsPageViewModel>.Instance,
+            new ManualUiDispatcher())
+        {
+            ClientId = "test-client-id",
+            ClientSecret = TwitchClientSecretCanary,
+        };
+
+        var view = new CredentialsPageView { DataContext = viewModel };
+        var window = new Window
+        {
+            WindowStyle = WindowStyle.None,
+            Content = view,
+        };
+
+        using var visualHost = VisualTestHost.Show(window, 760, 620);
+        visualHost.Settle();
+
+        var maskedSnapshot = ViewSnapshot.Capture(view);
+        var maskedSerialized = JsonSerializer.Serialize(maskedSnapshot);
+
+        var revealables = FindVisualChildren<RevealableTextBox>(view).ToList();
+        Assert.That(revealables, Has.Count.EqualTo(2));
+
+        foreach (var revealable in revealables)
+        {
+            revealable.IsRevealed = true;
+        }
+
+        visualHost.Settle();
+
+        var revealedSnapshot = ViewSnapshot.Capture(view);
+        var revealedSerialized = JsonSerializer.Serialize(revealedSnapshot);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(maskedSerialized, Does.Not.Contain(TwitchClientSecretCanary), "Секрет в маскированном RevealableTextBox не должен попадать в снимок.");
+            Assert.That(maskedSerialized, Does.Contain(McpPrivacy.RedactedText), "Маскированный RevealableTextBox должен вымарываться через McpPrivacy.");
+            Assert.That(revealedSerialized, Does.Not.Contain(TwitchClientSecretCanary), "Секрет в раскрытом RevealableTextBox не должен попадать в снимок.");
+            Assert.That(revealedSerialized, Does.Contain(McpPrivacy.RedactedText), "Раскрытый RevealableTextBox должен вымарываться через McpPrivacy.");
+        }
+    }
+
+    [Test]
+    public async Task UnhandledExceptionJournal_RegisteredAfterAddKeepShell_PreservesPreBuildRecordsInMcp()
+    {
+        var journal = new UnhandledExceptionJournal();
+        journal.Record("AppDomain.UnhandledException", new InvalidOperationException("pre-di-crash"), handled: false);
+
+        var services = new ServiceCollection();
+        services.AddKeepShell();
+        services.AddSingleton(journal);
+
+        await using var provider = services.BuildServiceProvider();
+        var resolved = provider.GetRequiredService<UnhandledExceptionJournal>();
+
+        Assert.That(resolved, Is.SameAs(journal), "Регистрация экземпляра журнала после AddKeepShell должна сохранять доконтейнерные записи.");
+        Assert.That(resolved.Count, Is.EqualTo(1));
+
+        await using var harness = await McpTestHarness.StartAsync(unhandledExceptionJournal: journal);
+        await using var client = await harness.ConnectClientAsync();
+        using var response = await McpTestHarness.CallToolJsonAsync(client, "read_unhandled_exceptions");
+        var text = response.RootElement.GetRawText();
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(text, Does.Contain("AppDomain.UnhandledException"));
+            Assert.That(text, Does.Contain("pre-di-crash"));
+        }
+    }
+
+    private static IEnumerable<T> FindVisualChildren<T>(DependencyObject root)
+        where T : DependencyObject
+    {
+        var count = VisualTreeHelper.GetChildrenCount(root);
+
+        for (var i = 0; i < count; i++)
+        {
+            var child = VisualTreeHelper.GetChild(root, i);
+
+            if (child is T match)
+            {
+                yield return match;
+            }
+
+            foreach (var nested in FindVisualChildren<T>(child))
+            {
+                yield return nested;
+            }
+        }
+    }
+
     private static void AssertContainsNoCanaries(string text, string context)
     {
         foreach (var canary in AllCanaries)
@@ -254,6 +362,29 @@ public sealed class McpSecurityRedactionTests
     private sealed class EmptyProvider : IServiceProvider
     {
         public object? GetService(Type serviceType) => null;
+    }
+
+    private sealed class StubClientCredentialsValidator : IClientCredentialsValidator
+    {
+        public Task<ClientCredentialsValidationResult> ValidateAsync(
+            string clientId,
+            string clientSecret,
+            CancellationToken cancellationToken) => Task.FromResult(ClientCredentialsValidationResult.Valid);
+    }
+
+    private sealed class StubOnboardingChannelValidator : IOnboardingChannelValidator
+    {
+        public Task<ChannelValidationResult> ValidateAsync(
+            string login,
+            string clientId,
+            string accessToken,
+            CancellationToken cancellationToken) => Task.FromResult(ChannelValidationResult.Skipped);
+
+        public Task<ChannelValidationResult> ValidateWithAppTokenAsync(
+            string login,
+            string clientId,
+            string clientSecret,
+            CancellationToken cancellationToken) => Task.FromResult(ChannelValidationResult.Skipped);
     }
 
     private sealed class StubClipboardService : IClipboardService

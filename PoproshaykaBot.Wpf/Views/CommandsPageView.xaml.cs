@@ -8,32 +8,23 @@ namespace PoproshaykaBot.Wpf.Views;
 
 public partial class CommandsPageView : IView<CommandsPageViewModel>
 {
-    private static readonly TimeSpan UsageInterval = TimeSpan.FromSeconds(5);
-
-    private readonly DispatcherTimer _usageTimer;
-
     private CommandsPageViewModel? _viewModel;
 
     public CommandsPageView()
     {
         InitializeComponent();
 
-        _usageTimer = new(DispatcherPriority.Background, Dispatcher)
-        {
-            Interval = UsageInterval,
-        };
-
-        _usageTimer.Tick += OnUsageTick;
-
         DataContextChanged += OnDataContextChanged;
         Loaded += OnLoaded;
         Unloaded += OnUnloaded;
+        IsVisibleChanged += OnIsVisibleChanged;
     }
 
     private void OnDataContextChanged(object sender, DependencyPropertyChangedEventArgs e)
     {
         if (_viewModel is not null)
         {
+            _viewModel.SetUsagePollingActive(false);
             _viewModel.PropertyChanged -= OnViewModelPropertyChanged;
         }
 
@@ -42,6 +33,10 @@ public partial class CommandsPageView : IView<CommandsPageViewModel>
         if (_viewModel is not null)
         {
             _viewModel.PropertyChanged += OnViewModelPropertyChanged;
+            if (IsLoaded && IsVisible)
+            {
+                _viewModel.SetUsagePollingActive(true);
+            }
         }
     }
 
@@ -51,25 +46,22 @@ public partial class CommandsPageView : IView<CommandsPageViewModel>
         {
             _viewModel.PropertyChanged -= OnViewModelPropertyChanged;
             _viewModel.PropertyChanged += OnViewModelPropertyChanged;
+            _viewModel.SetUsagePollingActive(IsLoaded && IsVisible);
         }
-
-        _viewModel?.RefreshUsage();
-        _usageTimer.Start();
     }
 
     private void OnUnloaded(object sender, RoutedEventArgs e)
     {
-        _usageTimer.Stop();
-
         if (_viewModel is not null)
         {
+            _viewModel.SetUsagePollingActive(false);
             _viewModel.PropertyChanged -= OnViewModelPropertyChanged;
         }
     }
 
-    private void OnUsageTick(object? sender, EventArgs e)
+    private void OnIsVisibleChanged(object sender, DependencyPropertyChangedEventArgs e)
     {
-        _viewModel?.RefreshUsage();
+        _viewModel?.SetUsagePollingActive(IsLoaded && IsVisible);
     }
 
     private void OnViewModelPropertyChanged(object? sender, PropertyChangedEventArgs e)

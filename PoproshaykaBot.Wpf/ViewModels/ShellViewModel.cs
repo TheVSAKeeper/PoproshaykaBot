@@ -488,7 +488,7 @@ public sealed partial class ShellViewModel : ShellViewModelBase, IDisposable
 
     public NavigationItem? FindSectionByKey(string? key)
     {
-        if (string.IsNullOrEmpty(key))
+        if (string.IsNullOrWhiteSpace(key))
         {
             return null;
         }
@@ -498,13 +498,7 @@ public sealed partial class ShellViewModel : ShellViewModelBase, IDisposable
             key = migrated;
         }
 
-        if (string.Equals(_settingsSection.Key, key, StringComparison.OrdinalIgnoreCase))
-        {
-            return _settingsSection;
-        }
-
-        return Sections.FirstOrDefault(section => section.Key.Length > 0
-            && string.Equals(section.Key, key, StringComparison.OrdinalIgnoreCase));
+        return FindByKey(key);
     }
 
     protected override void OnNavCollapsedChanged(bool value)

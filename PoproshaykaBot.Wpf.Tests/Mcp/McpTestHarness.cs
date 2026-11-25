@@ -165,6 +165,7 @@ internal sealed class McpTestHarness : IAsyncDisposable
         Action<IServiceCollection>? configureExtraTools = null,
         Action<SettingsManager, AccountsStore, YouTubeAccountsStore, ObsIntegrationStore>? seedStores = null,
         bool startServer = true,
+        UnhandledExceptionJournal? unhandledExceptionJournal = null,
         CancellationToken cancellationToken = default)
     {
         var tempDirectory = Path.Combine(Path.GetTempPath(), $"PoproshaykaBot-mcp-test-{Guid.NewGuid():N}");
@@ -339,6 +340,7 @@ internal sealed class McpTestHarness : IAsyncDisposable
             hostOptions,
             effectiveDispatch,
             NullLogger<ShellAutomation>.Instance,
+            unhandledExceptionJournal: unhandledExceptionJournal,
             performanceMonitor: performanceMonitor,
             diagnosticsCollector: diagnosticsCollector,
             secretSources: secretSources);

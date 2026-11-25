@@ -11,13 +11,20 @@ namespace PoproshaykaBot.Core.Infrastructure.Di;
 
 public static class InfrastructureServiceCollectionExtensions
 {
-    public static IServiceCollection AddCoreInfrastructure(this IServiceCollection services, UiLogSink uiLogSink, bool disposeSerilog = true)
+    public static IServiceCollection AddCoreInfrastructure(
+        this IServiceCollection services,
+        UiLogSink uiLogSink,
+        bool disposeSerilog = true,
+        bool registerLogging = true)
     {
-        services.AddLogging(builder =>
+        if (registerLogging)
         {
-            builder.ClearProviders();
-            builder.AddSerilog(dispose: disposeSerilog);
-        });
+            services.AddLogging(builder =>
+            {
+                builder.ClearProviders();
+                builder.AddSerilog(dispose: disposeSerilog);
+            });
+        }
 
         services.AddSingleton(uiLogSink);
         services.AddHttpClient();

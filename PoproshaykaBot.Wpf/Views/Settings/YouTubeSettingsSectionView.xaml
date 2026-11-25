@@ -39,13 +39,15 @@
         <DockPanel Margin="0,0,0,8">
             <TextBlock Text="Client ID"
                        Style="{StaticResource Setting.RowLabel}" />
-            <keepshell:RevealableTextBox Password="{Binding ClientId, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+            <keepshell:RevealableTextBox Password="{Binding ClientId, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                         keepshell:McpPrivacy.IsSensitive="True" />
         </DockPanel>
 
         <DockPanel Margin="0,0,0,8">
             <TextBlock Text="Client Secret"
                        Style="{StaticResource Setting.RowLabel}" />
-            <keepshell:RevealableTextBox Password="{Binding ClientSecret, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+            <keepshell:RevealableTextBox Password="{Binding ClientSecret, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                         keepshell:McpPrivacy.IsSensitive="True" />
         </DockPanel>
 
         <DockPanel Margin="0,0,0,8"

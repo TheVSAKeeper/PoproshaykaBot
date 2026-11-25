@@ -188,6 +188,7 @@
                    FontSize="{DynamicResource Font.Size.S}"
                    Margin="0,0,0,4" />
         <keepshell:RevealableTextBox Password="{Binding AccessTokenValue, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                     keepshell:McpPrivacy.IsSensitive="True"
                                      Margin="0,0,0,8" />
 
         <TextBlock Text="Refresh Token"
@@ -195,6 +196,7 @@
                    FontSize="{DynamicResource Font.Size.S}"
                    Margin="0,0,0,4" />
         <keepshell:RevealableTextBox Password="{Binding RefreshTokenValue, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                     keepshell:McpPrivacy.IsSensitive="True"
                                      Margin="0,0,0,10" />
 
         <WrapPanel>

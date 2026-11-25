@@ -80,28 +80,9 @@
 
             <TextBlock Text="{Binding RepositoryHintText}"
                        TextWrapping="Wrap"
-                       Margin="200,6,0,0">
-                <TextBlock.Style>
-                    <Style TargetType="TextBlock">
-                        <Setter Property="Foreground"
-                                Value="{DynamicResource Fg.Muted}" />
-                        <Setter Property="FontSize"
-                                Value="{DynamicResource Font.Size.S}" />
-                        <Style.Triggers>
-                            <DataTrigger Binding="{Binding RepositoryHintSeverity}"
-                                         Value="Success">
-                                <Setter Property="Foreground"
-                                        Value="{DynamicResource State.SuccessText}" />
-                            </DataTrigger>
-                            <DataTrigger Binding="{Binding RepositoryHintSeverity}"
-                                         Value="Error">
-                                <Setter Property="Foreground"
-                                        Value="{DynamicResource State.ErrorText}" />
-                            </DataTrigger>
-                        </Style.Triggers>
-                    </Style>
-                </TextBlock.Style>
-            </TextBlock>
+                       FontSize="{DynamicResource Font.Size.S}"
+                       keepshell:SeverityBrushBehavior.Foreground="{Binding RepositoryHintSeverity}"
+                       Margin="200,6,0,0" />
         </StackPanel>
 
         <StackPanel>
