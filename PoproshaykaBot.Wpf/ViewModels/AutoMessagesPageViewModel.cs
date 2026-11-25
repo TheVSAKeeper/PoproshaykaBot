@@ -1,6 +1,7 @@
 ﻿using System.Globalization;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using KeepShell.Services;
 using Microsoft.Extensions.Logging;
 using PoproshaykaBot.Core.Broadcast;
 using PoproshaykaBot.Core.Chat;
@@ -25,6 +26,8 @@ public sealed partial class AutoMessagesPageViewModel : ObservableObject, IUnsav
     private readonly IBroadcastPlatformTargetsProvider _targets;
     private readonly BroadcastProfilesStore _profiles;
     private readonly BroadcastScheduler _scheduler;
+    private readonly IBroadcastState _broadcastState;
+    private readonly IDialogService _dialogs;
     private readonly BotMessagingNavigation _navigation;
     private readonly IEventBus _events;
     private readonly ILogger<AutoMessagesPageViewModel> _logger;
@@ -65,7 +68,8 @@ public sealed partial class AutoMessagesPageViewModel : ObservableObject, IUnsav
     public AutoMessagesPageViewModel(
         SettingsManager settings, PollsStore polls, IUnsavedChangesPrompt prompt, IChatPlatformRegistry platforms,
         IBroadcastPlatformTargetsProvider targets, BroadcastProfilesStore profiles, BroadcastScheduler scheduler,
-        BotMessagingNavigation navigation, IEventBus events, ILogger<AutoMessagesPageViewModel> logger)
+        BotMessagingNavigation navigation, IEventBus events, ILogger<AutoMessagesPageViewModel> logger,
+        IBroadcastState broadcastState, IDialogService dialogs)
     {
         _rules = BotMessageRule.Create(settings, polls).ToDictionary(rule => rule.Key, StringComparer.Ordinal);
         _prompt = prompt;
@@ -73,6 +77,8 @@ public sealed partial class AutoMessagesPageViewModel : ObservableObject, IUnsav
         _targets = targets;
         _profiles = profiles;
         _scheduler = scheduler;
+        _broadcastState = broadcastState;
+        _dialogs = dialogs;
         _navigation = navigation;
         _events = events;
         _logger = logger;
@@ -108,9 +114,14 @@ public sealed partial class AutoMessagesPageViewModel : ObservableObject, IUnsav
         "poll-progress" => "От 15 до 3600 секунд. Изменение действует при следующем обновлении голосов.",
         _ => null,
     };
-    public string? Placeholders => Rule.Examples.Count > 0
-        ? string.Join(", ", Rule.Examples.Keys.Select(key => $"{{{key}}}"))
-        : null;
+    public string? Placeholders
+    {
+        get
+        {
+            var examples = Rule.ExampleValues;
+            return examples.Count > 0 ? string.Join(", ", examples.Keys.Select(key => $"{{{key}}}")) : null;
+        }
+    }
     public string Preview
     {
         get
@@ -119,7 +130,7 @@ public sealed partial class AutoMessagesPageViewModel : ObservableObject, IUnsav
                 ? Rule.DefaultForBlank ?? string.Empty
                 : Template;
             var template = MessageTemplate.For(text);
-            foreach (var (key, example) in Rule.Examples)
+            foreach (var (key, example) in Rule.ExampleValues)
             {
                 template = template.With(key, example);
             }
@@ -237,10 +248,13 @@ public sealed partial class AutoMessagesPageViewModel : ObservableObject, IUnsav
                 break;
         }
 
-        BroadcastStatus = _scheduler.IsActive
-            ? $"Таймер: {_scheduler.Interval.TotalMinutes:0} мин. Следующая отправка в {_scheduler.NextBroadcastTime:HH:mm:ss}."
-            : "Таймер остановлен. Запустить его можно на плитке «Рассылка».";
-        LastDispatch = BroadcastDeliveryText.Format(_scheduler, _platforms);
+        BroadcastStatus = (_scheduler.IsActive, _saved.Enabled) switch
+        {
+            (true, _) => $"Таймер: {_scheduler.Interval.TotalMinutes:0} мин. Следующая отправка в {_scheduler.NextBroadcastTime:HH:mm:ss}.",
+            (false, true) => "Таймер остановлен. Автоматический режим включён.",
+            _ => "Таймер остановлен. Запустить его можно на плитке «Рассылка».",
+        };
+        LastDispatch = BroadcastDeliveryText.Format(_scheduler.GetLastDispatch(), _platforms);
         SendNowCommand.NotifyCanExecuteChanged();
     }
 
@@ -319,6 +333,13 @@ public sealed partial class AutoMessagesPageViewModel : ObservableObject, IUnsav
             interval = value;
         }
 
+        var enablingAutomaticBroadcast = IsBroadcast && Enabled && !_saved.Enabled;
+        if (enablingAutomaticBroadcast && _scheduler.IsActive && !_broadcastState.IsAnyLive
+            && !_dialogs.Confirm("Переключение режима", "При включении автоматического режима рассылка остановится до начала эфира. Продолжить?"))
+        {
+            return false;
+        }
+
         try
         {
             if (!Rule.Save(_saved, new(Enabled, Template, interval)))
@@ -334,6 +355,11 @@ public sealed partial class AutoMessagesPageViewModel : ObservableObject, IUnsav
             return false;
         }
 
+        if (enablingAutomaticBroadcast)
+        {
+            ApplyAutomaticMode();
+        }
+
         Load();
         Notice = "Сохранено.";
         if (IsBroadcast)
@@ -342,6 +368,18 @@ public sealed partial class AutoMessagesPageViewModel : ObservableObject, IUnsav
         }
 
         return true;
+    }
+
+    private void ApplyAutomaticMode()
+    {
+        if (!_broadcastState.IsAnyLive)
+        {
+            _scheduler.Stop();
+        }
+        else if (!_scheduler.IsActive && BroadcastChannelSelection.Resolve(_broadcastState, _platforms) is { } channel)
+        {
+            _scheduler.Start(channel);
+        }
     }
 
     private bool CanSendNow() => IsBroadcast && !HasUnsavedChanges && _scheduler.IsActive;

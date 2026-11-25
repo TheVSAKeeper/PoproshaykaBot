@@ -8,9 +8,9 @@ namespace PoproshaykaBot.Wpf.Infrastructure;
 
 internal static class BroadcastDeliveryText
 {
-    public static string? Format(BroadcastScheduler scheduler, IChatPlatformRegistry platforms)
+    public static string? Format(
+        IReadOnlyDictionary<StreamingPlatform, BroadcastPlatformDelivery> results, IChatPlatformRegistry platforms)
     {
-        var results = scheduler.GetLastDispatch();
         if (results.Count == 0)
         {
             return null;
@@ -20,8 +20,10 @@ internal static class BroadcastDeliveryText
             $"{PlatformVisuals.GetDisplayName(entry.Key, platforms)}: {Describe(entry.Value)}");
         var accepted = results.Values.Count(result => result.EnqueueResult == ChatEnqueueResult.Queued);
         var confirmed = results.Values.Count(result => result.Delivery?.DeliveryStatus == ChatDeliveryStatus.Sent);
+        var hasUnsuccessfulDelivery = results.Values.Any(result =>
+            result.Delivery is { DeliveryStatus: not (ChatDeliveryStatus.None or ChatDeliveryStatus.Sent) });
         var partial = (accepted > 0 && accepted < results.Count)
-            || (confirmed > 0 && confirmed < results.Count)
+            || (confirmed > 0 && hasUnsuccessfulDelivery)
             || results.Values.Any(result => result.Delivery is { SentParts: > 0, DeliveryStatus: not ChatDeliveryStatus.Sent });
         return (partial ? "Частичный результат. " : string.Empty) + string.Join(" · ", lines);
     }

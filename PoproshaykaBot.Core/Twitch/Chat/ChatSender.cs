@@ -378,7 +378,7 @@ public sealed class ChatSender(
 
             if (!await WaitForRateLimitAsync(attempt, rateLimitDelay, ct))
             {
-                return ChatDeliveryStatus.Rejected;
+                return ct.IsCancellationRequested ? ChatDeliveryStatus.QueueClosed : ChatDeliveryStatus.Rejected;
             }
 
             rateLimitDelay = TimeSpan.FromSeconds(Math.Min(rateLimitDelay.TotalSeconds * 2, RateLimitMaxDelaySeconds));
@@ -391,9 +391,9 @@ public sealed class ChatSender(
     {
         try
         {
-            if (!CanSend(item))
+            if (CheckDestination(item) is { } unavailable)
             {
-                return ChatDeliveryStatus.ChatUnavailable;
+                return unavailable;
             }
 
             var botContextId = channelRegistry?.GetBinding(StreamingPlatform.Twitch)?.BotContextId;
@@ -417,9 +417,9 @@ public sealed class ChatSender(
                 return ChatDeliveryStatus.AuthorizationRequired;
             }
 
-            if (!CanSend(item))
+            if (CheckDestination(item) is { } unavailableAfterLookup)
             {
-                return ChatDeliveryStatus.ChatUnavailable;
+                return unavailableAfterLookup;
             }
 
             if (item.Whisper is { Refused: false } whisper
@@ -428,9 +428,9 @@ public sealed class ChatSender(
                 return ChatDeliveryStatus.Sent;
             }
 
-            if (!CanSend(item))
+            if (CheckDestination(item) is { } unavailableBeforeSend)
             {
-                return ChatDeliveryStatus.ChatUnavailable;
+                return unavailableBeforeSend;
             }
 
             var messageId = await helix.SendChatMessageAsync(broadcasterId, senderId, item.Message, item.ReplyParentMessageId, ct);
@@ -558,18 +558,18 @@ public sealed class ChatSender(
         }
     }
 
-    private bool CanSend(ChatSendItem item)
+    private ChatDeliveryStatus? CheckDestination(ChatSendItem item)
     {
         var target = targetChannelProvider.Current;
         if (target.IsSendingAllowed
             && (item.Origin?.IsCurrent ?? string.Equals(target.Login, item.TargetLogin, StringComparison.OrdinalIgnoreCase)))
         {
-            return true;
+            return null;
         }
 
         Interlocked.Increment(ref _failedCount);
         logger.LogDebug("ChatSender: сообщение пропущено – адрес исходного чата недоступен или отправка отключена");
-        return false;
+        return target.IsSendingAllowed ? ChatDeliveryStatus.ChatUnavailable : ChatDeliveryStatus.ObserverMode;
     }
 
     private sealed record ChatSendItem(

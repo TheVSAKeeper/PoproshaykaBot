@@ -211,7 +211,7 @@ public sealed class PlatformCleanupThirdPlatformWpfTests
     }
 
     [Test]
-    public void CommandsPage_shows_third_platform_scope_hides_whisper_notice_and_marks_unsupported_commands()
+    public void CommandsPage_ThirdPlatformShowsPublicReplyAndMarksUnsupportedCommands()
     {
         var registry = new StubPlatformRegistry(
             new StubChatPlatform(StreamingPlatform.Twitch, "Twitch", PlatformCapabilities.Whisper | PlatformCapabilities.ChannelMetadataEdit, true, StreamStatus.Offline, null, "tw"),
@@ -243,7 +243,7 @@ public sealed class PlatformCleanupThirdPlatformWpfTests
 
         Assert.Multiple(() =>
         {
-            Assert.That(page.WhisperNotice, Is.Null);
+            Assert.That(page.WhisperNotice, Does.Contain("VK Видео Live").And.Contain("в общем чате"));
             Assert.That(titleRow.IsClosedByCode, Is.True);
             Assert.That(titleRow.CodeAccessText, Is.EqualTo("Недоступна (VK Видео Live)"));
             Assert.That(titleRow.AccessText, Is.EqualTo("Недоступна (VK Видео Live)"));

@@ -32,6 +32,8 @@ internal sealed record BotMessageRule(
     int MaximumInterval = int.MaxValue)
 {
     public bool? DefaultEnabled { get; init; }
+    public Func<IReadOnlyDictionary<string, string>>? DynamicExamples { get; init; }
+    public IReadOnlyDictionary<string, string> ExampleValues => DynamicExamples?.Invoke() ?? Examples;
 
     public string BlankHint => DefaultForBlank is null
         ? "Пустой текст пропускает публикацию."
@@ -49,7 +51,10 @@ internal sealed record BotMessageRule(
         var noExamples = new Dictionary<string, string>(StringComparer.Ordinal);
         var viewer = new Dictionary<string, string>(StringComparer.Ordinal) { ["username"] = "Алекс" };
         var farewell = new Dictionary<string, string>(StringComparer.Ordinal) { ["username"] = "Алекс", ["usernames"] = "Алекс, Маша" };
-        var pointExamples = new Dictionary<string, string>(StringComparer.Ordinal) { ["username"] = "Алекс", ["points"] = "50" };
+        IReadOnlyDictionary<string, string> PointExamples() => new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            ["username"] = "Алекс", ["count"] = "50", ["points"] = $"50 {settings.Current.Ranks.PointTerm.ForCount(50)}",
+        };
         var stats = new Dictionary<string, string>(StringComparer.Ordinal)
         {
             ["duration"] = "1 ч 20 мин", ["messages"] = "240", ["chatters"] = "38",
@@ -99,21 +104,22 @@ internal sealed record BotMessageRule(
                 "После завершения и сохранения сессии с итоговой статистикой.",
                 stats, b => b.StreamEndStatsMessage, (b, v) => b.StreamEndStatsMessage = v),
             App("broadcast", stream, "Периодическая рассылка",
-                "По таймеру после запуска рассылки или вручную из этого правила. Автозапуск проверяется при следующем событии эфира или готовности чата.",
+                "Рассылка идёт по таймеру. В автоматическом режиме таймер запускается во время эфира. Сообщение также можно отправить вручную.",
                 BotMessageAudience.ProfileTargets, "Запускать рассылку автоматически", periodic,
                 s => s.Twitch.AutoBroadcast, b => b.AutoBroadcastEnabled, (b, v) => b.AutoBroadcastEnabled = v,
                 b => b.BroadcastMessageTemplate, (b, v) => b.BroadcastMessageTemplate = v,
                 intervalLabel: "Интервал рассылки, мин",
-                getInterval: b => Math.Max(1, b.BroadcastIntervalMinutes),
-                setInterval: (b, v) => b.BroadcastIntervalMinutes = v),
+                getInterval: b => Math.Clamp(b.BroadcastIntervalMinutes, 1, BroadcastScheduler.MaximumIntervalMinutes),
+                setInterval: (b, v) => b.BroadcastIntervalMinutes = v,
+                maximumInterval: BroadcastScheduler.MaximumIntervalMinutes),
             Chat("punishment", points, "Снятие баллов",
                 "После снятия баллов. Чат получит сообщение, если открытый канал совпадает с каналом события.",
-                pointExamples, m => m.PunishmentEnabled, (m, v) => m.PunishmentEnabled = v,
-                m => m.PunishmentMessage, (m, v) => m.PunishmentMessage = v),
+                noExamples, m => m.PunishmentEnabled, (m, v) => m.PunishmentEnabled = v,
+                m => m.PunishmentMessage, (m, v) => m.PunishmentMessage = v) with { DynamicExamples = PointExamples },
             Chat("reward", points, "Начисление баллов",
                 "После начисления баллов. Чат получит сообщение, если открытый канал совпадает с каналом события.",
-                pointExamples, m => m.RewardEnabled, (m, v) => m.RewardEnabled = v,
-                m => m.RewardMessage, (m, v) => m.RewardMessage = v),
+                noExamples, m => m.RewardEnabled, (m, v) => m.RewardEnabled = v,
+                m => m.RewardMessage, (m, v) => m.RewardMessage = v) with { DynamicExamples = PointExamples },
             Poll("poll-start", "Начало опроса", "Когда опрос опубликован в Twitch.", pollExamples,
                 t => t.StartEnabled, (t, v) => t.StartEnabled = v, t => t.StartTemplate, (t, v) => t.StartTemplate = v),
             Poll("poll-progress", "Ход опроса", "При обновлении голосов с учётом интервала объявлений.", pollExamples,
@@ -155,11 +161,11 @@ internal sealed record BotMessageRule(
             IReadOnlyDictionary<string, string> examples, Func<AppSettings, T> select,
             Func<T, bool> enabled, Action<T, bool> setEnabled, Func<T, string> text, Action<T, string> setText,
             string? defaultForBlank = null, string? intervalLabel = null, Func<T, int>? getInterval = null,
-            Action<T, int>? setInterval = null)
+            Action<T, int>? setInterval = null, int maximumInterval = int.MaxValue)
             => Build(key, group, title, trigger, targets, toggle, examples, () => select(settings.Current),
                 change => settings.MutateIfWritable(s => change(select(s))), enabled, setEnabled, text, setText,
                 value => string.IsNullOrWhiteSpace(value) && defaultForBlank is not null ? defaultForBlank : value.Trim(),
-                defaultForBlank, intervalLabel, getInterval, setInterval);
+                defaultForBlank, intervalLabel, getInterval, setInterval, maximum: maximumInterval);
 
         BotMessageRule Poll(
             string key, string title, string trigger, IReadOnlyDictionary<string, string> examples,

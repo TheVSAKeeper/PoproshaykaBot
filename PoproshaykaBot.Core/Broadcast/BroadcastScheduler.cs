@@ -20,6 +20,8 @@ public sealed class BroadcastScheduler(
     ILogger<BroadcastScheduler> logger)
     : IBroadcastScheduler, IAsyncDisposable
 {
+    public const int MaximumIntervalMinutes = (int)((uint.MaxValue - 1) / 60_000);
+
     private readonly Lock _stateLock = new();
     private readonly Lock _sendLock = new();
     private int _sentMessagesCount;
@@ -98,11 +100,9 @@ public sealed class BroadcastScheduler(
             _channel = channel;
             _lastError = null;
             _runEpoch++;
-            _dispatchVersion++;
-            _lastDispatch.Clear();
             Interlocked.Exchange(ref _sentMessagesCount, 0);
 
-            var minutes = Math.Max(1, settingsManager.Current.Twitch.AutoBroadcast.BroadcastIntervalMinutes);
+            var minutes = Math.Clamp(settingsManager.Current.Twitch.AutoBroadcast.BroadcastIntervalMinutes, 1, MaximumIntervalMinutes);
             _interval = TimeSpan.FromMinutes(minutes);
 
             logger.LogInformation("Рассылка запущена для канала {Channel}. Интервал: {IntervalMinutes} мин", _channel, minutes);
@@ -131,8 +131,6 @@ public sealed class BroadcastScheduler(
 
             _channel = null;
             _runEpoch++;
-            _dispatchVersion++;
-            _lastDispatch.Clear();
             Interlocked.Exchange(ref _sentMessagesCount, 0);
             NextBroadcastTime = null;
             _stopCts?.Cancel();

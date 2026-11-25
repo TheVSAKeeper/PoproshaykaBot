@@ -1,8 +1,12 @@
 ﻿using Microsoft.Extensions.Logging.Abstractions;
 using System.IO;
+using PoproshaykaBot.Core.Broadcast;
 using PoproshaykaBot.Core.Chat;
+using PoproshaykaBot.Core.Platforms;
 using PoproshaykaBot.Core.Settings;
 using PoproshaykaBot.Core.Settings.Stores;
+using PoproshaykaBot.Core.Twitch.Chat;
+using PoproshaykaBot.Wpf.Infrastructure;
 using PoproshaykaBot.Wpf.ViewModels;
 
 namespace PoproshaykaBot.Wpf.Tests.Settings;
@@ -130,6 +134,44 @@ public sealed class BotMessageRuleTests
 
     private IReadOnlyList<BotMessageRule> CreateRules(SettingsWriteGate? gate = null)
         => BotMessageRule.Create(CreateSettings(gate), CreatePolls(gate));
+
+    [TestCase("punishment")]
+    [TestCase("reward")]
+    public void PointExamplesUseTheSameValuesAsTheChatFormatter(string key)
+    {
+        var settings = CreateSettings();
+        var rule = BotMessageRule.Create(settings, CreatePolls()).Single(item => item.Key == key);
+        settings.Mutate(value => value.Ranks.PointTerm.Many = "жетонов");
+
+        const string template = "{username}, {count}, {points}";
+        var example = MessageTemplate.For(template);
+        foreach (var (placeholder, value) in rule.ExampleValues)
+        {
+            example = example.With(placeholder, value);
+        }
+
+        Assert.That(example.Render(), Is.EqualTo(
+            UserPointsManagementService.FormatMessage(template, "Алекс", 50, settings.Current.Ranks.PointTerm)));
+    }
+
+    [TestCase(null, false)]
+    [TestCase(ChatDeliveryStatus.Sent, false)]
+    [TestCase(ChatDeliveryStatus.Rejected, true)]
+    public void PartialDeliveryRequiresAnUnsuccessfulOutcome(ChatDeliveryStatus? otherStatus, bool partial)
+    {
+        var completed = new ChatAccountSendResult(ChatEnqueueResult.Queued, ChatDeliveryStatus.Sent, 1);
+        ChatAccountSendResult? other = otherStatus is { } status ? new(ChatEnqueueResult.Queued, status) : null;
+        Dictionary<StreamingPlatform, BroadcastPlatformDelivery> results = new()
+        {
+            [StreamingPlatform.Twitch] = new(ChatEnqueueResult.Queued, false, completed),
+            [StreamingPlatform.YouTube] = new(ChatEnqueueResult.Queued, other is null, other),
+        };
+
+        var label = BroadcastDeliveryText.Format(results, new ChatPlatformRegistry([]));
+
+        Assert.That(label, Does.Contain("доставка подтверждена"));
+        Assert.That(label!.StartsWith("Частичный результат", StringComparison.Ordinal), Is.EqualTo(partial));
+    }
 
     private SettingsManager CreateSettings(SettingsWriteGate? gate = null)
         => new(NullLogger<SettingsManager>.Instance, Path.Combine(_directory.FullName, "settings.json"), gate);

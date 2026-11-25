@@ -318,8 +318,9 @@ public sealed class BroadcastMessengerRoutingTests
         }
     }
 
-    [Test]
-    public async Task BroadcastScheduler_KeepsRefusalAlongsideQueuedAndConfirmedDelivery()
+    [TestCase(false)]
+    [TestCase(true)]
+    public async Task BroadcastScheduler_KeepsRefusalAlongsideQueuedAndConfirmedDelivery(bool stopTimer)
     {
         var twitch = new FakeChatPlatform(StreamingPlatform.Twitch, "Twitch");
         var youtube = new FakeChatPlatform(StreamingPlatform.YouTube, "YouTube", isConnected: false);
@@ -351,6 +352,12 @@ public sealed class BroadcastMessengerRoutingTests
             Assert.That(scheduler.QueuedDispatchCount, Is.EqualTo(1));
         });
 
+        if (stopTimer)
+        {
+            scheduler.Stop();
+            Assert.That(scheduler.GetLastDispatch(), Is.EqualTo(queued));
+        }
+
         completion.SetResult(new(ChatEnqueueResult.Queued, ChatDeliveryStatus.Sent, 1));
         await confirmed.Task.WaitAsync(TimeSpan.FromSeconds(5));
         var final = scheduler.GetLastDispatch();
@@ -359,7 +366,7 @@ public sealed class BroadcastMessengerRoutingTests
             Assert.That(final[StreamingPlatform.Twitch].Delivery?.DeliveryStatus, Is.EqualTo(ChatDeliveryStatus.Sent));
             Assert.That(final[StreamingPlatform.Twitch].AwaitingConfirmation, Is.False);
             Assert.That(final[StreamingPlatform.YouTube], Is.EqualTo(queued[StreamingPlatform.YouTube]));
-            Assert.That(scheduler.QueuedDispatchCount, Is.EqualTo(1));
+            Assert.That(scheduler.QueuedDispatchCount, Is.EqualTo(stopTimer ? 0 : 1));
         });
     }
 

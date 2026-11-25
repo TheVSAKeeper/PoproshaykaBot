@@ -197,7 +197,7 @@ public sealed partial class BroadcastStatusTileViewModel : DashboardTileViewMode
         PlatformsText = FormatTargetPlatforms(targets);
         RefreshTargetPlatformChips(targets);
         SentCount = _scheduler.QueuedDispatchCount;
-        LastDispatch = BroadcastDeliveryText.Format(_scheduler, _platformRegistry);
+        LastDispatch = BroadcastDeliveryText.Format(_scheduler.GetLastDispatch(), _platformRegistry);
 
         var nextTime = _scheduler.NextBroadcastTime;
         NextBroadcastText = nextTime.HasValue ? nextTime.Value.ToString("HH:mm:ss") : "–";
@@ -214,36 +214,7 @@ public sealed partial class BroadcastStatusTileViewModel : DashboardTileViewMode
     }
 
     private string? ResolvePrimaryChannel()
-    {
-        var platforms = _platformRegistry.All;
-        foreach (var platform in platforms)
-        {
-            if (_broadcastState.IsPlatformLive(platform.Id)
-                && !string.IsNullOrWhiteSpace(platform.ConfiguredChannel))
-            {
-                return platform.ConfiguredChannel;
-            }
-        }
-
-        foreach (var platform in platforms)
-        {
-            if (platform.IsEnabled && !string.IsNullOrWhiteSpace(platform.ConfiguredChannel))
-            {
-                return platform.ConfiguredChannel;
-            }
-        }
-
-        foreach (var platform in platforms)
-        {
-            var configured = platform.ConfiguredChannel;
-            if (!string.IsNullOrWhiteSpace(configured))
-            {
-                return configured;
-            }
-        }
-
-        return null;
-    }
+        => BroadcastChannelSelection.Resolve(_broadcastState, _platformRegistry);
 
     private string FormatTargetPlatforms(IReadOnlySet<StreamingPlatform> targets)
     {

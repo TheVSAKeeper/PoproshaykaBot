@@ -97,17 +97,22 @@ public class ChatSenderTests
         Assert.That(delivered, Is.EqualTo("hello"));
     }
 
-    [TestCase(false, ChatDeliveryStatus.Sent)]
-    [TestCase(true, ChatDeliveryStatus.ChatUnavailable)]
-    public async Task TrackedSend_QueueDoesNotConfirmDeliveryAndDoesNotFollowChannelSwitch(bool switchChannel, ChatDeliveryStatus expected)
+    [TestCase(ChatDeliveryStatus.Sent)]
+    [TestCase(ChatDeliveryStatus.ChatUnavailable)]
+    [TestCase(ChatDeliveryStatus.ObserverMode)]
+    public async Task TrackedSend_RechecksChannelAndObserverModeAfterEnqueue(ChatDeliveryStatus expected)
     {
         _helix.SendChatMessageAsync("1", "2", "рассылка", null, Arg.Any<CancellationToken>()).Returns("sent-id");
         var receipt = _sender.EnqueueTracked("рассылка");
         Assert.That(receipt.EnqueueResult, Is.EqualTo(ChatEnqueueResult.Queued));
         Assert.That(receipt.Delivery!.IsCompleted, Is.False);
-        if (switchChannel)
+        if (expected == ChatDeliveryStatus.ChatUnavailable)
         {
             _targetChannel.Login = "new-channel";
+        }
+        if (expected == ChatDeliveryStatus.ObserverMode)
+        {
+            _targetChannel.IsSendingAllowed = false;
         }
 
         var progress = new Progress<string>();
@@ -118,10 +123,31 @@ public class ChatSenderTests
         Assert.Multiple(() =>
         {
             Assert.That(delivery.DeliveryStatus, Is.EqualTo(expected));
-            Assert.That(delivery.SentParts, Is.EqualTo(switchChannel ? 0 : 1));
+            Assert.That(delivery.SentParts, Is.EqualTo(expected == ChatDeliveryStatus.Sent ? 1 : 0));
         });
-        await _helix.Received(switchChannel ? 0 : 1)
+        await _helix.Received(expected == ChatDeliveryStatus.Sent ? 1 : 0)
             .SendChatMessageAsync("1", "2", "рассылка", null, Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task TrackedSend_StoppingDuringRateLimitWaitClosesTheQueue()
+    {
+        var rejected = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        _helix.SendChatMessageAsync("1", "2", "рассылка", null, Arg.Any<CancellationToken>()).Returns(_ =>
+        {
+            rejected.TrySetResult();
+            return Task.FromException<string?>(
+                new HelixRequestException(HttpMethod.Post, "/chat/messages", HttpStatusCode.TooManyRequests, null, null));
+        });
+
+        var progress = new Progress<string>();
+        await _sender.StartAsync(progress, CancellationToken.None);
+        var receipt = _sender.EnqueueTracked("рассылка");
+        await rejected.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        await _sender.StopAsync(progress, new CancellationToken(canceled: true));
+
+        var delivery = await receipt.Delivery!.WaitAsync(TimeSpan.FromSeconds(5));
+        Assert.That(delivery.DeliveryStatus, Is.EqualTo(ChatDeliveryStatus.QueueClosed));
     }
 
     [Test]

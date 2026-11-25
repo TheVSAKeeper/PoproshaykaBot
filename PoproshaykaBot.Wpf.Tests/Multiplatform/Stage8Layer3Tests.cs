@@ -226,7 +226,7 @@ public sealed class Stage8Layer3Tests
     }
 
     [Test]
-    public void CommandsPage_SwitchesProbePlatformToYouTubeDisablesMetadataCommandsAndHidesWhisperNotice()
+    public void CommandsPage_YouTubeShowsPublicReplyAndDisablesMetadataCommands()
     {
         var registry = new StubPlatformRegistry(
             new StubChatPlatform(StreamingPlatform.Twitch, "Twitch", PlatformCapabilities.ChannelMetadataEdit | PlatformCapabilities.Whisper, "tw"),
@@ -275,7 +275,7 @@ public sealed class Stage8Layer3Tests
             Assert.That(titleRow.IsClosedByCode, Is.True);
             Assert.That(titleRow.AccessText, Contains.Substring("YouTube"));
             Assert.That(helpRow.IsClosedByCode, Is.False);
-            Assert.That(page.WhisperNotice, Is.Null);
+            Assert.That(page.WhisperNotice, Does.Contain("YouTube").And.Contain("в общем чате"));
         });
 
         Assert.That(page.TrySelect("title"), Is.True);

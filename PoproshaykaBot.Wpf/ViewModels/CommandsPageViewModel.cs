@@ -710,17 +710,18 @@ public sealed partial class CommandsPageViewModel : ObservableObject, IPageHeade
 
     private void RefreshWhisperNotice()
     {
-        var platform = ProbePlatform;
-        if (!CapabilitiesFor(platform).HasFlag(PlatformCapabilities.Whisper))
+        var whispers = _allRows.Any(row => row.EffectiveTarget.WhispersToCaller());
+        if (!whispers)
         {
             WhisperNotice = null;
             return;
         }
 
-        var whispers = _allRows.Any(row => row.EffectiveTarget.WhispersToCaller());
-        if (!whispers)
+        var platform = ProbePlatform;
+        if (!CapabilitiesFor(platform).HasFlag(PlatformCapabilities.Whisper))
         {
-            WhisperNotice = null;
+            var platformName = PlatformVisuals.GetDisplayName(platform, _platformRegistry);
+            WhisperNotice = $"На площадке {platformName} бот отвечает в общем чате. Площадка не поддерживает личные сообщения.";
             return;
         }
 

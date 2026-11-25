@@ -329,6 +329,20 @@ public class CommandRowTests
     }
 
     [Test]
+    public void Цель_шёпот_показывает_публичную_доставку_на_YouTube()
+    {
+        var page = CreatePage("!", new FakeCommand());
+        var row = page.Rows.Single();
+        row.TargetOption = CommandResponseTargetOption.Whisper;
+
+        page.CommandScope = page.CommandScopes.Single(scope => scope.Platform == StreamingPlatform.YouTube);
+        Assert.That(page.WhisperNotice, Does.Contain("YouTube").And.Contain("в общем чате"));
+
+        row.TargetOption = CommandResponseTargetOption.Both;
+        Assert.That(page.WhisperNotice, Is.Null);
+    }
+
+    [Test]
     public void Право_из_инспектора_ложится_в_файл_и_снимается_обратно()
     {
         var settingsPath = Path.Combine(_root, "commands.json");

@@ -15,6 +15,7 @@ using PoproshaykaBot.Core.Platforms;
 using PoproshaykaBot.Core.Settings;
 using PoproshaykaBot.Core.Settings.Stores;
 using PoproshaykaBot.Core.Statistics;
+using PoproshaykaBot.Core.Streaming;
 using PoproshaykaBot.Wpf.Bootstrap;
 using PoproshaykaBot.Wpf.Infrastructure;
 using PoproshaykaBot.Wpf.Tests.Support;
@@ -172,7 +173,8 @@ public sealed class VisualPagesSmokeTests
             using var page = new AutoMessagesPageViewModel(
                 settings, new PollsStore(filePath: Path.Combine(directory.FullName, "polls.json")), prompt, registry,
                 targets, new BroadcastProfilesStore(filePath: Path.Combine(directory.FullName, "broadcast-profiles.json")),
-                scheduler, new BotMessagingNavigation(), bus, NullLogger<AutoMessagesPageViewModel>.Instance);
+                scheduler, new BotMessagingNavigation(), bus, NullLogger<AutoMessagesPageViewModel>.Instance,
+                new StubBroadcastState(false), new StubDialogService());
             var view = new AutoMessagesPageView { DataContext = page };
             using var errors = BindingErrorSink.Attach();
             errors.Clear();
@@ -269,6 +271,53 @@ public sealed class VisualPagesSmokeTests
             {
                 Directory.Delete(directory.FullName, recursive: true);
             }
+        }
+    }
+
+    [TestCase(true, false, false, true, true)]
+    [TestCase(false, true, true, true, false)]
+    [TestCase(false, true, false, false, true)]
+    public async Task AutoMessages_применяет_режим_к_текущему_таймеру(
+        bool live, bool initiallyActive, bool confirm, bool expectedEnabled, bool expectedActive)
+    {
+        var directory = Directory.CreateTempSubdirectory("pb-broadcast-mode-");
+        try
+        {
+            var settings = new SettingsManager(NullLogger<SettingsManager>.Instance, Path.Combine(directory.FullName, "settings.json"));
+            var bus = new InMemoryEventBus(NullLogger<InMemoryEventBus>.Instance);
+            var registry = new ChatPlatformRegistry([new StubBroadcastPlatform()]);
+            var targets = new DefaultBroadcastPlatformTargetsProvider();
+            await using var scheduler = new BroadcastScheduler(
+                new BroadcastMessenger(registry, NullLogger<BroadcastMessenger>.Instance), targets, settings, bus,
+                TimeProvider.System, NullLogger<BroadcastScheduler>.Instance);
+            using var page = new AutoMessagesPageViewModel(
+                settings, new PollsStore(filePath: Path.Combine(directory.FullName, "polls.json")),
+                new FakeUnsavedChangesPrompt(), registry, targets,
+                new BroadcastProfilesStore(filePath: Path.Combine(directory.FullName, "broadcast-profiles.json")),
+                scheduler, new BotMessagingNavigation(), bus, NullLogger<AutoMessagesPageViewModel>.Instance,
+                new StubBroadcastState(live), new StubDialogService(confirm));
+            if (initiallyActive)
+            {
+                scheduler.Start("test-channel");
+            }
+
+            Assert.That(page.TryOpen("broadcast"), Is.True);
+            page.Enabled = true;
+            Assert.That(page.TrySaveDraft(), Is.EqualTo(expectedEnabled));
+
+            Assert.Multiple(() =>
+            {
+                Assert.That(settings.Current.Twitch.AutoBroadcast.AutoBroadcastEnabled, Is.EqualTo(expectedEnabled));
+                Assert.That(scheduler.IsActive, Is.EqualTo(expectedActive));
+                if (expectedEnabled && !expectedActive)
+                {
+                    Assert.That(page.BroadcastStatus, Does.Contain("Автоматический режим включён"));
+                }
+            });
+        }
+        finally
+        {
+            directory.Delete(recursive: true);
         }
     }
 
@@ -386,14 +435,34 @@ public sealed class VisualPagesSmokeTests
         public bool TrySetText(string? text) => true;
     }
 
-    private sealed class StubDialogService : IDialogService
+    private sealed class StubDialogService(bool? answer = null) : IDialogService
     {
         public Task<bool> ShowAsync(IDialogViewModel viewModel) => Task.FromResult(false);
         public Task<bool> ReplaceAsync(IDialogViewModel viewModel) => Task.FromResult(false);
-        public bool Confirm(string title, string message, bool defaultYes = false) => defaultYes;
+        public bool Confirm(string title, string message, bool defaultYes = false) => answer ?? defaultYes;
         public bool ConfirmWarning(string title, string message, bool defaultYes = false) => defaultYes;
         public void Info(string title, string message) { }
         public void Warning(string title, string message) { }
         public void Error(string title, string message) { }
+    }
+
+    private sealed record StubBroadcastState(bool IsAnyLive) : IBroadcastState
+    {
+        public Guid? CurrentBroadcastId => null;
+        public IReadOnlySet<StreamingPlatform> LivePlatforms =>
+            IsAnyLive ? new HashSet<StreamingPlatform> { StreamingPlatform.Twitch } : new HashSet<StreamingPlatform>();
+        public bool IsPlatformLive(StreamingPlatform platform) => IsAnyLive && platform == StreamingPlatform.Twitch;
+    }
+
+    private sealed class StubBroadcastPlatform : IChatPlatform
+    {
+        public StreamingPlatform Id => StreamingPlatform.Twitch;
+        public string DisplayName => "Twitch";
+        public PlatformCapabilities Capabilities => PlatformCapabilities.None;
+        public bool IsEnabled => true;
+        public bool IsConnected => true;
+        public IStreamStatus StreamStatus => throw new NotSupportedException();
+        public IPlatformMessenger Messenger => throw new NotSupportedException();
+        public string ConfiguredChannel => "test-channel";
     }
 }
