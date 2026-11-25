@@ -8,7 +8,7 @@ using System.Windows;
 namespace PoproshaykaBot.Wpf.Infrastructure;
 
 public sealed class OnboardingWizardLauncher(
-    IServiceProvider services,
+    IServiceScopeFactory scopeFactory,
     ILogger<OnboardingWizardLauncher> logger) : IOnboardingWizardLauncher
 {
     private int _isOpen;
@@ -30,7 +30,8 @@ public sealed class OnboardingWizardLauncher(
 
         try
         {
-            var wizard = services.GetRequiredService<OnboardingWizardWindow>();
+            using var scope = scopeFactory.CreateScope();
+            var wizard = scope.ServiceProvider.GetRequiredService<OnboardingWizardWindow>();
             wizard.StartAt(step);
             wizard.Owner = Application.Current.MainWindow;
 

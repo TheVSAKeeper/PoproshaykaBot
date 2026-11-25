@@ -109,7 +109,7 @@ internal sealed class JsonStore<T>
 
         if (!written)
         {
-            LogBlocked();
+            LogBlocked(applyWhenBlocked);
             return false;
         }
 
@@ -189,7 +189,7 @@ internal sealed class JsonStore<T>
 
         if (blocked)
         {
-            LogBlocked();
+            LogBlocked(applyWhenBlocked);
             return result;
         }
 
@@ -268,11 +268,18 @@ internal sealed class JsonStore<T>
         return allowed;
     }
 
-    private void LogBlocked()
+    private void LogBlocked(bool appliedInMemory)
     {
-        _logger?.LogWarning(
-            "Файл {FilePath} не переписан: право записи снято внешней записью в него. Изменения приняты в памяти и действуют до перезапуска приложения",
-            _filePath);
+        if (appliedInMemory)
+        {
+            _logger?.LogWarning(
+                "Файл {FilePath} не переписан: право записи снято внешней записью в него. Изменения приняты в памяти и действуют до перезапуска приложения",
+                _filePath);
+        }
+        else
+        {
+            _logger?.LogWarning("Изменения для {FilePath} отклонены: право записи снято внешней записью", _filePath);
+        }
     }
 
     [DoesNotReturn]

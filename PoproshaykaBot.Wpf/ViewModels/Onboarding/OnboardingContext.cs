@@ -46,7 +46,7 @@ public sealed class OnboardingContext(
     private readonly HashSet<PlatformAuthRole> _pendingTwitchRoles = [];
     private readonly Dictionary<PlatformAuthRole, TwitchAccountSettings?> _expectedTwitchAccounts = [];
     private readonly Dictionary<PlatformAuthRole, TwitchAssignment> _appliedTwitchAssignments = [];
-    private readonly List<Func<bool>> _provisionalWrites = [];
+    private readonly List<ProvisionalWrite> _provisionalWrites = [];
     private bool _rollbackIncomplete;
     private YouTubeSettings _savedYouTubeSettings = JsonStoreClone.DeepClone(youTubeSettings ?? new());
     private (string Secret, YouTubeAccountSettings Bot, YouTubeAccountSettings Broadcaster) _savedYouTubeAccounts =
@@ -57,8 +57,10 @@ public sealed class OnboardingContext(
     private const string AccountNotWritten = "Не удалось сохранить вход в Twitch. Если вы только что перенесли настройки, перезапустите приложение.";
     private const string AssignmentNotWritten = "Не удалось сохранить назначение аккаунта Twitch. Если вы только что перенесли настройки, перезапустите приложение.";
     private const string TwitchSettingsNotWritten = "Не удалось сохранить настройки приложения. Если вы только что перенесли данные, перезапустите приложение.";
-    private const string YouTubeSettingsNotWritten = "Не удалось сохранить настройки YouTube. Проверьте их и повторите попытку.";
-    private const string YouTubeAccountsNotWritten = "Не удалось сохранить вход в YouTube. Проверьте аккаунты и повторите попытку.";
+    private const string YouTubeSettingsNotWritten = "Запись настроек YouTube приостановлена. Если вы перенесли данные, перезапустите приложение.";
+    private const string YouTubeAccountsNotWritten = "Запись аккаунтов YouTube приостановлена. Если вы перенесли данные, перезапустите приложение.";
+    private const string YouTubeSettingsChanged = "Настройки YouTube изменились. Закройте мастер и откройте его снова.";
+    private const string YouTubeAccountsChanged = "Аккаунты YouTube изменились. Закройте мастер и откройте его снова.";
     internal const string RollbackIncomplete = "Часть изменений не удалось отменить. Закройте мастер, чтобы повторить восстановление.";
 
     internal bool HasProvisionalWrites => _provisionalWrites.Count > 0;
@@ -179,7 +181,7 @@ public sealed class OnboardingContext(
             return ChannelChanged;
         }
 
-        var undo = new List<Func<bool>>();
+        var undo = new List<ProvisionalWrite>();
         var accountSnapshots = new Dictionary<PlatformAuthRole, TwitchAccountSettings>();
         var assignments = new Dictionary<PlatformAuthRole, TwitchAssignment>();
         var youtubeDraft = (YouTubeClientSecret, YouTubeBotAccount, YouTubeBroadcasterAccount);
@@ -244,7 +246,7 @@ public sealed class OnboardingContext(
         return null;
     }
 
-    private string? WriteTwitchAccounts(AccountsStore accounts, List<Func<bool>> undo,
+    private string? WriteTwitchAccounts(AccountsStore accounts, List<ProvisionalWrite> undo,
         Dictionary<PlatformAuthRole, TwitchAccountSettings> snapshots, Dictionary<PlatformAuthRole, TwitchAssignment> assignments)
     {
         foreach (var role in _pendingTwitchRoles)
@@ -264,11 +266,11 @@ public sealed class OnboardingContext(
 
             var written = result.Snapshot!;
             snapshots.Add(role, written);
-            undo.Add(() =>
+            undo.Add(new(new(accounts, role), () =>
             {
                 var restore = accounts.TryReplaceContext(role, contextId, current => SameAccount(current, written), previous);
                 return !restore.Applied || restore.Written;
-            });
+            }));
 
             if (TwitchChannel is not null && _reauthorizedTwitchRoles.Contains(role))
             {
@@ -306,7 +308,7 @@ public sealed class OnboardingContext(
             return applied ? AssignmentNotWritten : ChannelChanged;
         }
 
-        undo.Add(() =>
+        undo.Add(new(new(catalog), () =>
         {
             var restored = catalog.TryMutateChannel(channel.Key, requireActive: false, entry =>
             {
@@ -323,7 +325,7 @@ public sealed class OnboardingContext(
                 return changed;
             });
             return !restored.Applied || restored.Written;
-        });
+        }));
         return null;
     }
 
@@ -335,22 +337,23 @@ public sealed class OnboardingContext(
         _appliedTwitchAssignments.TryGetValue(role, out var applied) ? applied : TwitchAssignment.From(TwitchChannel!, role);
 
     private string? WriteYouTube(YouTubeSettingsStore? settingsStore, YouTubeAccountsStore? accountsStore,
-        (string Secret, YouTubeAccountSettings Bot, YouTubeAccountSettings Broadcaster) accounts, List<Func<bool>> undo)
+        (string Secret, YouTubeAccountSettings Bot, YouTubeAccountSettings Broadcaster) accounts, List<ProvisionalWrite> undo)
     {
         if (settingsStore is not null && !JsonStoreClone.SameValues(YouTubeSettings, _savedYouTubeSettings))
         {
             var original = _savedYouTubeSettings;
             var replacement = JsonStoreClone.DeepClone(YouTubeSettings);
-            if (!settingsStore.TryReplace(original, replacement).Written)
+            var written = settingsStore.TryReplace(original, replacement);
+            if (!written.Written)
             {
-                return YouTubeSettingsNotWritten;
+                return written.Matched ? YouTubeSettingsNotWritten : YouTubeSettingsChanged;
             }
 
-            undo.Add(() =>
+            undo.Add(new(new(settingsStore), () =>
             {
                 var result = settingsStore.TryReplace(replacement, original);
                 return !result.Matched || result.Written;
-            });
+            }));
         }
 
         if (accountsStore is not null &&
@@ -360,16 +363,17 @@ public sealed class OnboardingContext(
         {
             var original = _savedYouTubeAccounts;
             var replacement = (accounts.Secret, JsonStoreClone.DeepClone(accounts.Bot), JsonStoreClone.DeepClone(accounts.Broadcaster));
-            if (!accountsStore.TryReplaceDefaultAccounts(original, replacement).Written)
+            var written = accountsStore.TryReplaceDefaultAccounts(original, replacement);
+            if (!written.Written)
             {
-                return YouTubeAccountsNotWritten;
+                return written.Matched ? YouTubeAccountsNotWritten : YouTubeAccountsChanged;
             }
 
-            undo.Add(() =>
+            undo.Add(new(new(accountsStore), () =>
             {
                 var result = accountsStore.TryReplaceDefaultAccounts(replacement, original);
                 return !result.Matched || result.Written;
-            });
+            }));
         }
 
         return null;
@@ -378,36 +382,50 @@ public sealed class OnboardingContext(
     internal void RestoreProvisionalWrites()
     {
         var errors = UndoWrites(_provisionalWrites);
-        if (errors.Count > 0)
+        _rollbackIncomplete = errors.Count > 0;
+        if (_rollbackIncomplete)
         {
             throw new AggregateException(RollbackIncomplete, errors);
         }
     }
 
-    private static List<Exception> UndoWrites(List<Func<bool>> writes)
+    private static List<Exception> UndoWrites(List<ProvisionalWrite> writes)
     {
         var errors = new List<Exception>();
+        var blocked = new HashSet<WriteKey>();
         for (var index = writes.Count - 1; index >= 0; index--)
         {
+            var write = writes[index];
+            if (blocked.Contains(write.Key))
+            {
+                continue;
+            }
+
             try
             {
-                if (writes[index]())
+                if (write.Undo())
                 {
                     writes.RemoveAt(index);
                 }
                 else
                 {
+                    blocked.Add(write.Key);
                     errors.Add(new InvalidOperationException("Хранилище отклонило восстановление настроек."));
                 }
             }
             catch (Exception exception)
             {
+                blocked.Add(write.Key);
                 errors.Add(exception);
             }
         }
 
         return errors;
     }
+
+    private sealed record ProvisionalWrite(WriteKey Key, Func<bool> Undo);
+
+    private readonly record struct WriteKey(object Store, PlatformAuthRole Role = PlatformAuthRole.None);
 
     private static bool SameAccount(TwitchAccountSettings? left, TwitchAccountSettings? right) =>
         left is null || right is null ? left is null && right is null

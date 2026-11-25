@@ -32,7 +32,6 @@ public sealed partial class OnboardingWizardViewModel : ObservableObject
     private int _currentPageIndex = -1;
     private bool _completed;
     private bool _rollbackPerformed;
-    private bool _pagesDisposed;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HeaderTitle))]
@@ -137,11 +136,8 @@ public sealed partial class OnboardingWizardViewModel : ObservableObject
     {
         if (_completed || _rollbackPerformed)
         {
-            DisposePages();
             return true;
         }
-
-        _rollbackPerformed = true;
 
         if (_context.TwitchSettingsWritten)
         {
@@ -149,36 +145,14 @@ public sealed partial class OnboardingWizardViewModel : ObservableObject
         }
 
         await RollbackHttpServerPortAsync();
-        RollbackTwitchSettings();
-        await RollbackAccountsAsync();
-
-        DisposePages();
-
-        return true;
-    }
-
-    private void DisposePages()
-    {
-        if (_pagesDisposed)
-        {
-            return;
-        }
-
-        _pagesDisposed = true;
-        foreach (var page in _pages)
-        {
-            if (page is IDisposable disposable)
-            {
-                try
-                {
-                    disposable.Dispose();
-                }
-                catch (Exception exception)
-                {
-                    _logger.OnboardingPageDisposeFailed(exception, page.GetType().Name);
-                }
-            }
-        }
+        var settingsRestored = RollbackTwitchSettings();
+        var accountsRestored = await RollbackAccountsAsync();
+        _rollbackPerformed = (settingsRestored && accountsRestored)
+            || _dialogService?.ConfirmWarning(
+                "Часть изменений осталась",
+                "Не удалось полностью отменить настройки. Чтобы повторить восстановление, вернитесь в мастер и попробуйте закрыть его снова. Закрыть мастер сейчас?",
+                defaultYes: false) == true;
+        return _rollbackPerformed;
     }
 
     private static T DeepClone<T>(T source) where T : class, new()
@@ -300,11 +274,11 @@ public sealed partial class OnboardingWizardViewModel : ObservableObject
         }
     }
 
-    private async Task RollbackAccountsAsync()
+    private async Task<bool> RollbackAccountsAsync()
     {
         if (!_context.HasProvisionalWrites)
         {
-            return;
+            return true;
         }
 
         try
@@ -318,19 +292,20 @@ public sealed partial class OnboardingWizardViewModel : ObservableObject
             await _eventBus.PublishAsync(new PlatformAuthorizationRefreshed(StreamingPlatform.YouTube, PlatformAuthRole.Bot));
             await _eventBus.PublishAsync(new PlatformAuthorizationRefreshed(StreamingPlatform.YouTube, PlatformAuthRole.Broadcaster));
             _logger.OnboardingAccountsRolledBack();
+            return true;
         }
         catch (Exception exception)
         {
             _logger.OnboardingAccountsRollbackFailed(exception);
-            _dialogService?.Warning("Часть изменений осталась", "Не удалось полностью отменить настройки. Перезапустите приложение и проверьте аккаунты.");
+            return false;
         }
     }
 
-    private void RollbackTwitchSettings()
+    private bool RollbackTwitchSettings()
     {
         if (!_context.TwitchSettingsWritten)
         {
-            return;
+            return true;
         }
 
         try
@@ -344,10 +319,13 @@ public sealed partial class OnboardingWizardViewModel : ObservableObject
                 settings.Twitch.HttpServerPort = _originalTwitch.HttpServerPort;
                 settings.Twitch.ChatDisplayAccount = _originalTwitch.ChatDisplayAccount;
             });
+            _context.TwitchSettingsWritten = false;
+            return true;
         }
         catch (Exception exception)
         {
             _logger.OnboardingSettingsSaveFailed(exception);
+            return false;
         }
     }
 

@@ -67,7 +67,6 @@ public sealed partial class YouTubeOnboardingPageViewModel : OnboardingPageViewM
     {
         Editor.PropertyChanged -= OnEditorPropertyChanged;
         Editor.SettingChanged -= OnEditorSettingChanged;
-        Editor.Dispose();
     }
 
     private void OnEditorPropertyChanged(object? sender, PropertyChangedEventArgs e)

@@ -139,9 +139,6 @@ internal static partial class AppLog
     [LoggerMessage(EventId = 1117, Level = LogLevel.Error, Message = "Не удалось восстановить HTTP сервер на старом порту {Port}")]
     public static partial void OnboardingHttpServerRestoreFailed(this ILogger logger, Exception? exception, int port);
 
-    [LoggerMessage(EventId = 1118, Level = LogLevel.Error, Message = "Ошибка освобождения ресурсов страницы мастера {PageType}")]
-    public static partial void OnboardingPageDisposeFailed(this ILogger logger, Exception? exception, string pageType);
-
     [LoggerMessage(EventId = 1119, Level = LogLevel.Information, Message = "Бот остановлен после отмены мастера первичной настройки")]
     public static partial void OnboardingBotStopped(this ILogger logger);
 

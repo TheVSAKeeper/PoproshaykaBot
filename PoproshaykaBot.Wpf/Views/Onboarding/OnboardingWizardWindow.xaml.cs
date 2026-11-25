@@ -56,5 +56,9 @@ public partial class OnboardingWizardWindow : Window
             _closeConfirmed = true;
             _ = Dispatcher.BeginInvoke(() => Close());
         }
+        else
+        {
+            _closing = false;
+        }
     }
 }

@@ -212,7 +212,12 @@ public sealed class OnboardingTwitchAccountTests
             }
             else
             {
-                Assert.That(context.SaveSetup(manager, accounts, ytSettings, ytAccounts), Is.Not.Null);
+                var error = context.SaveSetup(manager, accounts, ytSettings, ytAccounts);
+                Assert.That(error, Is.Not.Null);
+                if (revokedFile == "youtube-accounts.json")
+                {
+                    Assert.That(error, Does.Contain("перезапустите приложение"));
+                }
             }
 
             using (Assert.EnterMultipleScope())
@@ -237,6 +242,46 @@ public sealed class OnboardingTwitchAccountTests
 
     private static SettingsManager CreateSettingsManager(DirectoryInfo directory, SettingsWriteGate? gate = null) =>
         new(NullLogger<SettingsManager>.Instance, Path.Combine(directory.FullName, "settings.json"), gate);
+
+    [Test]
+    public async Task BlockedNewestRollbackPreservesOlderWritesForTheNextAttempt()
+    {
+        var folder = Directory.CreateTempSubdirectory("onboarding-repeat-rollback-");
+        try
+        {
+            var manager = CreateSettingsManager(folder);
+            var accounts = new AccountsStore(filePath: Path.Combine(folder.FullName, "accounts.json"));
+            var youtubePath = Path.Combine(folder.FullName, "youtube.json");
+            var youtube = new YouTubeSettingsStore(filePath: youtubePath);
+            youtube.Save(new() { ClientId = "original" });
+            var context = new OnboardingContext(new(), new(), new(), youtube.Load());
+            context.YouTubeSettings.ClientId = "first-draft";
+            Assert.That(context.SaveSetup(manager, accounts, youtube), Is.Null);
+            context.YouTubeSettings.ClientId = "second-draft";
+            Assert.That(context.SaveSetup(manager, accounts, youtube), Is.Null);
+
+            await using (var blocked = File.Open(youtubePath, FileMode.Open, FileAccess.Read, FileShare.None))
+            {
+                Assert.Throws<AggregateException>(context.RestoreProvisionalWrites);
+                Assert.That(context.HasProvisionalWrites, Is.True);
+                Assert.That(youtube.Load().ClientId, Is.EqualTo("second-draft"));
+            }
+
+            context.RestoreProvisionalWrites();
+
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(context.HasProvisionalWrites, Is.False);
+                Assert.That(context.HasIncompleteRollback, Is.False);
+                Assert.That(youtube.Load().ClientId, Is.EqualTo("original"));
+                Assert.That(new YouTubeSettingsStore(filePath: youtubePath).Load().ClientId, Is.EqualTo("original"));
+            }
+        }
+        finally
+        {
+            folder.Delete(recursive: true);
+        }
+    }
 
     [TestCase("42", "42", "renamed", false, true)]
     [TestCase("42", "999", "streamer", true, false)]
