@@ -2,6 +2,7 @@
 using KeepShell.ViewModels;
 using Microsoft.Extensions.Logging.Abstractions;
 using PoproshaykaBot.Core.Chat;
+using PoproshaykaBot.Core.Dashboard;
 using PoproshaykaBot.Core.Platforms;
 using PoproshaykaBot.Core.Platforms.Auth;
 using PoproshaykaBot.Core.Infrastructure.Events;
@@ -211,26 +212,53 @@ public class StreamPreviewTileTests
     }
 
     [Test]
-    public void Раскладка_по_умолчанию_ставит_превью_над_превью_оверлея()
+    public void Раскладка_по_умолчанию_использует_четырёхколоночный_мультистрим_и_скрывает_превью_стрима()
     {
         var layout = DashboardLayoutDefaults.Create();
 
+        DashboardLayoutReconciler.SyncRoot(layout);
+
         var preview = layout.Tiles.Single(tile => string.Equals(tile.TypeId, "stream-preview", StringComparison.Ordinal));
+        var polls = layout.Tiles.Single(tile => string.Equals(tile.TypeId, "polls-control", StringComparison.Ordinal));
+        var obs = layout.Tiles.Single(tile => string.Equals(tile.TypeId, "obs-info", StringComparison.Ordinal));
         var overlay = layout.Tiles.Single(tile => string.Equals(tile.TypeId, "chat-overlay-preview", StringComparison.Ordinal));
-        var firstColumn = layout.Tiles.Where(tile => tile.Column == 0).ToList();
+        var webChat = layout.Tiles.Single(tile => string.Equals(tile.TypeId, "twitch-chat", StringComparison.Ordinal));
+        var multiChat = layout.Tiles.Single(tile => string.Equals(tile.TypeId, "multiplatform-chat", StringComparison.Ordinal));
+        var multistream = layout.Tiles.Single(tile => string.Equals(tile.TypeId, "multistream", StringComparison.Ordinal));
+        var firstColumnVisible = layout.Tiles.Where(tile => tile.IsVisible && tile.Column == 0).ToList();
 
         Assert.Multiple(() =>
         {
-            Assert.That(preview.Column, Is.EqualTo(1));
-            Assert.That(preview.Row, Is.Zero);
-            Assert.That(preview.RowSpan, Is.EqualTo(2));
-            Assert.That(overlay.Column, Is.EqualTo(1));
-            Assert.That(overlay.Row, Is.EqualTo(2));
-            Assert.That(overlay.RowSpan, Is.EqualTo(3));
-            Assert.That(preview.IsVisible, Is.True);
+            Assert.That(layout.ColumnCount, Is.EqualTo(4));
+            Assert.That(layout.RowCount, Is.EqualTo(5));
+            Assert.That(layout.Root, Is.Not.Null, "Четырёхколоночная раскладка должна разбираться в дерево разрезов.");
+            Assert.That(preview.IsVisible, Is.False);
+            Assert.That(polls.IsVisible, Is.False);
+            Assert.That(firstColumnVisible.Select(tile => tile.TypeId), Is.EquivalentTo(new[] { "stream-info", "broadcast-status", "broadcast-profiles" }));
+            Assert.That((obs.Column, obs.Row, obs.RowSpan, obs.IsVisible), Is.EqualTo((1, 0, 3, true)));
+            Assert.That((overlay.Column, overlay.Row, overlay.RowSpan, overlay.IsVisible), Is.EqualTo((1, 3, 2, true)));
+            Assert.That((webChat.Column, webChat.Row, webChat.RowSpan, webChat.IsVisible), Is.EqualTo((2, 0, 5, true)));
+            Assert.That((multiChat.Column, multiChat.Row, multiChat.RowSpan, multiChat.IsVisible), Is.EqualTo((3, 0, 3, true)));
+            Assert.That((multistream.Column, multistream.Row, multistream.RowSpan, multistream.IsVisible), Is.EqualTo((3, 3, 2, true)));
+        });
 
-            Assert.That(firstColumn, Has.Count.EqualTo(5),
-                "Полы плиток первой колонки уже дают 796 DIP при бюджете 733 у окна 800 – шестая плитка увела бы её в прокрутку глубже.");
+        var reset = DashboardLayoutReconciler.ResetToDefaults(DashboardLayoutDefaults.Create(), new()
+        {
+            ColumnCount = 3,
+            RowCount = 5,
+            Tiles =
+            [
+                new() { Id = "stream-preview", TypeId = "stream-preview", IsVisible = true },
+                new() { Id = "polls-control", TypeId = "polls-control", IsVisible = true },
+                new() { Id = "logs", TypeId = "logs", IsVisible = true },
+            ],
+        });
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(reset.Tiles.Single(tile => tile.TypeId == "stream-preview").IsVisible, Is.False);
+            Assert.That(reset.Tiles.Single(tile => tile.TypeId == "polls-control").IsVisible, Is.False);
+            Assert.That(reset.Tiles.Single(tile => tile.TypeId == "logs").IsVisible, Is.True);
         });
     }
 
