@@ -1,7 +1,8 @@
 ﻿using KeepShell.Services;
 using KeepShell.Services.Modal;
+using KeepShell.Services.Platform;
+using KeepShell.Updates;
 using Microsoft.Extensions.Logging.Abstractions;
-using PoproshaykaBot.Core.Infrastructure.Events;
 using PoproshaykaBot.Core.Settings.Stores;
 using PoproshaykaBot.Core.Update;
 using PoproshaykaBot.Wpf.Infrastructure;
@@ -9,7 +10,8 @@ using PoproshaykaBot.Wpf.Tests.Support;
 using PoproshaykaBot.Wpf.ViewModels;
 using PoproshaykaBot.Wpf.ViewModels.Settings;
 using System.IO;
-using UpdateCandidate = KeepShell.Updates.UpdateCandidate;
+using CoreUpdateKind = PoproshaykaBot.Core.Update.UpdateKind;
+using ICoreUpdateEnvironment = PoproshaykaBot.Core.Update.IUpdateEnvironment;
 
 namespace PoproshaykaBot.Wpf.Tests.Shell;
 
@@ -34,7 +36,7 @@ public sealed class ManualUpdateCancellationTests
         }
     }
 
-    private static UpdateCandidate Candidate(string version = "3.1.0.16")
+    private static UpdateCandidate CreateCandidate(string version = "3.1.0.16")
     {
         var name = $"PoproshaykaBot-v{version}-x64-portable.exe";
         return new(
@@ -46,6 +48,11 @@ public sealed class ManualUpdateCancellationTests
             string.Empty);
     }
 
+    private static ICoreUpdateEnvironment CreateEnvironment()
+    {
+        return new TestEnvironment();
+    }
+
     [Test]
     public async Task UpdateBanner_CancelInstallAsync_CancelsAndAwaitsDownload_WithoutErrorOrClose()
     {
@@ -54,40 +61,43 @@ public sealed class ManualUpdateCancellationTests
         var finishCleanup = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         CancellationToken observedToken = default;
 
-        var coordinator = new FakeCoordinator(Candidate(), async (_, _, token) =>
+        var coordinator = new FakeCoordinator(CreateCandidate(), async (coord, token) =>
         {
             observedToken = token;
+            coord.SetStage(UpdateStage.Downloading);
             started.TrySetResult();
 
             try
             {
                 await Task.Delay(Timeout.InfiniteTimeSpan, token);
+                return true;
             }
             catch (OperationCanceledException)
             {
                 cancelled.TrySetResult();
                 await finishCleanup.Task;
-                throw;
+                coord.SetStage(UpdateStage.Available);
+                return false;
             }
         });
 
         var dialogs = new RecordingDialogService();
         var mainWindow = new RecordingMainWindow();
-        var bus = new InMemoryEventBus(NullLogger<InMemoryEventBus>.Instance);
 
         using var banner = new UpdateBannerViewModel(
             coordinator,
-            bus,
+            CreateEnvironment(),
             dialogs,
             NullLogger<UpdateBannerViewModel>.Instance,
             new ManualUiDispatcher(),
+            new NoopShellLauncher(),
             mainWindow);
 
-        var installTask = banner.InstallCommand.ExecuteAsync(null);
+        var downloadTask = banner.DownloadCommand.ExecuteAsync(null);
         await started.Task.WaitAsync(TimeSpan.FromSeconds(5));
 
         banner.ResetInstallState();
-        Assert.That(banner.IsBusy, Is.True, "Сброс при отмене закрытия не должен разблокировать идущую загрузку");
+        Assert.That(banner.IsDownloading, Is.True, "Сброс при отмене закрытия не должен разблокировать идущую загрузку");
 
         var cancelTask = banner.CancelInstallAsync();
         await cancelled.Task.WaitAsync(TimeSpan.FromSeconds(5));
@@ -96,13 +106,14 @@ public sealed class ManualUpdateCancellationTests
 
         finishCleanup.SetResult();
         await cancelTask.WaitAsync(TimeSpan.FromSeconds(5));
-        await installTask.WaitAsync(TimeSpan.FromSeconds(5));
+        await downloadTask.WaitAsync(TimeSpan.FromSeconds(5));
 
         using (Assert.EnterMultipleScope())
         {
             Assert.That(observedToken.CanBeCanceled, Is.True);
             Assert.That(observedToken.IsCancellationRequested, Is.True);
-            Assert.That(banner.IsBusy, Is.False);
+            Assert.That(banner.IsDownloading, Is.False);
+            Assert.That(banner.IsFailed, Is.False);
             Assert.That(dialogs.Errors, Is.Empty);
             Assert.That(mainWindow.CloseRequests, Is.Zero);
         }
@@ -111,28 +122,32 @@ public sealed class ManualUpdateCancellationTests
     [Test]
     public async Task UpdateBanner_HttpTimeout_StillReportsError()
     {
-        var coordinator = new FakeCoordinator(Candidate(), (_, _, _) =>
-            Task.FromException(new TaskCanceledException("Превышено время ожидания")));
+        var coordinator = new FakeCoordinator(CreateCandidate(), (coord, _) =>
+        {
+            coord.SetFailed("Превышено время ожидания");
+            return Task.FromResult(false);
+        });
 
         var dialogs = new RecordingDialogService();
         var mainWindow = new RecordingMainWindow();
-        var bus = new InMemoryEventBus(NullLogger<InMemoryEventBus>.Instance);
 
         using var banner = new UpdateBannerViewModel(
             coordinator,
-            bus,
+            CreateEnvironment(),
             dialogs,
             NullLogger<UpdateBannerViewModel>.Instance,
             new ManualUiDispatcher(),
+            new NoopShellLauncher(),
             mainWindow);
 
-        await banner.InstallCommand.ExecuteAsync(null);
+        await banner.DownloadCommand.ExecuteAsync(null);
 
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(banner.IsBusy, Is.False);
-            Assert.That(dialogs.Errors, Has.Count.EqualTo(1));
-            Assert.That(dialogs.Errors[0], Does.Contain("Превышено время ожидания"));
+            Assert.That(banner.IsDownloading, Is.False);
+            Assert.That(banner.IsFailed, Is.True);
+            Assert.That(banner.IsVisible, Is.True);
+            Assert.That(banner.Message, Does.Contain("Превышено время ожидания"));
             Assert.That(mainWindow.CloseRequests, Is.Zero);
         }
     }
@@ -145,32 +160,38 @@ public sealed class ManualUpdateCancellationTests
         var finishCleanup = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         CancellationToken observedToken = default;
 
-        var coordinator = new FakeCoordinator(Candidate(), async (_, _, token) =>
+        var coordinator = new FakeCoordinator(CreateCandidate(), async (coord, token) =>
         {
             observedToken = token;
+            coord.SetStage(UpdateStage.Downloading);
             started.TrySetResult();
 
             try
             {
                 await Task.Delay(Timeout.InfiniteTimeSpan, token);
+                return true;
             }
             catch (OperationCanceledException)
             {
                 cancelled.TrySetResult();
                 await finishCleanup.Task;
-                throw;
+                coord.SetStage(UpdateStage.Available);
+                return false;
             }
         });
 
         var store = new UpdateStore(null, Path.Combine(_directory, "update.json"));
+        var environment = CreateEnvironment();
+        var options = PoproshaykaBot.Core.Update.UpdateServiceCollectionExtensions.CreateOptions(environment);
         var dialogs = new RecordingDialogService();
         var mainWindow = new RecordingMainWindow();
-        var bus = new InMemoryEventBus(NullLogger<InMemoryEventBus>.Instance);
 
         using var section = new UpdateSettingsSectionViewModel(
+            new UpdateStoreSettingsAdapter(store),
             coordinator,
+            options,
+            environment,
             store,
-            bus,
             dialogs,
             new ManualUiDispatcher(),
             mainWindow);
@@ -201,16 +222,24 @@ public sealed class ManualUpdateCancellationTests
     [Test]
     public async Task UpdateSettingsSection_ResetInstallState_ClearsBusyAfterCancelledClose()
     {
-        var coordinator = new FakeCoordinator(Candidate(), (_, _, _) => Task.CompletedTask);
+        var candidate = CreateCandidate();
+        var coordinator = new FakeCoordinator(candidate, (coord, _) =>
+        {
+            coord.SetReady(new PendingUpdate(candidate.Version.ToString(), Path.Combine(_directory, "bot.exe"), Path.Combine(_directory, "target.exe"), "sha"));
+            return Task.FromResult(true);
+        });
         var store = new UpdateStore(null, Path.Combine(_directory, "update.json"));
+        var environment = CreateEnvironment();
+        var options = PoproshaykaBot.Core.Update.UpdateServiceCollectionExtensions.CreateOptions(environment);
         var dialogs = new RecordingDialogService();
         var mainWindow = new RecordingMainWindow();
-        var bus = new InMemoryEventBus(NullLogger<InMemoryEventBus>.Instance);
 
         using var section = new UpdateSettingsSectionViewModel(
+            new UpdateStoreSettingsAdapter(store),
             coordinator,
+            options,
+            environment,
             store,
-            bus,
             dialogs,
             new ManualUiDispatcher(),
             mainWindow);
@@ -226,36 +255,126 @@ public sealed class ManualUpdateCancellationTests
 
     private sealed class FakeCoordinator(
         UpdateCandidate candidate,
-        Func<UpdateCandidate, IProgress<int>?, CancellationToken, Task> onPrepare) : IUpdateCoordinator
+        Func<FakeCoordinator, CancellationToken, Task<bool>> onDownload) : KeepShell.Updates.IUpdateCoordinator
     {
-        public UpdateKind Kind => UpdateKind.Portable;
+        private Task<bool>? _activeDownload;
+        private CancellationTokenSource? _activeCts;
+
+        public event EventHandler? Changed;
 
         public bool IsUpdatable => true;
 
-        public string DefaultRepositorySlug => "owner/repo";
+        public UpdateStage Stage { get; private set; } = UpdateStage.Available;
+
+        public UpdateCandidate? Candidate => candidate;
+
+        public PendingUpdate? Pending { get; private set; }
+
+        public int Progress => 0;
+
+        public string? Error { get; private set; }
+
+        public void SetStage(UpdateStage stage)
+        {
+            Stage = stage;
+            Changed?.Invoke(this, EventArgs.Empty);
+        }
+
+        public void SetReady(PendingUpdate pending)
+        {
+            Pending = pending;
+            Error = null;
+            Stage = UpdateStage.ReadyToApply;
+            Changed?.Invoke(this, EventArgs.Empty);
+        }
+
+        public void SetFailed(string error)
+        {
+            Error = error;
+            Stage = UpdateStage.Failed;
+            Changed?.Invoke(this, EventArgs.Empty);
+        }
+
+        public bool RestorePending() => false;
+
+        public Task<bool> CheckAsync(bool manual, CancellationToken cancellationToken) => Task.FromResult(true);
+
+        public async Task<bool> DownloadAsync(CancellationToken cancellationToken)
+        {
+            using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            _activeCts = linked;
+            var task = onDownload(this, linked.Token);
+            _activeDownload = task;
+
+            try
+            {
+                return await task;
+            }
+            finally
+            {
+                _activeDownload = null;
+                _activeCts = null;
+            }
+        }
+
+        public async Task CancelPendingDownloadsAsync(CancellationToken cancellationToken = default)
+        {
+            if (_activeCts is { } cts)
+            {
+                await cts.CancelAsync();
+            }
+
+            if (_activeDownload is { } task)
+            {
+                try
+                {
+                    await task.WaitAsync(cancellationToken);
+                }
+                catch (OperationCanceledException)
+                {
+                }
+            }
+        }
+
+        public bool DiscardPending(Version? version = null) => false;
+
+        public void Skip()
+        {
+        }
+
+        public void Dismiss()
+        {
+        }
+    }
+
+    private sealed class TestEnvironment : ICoreUpdateEnvironment
+    {
+        public CoreUpdateKind Kind => CoreUpdateKind.Portable;
+
+        KeepShell.Updates.UpdateKind KeepShell.Updates.IUpdateEnvironment.Kind => KeepShell.Updates.UpdateKind.SingleFile;
+
+        public bool SelfContained => true;
+
+        public string Architecture => "x64";
 
         public Version CurrentVersion { get; } = Version.Parse("3.1.0.15");
 
-        public UpdateCandidate? LatestCandidate => candidate;
+        public int RuntimeMajor => 10;
 
-        public bool HasPreparedUpdate => false;
+        public string ExecutablePath => "Bot.exe";
 
-        public string? PreparedVersion => null;
+        public string StagingDirectory => "update";
 
-        public Task<UpdateCandidate?> CheckNowAsync(CancellationToken cancellationToken) => Task.FromResult<UpdateCandidate?>(candidate);
+        public string RepositorySlug => "owner/repo";
+    }
 
-        public Task PrepareAsync(UpdateCandidate updateCandidate, IProgress<int>? progress, CancellationToken cancellationToken) =>
-            onPrepare(updateCandidate, progress, cancellationToken);
+    private sealed class NoopShellLauncher : IShellLauncher
+    {
+        public bool Open(string pathOrUrl) => true;
 
-        public Task<bool> TryPrepareSilentlyAsync(UpdateCandidate updateCandidate, CancellationToken cancellationToken) => Task.FromResult(false);
+        public bool Reveal(string path) => true;
 
-        public Task<bool> DiscardPreparedUpdateAsync(CancellationToken cancellationToken) => Task.FromResult(false);
-
-        public Task CancelPendingDownloadsAsync(CancellationToken cancellationToken) => Task.CompletedTask;
-
-        public void SkipVersion(string version)
-        {
-        }
+        public bool Start(string executable, params string[] arguments) => true;
     }
 
     private sealed class RecordingDialogService : IDialogService

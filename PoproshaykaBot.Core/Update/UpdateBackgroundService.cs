@@ -1,4 +1,5 @@
-﻿using Microsoft.Extensions.Logging;
+﻿using KeepShell.Updates;
+using Microsoft.Extensions.Logging;
 using PoproshaykaBot.Core.Infrastructure.Hosting;
 using PoproshaykaBot.Core.Settings.Stores;
 
@@ -6,6 +7,7 @@ namespace PoproshaykaBot.Core.Update;
 
 public sealed class UpdateBackgroundService(
     IUpdateCoordinator coordinator,
+    IUpdateEnvironment environment,
     UpdateStore store,
     TimeProvider timeProvider,
     ILogger<UpdateBackgroundService> logger)
@@ -22,11 +24,13 @@ public sealed class UpdateBackgroundService(
 
     public Task StartAsync(CancellationToken cancellationToken)
     {
-        if (coordinator.Kind == UpdateKind.Unsupported)
+        if (environment.Kind == UpdateKind.Unsupported)
         {
             logger.LogInformation("Сборка не поддерживает автообновление – фоновая проверка отключена");
             return Task.CompletedTask;
         }
+
+        coordinator.RestorePending();
 
         _cts?.Dispose();
         _cts = new();
@@ -72,7 +76,7 @@ public sealed class UpdateBackgroundService(
         {
             logger.LogInformation("Фоновая проверка обновлений запущена: период {IntervalHours} ч, тип сборки {Kind}, обновляемая {IsUpdatable}",
                 Math.Max(1, store.Load().CheckIntervalHours),
-                coordinator.Kind,
+                environment.Kind,
                 coordinator.IsUpdatable);
 
             await Task.Delay(InitialDelay, timeProvider, cancellationToken).ConfigureAwait(false);
@@ -87,11 +91,11 @@ public sealed class UpdateBackgroundService(
                 }
                 else if (!coordinator.IsUpdatable)
                 {
-                    logger.LogInformation("Проверка обновлений пропущена: сборка {Kind} сейчас не обновляется", coordinator.Kind);
+                    logger.LogInformation("Проверка обновлений пропущена: сборка {Kind} сейчас не обновляется", environment.Kind);
                 }
-                else if (await coordinator.CheckNowAsync(cancellationToken).ConfigureAwait(false) is { } candidate)
+                else
                 {
-                    await coordinator.TryPrepareSilentlyAsync(candidate, cancellationToken).ConfigureAwait(false);
+                    await coordinator.CheckAsync(manual: false, cancellationToken).ConfigureAwait(false);
                 }
 
                 var hours = Math.Max(1, settings.CheckIntervalHours);

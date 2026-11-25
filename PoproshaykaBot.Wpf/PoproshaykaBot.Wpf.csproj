@@ -39,6 +39,7 @@
     <PackageReference Include="KeepShell" />
     <PackageReference Include="KeepShell.Automation" />
     <PackageReference Include="KeepShell.Mcp" />
+    <PackageReference Include="KeepShell.Updates.Wpf" />
     <PackageReference Include="MahApps.Metro.IconPacks.Lucide" />
     <PackageReference Include="Microsoft.Web.WebView2" />
     <PackageReference Include="Serilog.Extensions.Logging" />

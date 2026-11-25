@@ -1,4 +1,5 @@
 ﻿using KeepShell.Services;
+using KeepShell.Services.Platform;
 using KeepShell.Testing;
 using KeepShell.ViewModels;
 using MahApps.Metro.IconPacks;
@@ -214,8 +215,14 @@ public sealed class SettingsNavigationSaveTests
             var history = new BroadcastHistoryStore(null, Path.Combine(_root.FullName, "broadcasts.json"), Path.Combine(_root.FullName, "sessions.json"));
             var boxArt = new GameBoxArtProvider(new FakeBoxArtCache(), NullLogger<GameBoxArtProvider>.Instance);
             _history = new(history, new UserStatisticsRepository(NullLogger<UserStatisticsRepository>.Instance), store, boxArt, bus);
-            _update = new(DispatchProxy.Create<IUpdateCoordinator, InertProxy>(), bus, dialogs,
-                NullLogger<UpdateBannerViewModel>.Instance, dispatcher, windows);
+            _update = new(
+                DispatchProxy.Create<KeepShell.Updates.IUpdateCoordinator, InertProxy>(),
+                DispatchProxy.Create<IUpdateEnvironment, InertProxy>(),
+                dialogs,
+                NullLogger<UpdateBannerViewModel>.Instance,
+                dispatcher,
+                DispatchProxy.Create<IShellLauncher, InertProxy>(),
+                windows);
             _onboarding = new(new OnboardingChecklist(manager, accounts), DispatchProxy.Create<IOnboardingWizardLauncher, InertProxy>(), bus);
             var debug = new DebugBannerViewModel(new TargetChannelProvider(manager,
                 new DebugChannelStore(filePath: Path.Combine(_root.FullName, "debug.json")), DebugChannelOverride.None));
@@ -285,6 +292,13 @@ public sealed class SettingsNavigationSaveTests
 
     public class InertProxy : DispatchProxy
     {
-        protected override object? Invoke(MethodInfo? targetMethod, object?[]? args) => null;
+        protected override object? Invoke(MethodInfo? targetMethod, object?[]? args)
+        {
+            return targetMethod is not null
+                && targetMethod.ReturnType != typeof(void)
+                && targetMethod.ReturnType.IsValueType
+                ? Activator.CreateInstance(targetMethod.ReturnType)
+                : null;
+        }
     }
 }

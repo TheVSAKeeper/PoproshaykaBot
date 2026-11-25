@@ -54,7 +54,7 @@ public sealed class BotAutomation(
     UnobservedTaskExceptionTracker? unobservedExceptions = null,
     BindingErrorSink? bindingErrors = null,
     IUpdateEnvironment? updateEnvironment = null,
-    IUpdateCoordinator? updateCoordinator = null,
+    KeepShell.Updates.IUpdateCoordinator? updateCoordinator = null,
     SettingsWriteGate? settingsWriteGate = null,
     UiSettingsWriteGuard? uiSettingsWriteGuard = null,
     ChatDisplayStore? chatDisplayStore = null,
@@ -417,12 +417,12 @@ public sealed class BotAutomation(
         RuntimeHealthDto.UpdateHealthDto? updateHealth = updateCoordinator is null
             ? null
             : new(
-                updateCoordinator.Kind,
+                updateEnvironment?.Kind ?? UpdateKind.Unsupported,
                 updateCoordinator.IsUpdatable,
-                updateCoordinator.CurrentVersion.ToString(),
-                updateCoordinator.LatestCandidate?.Version.ToString(),
-                updateCoordinator.HasPreparedUpdate,
-                updateCoordinator.PreparedVersion);
+                updateEnvironment?.CurrentVersion.ToString() ?? AppInfo.Version,
+                updateCoordinator.Candidate?.Version.ToString(),
+                updateCoordinator.Pending is not null,
+                updateCoordinator.Pending?.Version);
 
         RuntimeHealthDto.DashboardLayoutHealthDto? dashboardHealth = null;
         if (dashboardLayoutCoordinator is not null)

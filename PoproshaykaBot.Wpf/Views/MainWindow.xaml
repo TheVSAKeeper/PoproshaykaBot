@@ -3,6 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework"
         xmlns:keepshell="https://schemas.keepshell.dev/wpf"
+        xmlns:updates="clr-namespace:KeepShell.Updates.Wpf;assembly=KeepShell.Updates.Wpf"
         xmlns:vm="clr-namespace:PoproshaykaBot.Wpf.ViewModels"
         xmlns:views="clr-namespace:PoproshaykaBot.Wpf.Views"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
@@ -49,7 +50,9 @@
             <StackPanel>
                 <views:OnboardingBannerView DataContext="{Binding OnboardingBanner}" />
                 <views:ChannelSwitchPromptBannerView DataContext="{Binding ChannelSwitchBanner}" />
-                <views:UpdateBannerView DataContext="{Binding UpdateBanner}" />
+                <updates:UpdateBanner DataContext="{Binding UpdateBanner}"
+                                      Margin="20,12,20,0"
+                                      Visibility="{Binding IsVisible, Converter={StaticResource BoolToVisibility}}" />
             </StackPanel>
         </keepshell:ShellLayout.ContentBanner>
         <keepshell:ShellLayout.ContentOverlay>

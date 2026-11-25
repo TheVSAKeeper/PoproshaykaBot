@@ -329,7 +329,14 @@ public sealed class MultistreamPageTests
             var history = new BroadcastHistoryStore(null, Path.Combine(data.FullName, "broadcasts.json"), Path.Combine(data.FullName, "sessions.json"));
             var boxArt = new GameBoxArtProvider(DispatchProxy.Create<IGameBoxArtCache, InertProxy>(), NullLogger<GameBoxArtProvider>.Instance);
             using var streamHistory = new StreamHistoryPageViewModel(history, new UserStatisticsRepository(NullLogger<UserStatisticsRepository>.Instance), store, boxArt, bus);
-            using var updateBanner = new UpdateBannerViewModel(DispatchProxy.Create<IUpdateCoordinator, InertProxy>(), bus, dialogs, NullLogger<UpdateBannerViewModel>.Instance, dispatcher, windows);
+            using var updateBanner = new UpdateBannerViewModel(
+                DispatchProxy.Create<KeepShell.Updates.IUpdateCoordinator, InertProxy>(),
+                DispatchProxy.Create<IUpdateEnvironment, InertProxy>(),
+                dialogs,
+                NullLogger<UpdateBannerViewModel>.Instance,
+                dispatcher,
+                DispatchProxy.Create<IShellLauncher, InertProxy>(),
+                windows);
             using var onboardingBanner = new OnboardingBannerViewModel(new OnboardingChecklist(manager, new AccountsStore(filePath: Path.Combine(data.FullName, "acc.json"))), DispatchProxy.Create<IOnboardingWizardLauncher, InertProxy>(), bus);
             var debugBanner = new DebugBannerViewModel(new TargetChannelProvider(manager, new DebugChannelStore(filePath: Path.Combine(data.FullName, "dbg.json")), DebugChannelOverride.None));
             var preferences = new ShellPreferences(store) { LastPage = SectionKeys.Settings };

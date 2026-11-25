@@ -417,7 +417,16 @@ public class SettingsBlocksTests
         var obsChat = new ObsChatSettingsSectionViewModel(obsChatStore, settingsManager, dialogs, null!);
         var obsIntegration = new ObsIntegrationSectionViewModel(null!, settingsManager, NullLogger<ObsIntegrationSectionViewModel>.Instance, dialogs, null!);
         var polls = new PollsSettingsSectionViewModel(pollsStore, TimeProvider.System);
-        var update = new UpdateSettingsSectionViewModel(new FakeUpdateCoordinator(), updateStore, bus, dialogs, new ManualUiDispatcher(), DispatchProxy.Create<IMainWindowController, InertProxy>());
+        var updateEnv = new FakeUpdateEnvironment();
+        var update = new UpdateSettingsSectionViewModel(
+            new UpdateStoreSettingsAdapter(updateStore),
+            new FakeUpdateCoordinator(),
+            PoproshaykaBot.Core.Update.UpdateServiceCollectionExtensions.CreateOptions(updateEnv),
+            updateEnv,
+            updateStore,
+            dialogs,
+            new ManualUiDispatcher(),
+            DispatchProxy.Create<IMainWindowController, InertProxy>());
         var debugChannel = new DebugChannelSectionViewModel(DebugChannelOverride.None, debugChannelStore, null!, TimeProvider.System, NullLogger<DebugChannelSectionViewModel>.Instance);
         var channelCatalogStore = new ChannelCatalogStore(null, Path.Combine(_root, "channels.json"), gate);
         var userStatistics = new UserStatisticsRepository(NullLogger<UserStatisticsRepository>.Instance);
@@ -487,35 +496,56 @@ public class SettingsBlocksTests
         }
     }
 
-    private sealed class FakeUpdateCoordinator : IUpdateCoordinator
+    private sealed class FakeUpdateCoordinator : KeepShell.Updates.IUpdateCoordinator
     {
-        public UpdateKind Kind => UpdateKind.Unsupported;
+        public event EventHandler? Changed
+        {
+            add { }
+            remove { }
+        }
 
         public bool IsUpdatable => false;
 
-        public string DefaultRepositorySlug => "owner/repo";
+        public KeepShell.Updates.UpdateStage Stage => KeepShell.Updates.UpdateStage.Idle;
 
-        public Version CurrentVersion { get; } = new(1, 0);
+        public UpdateCandidate? Candidate => null;
 
-        public UpdateCandidate? LatestCandidate => null;
+        public KeepShell.Updates.PendingUpdate? Pending => null;
 
-        public bool HasPreparedUpdate => false;
+        public int Progress => 0;
 
-        public string? PreparedVersion => null;
+        public string? Error => null;
 
-        public Task<UpdateCandidate?> CheckNowAsync(CancellationToken cancellationToken) => Task.FromResult<UpdateCandidate?>(null);
+        public bool RestorePending() => false;
 
-        public Task PrepareAsync(UpdateCandidate candidate, IProgress<int>? progress, CancellationToken cancellationToken) => Task.CompletedTask;
+        public Task<bool> CheckAsync(bool manual, CancellationToken cancellationToken) => Task.FromResult(false);
 
-        public Task<bool> TryPrepareSilentlyAsync(UpdateCandidate candidate, CancellationToken cancellationToken) => Task.FromResult(false);
+        public Task<bool> DownloadAsync(CancellationToken cancellationToken) => Task.FromResult(false);
 
-        public Task<bool> DiscardPreparedUpdateAsync(CancellationToken cancellationToken) => Task.FromResult(false);
+        public Task CancelPendingDownloadsAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
 
-        public Task CancelPendingDownloadsAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+        public bool DiscardPending(Version? version = null) => false;
 
-        public void SkipVersion(string version)
+        public void Skip()
         {
         }
+
+        public void Dismiss()
+        {
+        }
+    }
+
+    private sealed class FakeUpdateEnvironment : IUpdateEnvironment
+    {
+        public UpdateKind Kind => UpdateKind.Unsupported;
+        KeepShell.Updates.UpdateKind KeepShell.Updates.IUpdateEnvironment.Kind => KeepShell.Updates.UpdateKind.None;
+        public bool SelfContained => false;
+        public string Architecture => "x64";
+        public Version CurrentVersion { get; } = new(1, 0);
+        public int RuntimeMajor => 10;
+        public string ExecutablePath => "Bot.exe";
+        public string StagingDirectory => "update";
+        public string RepositorySlug => "owner/repo";
     }
 
     private sealed class EmptyServiceProvider : IServiceProvider

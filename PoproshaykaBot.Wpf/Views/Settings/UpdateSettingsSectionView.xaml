@@ -41,12 +41,12 @@
                        Style="{StaticResource Setting.GroupHeading}" />
 
             <CheckBox Content="Проверять обновления автоматически"
-                      IsChecked="{Binding AutoCheckEnabled, Mode=TwoWay}"
+                      IsChecked="{Binding AutomaticCheckEnabled, Mode=TwoWay}"
                       Style="{StaticResource CheckBox.Default}"
                       Margin="0,0,0,8" />
 
             <StackPanel Style="{StaticResource Setting.DependentBlock}"
-                        IsEnabled="{Binding AutoCheckEnabled}">
+                        IsEnabled="{Binding AutomaticCheckEnabled}">
                 <keepshell:NumericSettingField Label="Интервал проверки (часов)"
                                                Value="{Binding CheckIntervalHours, Mode=TwoWay}"
                                                IncreaseCommand="{Binding IncreaseIntervalCommand}"
@@ -62,9 +62,9 @@
                       Margin="0,4,0,8" />
 
             <CheckBox Content="Разрешить автообновление для сборки, требующей .NET (framework-dependent)"
-                      IsChecked="{Binding AllowFrameworkDependent, Mode=TwoWay}"
+                      IsChecked="{Binding AllowFrameworkDependentUpdate, Mode=TwoWay}"
                       Style="{StaticResource CheckBox.Default}"
-                      Visibility="{Binding IsFrameworkDependentVisible, Converter={StaticResource BoolToVisibility}}"
+                      Visibility="{Binding IsFrameworkDependentBuild, Converter={StaticResource BoolToVisibility}}"
                       Margin="0,0,0,8" />
 
             <keepshell:SettingRowPanel Margin="0,8,0,0">
@@ -83,7 +83,7 @@
                          VerticalAlignment="Top"
                          AutomationProperties.Name="Репозиторий обновлений в формате owner/repo"
                          Text="{Binding RepositoryOverride, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                         keepshell:PlaceholderBehavior.Placeholder="{Binding DefaultRepositorySlug}" />
+                         keepshell:PlaceholderBehavior.Placeholder="{Binding DefaultRepository}" />
             </keepshell:SettingRowPanel>
         </StackPanel>
 
@@ -93,6 +93,7 @@
             <StackPanel Orientation="Horizontal">
                 <Button Content="Проверить сейчас"
                         Command="{Binding CheckNowCommand}"
+                        IsEnabled="{Binding CanCheckNow}"
                         Style="{StaticResource Button.Secondary}"
                         VerticalAlignment="Center"
                         Margin="0,0,8,0" />

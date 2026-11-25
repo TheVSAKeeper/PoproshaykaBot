@@ -279,10 +279,10 @@ public sealed class SettingsDirtyAuditTests
             h => Assert.That(h.LayoutStore.LoadDashboard()!.Tiles[0].MaxWidth, Is.EqualTo(500)));
 
         yield return new(
-            "Update: AutoCheckEnabled, CheckIntervalHours",
+            "Update: AutomaticCheckEnabled, CheckIntervalHours",
             h =>
             {
-                h.Update.AutoCheckEnabled = false;
+                h.Update.AutomaticCheckEnabled = false;
                 h.Update.CheckIntervalHours = 12;
             },
             h =>
@@ -691,7 +691,16 @@ public sealed class SettingsDirtyAuditTests
             ChannelCatalog = new(CatalogStore, [new FakeChannelAdapter(StreamingPlatform.Twitch)], platformRegistry: registry);
             ChannelGroups = new(CatalogStore, new UserStatisticsRepository(NullLogger<UserStatisticsRepository>.Instance), platformRegistry: registry);
             DashboardLayout = new(Array.Empty<DashboardTileViewModel>(), uiSettings, LayoutStore);
-            Update = new(new FakeUpdateCoordinator(), UpdateStore, bus, Dialogs, new ManualUiDispatcher(), DispatchProxy.Create<IMainWindowController, InertProxy>());
+            var updateEnv = new FakeUpdateEnvironment();
+            Update = new(
+                new UpdateStoreSettingsAdapter(UpdateStore),
+                new FakeUpdateCoordinator(),
+                PoproshaykaBot.Core.Update.UpdateServiceCollectionExtensions.CreateOptions(updateEnv),
+                updateEnv,
+                UpdateStore,
+                Dialogs,
+                new ManualUiDispatcher(),
+                DispatchProxy.Create<IMainWindowController, InertProxy>());
             DebugChannel = new(DebugChannelOverride.None, DebugChannelStore, new ChannelLiveStatusReader(DispatchProxy.Create<IHttpClientFactory, InertProxy>(), settingsManager, TimeProvider.System, NullLogger<ChannelLiveStatusReader>.Instance), TimeProvider.System, NullLogger<DebugChannelSectionViewModel>.Instance);
             Mcp = new(mcpPreferences, new(mcpPreferences, null!, null!, mcpOptions, new EmptyServiceProvider()), mcpOptions, Dialogs, DispatchProxy.Create<IClipboardService, InertProxy>());
             Appearance = new(new(uiSettings), new(uiSettings));
@@ -849,21 +858,40 @@ public sealed class SettingsDirtyAuditTests
         public void EndSession() { }
     }
 
-    private sealed class FakeUpdateCoordinator : IUpdateCoordinator
+    private sealed class FakeUpdateCoordinator : KeepShell.Updates.IUpdateCoordinator
+    {
+        public event EventHandler? Changed
+        {
+            add { }
+            remove { }
+        }
+
+        public bool IsUpdatable => false;
+        public KeepShell.Updates.UpdateStage Stage => KeepShell.Updates.UpdateStage.Idle;
+        public UpdateCandidate? Candidate => null;
+        public KeepShell.Updates.PendingUpdate? Pending => null;
+        public int Progress => 0;
+        public string? Error => null;
+        public bool RestorePending() => false;
+        public Task<bool> CheckAsync(bool manual, CancellationToken cancellationToken) => Task.FromResult(false);
+        public Task<bool> DownloadAsync(CancellationToken cancellationToken) => Task.FromResult(false);
+        public Task CancelPendingDownloadsAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
+        public bool DiscardPending(Version? version = null) => false;
+        public void Skip() { }
+        public void Dismiss() { }
+    }
+
+    private sealed class FakeUpdateEnvironment : IUpdateEnvironment
     {
         public UpdateKind Kind => UpdateKind.Unsupported;
-        public bool IsUpdatable => false;
-        public string DefaultRepositorySlug => "owner/repo";
+        KeepShell.Updates.UpdateKind KeepShell.Updates.IUpdateEnvironment.Kind => KeepShell.Updates.UpdateKind.None;
+        public bool SelfContained => false;
+        public string Architecture => "x64";
         public Version CurrentVersion { get; } = new(1, 0);
-        public UpdateCandidate? LatestCandidate => null;
-        public bool HasPreparedUpdate => false;
-        public string? PreparedVersion => null;
-        public Task<UpdateCandidate?> CheckNowAsync(CancellationToken cancellationToken) => Task.FromResult<UpdateCandidate?>(null);
-        public Task PrepareAsync(UpdateCandidate candidate, IProgress<int>? progress, CancellationToken cancellationToken) => Task.CompletedTask;
-        public Task<bool> TryPrepareSilentlyAsync(UpdateCandidate candidate, CancellationToken cancellationToken) => Task.FromResult(false);
-        public Task<bool> DiscardPreparedUpdateAsync(CancellationToken cancellationToken) => Task.FromResult(false);
-        public Task CancelPendingDownloadsAsync(CancellationToken cancellationToken) => Task.CompletedTask;
-        public void SkipVersion(string version) { }
+        public int RuntimeMajor => 10;
+        public string ExecutablePath => "Bot.exe";
+        public string StagingDirectory => "update";
+        public string RepositorySlug => "owner/repo";
     }
 
     public sealed class FakeDialogService : IDialogService

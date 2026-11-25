@@ -1,41 +1,40 @@
 ﻿using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-using PoproshaykaBot.Core.Infrastructure.Events;
-using PoproshaykaBot.Core.Infrastructure.Events.Update;
+using KeepShell.Services.Platform;
+using KeepShell.Updates;
+using KeepShell.Updates.Wpf;
 using PoproshaykaBot.Core.Settings.Stores;
-using PoproshaykaBot.Core.Settings.Update;
-using PoproshaykaBot.Core.Update;
 using PoproshaykaBot.Wpf.Infrastructure;
+using System.ComponentModel;
 using System.Globalization;
+using CoreUpdateApplyMode = PoproshaykaBot.Core.Settings.Update.UpdateApplyMode;
+using CoreUpdateKind = PoproshaykaBot.Core.Update.UpdateKind;
+using CoreUpdateSettings = PoproshaykaBot.Core.Settings.Update.UpdateSettings;
+using ICoreUpdateEnvironment = PoproshaykaBot.Core.Update.IUpdateEnvironment;
+using KeepUpdateApplyMode = KeepShell.Updates.UpdateApplyMode;
 
 namespace PoproshaykaBot.Wpf.ViewModels.Settings;
 
-public sealed partial class UpdateSettingsSectionViewModel : ObservableObject, IDisposable
+public sealed partial class UpdateSettingsSectionViewModel : UpdateSettingsSectionViewModelBase
 {
-    private readonly IUpdateCoordinator _coordinator;
-    private readonly IDialogService _dialogService;
+    private readonly ICoreUpdateEnvironment _coreEnvironment;
     private readonly UpdateStore _store;
-    private readonly IUiDispatcher _uiDispatcher;
+    private readonly IDialogService _dialogService;
     private readonly IMainWindowController _mainWindow;
-    private readonly List<IDisposable> _subscriptions = [];
     private readonly Lock _installLock = new();
     private readonly CancellationTokenSource _closeCts = new();
 
-    private Task? _activeInstallTask;
+    private Task<bool>? _activeInstallTask;
+    private bool _isInstalling;
+    private bool _isClosePending;
     private bool _disposed;
-
-    [ObservableProperty]
-    private bool _autoCheckEnabled;
-
-    [ObservableProperty]
-    private double _checkIntervalHours = 6;
 
     [ObservableProperty]
     private bool _autoInstall;
 
     [ObservableProperty]
-    [NotifyCanExecuteChangedFor(nameof(CheckNowCommand))]
     [NotifyCanExecuteChangedFor(nameof(InstallUpdateCommand))]
+    [NotifyPropertyChangedFor(nameof(CanCheckNow))]
     private bool _isBusy;
 
     [ObservableProperty]
@@ -51,75 +50,72 @@ public sealed partial class UpdateSettingsSectionViewModel : ObservableObject, I
     private StatusSeverity _statusSeverity;
 
     [ObservableProperty]
-    private bool _isFrameworkDependentVisible;
-
-    [ObservableProperty]
-    [NotifyCanExecuteChangedFor(nameof(CheckNowCommand))]
-    [NotifyCanExecuteChangedFor(nameof(InstallUpdateCommand))]
-    private bool _allowFrameworkDependent;
-
-    [ObservableProperty]
-    private string _repositoryOverride = string.Empty;
-
-    [ObservableProperty]
     private string _repositoryHintText = string.Empty;
 
     [ObservableProperty]
     private StatusSeverity _repositoryHintSeverity;
 
     public UpdateSettingsSectionViewModel(
+        IUpdateSettings updateSettings,
         IUpdateCoordinator coordinator,
+        UpdateOptions options,
+        ICoreUpdateEnvironment environment,
         UpdateStore store,
-        IEventBus bus,
         IDialogService dialogService,
         IUiDispatcher uiDispatcher,
         IMainWindowController mainWindow)
+        : base(updateSettings, coordinator, options, environment, uiDispatcher)
     {
-        _coordinator = coordinator;
+        _coreEnvironment = environment;
         _store = store;
         _dialogService = dialogService;
-        _uiDispatcher = uiDispatcher;
         _mainWindow = mainWindow;
-        IsFrameworkDependentVisible = coordinator.Kind == UpdateKind.FrameworkDependent;
-        CurrentVersionText = $"Текущая версия: {coordinator.CurrentVersion} (.NET {Environment.Version.Major})";
-        _subscriptions.Add(bus.SubscribeOnUi<UpdateAvailable>(_ => RefreshStatus()));
-        _subscriptions.Add(bus.SubscribeOnUi<UpdatePrepared>(_ => RefreshStatus()));
-        _subscriptions.Add(bus.SubscribeOnUi<UpdateDiscarded>(_ => RefreshStatus()));
+
+        _autoInstall = ApplyMode == KeepUpdateApplyMode.Automatic;
+        CurrentVersionText = $"Текущая версия: {_coreEnvironment.CurrentVersion} (.NET {System.Environment.Version.Major})";
+        RefreshRepositoryHint();
         RefreshStatus();
     }
 
-    public string DefaultRepositorySlug => _coordinator.DefaultRepositorySlug;
+    protected override bool AutoSave => false;
 
-    public void LoadSettings(UpdateSettings settings)
+    public bool CanCheckNow => !IsBusy && IsUpdatableNow();
+
+    public void LoadSettings(CoreUpdateSettings settings)
     {
-        AutoCheckEnabled = settings.AutoCheckEnabled;
+        AutomaticCheckEnabled = settings.AutoCheckEnabled;
         CheckIntervalHours = Math.Clamp(settings.CheckIntervalHours, 1, 168);
-        AutoInstall = settings.ApplyMode == UpdateApplyMode.SilentOnExit;
-        AllowFrameworkDependent = settings.AllowFrameworkDependentUpdate;
+        AutoInstall = settings.ApplyMode == CoreUpdateApplyMode.SilentOnExit;
+        AllowFrameworkDependentUpdate = settings.AllowFrameworkDependentUpdate;
         RepositoryOverride = settings.RepositoryOverride ?? string.Empty;
         RefreshRepositoryHint();
         RefreshStatus();
     }
 
-    public void SaveSettings(UpdateSettings settings)
+    public void SaveSettings(CoreUpdateSettings settings)
     {
-        settings.AutoCheckEnabled = AutoCheckEnabled;
-        settings.CheckIntervalHours = (int)CheckIntervalHours;
-        settings.ApplyMode = AutoInstall ? UpdateApplyMode.SilentOnExit : UpdateApplyMode.NotifyAndConfirm;
-        settings.AllowFrameworkDependentUpdate = AllowFrameworkDependent;
+        settings.AutoCheckEnabled = AutomaticCheckEnabled;
+        settings.CheckIntervalHours = Math.Clamp((int)Math.Round(CheckIntervalHours), 1, 168);
+        settings.ApplyMode = AutoInstall ? CoreUpdateApplyMode.SilentOnExit : CoreUpdateApplyMode.NotifyAndConfirm;
+        settings.AllowFrameworkDependentUpdate = AllowFrameworkDependentUpdate;
         var slug = RepositoryOverride.Trim();
         settings.RepositoryOverride = slug.Length == 0 ? null : slug;
     }
 
-    public Task OnSavedAsync(UpdateApplyMode previousMode)
+    public Task OnSavedAsync(CoreUpdateApplyMode previousMode)
     {
-        return previousMode == UpdateApplyMode.SilentOnExit && !AutoInstall
-            ? _coordinator.DiscardPreparedUpdateAsync(CancellationToken.None)
-            : Task.CompletedTask;
+        if (previousMode == CoreUpdateApplyMode.SilentOnExit && !AutoInstall)
+        {
+            Coordinator.DiscardPending();
+        }
+
+        return Task.CompletedTask;
     }
 
-    public void Dispose()
+    public new void Dispose()
     {
+        base.Dispose();
+
         bool canDisposeCts;
 
         lock (_installLock)
@@ -145,13 +141,6 @@ public sealed partial class UpdateSettingsSectionViewModel : ObservableObject, I
         {
             _closeCts.Dispose();
         }
-
-        foreach (var sub in _subscriptions)
-        {
-            sub.Dispose();
-        }
-
-        _subscriptions.Clear();
     }
 
     public void ResetInstallState()
@@ -164,12 +153,13 @@ public sealed partial class UpdateSettingsSectionViewModel : ObservableObject, I
             }
         }
 
-        if (!IsBusy)
+        if (!_isClosePending && !IsBusy)
         {
             return;
         }
 
-        IsBusy = false;
+        _isClosePending = false;
+        UpdateBusyState();
         RefreshStatus();
     }
 
@@ -196,10 +186,46 @@ public sealed partial class UpdateSettingsSectionViewModel : ObservableObject, I
             return;
         }
 
+        await Coordinator.CancelPendingDownloadsAsync();
+
         if (active is not null)
         {
             await active.ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing | ConfigureAwaitOptions.ContinueOnCapturedContext);
         }
+    }
+
+    protected override void OnCoordinatorSynced()
+    {
+        DownloadProgress = IsDownloading ? Progress : 0;
+        UpdateBusyState();
+        RefreshStatus();
+        InstallUpdateCommand.NotifyCanExecuteChanged();
+    }
+
+    protected override void OnPropertyChanged(PropertyChangedEventArgs e)
+    {
+        base.OnPropertyChanged(e);
+
+        switch (e.PropertyName)
+        {
+            case nameof(AllowFrameworkDependentUpdate):
+                OnPropertyChanged(nameof(CanCheckNow));
+                RefreshStatus();
+                InstallUpdateCommand.NotifyCanExecuteChanged();
+                break;
+            case nameof(RepositoryOverride):
+                RefreshRepositoryHint();
+                break;
+            case nameof(IsChecking):
+            case nameof(IsDownloading):
+                UpdateBusyState();
+                break;
+        }
+    }
+
+    partial void OnAutoInstallChanged(bool value)
+    {
+        ApplyMode = value ? KeepUpdateApplyMode.Automatic : KeepUpdateApplyMode.Notify;
     }
 
     [RelayCommand]
@@ -208,52 +234,36 @@ public sealed partial class UpdateSettingsSectionViewModel : ObservableObject, I
     [RelayCommand]
     private void DecreaseInterval() => CheckIntervalHours = Math.Max(1, CheckIntervalHours - 1);
 
-    [RelayCommand(CanExecute = nameof(CanActNow))]
-    private async Task CheckNowAsync()
-    {
-        IsBusy = true;
-        (StatusText, StatusSeverity) = ("Проверка обновлений…", StatusSeverity.Info);
-        DownloadProgress = 0;
-
-        try
-        {
-            var candidate = await _coordinator.CheckNowAsync(CancellationToken.None);
-
-            if (candidate is null)
-            {
-                (StatusText, StatusSeverity) = ("У вас установлена актуальная версия.", StatusSeverity.None);
-            }
-            else
-            {
-                RefreshStatus();
-            }
-        }
-        catch (Exception exception)
-        {
-            (StatusText, StatusSeverity) = ($"Ошибка проверки: {exception.Message}", StatusSeverity.Error);
-        }
-        finally
-        {
-            IsBusy = false;
-        }
-    }
-
     [RelayCommand(CanExecute = nameof(CanInstall))]
     private async Task InstallUpdateAsync()
     {
-        var candidate = _coordinator.LatestCandidate;
+        var candidate = Candidate;
+        var pending = Pending;
 
-        if (candidate is null)
+        if (candidate is null && pending is null)
         {
             return;
         }
 
-        var question = string.Equals(_coordinator.PreparedVersion, candidate.Version.ToString(), StringComparison.Ordinal)
-            ? $"Установить загруженную версию {candidate.Version} сейчас?"
-            : $"Загрузить и установить версию {candidate.Version}?";
+        var versionText = pending?.Version ?? candidate!.Version.ToString();
+        var isPrepared = pending is not null
+            && (candidate is null || string.Equals(pending.Version, candidate.Version.ToString(), StringComparison.Ordinal));
+
+        var question = isPrepared
+            ? $"Установить загруженную версию {versionText} сейчас?"
+            : $"Загрузить и установить версию {versionText}?";
 
         if (!_dialogService.Confirm("Установка обновления", question + "\n\nПриложение перезапустится автоматически."))
         {
+            return;
+        }
+
+        if (isPrepared)
+        {
+            _isClosePending = true;
+            UpdateBusyState();
+            _dialogService.Info("Установка обновления", "Обновление загружено. Приложение закроется и установит новую версию.");
+            _mainWindow.RequestClose();
             return;
         }
 
@@ -269,37 +279,44 @@ public sealed partial class UpdateSettingsSectionViewModel : ObservableObject, I
             token = _closeCts.Token;
         }
 
-        IsBusy = true;
+        _isInstalling = true;
+        UpdateBusyState();
         DownloadProgress = 0;
 
-        var progress = new UiProgressPoller<int>(_uiDispatcher, pct =>
-        {
-            (StatusText, StatusSeverity) = ($"Загрузка обновления… {pct}%", StatusSeverity.Info);
-            DownloadProgress = pct;
-        });
-
-        Task? prepareTask = null;
+        Task<bool>? downloadTask = null;
 
         try
         {
-            using (progress.StartScope())
+            downloadTask = Coordinator.DownloadAsync(token);
+
+            lock (_installLock)
             {
-                prepareTask = _coordinator.PrepareAsync(candidate, progress.Progress, token);
-
-                lock (_installLock)
-                {
-                    _activeInstallTask = prepareTask;
-                }
-
-                await prepareTask;
+                _activeInstallTask = downloadTask;
             }
 
-            if (token.IsCancellationRequested)
+            var succeeded = await downloadTask;
+
+            if (token.IsCancellationRequested || IsDisposed())
             {
-                IsBusy = false;
+                _isInstalling = false;
+                UpdateBusyState();
                 RefreshStatus();
                 return;
             }
+
+            if (!succeeded)
+            {
+                var error = Coordinator.Error ?? "Не удалось загрузить обновление.";
+                _isInstalling = false;
+                UpdateBusyState();
+                (StatusText, StatusSeverity) = ($"Ошибка загрузки: {error}", StatusSeverity.Error);
+                _dialogService.Error("Ошибка обновления", $"Не удалось установить обновление: {error}");
+                return;
+            }
+
+            _isInstalling = false;
+            _isClosePending = true;
+            UpdateBusyState();
 
             _dialogService.Info("Установка обновления", "Обновление загружено. Приложение закроется и установит новую версию.");
 
@@ -307,16 +324,16 @@ public sealed partial class UpdateSettingsSectionViewModel : ObservableObject, I
         }
         catch (OperationCanceledException) when (token.IsCancellationRequested || IsDisposed())
         {
-            IsBusy = false;
+            _isInstalling = false;
+            UpdateBusyState();
             RefreshStatus();
         }
         catch (Exception exception)
         {
+            _isInstalling = false;
+            UpdateBusyState();
             (StatusText, StatusSeverity) = ($"Ошибка загрузки: {exception.Message}", StatusSeverity.Error);
-
             _dialogService.Error("Ошибка обновления", $"Не удалось установить обновление: {exception.Message}");
-
-            IsBusy = false;
         }
         finally
         {
@@ -324,7 +341,7 @@ public sealed partial class UpdateSettingsSectionViewModel : ObservableObject, I
 
             lock (_installLock)
             {
-                if (ReferenceEquals(_activeInstallTask, prepareTask))
+                if (ReferenceEquals(_activeInstallTask, downloadTask))
                 {
                     _activeInstallTask = null;
                 }
@@ -339,9 +356,7 @@ public sealed partial class UpdateSettingsSectionViewModel : ObservableObject, I
         }
     }
 
-    private bool CanActNow() => !IsBusy && IsUpdatableNow();
-
-    private bool CanInstall() => !IsBusy && IsUpdatableNow() && _coordinator.LatestCandidate is not null;
+    private bool CanInstall() => !IsBusy && IsUpdatableNow() && (Candidate is not null || Pending is not null);
 
     private bool IsDisposed()
     {
@@ -351,14 +366,15 @@ public sealed partial class UpdateSettingsSectionViewModel : ObservableObject, I
         }
     }
 
-    partial void OnAllowFrameworkDependentChanged(bool value) => RefreshStatus();
-
-    partial void OnRepositoryOverrideChanged(string value) => RefreshRepositoryHint();
-
-    private bool IsUpdatableNow() => _coordinator.Kind switch
+    private void UpdateBusyState()
     {
-        UpdateKind.Portable => true,
-        UpdateKind.FrameworkDependent => AllowFrameworkDependent,
+        IsBusy = _isInstalling || _isClosePending || IsChecking || IsDownloading;
+    }
+
+    private bool IsUpdatableNow() => _coreEnvironment.Kind switch
+    {
+        CoreUpdateKind.Portable => true,
+        CoreUpdateKind.FrameworkDependent => AllowFrameworkDependentUpdate,
         _ => false,
     };
 
@@ -368,10 +384,10 @@ public sealed partial class UpdateSettingsSectionViewModel : ObservableObject, I
 
         if (text.Length == 0)
         {
-            RepositoryHintText = $"Пусто – используется {_coordinator.DefaultRepositorySlug} (из сборки).";
+            RepositoryHintText = $"Пусто – используется {DefaultRepository} (из сборки).";
             RepositoryHintSeverity = StatusSeverity.None;
         }
-        else if (KeepShell.Updates.UpdateRepository.IsValidSlug(text))
+        else if (UpdateRepository.IsValidSlug(text))
         {
             RepositoryHintText = $"✓ {text}";
             RepositoryHintSeverity = StatusSeverity.Success;
@@ -385,7 +401,7 @@ public sealed partial class UpdateSettingsSectionViewModel : ObservableObject, I
 
     private void RefreshStatus()
     {
-        if (_coordinator.Kind == UpdateKind.Unsupported)
+        if (_coreEnvironment.Kind == CoreUpdateKind.Unsupported)
         {
             (StatusText, StatusSeverity) = ("Автообновление недоступно для этой сборки (запуск из среды разработки).", StatusSeverity.None);
             return;
@@ -397,15 +413,31 @@ public sealed partial class UpdateSettingsSectionViewModel : ObservableObject, I
             return;
         }
 
-        var candidate = _coordinator.LatestCandidate;
-
-        if (candidate is not null
-            && string.Equals(_coordinator.PreparedVersion, candidate.Version.ToString(), StringComparison.Ordinal))
+        if (IsChecking)
         {
-            (StatusText, StatusSeverity) = ($"Обновление {candidate.Version} загружено и установится при выходе из приложения.", StatusSeverity.Success);
+            (StatusText, StatusSeverity) = ("Проверка обновлений…", StatusSeverity.Info);
+            return;
+        }
+
+        if (IsDownloading)
+        {
+            (StatusText, StatusSeverity) = ($"Загрузка обновления… {Progress}%", StatusSeverity.Info);
+            return;
+        }
+
+        if (Stage == UpdateStage.Failed)
+        {
+            (StatusText, StatusSeverity) = ($"Ошибка: {Error ?? "Не удалось выполнить операцию обновления."}", StatusSeverity.Error);
+            return;
+        }
+
+        if (Pending is { } pending
+            && (Candidate is null || string.Equals(pending.Version, Candidate.Version.ToString(), StringComparison.Ordinal)))
+        {
+            (StatusText, StatusSeverity) = ($"Обновление {pending.Version} загружено и установится при выходе из приложения.", StatusSeverity.Success);
             InstallUpdateCommand.NotifyCanExecuteChanged();
         }
-        else if (candidate is not null)
+        else if (Candidate is { } candidate)
         {
             (StatusText, StatusSeverity) = ($"Доступно обновление: {candidate.Version}", StatusSeverity.Success);
             InstallUpdateCommand.NotifyCanExecuteChanged();
@@ -416,7 +448,7 @@ public sealed partial class UpdateSettingsSectionViewModel : ObservableObject, I
         }
     }
 
-    private static string FormatLastCheck(UpdateSettings settings)
+    private static string FormatLastCheck(CoreUpdateSettings settings)
     {
         if (settings.LastCheckUtc is { } lastCheck)
         {

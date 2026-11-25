@@ -18,7 +18,6 @@ public static class UpdateServiceCollectionExtensions
         services.AddSingleton<IUpdateSettings, UpdateStoreSettingsAdapter>();
         services.AddKeepShellUpdates(environment, options);
         services.AddSingleFileSwapInstaller();
-        services.AddSingleton<IUpdateCoordinator, UpdateCoordinator>();
         services.AddSingleton<IAppLifetimeComponent, UpdateBackgroundService>();
 
         return services;
