@@ -37,10 +37,7 @@ public sealed class LegacyImportDialog(
             uiSettingsGuard,
             chatHistoryCache);
 
-        var window = new LegacyImportWindow(viewModel)
-        {
-            Owner = DialogOwner.Resolve(),
-        };
+        var window = new LegacyImportWindow(viewModel, DialogOwner.Resolve());
         window.Loaded += LoadSources;
 
         window.ShowDialog();

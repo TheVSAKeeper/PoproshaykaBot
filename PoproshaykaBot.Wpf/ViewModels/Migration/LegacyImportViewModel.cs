@@ -111,8 +111,8 @@ public sealed partial class LegacyImportViewModel : ObservableObject
     public bool CanSelectSource => !IsBusy;
 
     public bool CanOverwriteExisting => SelectedSource is { Summary.Kind: not LegacyDataSourceKind.CurrentBaseDirectory } source
-        && source.Summary.Files.Any(file =>
-            _targetFiles.Contains(Normalize(Path.Combine(AppPaths.BaseDirectory, file.RelativeTargetPath))));
+        && source.Summary.Files.Select(file => file.RelativeTargetPath).Concat(source.Summary.GeneratedTargetPaths)
+            .Any(path => _targetFiles.Contains(Normalize(Path.Combine(AppPaths.BaseDirectory, path))));
 
     public string? ConflictNotice => SelectedSource?.Summary.Kind == LegacyDataSourceKind.CurrentBaseDirectory
         ? "При переносе на месте исправные рабочие файлы сохраняются. Одноимённые старые файлы останутся в исходной папке."

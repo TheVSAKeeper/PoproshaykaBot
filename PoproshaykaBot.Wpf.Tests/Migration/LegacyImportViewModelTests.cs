@@ -79,6 +79,18 @@ public class LegacyImportViewModelTests
     }
 
     [Test]
+    public void Replacing_files_is_offered_for_store_generated_by_monolith_split()
+    {
+        File.WriteAllText(Path.Combine(_folder, "settings.json"), """{"twitch":{"botUsername":"bot"}}""");
+        var source = LegacyDataScanner.Inspect(_folder, NullLogger.Instance)!;
+        var target = Summary(AppPaths.BaseDirectory, LegacyDataSourceKind.CurrentBaseDirectory, Path.Combine("settings", "accounts.json"));
+        var viewModel = new LegacyImportViewModel([source], target, false, new FakeFilePicker(_folder), NullLogger.Instance);
+        viewModel.SelectedSource = viewModel.Sources[0];
+
+        Assert.That(viewModel.CanOverwriteExisting, Is.True);
+    }
+
+    [Test]
     public async Task ImportAsync_RevokesChatHistoryCacheWrites_WhenChatHistoryCopied()
     {
         var sourceDir = Path.Combine(_folder, "source");

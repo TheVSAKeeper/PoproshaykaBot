@@ -638,8 +638,8 @@ public abstract class RoleAccountsStoreBase<TFile, TAccount> : IPlatformAccountD
         var normalized = AuthContextIds.Normalize(contextId);
         if (AuthContextIds.IsDefault(normalized))
         {
-            var bot = EnsureAccount(state, PlatformAuthRole.Bot, BotDefaultScopes);
-            var broadcaster = EnsureAccount(state, PlatformAuthRole.Broadcaster, BroadcasterDefaultScopes);
+            var bot = EnsureAccount(state, PlatformAuthRole.Bot);
+            var broadcaster = EnsureAccount(state, PlatformAuthRole.Broadcaster);
             return role == PlatformAuthRole.Bot ? bot : broadcaster;
         }
 
@@ -709,6 +709,9 @@ public abstract class RoleAccountsStoreBase<TFile, TAccount> : IPlatformAccountD
 
     protected abstract IReadOnlyList<string> BroadcasterDefaultScopes { get; }
 
+    protected virtual IReadOnlyList<string> DefaultScopes(PlatformAuthRole role, TAccount account) =>
+        role == PlatformAuthRole.Bot ? BotDefaultScopes : BroadcasterDefaultScopes;
+
     protected virtual void OnRoleMutated(PlatformAuthRole role, bool written)
     {
     }
@@ -742,14 +745,14 @@ public abstract class RoleAccountsStoreBase<TFile, TAccount> : IPlatformAccountD
 
     private void EnsureDefaultScopes(TAccount account, PlatformAuthRole role)
     {
-        var defaultScopes = role == PlatformAuthRole.Bot ? BotDefaultScopes : BroadcasterDefaultScopes;
-        if (account.Scopes.Length == 0)
+        account.StoredScopes ??= [];
+        if (account.Scopes is not { Length: > 0 })
         {
-            account.Scopes = [.. defaultScopes];
+            account.Scopes = [.. DefaultScopes(role, account)];
         }
     }
 
-    private TAccount EnsureAccount(TFile state, PlatformAuthRole role, IReadOnlyList<string> defaultScopes)
+    private TAccount EnsureAccount(TFile state, PlatformAuthRole role)
     {
         var account = GetAccount(state, role);
         if (account is null)
@@ -758,10 +761,7 @@ public abstract class RoleAccountsStoreBase<TFile, TAccount> : IPlatformAccountD
             SetAccount(state, role, account);
         }
 
-        if (account.Scopes.Length == 0)
-        {
-            account.Scopes = [..defaultScopes];
-        }
+        EnsureDefaultScopes(account, role);
 
         return account;
     }

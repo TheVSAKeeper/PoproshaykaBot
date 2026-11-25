@@ -22,6 +22,34 @@ public sealed partial class ShellPreferences : ShellPreferencesBase
         set => Settings.SetValue(SettingsKeys.LastPage, value ?? string.Empty);
     }
 
+    internal void PreviewAppearanceFlags(bool showPageHeader, bool enableToastNotifications)
+    {
+        var wasSuppressed = SuppressPersist;
+        SuppressPersist = true;
+        try
+        {
+            ShowPageHeader = showPageHeader;
+            EnableToastNotifications = enableToastNotifications;
+        }
+        finally
+        {
+            SuppressPersist = wasSuppressed;
+        }
+    }
+
+    internal void SaveAppearanceFlags(bool savePageHeader, bool saveNotifications)
+    {
+        if (savePageHeader)
+        {
+            PersistBool(SettingsKeys.ShowPageHeader, ShowPageHeader);
+        }
+
+        if (saveNotifications)
+        {
+            PersistBool(SettingsKeys.EnableToastNotifications, EnableToastNotifications);
+        }
+    }
+
     partial void OnNavCollapsedChanged(bool value)
     {
         PersistBool(SettingsKeys.NavCollapsed, value);

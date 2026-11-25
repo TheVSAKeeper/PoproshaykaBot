@@ -6,6 +6,8 @@ using Platforms.Auth;
 
 public static class TwitchScopes
 {
+    internal static readonly TimeSpan AccessTokenRefreshMargin = TimeSpan.FromMinutes(5);
+
     public const string UserReadChat = "user:read:chat";
     public const string UserWriteChat = "user:write:chat";
     public const string UserBot = "user:bot";
@@ -57,7 +59,9 @@ public static class TwitchScopes
 
     public static bool HasUsableAuthorization(PlatformAuthRole role, TwitchAccountSettings? account)
     {
-        if (account is null || !PlatformAuthRoles.HasCredentials(account.AccessToken, account.RefreshToken))
+        if (account is null || (string.IsNullOrWhiteSpace(account.RefreshToken)
+            && (string.IsNullOrWhiteSpace(account.AccessToken) || account.AccessTokenExpiresAt is not { } expiresAt
+                || expiresAt - DateTimeOffset.UtcNow <= AccessTokenRefreshMargin)))
         {
             return false;
         }
@@ -65,6 +69,12 @@ public static class TwitchScopes
         var required = role == PlatformAuthRole.Bot ? BotRequired : BroadcasterRequired;
         return account.StoredScopes is not null
             && required.All(scope => IsGranted(account, scope))
-            && (account.Scopes is not { Length: > 0 } || SetEquals(account.StoredScopes, account.Scopes));
+            && SetEquals(account.StoredScopes, account.Scopes is { Length: > 0 } ? account.Scopes : DefaultScopes(role, account));
+    }
+
+    internal static IReadOnlyList<string> DefaultScopes(PlatformAuthRole role, TwitchAccountSettings account)
+    {
+        var required = role == PlatformAuthRole.Bot ? BotRequired : BroadcasterRequired;
+        return account.StoredScopes is { } granted && required.All(scope => IsGranted(account, scope)) ? granted : required;
     }
 }

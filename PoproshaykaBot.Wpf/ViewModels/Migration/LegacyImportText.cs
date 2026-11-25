@@ -98,7 +98,7 @@ public static class LegacyImportText
     {
         ArgumentNullException.ThrowIfNull(result);
 
-        if (result.Failures.Count > 0)
+        if (result.Failures.Any(failure => !failure.DestinationWritten))
         {
             return result.HasChanges
                 ? "Данные перенесены не полностью."
@@ -108,6 +108,11 @@ public static class LegacyImportText
         if (result.UnmigratedLegacyFiles.Count > 0)
         {
             return "Часть данных осталась на прежнем месте.";
+        }
+
+        if (result.Failures.Count > 0)
+        {
+            return "Данные перенесены. Часть исходных файлов сохранила прежние имена.";
         }
 
         if (result.IsInPlaceMigration && result.HasChanges)
@@ -200,9 +205,10 @@ public static class LegacyImportText
             lines.Add($"Оставлено без изменений: {Count(result.SkippedFiles.Count, "файл", "файла", "файлов")} – такие данные здесь уже есть.");
         }
 
-        if (result.Failures.Count > 0)
+        var failedCopies = result.Failures.Count(failure => !failure.DestinationWritten);
+        if (failedCopies > 0)
         {
-            lines.Add($"Не удалось перенести: {Count(result.Failures.Count, "файл", "файла", "файлов")}.");
+            lines.Add($"Не удалось перенести: {Count(failedCopies, "файл", "файла", "файлов")}.");
         }
 
         if (result.HasChanges && (result.Failures.Count > 0 || result.UnmigratedLegacyFiles.Count > 0))
@@ -263,7 +269,10 @@ public static class LegacyImportText
     {
         ArgumentNullException.ThrowIfNull(failure);
 
-        return $"{DescribeFile(failure.RelativeTargetPath)} – перенести не удалось, файл остался на прежнем месте.";
+        var file = DescribeFile(failure.RelativeTargetPath);
+        return failure.DestinationWritten
+            ? $"{file} – рабочий файл записан, исходный файл сохранён под прежним именем."
+            : $"{file} – перенести не удалось, файл остался на прежнем месте.";
     }
 
     public static string Count(long value, string one, string few, string many)

@@ -80,10 +80,12 @@ public static class LegacySettingsLayoutMigrator
                 JsonStoreBackup.CreateBackup(target, "invalid", logger, carriesTokens ? AccountsTokenRedactor.Redact : null);
             }
 
+            var destinationWritten = false;
             try
             {
                 AtomicFile.Save(target, temporaryPath => File.Copy(legacy, temporaryPath, true), logger, keepBackup: !carriesTokens);
                 relocated.Add(fileName);
+                destinationWritten = true;
                 var backupPath = BuildLegacyBackupPath(legacy);
                 File.Move(legacy, backupPath);
                 logger?.LogInformation("Legacy-файл перенесён: {Legacy} → {Target}; оригинал сохранён как {Backup}",
@@ -94,7 +96,7 @@ public static class LegacySettingsLayoutMigrator
             catch (Exception exception)
             {
                 logger?.LogError(exception, "Не удалось перенести {Legacy} в {Target}", legacy, target);
-                reportFailure?.Invoke(new(fileName, exception.Message));
+                reportFailure?.Invoke(new(fileName, exception.Message, destinationWritten));
             }
         }
 

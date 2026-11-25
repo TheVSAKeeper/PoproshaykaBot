@@ -84,7 +84,10 @@ public sealed partial class BotConnectionPageViewModel : OnboardingPageViewModel
 
         try
         {
-            if (!_settingsManager.SaveSettings(context.Settings))
+            var settingsWritten = _settingsManager.SaveSettings(context.Settings);
+            context.TwitchSettingsApplied = true;
+            context.TwitchSettingsWritten |= settingsWritten;
+            if (!settingsWritten)
             {
                 _logger.BotConnectionSettingsNotWritten();
                 ApplyPhase(BotLifecyclePhase.Failed, SettingsNotWrittenDetails);
@@ -92,9 +95,7 @@ public sealed partial class BotConnectionPageViewModel : OnboardingPageViewModel
                 ShowRetry = false;
                 return;
             }
-            context.TwitchSettingsWritten = true;
-
-            if (!_accountsStore.SaveAll(context.BotAccount, context.BroadcasterAccount))
+            if (!context.SaveTwitchAccounts(_accountsStore))
             {
                 _logger.BotConnectionAccountsNotWritten();
                 ApplyPhase(BotLifecyclePhase.Failed, AccountsNotWrittenDetails);
@@ -133,8 +134,10 @@ public sealed partial class BotConnectionPageViewModel : OnboardingPageViewModel
             return;
         }
 
-        _ = _eventBus.PublishAsync(new PlatformAuthorizationRefreshed(StreamingPlatform.Twitch, Core.Platforms.Auth.PlatformAuthRole.Bot));
-        _ = _eventBus.PublishAsync(new PlatformAuthorizationRefreshed(StreamingPlatform.Twitch, Core.Platforms.Auth.PlatformAuthRole.Broadcaster));
+        _ = _eventBus.PublishAsync(new PlatformAuthorizationRefreshed(StreamingPlatform.Twitch, PlatformAuthRole.Bot,
+            context.TwitchContextId(PlatformAuthRole.Bot)));
+        _ = _eventBus.PublishAsync(new PlatformAuthorizationRefreshed(StreamingPlatform.Twitch, PlatformAuthRole.Broadcaster,
+            context.TwitchContextId(PlatformAuthRole.Broadcaster)));
         _ = _eventBus.PublishAsync(new PlatformAuthorizationRefreshed(StreamingPlatform.YouTube, Core.Platforms.Auth.PlatformAuthRole.Bot));
         _ = _eventBus.PublishAsync(new PlatformAuthorizationRefreshed(StreamingPlatform.YouTube, Core.Platforms.Auth.PlatformAuthRole.Broadcaster));
 

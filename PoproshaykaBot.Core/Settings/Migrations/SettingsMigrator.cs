@@ -26,31 +26,51 @@ public static class SettingsMigrator
 
         if (baseDirectory != null)
         {
-            changed |= SplitMonolithicSettings(root, baseDirectory, splitFiles, logger);
+            changed |= SplitMonolithicSettings(root, (fileName, content, redact) =>
+                TryWriteSplit(Path.Combine(baseDirectory, fileName), content.ToJsonString(JsonStoreOptions.Default), fileName, splitFiles, logger, redact));
         }
 
         return new(changed, splitFiles);
     }
 
-    private static bool SplitMonolithicSettings(JsonObject root, string baseDirectory, List<string> splitFiles, ILogger? logger)
+    internal static IReadOnlyList<string> GetSplitTargets(JsonObject root)
+    {
+        var draft = (JsonObject)root.DeepClone();
+        if (draft["twitch"] is JsonObject twitch)
+        {
+            MigrateBotAccount(twitch, null);
+        }
+
+        var targets = new List<string>();
+        SplitMonolithicSettings(draft, (name, _, _) =>
+        {
+            targets.Add(name);
+            return true;
+        });
+        return targets;
+    }
+
+    private delegate bool WriteSplit(string fileName, JsonObject value, Func<string, string>? backupRedactor = null);
+
+    private static bool SplitMonolithicSettings(JsonObject root, WriteSplit write)
     {
         var changed = false;
 
         if (root["twitch"] is JsonObject twitch)
         {
-            changed |= SplitAccounts(twitch, baseDirectory, splitFiles, logger);
-            changed |= TrySplitObject(twitch, "broadcastProfiles", baseDirectory, "broadcast-profiles.json", splitFiles, logger);
-            changed |= TrySplitObject(twitch, "polls", baseDirectory, "polls.json", splitFiles, logger);
-            changed |= SplitRecentCategories(twitch, baseDirectory, splitFiles, logger);
-            changed |= TrySplitObject(twitch, "obsChat", baseDirectory, "obs-chat.json", splitFiles, logger);
+            changed |= SplitAccounts(twitch, write);
+            changed |= TrySplitObject(twitch, "broadcastProfiles", "broadcast-profiles.json", write);
+            changed |= TrySplitObject(twitch, "polls", "polls.json", write);
+            changed |= SplitRecentCategories(twitch, write);
+            changed |= TrySplitObject(twitch, "obsChat", "obs-chat.json", write);
         }
 
-        changed |= SplitDashboardLayout(root, baseDirectory, splitFiles, logger);
+        changed |= SplitDashboardLayout(root, write);
 
         return changed;
     }
 
-    private static bool SplitAccounts(JsonObject twitch, string baseDirectory, List<string> splitFiles, ILogger? logger)
+    private static bool SplitAccounts(JsonObject twitch, WriteSplit write)
     {
         var botAccount = twitch[BotAccountKey] as JsonObject;
         var broadcasterAccount = twitch[BroadcasterAccountKey] as JsonObject;
@@ -60,19 +80,13 @@ public static class SettingsMigrator
             return false;
         }
 
-        var accountsTarget = Path.Combine(baseDirectory, "accounts.json");
         var dto = new JsonObject
         {
             [BotAccountKey] = botAccount?.DeepClone() ?? new JsonObject(),
             [BroadcasterAccountKey] = broadcasterAccount?.DeepClone() ?? new JsonObject(),
         };
 
-        if (!TryWriteSplit(accountsTarget,
-                dto.ToJsonString(JsonStoreOptions.Default),
-                "accounts.json",
-                splitFiles,
-                logger,
-                AccountsTokenRedactor.Redact))
+        if (!write("accounts.json", dto, AccountsTokenRedactor.Redact))
         {
             return false;
         }
@@ -83,7 +97,7 @@ public static class SettingsMigrator
         return changed;
     }
 
-    private static bool SplitRecentCategories(JsonObject twitch, string baseDirectory, List<string> splitFiles, ILogger? logger)
+    private static bool SplitRecentCategories(JsonObject twitch, WriteSplit write)
     {
         if (twitch["infrastructure"] is not JsonObject infrastructure
             || infrastructure["recentCategories"] is not JsonArray recentCategories)
@@ -91,17 +105,16 @@ public static class SettingsMigrator
             return false;
         }
 
-        var target = Path.Combine(baseDirectory, "recent-categories.json");
         var dto = new JsonObject
         {
             ["items"] = recentCategories.DeepClone(),
         };
 
-        return TryWriteSplit(target, dto.ToJsonString(JsonStoreOptions.Default), "recent-categories.json", splitFiles, logger)
+        return write("recent-categories.json", dto)
                && infrastructure.Remove("recentCategories");
     }
 
-    private static bool SplitDashboardLayout(JsonObject root, string baseDirectory, List<string> splitFiles, ILogger? logger)
+    private static bool SplitDashboardLayout(JsonObject root, WriteSplit write)
     {
         if (root["ui"] is not JsonObject ui
             || !ui.ContainsKey("dashboard") && !ui.ContainsKey("mainWindow"))
@@ -109,33 +122,28 @@ public static class SettingsMigrator
             return false;
         }
 
-        var target = Path.Combine(baseDirectory, "dashboard-layout.json");
         var dto = new JsonObject
         {
             ["dashboard"] = ui["dashboard"]?.DeepClone(),
             ["mainWindow"] = ui["mainWindow"]?.DeepClone(),
         };
 
-        return TryWriteSplit(target, dto.ToJsonString(JsonStoreOptions.Default), "dashboard-layout.json", splitFiles, logger)
+        return write("dashboard-layout.json", dto)
                && root.Remove("ui");
     }
 
     private static bool TrySplitObject(
         JsonObject parent,
         string key,
-        string baseDirectory,
         string targetFileName,
-        List<string> splitFiles,
-        ILogger? logger)
+        WriteSplit write)
     {
         if (parent[key] is not JsonObject value)
         {
             return false;
         }
 
-        var target = Path.Combine(baseDirectory, targetFileName);
-
-        if (!TryWriteSplit(target, value.DeepClone()!.ToJsonString(JsonStoreOptions.Default), targetFileName, splitFiles, logger))
+        if (!write(targetFileName, value))
         {
             return false;
         }

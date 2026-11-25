@@ -149,8 +149,9 @@ public sealed partial class CompletionPageViewModel : OnboardingPageViewModelBas
         try
         {
             settingsWritten = _settingsManager.SaveSettings(context.Settings);
+            context.TwitchSettingsApplied = true;
             context.TwitchSettingsWritten |= settingsWritten;
-            twitchAccountsWritten = _accountsStore.SaveAll(context.BotAccount, context.BroadcasterAccount);
+            twitchAccountsWritten = context.SaveTwitchAccounts(_accountsStore);
             if (_youtubeSettingsStore is not null)
             {
                 settingsWritten &= _youtubeSettingsStore.Save(context.YouTubeSettings);
@@ -171,8 +172,10 @@ public sealed partial class CompletionPageViewModel : OnboardingPageViewModelBas
             return false;
         }
 
-        await _eventBus.PublishAsync(new PlatformAuthorizationRefreshed(StreamingPlatform.Twitch, PlatformAuthRole.Bot), CancellationToken.None);
-        await _eventBus.PublishAsync(new PlatformAuthorizationRefreshed(StreamingPlatform.Twitch, PlatformAuthRole.Broadcaster), CancellationToken.None);
+        await _eventBus.PublishAsync(new PlatformAuthorizationRefreshed(StreamingPlatform.Twitch, PlatformAuthRole.Bot,
+            context.TwitchContextId(PlatformAuthRole.Bot)), CancellationToken.None);
+        await _eventBus.PublishAsync(new PlatformAuthorizationRefreshed(StreamingPlatform.Twitch, PlatformAuthRole.Broadcaster,
+            context.TwitchContextId(PlatformAuthRole.Broadcaster)), CancellationToken.None);
         await _eventBus.PublishAsync(new PlatformAuthorizationRefreshed(StreamingPlatform.YouTube, PlatformAuthRole.Bot), CancellationToken.None);
         await _eventBus.PublishAsync(new PlatformAuthorizationRefreshed(StreamingPlatform.YouTube, PlatformAuthRole.Broadcaster), CancellationToken.None);
 

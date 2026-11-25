@@ -93,14 +93,15 @@ public static class LegacyDataImporter
             RestoreFilesTouchedBySplit(snapshot, fullTarget, migratedSettingsFiles, skipped, failures, logger);
         }
 
-        var leftovers = CollectUnmigratedLegacyFiles(fullTarget, logger);
+        var leftovers = CollectUnmigratedLegacyFiles(fullTarget, failures, logger);
 
         var authorizationTouched = copied.Select(Path.GetFileName).Concat(migratedSettingsFiles)
             .Any(file => AuthorizationFiles.Contains(file, StringComparer.OrdinalIgnoreCase));
         var targetAuthorization = authorizationTouched ? LegacyDataReader.ReadTwitchAuthorization(fullTarget, logger) : default;
         var botAuthorizationRequired = authorizationTouched && !targetAuthorization.BotReady;
         var broadcasterAuthorizationRecommended = authorizationTouched && !targetAuthorization.BroadcasterReady
-            && (sourceAuthorization.HasBroadcasterCredentials || targetAuthorizationBefore.HasBroadcasterCredentials);
+            && (sourceAuthorization.HasBroadcasterCredentials || targetAuthorizationBefore.HasBroadcasterCredentials
+                || targetAuthorization.HasBroadcasterCredentials);
 
         logger?.LogInformation("Импорт данных завершён: скопировано {Copied}, пропущено {Skipped}, с ошибками {Failed}",
             copied.Count,
@@ -321,11 +322,14 @@ public static class LegacyDataImporter
         }
     }
 
-    private static IReadOnlyList<string> CollectUnmigratedLegacyFiles(string target, ILogger? logger)
+    private static IReadOnlyList<string> CollectUnmigratedLegacyFiles(
+        string target, IReadOnlyList<LegacyImportFailure> failures, ILogger? logger)
     {
         var leftovers = LegacyDataCatalog.SettingsFiles
             .Where(name => File.Exists(Path.Combine(target, name))
-                && File.Exists(Path.Combine(target, LegacyDataCatalog.SettingsFolderName, name)))
+                && File.Exists(Path.Combine(target, LegacyDataCatalog.SettingsFolderName, name))
+                && !failures.Any(failure => failure.DestinationWritten
+                    && string.Equals(failure.RelativeTargetPath, name, StringComparison.OrdinalIgnoreCase)))
             .ToList();
 
         if (leftovers.Count > 0)

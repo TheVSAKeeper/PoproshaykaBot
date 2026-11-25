@@ -33,6 +33,8 @@ public sealed partial class OnboardingWizardViewModel : ObservableObject
     private readonly TwitchSettings _originalTwitch;
     private readonly TwitchAccountSettings _originalBotAccount;
     private readonly TwitchAccountSettings _originalBroadcasterAccount;
+    private readonly bool _hadBotAccount;
+    private readonly bool _hadBroadcasterAccount;
     private readonly YouTubeSettings _originalYouTubeSettings;
     private readonly string _originalYouTubeClientSecret;
     private readonly YouTubeAccountSettings _originalYouTubeBotAccount;
@@ -68,7 +70,8 @@ public sealed partial class OnboardingWizardViewModel : ObservableObject
         IEventBus eventBus,
         ILogger<OnboardingWizardViewModel> logger,
         YouTubeSettingsStore? youtubeSettingsStore = null,
-        YouTubeAccountsStore? youtubeAccountsStore = null)
+        YouTubeAccountsStore? youtubeAccountsStore = null,
+        ChannelCatalogStore? twitchCatalog = null)
     {
         _settingsManager = settingsManager;
         _accountsStore = accountsStore;
@@ -82,8 +85,11 @@ public sealed partial class OnboardingWizardViewModel : ObservableObject
         _pages = [.. pages];
 
         _originalTwitch = DeepClone(settingsManager.Current.Twitch);
-        _originalBotAccount = DeepClone(accountsStore.LoadBot());
-        _originalBroadcasterAccount = DeepClone(accountsStore.LoadBroadcaster());
+        var twitchChannel = twitchCatalog?.GetActiveChannel(StreamingPlatform.Twitch);
+        _hadBotAccount = accountsStore.TryLoadContext(PlatformAuthRole.Bot, twitchChannel?.BotContextId, out var originalBot);
+        _hadBroadcasterAccount = accountsStore.TryLoadContext(PlatformAuthRole.Broadcaster, twitchChannel?.BroadcasterContextId, out var originalBroadcaster);
+        _originalBotAccount = originalBot is null ? new() : DeepClone(originalBot);
+        _originalBroadcasterAccount = originalBroadcaster is null ? new() : DeepClone(originalBroadcaster);
         _originalYouTubeSettings = youtubeSettingsStore is not null ? DeepClone(youtubeSettingsStore.Load()) : new();
         _originalYouTubeClientSecret = youtubeAccountsStore?.LoadClientSecret() ?? string.Empty;
         _originalYouTubeBotAccount = youtubeAccountsStore is not null ? DeepClone(youtubeAccountsStore.LoadBot()) : new();
@@ -96,7 +102,15 @@ public sealed partial class OnboardingWizardViewModel : ObservableObject
             DeepClone(_originalYouTubeSettings),
             _originalYouTubeClientSecret,
             DeepClone(_originalYouTubeBotAccount),
-            DeepClone(_originalYouTubeBroadcasterAccount));
+            DeepClone(_originalYouTubeBroadcasterAccount))
+        {
+            TwitchCatalog = twitchCatalog,
+            TwitchChannel = twitchChannel,
+        };
+        if (twitchChannel is not null && !string.IsNullOrWhiteSpace(twitchChannel.Handle))
+        {
+            _context.Settings.Twitch.Channel = twitchChannel.Handle.TrimStart('@');
+        }
 
         if (_pages.Count > 0)
         {
@@ -125,7 +139,7 @@ public sealed partial class OnboardingWizardViewModel : ObservableObject
             return;
         }
 
-        _context.AutoDetectChannel = string.IsNullOrWhiteSpace(_context.Settings.Twitch.Channel);
+        _context.AutoDetectChannel = !_context.HasConfiguredTwitchChannel;
         var index = _pages.FindIndex(page => step switch
         {
             OnboardingStep.Credentials => page is CredentialsPageViewModel,
@@ -192,6 +206,9 @@ public sealed partial class OnboardingWizardViewModel : ObservableObject
                && string.Equals(left.RefreshToken, right.RefreshToken, StringComparison.Ordinal)
                && string.Equals(left.Login, right.Login, StringComparison.Ordinal)
                && string.Equals(left.UserId, right.UserId, StringComparison.Ordinal)
+               && left.AccessTokenExpiresAt == right.AccessTokenExpiresAt
+               && (left.Scopes ?? []).SequenceEqual(right.Scopes ?? [], StringComparer.Ordinal)
+               && (left.StoredScopes ?? []).SequenceEqual(right.StoredScopes ?? [], StringComparer.Ordinal)
                && string.Equals(left.BrowserProfileName, right.BrowserProfileName, StringComparison.Ordinal);
     }
 
@@ -224,6 +241,11 @@ public sealed partial class OnboardingWizardViewModel : ObservableObject
 
         if (IsLastPage)
         {
+            foreach (var page in _pages.OfType<AppearancePageViewModel>())
+            {
+                page.Commit();
+            }
+
             _completed = true;
             CloseRequested?.Invoke();
             return;
@@ -311,18 +333,22 @@ public sealed partial class OnboardingWizardViewModel : ObservableObject
 
     private async Task RollbackAccountsAsync()
     {
-        if (!AccountsDifferFromOriginal())
+        if (!_context.TwitchAccountsApplied)
         {
             return;
         }
 
         try
         {
-            var written = _accountsStore.SaveAll(_originalBotAccount, _originalBroadcasterAccount);
-            await _eventBus.PublishAsync(new PlatformAuthorizationRefreshed(StreamingPlatform.Twitch, PlatformAuthRole.Bot));
-            await _eventBus.PublishAsync(new PlatformAuthorizationRefreshed(StreamingPlatform.Twitch, PlatformAuthRole.Broadcaster));
+            var botWritten = RestoreTwitchAccount(PlatformAuthRole.Bot, _hadBotAccount, _originalBotAccount);
+            var broadcasterWritten = RestoreTwitchAccount(PlatformAuthRole.Broadcaster, _hadBroadcasterAccount, _originalBroadcasterAccount);
+            _context.RestoreTwitchAssignments();
+            await _eventBus.PublishAsync(new PlatformAuthorizationRefreshed(StreamingPlatform.Twitch, PlatformAuthRole.Bot,
+                _context.TwitchContextId(PlatformAuthRole.Bot)));
+            await _eventBus.PublishAsync(new PlatformAuthorizationRefreshed(StreamingPlatform.Twitch, PlatformAuthRole.Broadcaster,
+                _context.TwitchContextId(PlatformAuthRole.Broadcaster)));
 
-            if (written)
+            if (botWritten && broadcasterWritten)
             {
                 _logger.OnboardingAccountsRolledBack();
             }
@@ -337,12 +363,17 @@ public sealed partial class OnboardingWizardViewModel : ObservableObject
         }
     }
 
-    private bool AccountsDifferFromOriginal()
+    private bool RestoreTwitchAccount(PlatformAuthRole role, bool hadAccount, TwitchAccountSettings original)
     {
-        var liveBot = _accountsStore.LoadBot();
-        var liveBroadcaster = _accountsStore.LoadBroadcaster();
-        return !AccountsEqual(liveBot, _originalBotAccount)
-               || !AccountsEqual(liveBroadcaster, _originalBroadcasterAccount);
+        var contextId = _context.TwitchContextId(role);
+        _accountsStore.TryLoadContext(role, contextId, out var live);
+        if (!hadAccount)
+        {
+            return live is null || _accountsStore.RemoveRoleContext(role, contextId).Written;
+        }
+
+        return live is not null && AccountsEqual(live, original)
+            || _accountsStore.UpsertContext(role, contextId, OnboardingContext.GetContextLabel(_accountsStore, role, contextId), original);
     }
 
     private void RollbackYouTubeSettings()
@@ -402,7 +433,7 @@ public sealed partial class OnboardingWizardViewModel : ObservableObject
 
     private void RollbackTwitchSettings()
     {
-        if (!_context.TwitchSettingsWritten)
+        if (!_context.TwitchSettingsApplied)
         {
             var channel = _originalTwitch.Channel;
             if (!string.Equals(_settingsManager.Current.Twitch.Channel, channel, StringComparison.Ordinal))

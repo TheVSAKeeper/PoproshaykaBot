@@ -413,14 +413,16 @@ public sealed class LegacyDataImporterTests
     [TestCase("", true, false)]
     [TestCase("""{"accessToken":"bot","storedScopes":["chat:read"]}""", true, false)]
     [TestCase("""{"refreshToken":"bot","storedScopes":["user:read:chat","user:write:chat","user:bot"]}""", false, false)]
-    [TestCase("""{"accessToken":"bot","storedScopes":["user:read:chat","user:write:chat","user:bot"]}""", false, true)]
+    [TestCase("""{"accessToken":"bot","storedScopes":["user:read:chat","user:write:chat","user:bot"]}""", true, false)]
+    [TestCase("""{"accessToken":"bot","accessTokenExpiresAt":"2000-01-01T00:00:00Z","storedScopes":["user:read:chat","user:write:chat","user:bot"]}""", true, false)]
+    [TestCase("""{"refreshToken":"bot","storedScopes":["user:read:chat","user:write:chat","user:bot","user:manage:whispers"]}""", false, true)]
     public void Import_AssessesBotAndBroadcasterIndependently(string bot, bool botRequired, bool broadcasterOutdated)
     {
         var broadcasterScopes = broadcasterOutdated
             ? """["channel:bot"]"""
             : """["channel:bot","channel:read:polls","channel:manage:polls","channel:manage:broadcast"]""";
         var botAccount = string.IsNullOrEmpty(bot) ? "{}" : bot;
-        var accounts = $$"""{"botAccount":{{botAccount}},"broadcasterAccount":{"accessToken":"streamer","storedScopes":{{broadcasterScopes}}} }""";
+        var accounts = $$"""{"botAccount":{{botAccount}},"broadcasterAccount":{"refreshToken":"streamer","storedScopes":{{broadcasterScopes}}} }""";
         LegacyDataFixture.Write(_source, Path.Combine("settings", "accounts.json"), accounts);
 
         var result = LegacyDataImporter.Import(_source, _target, false, null);
@@ -429,6 +431,42 @@ public sealed class LegacyDataImporterTests
         {
             Assert.That(result.BotAuthorizationRequired, Is.EqualTo(botRequired));
             Assert.That(result.BroadcasterAuthorizationRecommended, Is.EqualTo(broadcasterOutdated));
+        }
+    }
+
+    [Test]
+    public void Import_MonolithReportsOutdatedBroadcasterAuthorization()
+    {
+        LegacyDataFixture.Write(_source, "settings.json",
+            """{"twitch":{"broadcasterAccount":{"refreshToken":"legacy","storedScopes":["channel:bot"]}}}""");
+
+        var result = LegacyDataImporter.Import(_source, _target, false, null);
+
+        Assert.That(result.BroadcasterAuthorizationRecommended, Is.True);
+    }
+
+    [Test]
+    public void Import_InPlaceReportsDestinationWrittenWhenSourceCannotBeRenamed()
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            Assert.Ignore("Проверяется запрет переименования открытого файла на Windows.");
+        }
+
+        const string file = "obs-chat.json";
+        LegacyDataFixture.Write(_source, file, LegacyDataFixture.ObsChat);
+        var path = Path.Combine(_source, file);
+        using var open = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read);
+
+        var result = LegacyDataImporter.Import(_source, _source, false, null);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.MigratedSettingsFiles, Does.Contain(file));
+            Assert.That(result.UnmigratedLegacyFiles, Does.Not.Contain(file));
+            Assert.That(result.Failures.Single().DestinationWritten, Is.True);
+            Assert.That(File.ReadAllText(Path.Combine(_source, "settings", file)), Is.EqualTo(LegacyDataFixture.ObsChat));
+            Assert.That(File.Exists(path), Is.True);
         }
     }
 

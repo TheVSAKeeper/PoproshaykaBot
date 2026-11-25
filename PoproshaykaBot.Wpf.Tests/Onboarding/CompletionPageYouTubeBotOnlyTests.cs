@@ -68,7 +68,7 @@ public sealed class CompletionPageYouTubeBotOnlyTests
                 {
                     Twitch = new TwitchSettings { ClientId = "tw-client", ClientSecret = "tw-secret", Channel = "streamer" },
                 },
-                new TwitchAccountSettings { Login = "twbot", AccessToken = "tw-bot-token", Scopes = [.. TwitchScopes.BotRequired], StoredScopes = [.. TwitchScopes.BotRequired] },
+                new TwitchAccountSettings { Login = "twbot", AccessToken = "tw-bot-token", RefreshToken = "tw-bot-refresh", Scopes = [.. TwitchScopes.BotRequired], StoredScopes = [.. TwitchScopes.BotRequired] },
                 twitchBroadcasterAuthorized
                     ? new TwitchAccountSettings { Login = "streamer", AccessToken = "tw-streamer-token", Scopes = [.. TwitchScopes.BroadcasterRequired] }
                     : new TwitchAccountSettings(),
@@ -118,6 +118,54 @@ public sealed class CompletionPageYouTubeBotOnlyTests
             {
                 Directory.Delete(tempDir, recursive: true);
             }
+        }
+    }
+
+    [Test]
+    public async Task CancelRestoresTheInMemoryCredentialsWhenSettingsWriteWasDenied()
+    {
+        var dir = Directory.CreateTempSubdirectory("gated-onboarding-");
+        try
+        {
+            await using var provider = BuildProvider();
+            var gate = new SettingsWriteGate();
+            var path = Path.Combine(dir.FullName, "settings.json");
+            var manager = new SettingsManager(NullLogger<SettingsManager>.Instance, path, gate);
+            manager.SaveSettings(new() { Twitch = new() { ClientId = "original", ClientSecret = "original-secret" } });
+            await gate.RunExternalWriteAsync(() => Task.FromResult(0), _ => new[] { "settings.json" });
+            var accounts = new AccountsStore(filePath: Path.Combine(dir.FullName, "accounts.json"));
+            var bus = provider.GetRequiredService<IEventBus>();
+            var controller = provider.GetRequiredService<BotConnectionManager>();
+            using var connection = new BotConnectionPageViewModel(controller, bus, manager, accounts, NullLogger<BotConnectionPageViewModel>.Instance);
+            var wizard = new OnboardingWizardViewModel([new DraftCredentialsPage(), connection], manager, accounts,
+                provider.GetRequiredService<KestrelHttpServer>(), controller, bus, NullLogger<OnboardingWizardViewModel>.Instance);
+
+            await wizard.NextCommand.ExecuteAsync(null);
+            Assert.That(manager.Current.Twitch.ClientId, Is.EqualTo("draft"));
+            Assert.That(await wizard.RequestCloseAsync(), Is.True);
+
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(manager.Current.Twitch.ClientId, Is.EqualTo("original"));
+                Assert.That(manager.Current.Twitch.ClientSecret, Is.EqualTo("original-secret"));
+                Assert.That(new SettingsManager(NullLogger<SettingsManager>.Instance, path).Current.Twitch.ClientId, Is.EqualTo("original"));
+            }
+        }
+        finally
+        {
+            dir.Delete(recursive: true);
+        }
+    }
+
+    private sealed class DraftCredentialsPage : OnboardingPageViewModelBase
+    {
+        public override string PageTitle => "Черновик";
+
+        public override void OnEnter(OnboardingContext context)
+        {
+            context.Settings.Twitch.ClientId = "draft";
+            context.Settings.Twitch.ClientSecret = "draft-secret";
+            CanAdvance = true;
         }
     }
 

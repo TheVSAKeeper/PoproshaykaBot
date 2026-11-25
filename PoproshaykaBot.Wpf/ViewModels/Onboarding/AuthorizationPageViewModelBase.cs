@@ -215,8 +215,7 @@ public abstract partial class AuthorizationPageViewModelBase : OnboardingPageVie
 
             if (result is { Outcome: EmbeddedTwitchAuthOutcome.Completed, Flow: { } flow })
             {
-                ApplyAuthResult(flow);
-                completed = true;
+                completed = ApplyAuthResult(flow);
             }
             else if (result.Outcome is EmbeddedTwitchAuthOutcome.Canceled or EmbeddedTwitchAuthOutcome.Unavailable)
             {
@@ -313,7 +312,7 @@ public abstract partial class AuthorizationPageViewModelBase : OnboardingPageVie
                 return;
             }
 
-            ApplyAuthResult(result);
+            hadError = !ApplyAuthResult(result);
         }
         catch (OperationCanceledException) when (cts.IsCancellationRequested)
         {
@@ -351,31 +350,37 @@ public abstract partial class AuthorizationPageViewModelBase : OnboardingPageVie
         }
     }
 
-    private void ApplyAuthResult(OAuthFlowResult result)
+    private bool ApplyAuthResult(OAuthFlowResult result)
     {
         if (_context is null)
         {
-            return;
+            return false;
         }
 
         var account = GetAccount();
-        result.ApplyTo(account, DateTimeOffset.UtcNow);
+        if (!_context.AcceptTwitchLogin(_role, account, result))
+        {
+            StatusMessage = "Войдите с аккаунтом Twitch, назначенным этому каналу.";
+            StatusMessageSeverity = StatusSeverity.Error;
+            return false;
+        }
 
         if (_role != PlatformAuthRole.Broadcaster
             || !_context.AutoDetectChannel
             || string.IsNullOrWhiteSpace(result.Login))
         {
-            return;
+            return true;
         }
 
         _context.Settings.Twitch.Channel = result.Login;
         _settingsManager.UpdateCurrent(settings => settings.Twitch.Channel = result.Login);
+        return true;
     }
 
     private void RefreshFromContext()
     {
         var account = GetAccount();
-        HasToken = TwitchScopes.HasUsableAuthorization(_role, account);
+        HasToken = TwitchScopes.HasUsableAuthorization(_role, account) && _context?.CanUseTwitchRole(_role, account) == true;
 
         if (HasToken)
         {
@@ -393,7 +398,7 @@ public abstract partial class AuthorizationPageViewModelBase : OnboardingPageVie
         }
         else
         {
-            var canSkip = _role == PlatformAuthRole.Broadcaster && !string.IsNullOrWhiteSpace(_context?.Settings.Twitch.Channel);
+            var canSkip = _role == PlatformAuthRole.Broadcaster && _context?.HasConfiguredTwitchChannel == true;
             if (_authCts is null)
             {
                 ResultText = PlatformAuthRoles.HasCredentials(account.AccessToken, account.RefreshToken)
@@ -417,7 +422,7 @@ public abstract partial class AuthorizationPageViewModelBase : OnboardingPageVie
 
         var account = GetAccount();
 
-        if (string.IsNullOrWhiteSpace(account.AccessToken))
+        if (!PlatformAuthRoles.HasCredentials(account.AccessToken, account.RefreshToken))
         {
             return;
         }
@@ -427,6 +432,7 @@ public abstract partial class AuthorizationPageViewModelBase : OnboardingPageVie
         account.AccessTokenExpiresAt = null;
         account.Scopes = [];
         account.StoredScopes = [];
+        _context.ClearTwitchLogin(_role);
 
         RefreshFromContext();
     }

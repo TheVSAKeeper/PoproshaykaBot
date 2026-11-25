@@ -22,5 +22,7 @@ public sealed class LegacyDataSummary
 
     public bool HasFlatTwitchTokens { get; init; }
 
+    public IReadOnlyList<string> GeneratedTargetPaths { get; init; } = [];
+
     public required IReadOnlyList<LegacyDataFile> Files { get; init; }
 }

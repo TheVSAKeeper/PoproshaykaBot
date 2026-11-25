@@ -12,13 +12,18 @@ public partial class App
 
     internal static OnboardingStep? GetStartupWizardStep(OnboardingChecklist checklist, LegacyImportResult? import)
     {
+        if (checklist.RequiresWizard && import?.WroteApplicationSettings != true)
+        {
+            return OnboardingStep.None;
+        }
+
         if (import?.HasChanges == true)
         {
             var step = checklist.FirstMissingStep;
             return step != OnboardingStep.None ? step : null;
         }
 
-        return checklist.RequiresWizard ? OnboardingStep.None : null;
+        return null;
     }
 
     private void MaybeLaunchOnboardingWizard(LegacyImportResult? import)

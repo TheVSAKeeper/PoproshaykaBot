@@ -59,13 +59,14 @@ public class OnboardingBannerTests
         Assert.That(banner.IsVisible, Is.False);
     }
 
-    [TestCase(false, false, false, OnboardingStep.None)]
-    [TestCase(true, false, false, null)]
-    [TestCase(false, true, false, OnboardingStep.Credentials)]
-    [TestCase(true, true, false, OnboardingStep.BotAuthorization)]
-    [TestCase(true, true, true, null)]
+    [TestCase(false, null, false, OnboardingStep.None)]
+    [TestCase(true, null, false, null)]
+    [TestCase(false, "users_statistics.json", false, OnboardingStep.None)]
+    [TestCase(false, "settings/settings.json", false, OnboardingStep.Credentials)]
+    [TestCase(true, "settings/settings.json", false, OnboardingStep.BotAuthorization)]
+    [TestCase(true, "settings/settings.json", true, null)]
     public void StartupWizard_UsesTheFirstMissingStepOnlyAfterImport(
-        bool configured, bool imported, bool currentBotGrants, OnboardingStep? expected)
+        bool configured, string? importedFile, bool currentBotGrants, OnboardingStep? expected)
     {
         var settings = new SettingsManager(NullLogger<SettingsManager>.Instance, Path.Combine(_directory, "settings.json"));
         var accounts = new AccountsStore(filePath: Path.Combine(_directory, "accounts.json"));
@@ -78,15 +79,16 @@ public class OnboardingBannerTests
             accounts.SaveAll(new TwitchAccountSettings
             {
                 AccessToken = "bot",
+                RefreshToken = "refresh",
                 StoredScopes = currentBotGrants ? [.. TwitchScopes.BotRequired] : ["chat:read"],
             }, new TwitchAccountSettings());
         }
 
-        var result = imported ? new LegacyImportResult
+        var result = importedFile is not null ? new LegacyImportResult
         {
             SourcePath = "old",
             TargetPath = "new",
-            CopiedFiles = ["settings/settings.json"],
+            CopiedFiles = [importedFile],
             Failures = [new("settings/commands.json", "I/O")],
             SkippedFiles = [],
         } : null;

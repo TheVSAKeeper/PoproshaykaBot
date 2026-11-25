@@ -143,13 +143,12 @@ public sealed class OAuthTokenRefresher : IDisposable
         ILogger<OAuthTokenRefresher> logger)
         : IOAuthTokenRefreshStrategy<TwitchAccountSettings>
     {
-        private static readonly TimeSpan RefreshMargin = TimeSpan.FromMinutes(5);
         private static readonly TimeSpan BaseRetryDelay = TimeSpan.FromSeconds(15);
         private static readonly TimeSpan MaxRetryDelay = TimeSpan.FromMinutes(5);
 
         public StreamingPlatform Platform => StreamingPlatform.Twitch;
 
-        public TimeSpan TokenRefreshMargin => RefreshMargin;
+        public TimeSpan TokenRefreshMargin => TwitchScopes.AccessTokenRefreshMargin;
 
         public TimeSpan BaseTransientRetryDelay => BaseRetryDelay;
 

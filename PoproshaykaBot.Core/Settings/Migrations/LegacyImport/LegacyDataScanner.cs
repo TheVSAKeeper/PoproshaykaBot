@@ -124,6 +124,9 @@ public static class LegacyDataScanner
             TotalMessagesProcessed = LegacyDataReader.ReadUInt64(botStatistics, "totalMessagesProcessed"),
             HasOAuthTokens = LegacyDataReader.HasTokens(accountsRoot) || LegacyDataReader.HasTokens(twitch),
             HasFlatTwitchTokens = LegacyDataReader.HasFlatTwitchTokens(twitch),
+            GeneratedTargetPaths = settingsRoot is System.Text.Json.Nodes.JsonObject settings
+                ? [.. SettingsMigrator.GetSplitTargets(settings).Select(file => Path.Combine(LegacyDataCatalog.SettingsFolderName, file))]
+                : [],
             Files = files,
         };
     }

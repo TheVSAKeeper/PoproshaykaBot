@@ -39,6 +39,9 @@ public sealed class AccountsStore : RoleAccountsStoreBase<AccountsStore.Accounts
 
     protected override IReadOnlyList<string> BroadcasterDefaultScopes => TwitchScopes.BroadcasterRequired;
 
+    protected override IReadOnlyList<string> DefaultScopes(PlatformAuthRole role, TwitchAccountSettings account) =>
+        TwitchScopes.DefaultScopes(role, account);
+
     private static readonly PlatformAccountOperation[] BotPermissions =
     [
         new("Чтение чата", true, TwitchScopes.UserReadChat),
