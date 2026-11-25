@@ -14,11 +14,24 @@
                   HorizontalScrollBarVisibility="Disabled">
         <StackPanel Margin="20,18">
 
-            <TextBlock Text="Всё готово к запуску!"
-                       FontWeight="Bold"
+            <TextBlock FontWeight="Bold"
                        FontSize="{DynamicResource Font.Size.L}"
                        TextWrapping="Wrap"
-                       Margin="0,0,0,12" />
+                       Margin="0,0,0,12">
+                <TextBlock.Style>
+                    <Style TargetType="TextBlock">
+                        <Setter Property="Text" Value="Всё готово к запуску!" />
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding IsValidationPending}" Value="True">
+                                <Setter Property="Text" Value="Проверяем настройки" />
+                            </DataTrigger>
+                            <DataTrigger Binding="{Binding IsValidationFailure}" Value="True">
+                                <Setter Property="Text" Value="Завершите настройку" />
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </TextBlock.Style>
+            </TextBlock>
 
             <TextBlock Text="{Binding SummaryText}"
                        Foreground="{DynamicResource Fg.Primary}"
