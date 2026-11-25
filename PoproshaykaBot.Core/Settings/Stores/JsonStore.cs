@@ -118,7 +118,7 @@ internal sealed class JsonStore<T>
         return true;
     }
 
-    public bool Mutate(Action<T> mutator)
+    public bool Mutate(Action<T> mutator, bool applyWhenBlocked = true)
     {
         ArgumentNullException.ThrowIfNull(mutator);
 
@@ -128,7 +128,8 @@ internal sealed class JsonStore<T>
                 return true;
             },
             _ => true,
-            out var written);
+            out var written,
+            applyWhenBlocked);
 
         return written;
     }

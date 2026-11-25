@@ -139,13 +139,21 @@ public sealed partial class OnboardingWizardViewModel : ObservableObject
             return true;
         }
 
+        _context.CancellationStarted = true;
+        NextCommand.NotifyCanExecuteChanged();
+        BackCommand.NotifyCanExecuteChanged();
+
         if (_context.TwitchSettingsWritten)
         {
             await StopBotIfRunningAsync();
         }
 
-        await RollbackHttpServerPortAsync();
+        var currentPort = _settingsManager.Current.Twitch.HttpServerPort;
         var settingsRestored = RollbackTwitchSettings();
+        if (settingsRestored)
+        {
+            await RollbackHttpServerPortAsync(currentPort);
+        }
         var accountsRestored = await RollbackAccountsAsync();
         _rollbackPerformed = (settingsRestored && accountsRestored)
             || _dialogService?.ConfirmWarning(
@@ -164,7 +172,7 @@ public sealed partial class OnboardingWizardViewModel : ObservableObject
     [RelayCommand(CanExecute = nameof(CanGoNext))]
     private async Task NextAsync()
     {
-        if (CurrentPage is not { } current)
+        if (!CanGoNext() || CurrentPage is not { } current)
         {
             return;
         }
@@ -199,13 +207,13 @@ public sealed partial class OnboardingWizardViewModel : ObservableObject
 
     private bool CanGoNext()
     {
-        return !IsBusy && CurrentPage?.CanAdvance == true;
+        return !_context.CancellationStarted && !IsBusy && CurrentPage?.CanAdvance == true;
     }
 
     [RelayCommand(CanExecute = nameof(CanGoBack))]
     private void Back()
     {
-        if (_currentPageIndex <= 0)
+        if (!CanGoBack())
         {
             return;
         }
@@ -215,7 +223,7 @@ public sealed partial class OnboardingWizardViewModel : ObservableObject
 
     private bool CanGoBack()
     {
-        return !IsBusy && _currentPageIndex > 0;
+        return !_context.CancellationStarted && !IsBusy && _currentPageIndex > 0;
     }
 
     [RelayCommand(CanExecute = nameof(CanCancel))]
@@ -281,24 +289,29 @@ public sealed partial class OnboardingWizardViewModel : ObservableObject
             return true;
         }
 
+        var restored = true;
         try
         {
             _context.RestoreProvisionalWrites();
-            await _eventBus.PublishAsync(new PlatformAuthorizationRefreshed(StreamingPlatform.Twitch, PlatformAuthRole.Bot,
-                _context.TwitchContextId(PlatformAuthRole.Bot)));
-            await _eventBus.PublishAsync(new PlatformAuthorizationRefreshed(StreamingPlatform.Twitch, PlatformAuthRole.Broadcaster,
-                _context.TwitchContextId(PlatformAuthRole.Broadcaster)));
-
-            await _eventBus.PublishAsync(new PlatformAuthorizationRefreshed(StreamingPlatform.YouTube, PlatformAuthRole.Bot));
-            await _eventBus.PublishAsync(new PlatformAuthorizationRefreshed(StreamingPlatform.YouTube, PlatformAuthRole.Broadcaster));
-            _logger.OnboardingAccountsRolledBack();
-            return true;
         }
         catch (Exception exception)
         {
             _logger.OnboardingAccountsRollbackFailed(exception);
-            return false;
+            restored = false;
         }
+
+        await _eventBus.PublishAsync(new PlatformAuthorizationRefreshed(StreamingPlatform.Twitch, PlatformAuthRole.Bot,
+            _context.TwitchContextId(PlatformAuthRole.Bot)));
+        await _eventBus.PublishAsync(new PlatformAuthorizationRefreshed(StreamingPlatform.Twitch, PlatformAuthRole.Broadcaster,
+            _context.TwitchContextId(PlatformAuthRole.Broadcaster)));
+        await _eventBus.PublishAsync(new PlatformAuthorizationRefreshed(StreamingPlatform.YouTube, PlatformAuthRole.Bot));
+        await _eventBus.PublishAsync(new PlatformAuthorizationRefreshed(StreamingPlatform.YouTube, PlatformAuthRole.Broadcaster));
+        if (restored)
+        {
+            _logger.OnboardingAccountsRolledBack();
+        }
+
+        return restored;
     }
 
     private bool RollbackTwitchSettings()
@@ -310,7 +323,7 @@ public sealed partial class OnboardingWizardViewModel : ObservableObject
 
         try
         {
-            _settingsManager.Mutate(settings =>
+            var written = _settingsManager.MutateIfWritable(settings =>
             {
                 settings.Twitch.ClientId = _originalTwitch.ClientId;
                 settings.Twitch.ClientSecret = _originalTwitch.ClientSecret;
@@ -319,8 +332,12 @@ public sealed partial class OnboardingWizardViewModel : ObservableObject
                 settings.Twitch.HttpServerPort = _originalTwitch.HttpServerPort;
                 settings.Twitch.ChatDisplayAccount = _originalTwitch.ChatDisplayAccount;
             });
-            _context.TwitchSettingsWritten = false;
-            return true;
+            if (written)
+            {
+                _context.TwitchSettingsWritten = false;
+            }
+
+            return written;
         }
         catch (Exception exception)
         {
@@ -329,9 +346,8 @@ public sealed partial class OnboardingWizardViewModel : ObservableObject
         }
     }
 
-    private async Task RollbackHttpServerPortAsync()
+    private async Task RollbackHttpServerPortAsync(int currentPort)
     {
-        var currentPort = _settingsManager.Current.Twitch.HttpServerPort;
         var originalPort = _originalTwitch.HttpServerPort;
 
         if (currentPort == originalPort)

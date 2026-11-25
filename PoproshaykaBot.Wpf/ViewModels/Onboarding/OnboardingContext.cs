@@ -65,6 +65,7 @@ public sealed class OnboardingContext(
 
     internal bool HasProvisionalWrites => _provisionalWrites.Count > 0;
     internal bool HasIncompleteRollback => _rollbackIncomplete;
+    internal bool CancellationStarted { get; set; }
 
     internal string TwitchContextId(PlatformAuthRole role) => AuthContextIds.Normalize(
         role == PlatformAuthRole.Bot ? TwitchChannel?.BotContextId : TwitchChannel?.BroadcasterContextId);
@@ -156,6 +157,11 @@ public sealed class OnboardingContext(
     internal string? SaveSetup(SettingsManager settingsManager, AccountsStore accounts,
         YouTubeSettingsStore? youtubeSettingsStore = null, YouTubeAccountsStore? youtubeAccountsStore = null)
     {
+        if (CancellationStarted)
+        {
+            return "Настройка уже отменяется. Закройте мастер, чтобы завершить восстановление.";
+        }
+
         if (_rollbackIncomplete)
         {
             return RollbackIncomplete;

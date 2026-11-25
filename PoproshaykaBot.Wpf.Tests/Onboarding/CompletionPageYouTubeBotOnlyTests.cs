@@ -13,6 +13,7 @@ using PoproshaykaBot.Core.Infrastructure.Hosting;
 using PoproshaykaBot.Core.Infrastructure.Logging;
 using PoproshaykaBot.Core.Obs;
 using PoproshaykaBot.Core.Platforms;
+using PoproshaykaBot.Core.Platforms.Auth;
 using PoproshaykaBot.Core.Polls;
 using PoproshaykaBot.Core.Server;
 using PoproshaykaBot.Core.Settings;
@@ -224,6 +225,103 @@ public sealed class CompletionPageYouTubeBotOnlyTests
         }
     }
 
+    [TestCase(false)]
+    [TestCase(true)]
+    public async Task CancelAfterBlockedRollbackNotifiesAndAllowsOnlyRetryingClose(bool blockYouTube)
+    {
+        var dir = Directory.CreateTempSubdirectory("gated-onboarding-cancel-");
+        try
+        {
+            await using var provider = BuildProvider();
+            var gate = new SettingsWriteGate();
+            var path = Path.Combine(dir.FullName, "settings.json");
+            var manager = new SettingsManager(NullLogger<SettingsManager>.Instance, path, gate);
+            manager.SaveSettings(new() { Twitch = new() { ClientId = "original" } });
+            var accounts = new AccountsStore(filePath: Path.Combine(dir.FullName, "accounts.json"));
+            var youtubePath = Path.Combine(dir.FullName, "youtube.json");
+            var youtube = new YouTubeSettingsStore(filePath: youtubePath);
+            youtube.Save(new() { ClientId = "original" });
+            var page = new ProvisionalSetupPage(manager, accounts, youtube);
+            var bus = provider.GetRequiredService<IEventBus>();
+            var refreshed = new List<PlatformAuthorizationRefreshed>();
+            using var subscription = bus.Subscribe<PlatformAuthorizationRefreshed>(message => refreshed.Add(message));
+            var dialogs = new NoOpDialogService { ConfirmWarningResult = false };
+            var wizard = new OnboardingWizardViewModel([page, new DraftCredentialsPage()], manager, accounts,
+                provider.GetRequiredService<KestrelHttpServer>(), provider.GetRequiredService<BotConnectionManager>(), bus,
+                NullLogger<OnboardingWizardViewModel>.Instance, youtubeSettingsStore: youtube, dialogService: dialogs);
+
+            var allowWrite = new TaskCompletionSource<int>(TaskCreationOptions.RunContinuationsAsynchronously);
+            Task? externalWrite = null;
+            FileStream? locked = null;
+            try
+            {
+                if (blockYouTube)
+                {
+                    locked = File.Open(youtubePath, FileMode.Open, FileAccess.Read, FileShare.None);
+                }
+                else
+                {
+                    externalWrite = gate.RunExternalWriteAsync(() => allowWrite.Task, _ => []);
+                }
+
+                Assert.That(await wizard.RequestCloseAsync(), Is.False);
+                using (Assert.EnterMultipleScope())
+                {
+                    Assert.That(manager.Current.Twitch.ClientId, Is.EqualTo(blockYouTube ? "original" : "draft"));
+                    Assert.That(new SettingsManager(NullLogger<SettingsManager>.Instance, path).Current.Twitch.ClientId,
+                        Is.EqualTo(blockYouTube ? "original" : "draft"));
+                    Assert.That(accounts.LoadBot().AccessToken, Is.Empty);
+                    Assert.That(refreshed.Any(message => message.Platform == StreamingPlatform.Twitch && message.Role == PlatformAuthRole.Bot), Is.True);
+                    Assert.That(wizard.NextCommand.CanExecute(null), Is.False);
+                    Assert.That(wizard.CancelCommand.CanExecute(null), Is.True);
+                    Assert.That(page.Context.SaveSetup(manager, accounts, youtube), Does.Contain("отменяется"));
+                }
+            }
+            finally
+            {
+                if (locked is not null)
+                {
+                    await locked.DisposeAsync();
+                }
+                if (externalWrite is not null)
+                {
+                    allowWrite.TrySetResult(0);
+                    await externalWrite;
+                }
+            }
+
+            Assert.That(await wizard.RequestCloseAsync(), Is.True);
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(manager.Current.Twitch.ClientId, Is.EqualTo("original"));
+                Assert.That(youtube.Load().ClientId, Is.EqualTo("original"));
+                Assert.That(new YouTubeSettingsStore(filePath: youtubePath).Load().ClientId, Is.EqualTo("original"));
+            }
+        }
+        finally
+        {
+            dir.Delete(recursive: true);
+        }
+    }
+
+    private sealed class ProvisionalSetupPage(SettingsManager settings, AccountsStore accounts, YouTubeSettingsStore youtube)
+        : OnboardingPageViewModelBase
+    {
+        public override string PageTitle => "Черновик";
+        public OnboardingContext Context { get; private set; } = null!;
+
+        public override void OnEnter(OnboardingContext context)
+        {
+            Context = context;
+            context.Settings.Twitch.ClientId = "draft";
+            context.YouTubeSettings.ClientId = "draft";
+            Assert.That(context.AcceptTwitchLogin(PlatformAuthRole.Bot, context.BotAccount,
+                new("access", "refresh", [.. TwitchScopes.BotRequired], "bot", "1", 3600)), Is.True);
+            Assert.That(context.SaveSetup(settings, accounts, youtube), Is.Null);
+            CanAdvance = true;
+        }
+    }
+
     private static ServiceProvider BuildProvider()
     {
         var services = new ServiceCollection();
@@ -264,11 +362,12 @@ public sealed class CompletionPageYouTubeBotOnlyTests
 
     private sealed class NoOpDialogService : IDialogService
     {
+        public bool ConfirmWarningResult { get; init; } = true;
         public string? WarningMessage { get; private set; }
         public Task<bool> ShowAsync(IDialogViewModel viewModel) => Task.FromResult(false);
         public Task<bool> ReplaceAsync(IDialogViewModel viewModel) => Task.FromResult(false);
         public bool Confirm(string title, string message, bool defaultYes = false) => true;
-        public bool ConfirmWarning(string title, string message, bool defaultYes = false) => true;
+        public bool ConfirmWarning(string title, string message, bool defaultYes = false) => ConfirmWarningResult;
         public void Info(string title, string message) { }
         public void Warning(string title, string message) => WarningMessage = message;
         public void Error(string title, string message) { }

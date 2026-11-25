@@ -69,7 +69,11 @@ public class SettingsManager
         }
     }
 
-    public virtual bool Mutate(Action<AppSettings> mutator)
+    public virtual bool Mutate(Action<AppSettings> mutator) => MutateCore(mutator, applyWhenBlocked: true);
+
+    public bool MutateIfWritable(Action<AppSettings> mutator) => MutateCore(mutator, applyWhenBlocked: false);
+
+    private bool MutateCore(Action<AppSettings> mutator, bool applyWhenBlocked)
     {
         ArgumentNullException.ThrowIfNull(mutator);
 
@@ -77,9 +81,12 @@ public class SettingsManager
         {
             try
             {
-                var written = _store.Mutate(mutator);
-                _currentSettings = _store.Load();
-                LogApplied(written);
+                var written = _store.Mutate(mutator, applyWhenBlocked);
+                if (written || applyWhenBlocked)
+                {
+                    _currentSettings = _store.Load();
+                    LogApplied(written);
+                }
 
                 return written;
             }
