@@ -433,10 +433,10 @@
                                                                              Text="{Binding ScopesText, UpdateSourceTrigger=PropertyChanged}"
                                                                              AutomationProperties.Name="Список scope через пробел" />
                                                                     <Button Grid.Column="1"
-                                                                            Style="{StaticResource Button.Ghost}"
-                                                                            Content="Сбросить"
+                                                                            Style="{StaticResource Form.RowReset}"
                                                                             Command="{Binding ResetScopesCommand}"
-                                                                            Margin="8,0,0,0" />
+                                                                            ToolTip="Сбросить права к значению по умолчанию"
+                                                                            AutomationProperties.Name="Сбросить права к умолчанию" />
                                                                 </Grid>
                                                             </StackPanel>
 

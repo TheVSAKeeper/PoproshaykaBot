@@ -370,10 +370,13 @@
                                         </Grid.RowDefinitions>
                                         <TextBlock Text="Название">
                                             <TextBlock.Style>
-                                                <Style TargetType="TextBlock" BasedOn="{StaticResource Setting.RowLabel}">
+                                                <Style TargetType="TextBlock" BasedOn="{StaticResource Form.Label}">
                                                     <Setter Property="Grid.Row" Value="0" />
                                                     <Setter Property="Grid.Column" Value="0" />
                                                     <Setter Property="Grid.ColumnSpan" Value="1" />
+                                                    <Setter Property="Width" Value="188" />
+                                                    <Setter Property="Margin" Value="0,0,12,0" />
+                                                    <Setter Property="TextWrapping" Value="Wrap" />
                                                     <Style.Triggers>
                                                         <DataTrigger Binding="{Binding IsNarrowLayout, RelativeSource={RelativeSource AncestorType=UserControl}}" Value="True">
                                                             <Setter Property="Grid.ColumnSpan" Value="2" />
@@ -421,10 +424,12 @@
                                                     </Grid.RowDefinitions>
                                                     <TextBlock Text="{Binding Title}">
                                                         <TextBlock.Style>
-                                                            <Style TargetType="TextBlock" BasedOn="{StaticResource Setting.RowLabel}">
+                                                            <Style TargetType="TextBlock" BasedOn="{StaticResource Form.Label}">
                                                                 <Setter Property="Grid.Row" Value="0" />
                                                                 <Setter Property="Grid.Column" Value="0" />
                                                                 <Setter Property="Grid.ColumnSpan" Value="1" />
+                                                                <Setter Property="Width" Value="188" />
+                                                                <Setter Property="TextWrapping" Value="Wrap" />
                                                                 <Setter Property="VerticalAlignment" Value="Top" />
                                                                 <Setter Property="Margin" Value="0,8,12,0" />
                                                                 <Style.Triggers>
@@ -566,51 +571,16 @@
                                         </ItemsControl.ItemTemplate>
                                     </ItemsControl>
 
-                                    <Grid Margin="0,0,0,4">
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="Auto" />
-                                            <ColumnDefinition Width="*" />
-                                        </Grid.ColumnDefinitions>
-                                        <Grid.RowDefinitions>
-                                            <RowDefinition Height="Auto" />
-                                            <RowDefinition Height="Auto" />
-                                        </Grid.RowDefinitions>
-                                        <TextBlock Text="Мониторинг">
-                                            <TextBlock.Style>
-                                                <Style TargetType="TextBlock" BasedOn="{StaticResource Setting.RowLabel}">
-                                                    <Setter Property="Grid.Row" Value="0" />
-                                                    <Setter Property="Grid.Column" Value="0" />
-                                                    <Setter Property="Grid.ColumnSpan" Value="1" />
-                                                    <Style.Triggers>
-                                                        <DataTrigger Binding="{Binding IsNarrowLayout, RelativeSource={RelativeSource AncestorType=UserControl}}" Value="True">
-                                                            <Setter Property="Grid.ColumnSpan" Value="2" />
-                                                            <Setter Property="Width" Value="Auto" />
-                                                            <Setter Property="HorizontalAlignment" Value="Left" />
-                                                            <Setter Property="Margin" Value="0,0,0,6" />
-                                                        </DataTrigger>
-                                                    </Style.Triggers>
-                                                </Style>
-                                            </TextBlock.Style>
-                                        </TextBlock>
+                                    <keepshell:SettingRowPanel Margin="0,0,0,4">
+                                        <TextBlock Text="Мониторинг"
+                                                   Style="{StaticResource Form.Label}"
+                                                   TextWrapping="Wrap"
+                                                   Margin="0,0,12,0" />
                                         <CheckBox Content="Фоновый мониторинг эфира"
+                                                  Style="{StaticResource CheckBox.Default}"
                                                   IsChecked="{Binding MonitoringEnabled, Mode=TwoWay}"
-                                                  IsEnabled="{Binding SupportsMonitoring}">
-                                            <CheckBox.Style>
-                                                <Style TargetType="CheckBox" BasedOn="{StaticResource CheckBox.Default}">
-                                                    <Setter Property="Grid.Row" Value="0" />
-                                                    <Setter Property="Grid.Column" Value="1" />
-                                                    <Setter Property="Grid.ColumnSpan" Value="1" />
-                                                    <Style.Triggers>
-                                                        <DataTrigger Binding="{Binding IsNarrowLayout, RelativeSource={RelativeSource AncestorType=UserControl}}" Value="True">
-                                                            <Setter Property="Grid.Row" Value="1" />
-                                                            <Setter Property="Grid.Column" Value="0" />
-                                                            <Setter Property="Grid.ColumnSpan" Value="2" />
-                                                        </DataTrigger>
-                                                    </Style.Triggers>
-                                                </Style>
-                                            </CheckBox.Style>
-                                        </CheckBox>
-                                    </Grid>
+                                                  IsEnabled="{Binding SupportsMonitoring}" />
+                                    </keepshell:SettingRowPanel>
 
                                     <Border BorderThickness="0,1,0,0"
                                             BorderBrush="{DynamicResource Border.Subtle}"

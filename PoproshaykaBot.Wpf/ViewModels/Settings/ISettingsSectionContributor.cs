@@ -2,6 +2,7 @@
 using PoproshaykaBot.Core.Settings;
 using PoproshaykaBot.Core.Platforms;
 using System.ComponentModel;
+using System.Windows.Input;
 
 namespace PoproshaykaBot.Wpf.ViewModels.Settings;
 
@@ -12,6 +13,10 @@ public sealed record SettingsSectionBlockDescriptor(
     object Content) : INotifyPropertyChanged
 {
     public StreamingPlatform? Platform { get; init; }
+
+    public ICommand? ResetCommand { get; init; }
+
+    public string? ResetHint { get; init; }
 
     public event PropertyChangedEventHandler? PropertyChanged
     {

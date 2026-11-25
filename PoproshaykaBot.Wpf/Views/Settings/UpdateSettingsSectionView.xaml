@@ -67,22 +67,24 @@
                       Visibility="{Binding IsFrameworkDependentVisible, Converter={StaticResource BoolToVisibility}}"
                       Margin="0,0,0,8" />
 
-            <DockPanel Margin="0,8,0,0">
-                <TextBlock Text="Репозиторий (owner/repo)"
-                           Style="{StaticResource Setting.RowLabel}" />
+            <keepshell:SettingRowPanel Margin="0,8,0,0">
+                <StackPanel Margin="0,0,12,0">
+                    <TextBlock Text="Репозиторий (owner/repo)"
+                               Style="{StaticResource Form.Label}"
+                               TextWrapping="Wrap" />
+                    <TextBlock Text="{Binding RepositoryHintText}"
+                               TextWrapping="Wrap"
+                               FontSize="{DynamicResource Font.Size.S}"
+                               keepshell:SeverityBrushBehavior.Foreground="{Binding RepositoryHintSeverity}"
+                               Margin="0,6,0,0" />
+                </StackPanel>
                 <TextBox Style="{StaticResource TextBox.Form}"
                          Width="{DynamicResource Setting.ShortFieldWidth}"
-                         HorizontalAlignment="Left"
+                         VerticalAlignment="Top"
                          AutomationProperties.Name="Репозиторий обновлений в формате owner/repo"
                          Text="{Binding RepositoryOverride, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                          keepshell:PlaceholderBehavior.Placeholder="{Binding DefaultRepositorySlug}" />
-            </DockPanel>
-
-            <TextBlock Text="{Binding RepositoryHintText}"
-                       TextWrapping="Wrap"
-                       FontSize="{DynamicResource Font.Size.S}"
-                       keepshell:SeverityBrushBehavior.Foreground="{Binding RepositoryHintSeverity}"
-                       Margin="200,6,0,0" />
+            </keepshell:SettingRowPanel>
         </StackPanel>
 
         <StackPanel>

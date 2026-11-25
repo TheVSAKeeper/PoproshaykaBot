@@ -79,7 +79,7 @@
     </UserControl.Resources>
 
     <StackPanel>
-        <CheckBox Style="{StaticResource CheckBox.Default}"
+        <CheckBox Style="{StaticResource CheckBox.ToggleSwitch}"
                   IsChecked="{Binding IsEnabled, Mode=TwoWay}"
                   Content="Подключаться к чужому каналу (режим отладки)"
                   Margin="0,0,0,4" />
@@ -88,46 +88,48 @@
                    Style="{StaticResource Form.CheckHint}"
                    Margin="0,0,0,16" />
 
-        <DockPanel>
-            <TextBlock Text="Канал"
-                       Style="{StaticResource Setting.RowLabel}" />
+        <keepshell:SettingRowPanel Margin="0,0,0,16">
+            <StackPanel Margin="0,0,12,0">
+                <TextBlock Text="Канал"
+                           Style="{StaticResource Form.Label}"
+                           TextWrapping="Wrap" />
+                <TextBlock Text="{Binding HintText}"
+                           TextWrapping="Wrap"
+                           Margin="0,6,0,0">
+                    <TextBlock.Style>
+                        <Style TargetType="TextBlock">
+                            <Setter Property="Foreground"
+                                    Value="{DynamicResource Fg.Muted}" />
+                            <Setter Property="FontSize"
+                                    Value="{DynamicResource Font.Size.S}" />
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding HintSeverity}"
+                                             Value="Success">
+                                    <Setter Property="Foreground"
+                                            Value="{DynamicResource State.SuccessText}" />
+                                </DataTrigger>
+                                <DataTrigger Binding="{Binding HintSeverity}"
+                                             Value="Warning">
+                                    <Setter Property="Foreground"
+                                            Value="{DynamicResource State.WarningText}" />
+                                </DataTrigger>
+                                <DataTrigger Binding="{Binding HintSeverity}"
+                                             Value="Error">
+                                    <Setter Property="Foreground"
+                                            Value="{DynamicResource State.ErrorText}" />
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </TextBlock.Style>
+                </TextBlock>
+            </StackPanel>
             <TextBox Text="{Binding Channel, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                      IsEnabled="{Binding IsEnabled}"
                      Width="{DynamicResource Setting.ShortFieldWidth}"
-                     HorizontalAlignment="Left"
+                     VerticalAlignment="Top"
                      AutomationProperties.Name="Канал для режима отладки"
                      keepshell:PlaceholderBehavior.Placeholder="например, dunduk" />
-        </DockPanel>
-
-        <TextBlock Text="{Binding HintText}"
-                   TextWrapping="Wrap"
-                   Margin="200,6,0,16">
-            <TextBlock.Style>
-                <Style TargetType="TextBlock">
-                    <Setter Property="Foreground"
-                            Value="{DynamicResource Fg.Muted}" />
-                    <Setter Property="FontSize"
-                            Value="{DynamicResource Font.Size.S}" />
-                    <Style.Triggers>
-                        <DataTrigger Binding="{Binding HintSeverity}"
-                                     Value="Success">
-                            <Setter Property="Foreground"
-                                    Value="{DynamicResource State.SuccessText}" />
-                        </DataTrigger>
-                        <DataTrigger Binding="{Binding HintSeverity}"
-                                     Value="Warning">
-                            <Setter Property="Foreground"
-                                    Value="{DynamicResource State.WarningText}" />
-                        </DataTrigger>
-                        <DataTrigger Binding="{Binding HintSeverity}"
-                                     Value="Error">
-                            <Setter Property="Foreground"
-                                    Value="{DynamicResource State.ErrorText}" />
-                        </DataTrigger>
-                    </Style.Triggers>
-                </Style>
-            </TextBlock.Style>
-        </TextBlock>
+        </keepshell:SettingRowPanel>
 
         <DockPanel DataContext="{Binding Recent}"
                    LastChildFill="False"

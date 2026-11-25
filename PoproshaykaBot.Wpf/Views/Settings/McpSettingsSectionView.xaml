@@ -25,18 +25,31 @@
                    Text="Встроенный сервер на loopback: агент подключается к запущенному окну и видит то же, что вы – открытую страницу, дерево контролов, журнал, кадр. Нужен только для отладки, в обычной работе держите выключенным." />
 
         <CheckBox Content="Поднимать сервер"
+                  Style="{StaticResource CheckBox.ToggleSwitch}"
                   IsChecked="{Binding Preferences.Enabled, Mode=TwoWay}"
                   Margin="0,14,0,16"
                   VerticalAlignment="Center" />
 
         <StackPanel Style="{StaticResource Setting.DependentBlock}"
                     IsEnabled="{Binding Preferences.Enabled}">
-            <DockPanel>
-                <TextBlock Text="Порт"
-                           Style="{StaticResource Setting.RowLabel}" />
+            <keepshell:SettingRowPanel>
+                <StackPanel Margin="0,0,12,0">
+                    <TextBlock Text="Порт"
+                               Style="{StaticResource Form.Label}"
+                               TextWrapping="Wrap" />
+                    <TextBlock Text="{Binding PortError}"
+                               Foreground="{DynamicResource State.ErrorText}"
+                               FontSize="{DynamicResource Font.Size.S}"
+                               Margin="0,4,0,0"
+                               TextWrapping="Wrap"
+                               Visibility="{Binding PortError, Converter={StaticResource NullToVisibility}}" />
+                    <TextBlock Style="{StaticResource Form.Hint}"
+                               Margin="0,6,0,0"
+                               Text="1024…65535, только 127.0.0.1. Смена порта применяется сразу – сервер перезапускается." />
+                </StackPanel>
                 <TextBox Text="{Binding PortText, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
-                         HorizontalAlignment="Left"
                          Width="{DynamicResource Setting.ShortFieldWidth}"
+                         VerticalAlignment="Top"
                          FontFamily="{DynamicResource Font.Mono}"
                          AutomationProperties.Name="Порт MCP-сервера">
                     <TextBox.Style>
@@ -52,16 +65,7 @@
                         </Style>
                     </TextBox.Style>
                 </TextBox>
-            </DockPanel>
-            <TextBlock Text="{Binding PortError}"
-                       Foreground="{DynamicResource State.ErrorText}"
-                       FontSize="{DynamicResource Font.Size.S}"
-                       Margin="200,4,0,0"
-                       TextWrapping="Wrap"
-                       Visibility="{Binding PortError, Converter={StaticResource NullToVisibility}}" />
-            <TextBlock Style="{StaticResource Form.Hint}"
-                       Margin="200,6,0,0"
-                       Text="1024…65535, только 127.0.0.1. Смена порта применяется сразу – сервер перезапускается." />
+            </keepshell:SettingRowPanel>
         </StackPanel>
 
         <CheckBox Content="Разрешить изменяющие операции"
@@ -72,10 +76,12 @@
         <TextBlock Style="{StaticResource Form.CheckHint}"
                    Text="Один флаг на всё: агент сможет нажимать кнопки, вводить текст, закрывать приложение, подключать и отключать бота. Без флага доступно только чтение." />
 
-        <DockPanel Margin="0,16,0,0">
+        <keepshell:SettingRowPanel Margin="0,16,0,0">
             <TextBlock Text="Токен"
-                       Style="{StaticResource Setting.RowLabel}" />
-            <Grid>
+                       Style="{StaticResource Form.Label}"
+                       TextWrapping="Wrap"
+                       Margin="0,0,12,0" />
+            <Grid Width="460">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*" />
                     <ColumnDefinition Width="Auto" />
@@ -115,7 +121,7 @@
                     </Button>
                 </StackPanel>
             </Grid>
-        </DockPanel>
+        </keepshell:SettingRowPanel>
 
         <StackPanel Orientation="Horizontal"
                     Margin="0,16,0,0">
@@ -166,29 +172,32 @@
             </Grid>
         </Border>
 
-        <DockPanel Margin="0,16,0,0">
+        <keepshell:SettingRowPanel Margin="0,16,0,0">
             <TextBlock Text="Формат подключения"
-                       Style="{StaticResource Setting.RowLabel}" />
+                       Style="{StaticResource Form.Label}"
+                       TextWrapping="Wrap"
+                       Margin="0,0,12,0" />
             <ComboBox Style="{StaticResource ComboBox.Form}"
-                      HorizontalAlignment="Left"
                       Width="{DynamicResource Setting.ShortFieldWidth}"
                       ItemsSource="{Binding SnippetFormats}"
                       SelectedIndex="{Binding SelectedSnippetFormatIndex, Mode=TwoWay}"
                       AutomationProperties.Name="Формат строки подключения" />
-        </DockPanel>
+        </keepshell:SettingRowPanel>
 
-        <Grid Margin="0,10,0,0">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="*" />
-                <ColumnDefinition Width="Auto" />
-            </Grid.ColumnDefinitions>
+        <keepshell:SettingRowPanel Margin="0,10,0,0">
+            <TextBlock Text="Строка подключения"
+                       Style="{StaticResource Form.Label}"
+                       TextWrapping="Wrap"
+                       VerticalAlignment="Top"
+                       Margin="0,6,12,0" />
+            <Grid Width="460">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
 
-            <DockPanel Grid.Column="0">
-                <TextBlock Text="Строка подключения"
-                           Style="{StaticResource Setting.RowLabel}"
-                           VerticalAlignment="Top"
-                           Margin="0,6,12,0" />
-                <TextBox Text="{Binding ConnectSnippet, Mode=OneWay}"
+                <TextBox Grid.Column="0"
+                         Text="{Binding ConnectSnippet, Mode=OneWay}"
                          IsReadOnly="True"
                          keepshell:McpPrivacy.IsSensitive="True"
                          MaxHeight="180"
@@ -197,21 +206,21 @@
                          FontFamily="{DynamicResource Font.Mono}"
                          FontSize="{DynamicResource Font.Size.S}"
                          AutomationProperties.Name="{Binding ConnectSnippetAutomationName}" />
-            </DockPanel>
 
-            <Button Grid.Column="1"
-                    Style="{StaticResource Button.Icon}"
-                    Command="{Binding CopyConnectSnippetCommand}"
-                    Margin="8,0,0,0"
-                    VerticalAlignment="Bottom"
-                    AutomationProperties.Name="Скопировать строку подключения"
-                    ToolTip="{Binding ConnectSnippetTooltip}">
-                <iconPacks:PackIconLucide Kind="{x:Static iconPacks:PackIconLucideKind.Clipboard}"
-                                          Width="16"
-                                          Height="16"
-                                          HorizontalAlignment="Center"
-                                          VerticalAlignment="Center" />
-            </Button>
-        </Grid>
+                <Button Grid.Column="1"
+                        Style="{StaticResource Button.Icon}"
+                        Command="{Binding CopyConnectSnippetCommand}"
+                        Margin="8,0,0,0"
+                        VerticalAlignment="Bottom"
+                        AutomationProperties.Name="Скопировать строку подключения"
+                        ToolTip="{Binding ConnectSnippetTooltip}">
+                    <iconPacks:PackIconLucide Kind="{x:Static iconPacks:PackIconLucideKind.Clipboard}"
+                                              Width="16"
+                                              Height="16"
+                                              HorizontalAlignment="Center"
+                                              VerticalAlignment="Center" />
+                </Button>
+            </Grid>
+        </keepshell:SettingRowPanel>
     </StackPanel>
 </UserControl>

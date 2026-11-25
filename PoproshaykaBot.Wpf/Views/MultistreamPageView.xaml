@@ -99,7 +99,6 @@
 
             <Style x:Key="PlatformCardItemStyle" TargetType="ListBoxItem">
                 <Setter Property="Padding" Value="14,11" />
-                <Setter Property="Margin" Value="0,0,0,8" />
                 <Setter Property="HorizontalContentAlignment" Value="Stretch" />
                 <Setter Property="VerticalContentAlignment" Value="Center" />
                 <Setter Property="Cursor" Value="Hand" />
@@ -131,10 +130,7 @@
                 </Setter>
                 <Style.Triggers>
                     <DataTrigger Binding="{Binding IsCompactLayout, RelativeSource={RelativeSource AncestorType=UserControl}}" Value="True">
-                        <Setter Property="Margin" Value="0,0,8,8" />
-                        <Setter Property="MinWidth" Value="204" />
                         <Setter Property="Padding" Value="11,8" />
-                        <Setter Property="HorizontalAlignment" Value="Left" />
                     </DataTrigger>
                 </Style.Triggers>
             </Style>
@@ -282,18 +278,7 @@
                              AutomationProperties.Name="Площадки">
                         <ListBox.ItemsPanel>
                             <ItemsPanelTemplate>
-                                <WrapPanel>
-                                    <WrapPanel.Style>
-                                        <Style TargetType="WrapPanel">
-                                            <Setter Property="ItemWidth" Value="{Binding MasterCardWidth, RelativeSource={RelativeSource AncestorType=UserControl}}" />
-                                            <Style.Triggers>
-                                                <DataTrigger Binding="{Binding IsCompactLayout, RelativeSource={RelativeSource AncestorType=UserControl}}" Value="True">
-                                                    <Setter Property="ItemWidth" Value="{x:Static sys:Double.NaN}" />
-                                                </DataTrigger>
-                                            </Style.Triggers>
-                                        </Style>
-                                    </WrapPanel.Style>
-                                </WrapPanel>
+                                <keepshell:CardColumnsPanel MinColumnWidth="204" Spacing="8" />
                             </ItemsPanelTemplate>
                         </ListBox.ItemsPanel>
                         <ListBox.Style>
@@ -522,7 +507,7 @@
                                FontSize="{DynamicResource Font.Size.Caption}"
                                FontWeight="{DynamicResource Font.Weight.SemiBold}"
                                Foreground="{DynamicResource Fg.Muted}"
-                               Margin="4,10,0,6">
+                               Margin="4,18,0,6">
                         <TextBlock.Style>
                             <Style TargetType="TextBlock">
                                 <Style.Triggers>
@@ -553,7 +538,7 @@
                                         <Setter Property="Grid.Column" Value="1" />
                                         <Setter Property="Grid.ColumnSpan" Value="1" />
                                         <Setter Property="Padding" Value="12,10" />
-                                        <Setter Property="Margin" Value="8,0,0,8" />
+                                        <Setter Property="Margin" Value="8,0,0,0" />
                                     </DataTrigger>
                                 </Style.Triggers>
                             </Style>
@@ -728,14 +713,8 @@
                                     Margin="0,0,0,12"
                                     AutomationProperties.AutomationId="MultistreamGuidedOverviewCard">
                                 <StackPanel>
-                                    <Grid>
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="*" />
-                                            <ColumnDefinition Width="*" />
-                                            <ColumnDefinition Width="*" />
-                                        </Grid.ColumnDefinitions>
-
-                                        <DockPanel Grid.Column="0" Margin="0,0,10,0">
+                                    <keepshell:CardColumnsPanel MinColumnWidth="200" Spacing="8">
+                                        <DockPanel>
                                             <Ellipse DockPanel.Dock="Left"
                                                      Width="7"
                                                      Height="7"
@@ -751,7 +730,7 @@
                                                        VerticalAlignment="Center" />
                                         </DockPanel>
 
-                                        <DockPanel Grid.Column="1" Margin="0,0,10,0">
+                                        <DockPanel>
                                             <Ellipse DockPanel.Dock="Left"
                                                      Width="7"
                                                      Height="7"
@@ -767,7 +746,7 @@
                                                        VerticalAlignment="Center" />
                                         </DockPanel>
 
-                                        <DockPanel Grid.Column="2">
+                                        <DockPanel>
                                             <Ellipse DockPanel.Dock="Left"
                                                      Width="7"
                                                      Height="7"
@@ -782,7 +761,7 @@
                                                        keepshell:SeverityBrushBehavior.Foreground="{Binding ChannelReadinessSeverity}"
                                                        VerticalAlignment="Center" />
                                         </DockPanel>
-                                    </Grid>
+                                    </keepshell:CardColumnsPanel>
 
                                     <WrapPanel Orientation="Horizontal"
                                                VerticalAlignment="Center"
@@ -1044,66 +1023,22 @@
                                                VerticalAlignment="Center" />
                                 </DockPanel>
 
-                            <Border Background="{DynamicResource Bg.SurfaceAlt}"
-                                    BorderBrush="{DynamicResource Border.Subtle}"
-                                    BorderThickness="1"
-                                    CornerRadius="{DynamicResource Radius.M}"
-                                    Padding="2"
-                                    HorizontalAlignment="Left"
-                                    Margin="0,0,0,14">
-                                <WrapPanel>
-                                    <RadioButton Style="{StaticResource RadioButton.Segment}"
-                                                 GroupName="MultistreamAutomationTabs"
-                                                 IsChecked="{Binding IsProfilesTabSelected, Mode=TwoWay}"
-                                                 Command="{Binding SelectAutomationTabCommand}"
-                                                 CommandParameter="{x:Static localVm:MultistreamAutomationTab.Profiles}"
-                                                 AutomationProperties.AutomationId="MultistreamAutoTabProfiles"
-                                                 AutomationProperties.Name="Профили трансляции">
-                                        <StackPanel Orientation="Horizontal">
-                                            <iconPacks:PackIconLucide Kind="{x:Static iconPacks:PackIconLucideKind.ListChecks}"
-                                                                      Width="14"
-                                                                      Height="14"
-                                                                      VerticalAlignment="Center"
-                                                                      Margin="0,0,6,0" />
-                                            <TextBlock Text="Профили трансляции" VerticalAlignment="Center" />
-                                        </StackPanel>
-                                    </RadioButton>
-                                    <RadioButton Style="{StaticResource RadioButton.Segment}"
-                                                 GroupName="MultistreamAutomationTabs"
-                                                 Margin="2,0,0,0"
-                                                 IsChecked="{Binding IsAutomationTabSelected, Mode=TwoWay}"
-                                                 Command="{Binding SelectAutomationTabCommand}"
-                                                 CommandParameter="{x:Static localVm:MultistreamAutomationTab.Automation}"
-                                                 AutomationProperties.AutomationId="MultistreamAutoTabAutomation"
-                                                 AutomationProperties.Name="Автоматика">
-                                        <StackPanel Orientation="Horizontal">
-                                            <iconPacks:PackIconLucide Kind="{x:Static iconPacks:PackIconLucideKind.Bot}"
-                                                                      Width="14"
-                                                                      Height="14"
-                                                                      VerticalAlignment="Center"
-                                                                      Margin="0,0,6,0" />
-                                            <TextBlock Text="Автоматика" VerticalAlignment="Center" />
-                                        </StackPanel>
-                                    </RadioButton>
-                                    <RadioButton Style="{StaticResource RadioButton.Segment}"
-                                                 GroupName="MultistreamAutomationTabs"
-                                                 Margin="2,0,0,0"
-                                                 IsChecked="{Binding IsGroupsTabSelected, Mode=TwoWay}"
-                                                 Command="{Binding SelectAutomationTabCommand}"
-                                                 CommandParameter="{x:Static localVm:MultistreamAutomationTab.Groups}"
-                                                 AutomationProperties.AutomationId="MultistreamAutoTabGroups"
-                                                 AutomationProperties.Name="Группы каналов">
-                                        <StackPanel Orientation="Horizontal">
-                                            <iconPacks:PackIconLucide Kind="{x:Static iconPacks:PackIconLucideKind.Users}"
-                                                                      Width="14"
-                                                                      Height="14"
-                                                                      VerticalAlignment="Center"
-                                                                      Margin="0,0,6,0" />
-                                            <TextBlock Text="Группы каналов" VerticalAlignment="Center" />
-                                        </StackPanel>
-                                    </RadioButton>
-                                </WrapPanel>
-                            </Border>
+                            <ListBox x:Name="AutomationTabsList"
+                                     Style="{StaticResource ListBox.Segmented}"
+                                     HorizontalAlignment="Left"
+                                     Margin="0,0,0,14"
+                                     ItemsSource="{Binding AutomationTabOptions}"
+                                     SelectedValuePath="Tab"
+                                     SelectedValue="{Binding SelectedAutomationTab, Mode=TwoWay}"
+                                     AutomationProperties.Name="Вкладки автоматики">
+                                <ListBox.ItemContainerStyle>
+                                    <Style TargetType="ListBoxItem" BasedOn="{StaticResource SegmentedItem}">
+                                        <Setter Property="AutomationProperties.AutomationId" Value="{Binding AutomationId}" />
+                                        <Setter Property="Padding" Value="{DynamicResource Padding.Control.Compact}" />
+                                        <Setter Property="MinHeight" Value="{DynamicResource Control.Height.Compact}" />
+                                    </Style>
+                                </ListBox.ItemContainerStyle>
+                            </ListBox>
 
                             <StackPanel Visibility="{Binding IsProfilesTabSelected, Converter={StaticResource BoolToVisibility}}">
                                 <Border Style="{StaticResource Card.Inset}" Margin="0,0,0,12" Padding="12,9">

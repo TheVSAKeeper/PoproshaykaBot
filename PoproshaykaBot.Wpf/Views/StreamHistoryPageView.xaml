@@ -124,7 +124,7 @@
         <Style x:Key="DeltaCell"
                TargetType="StackPanel">
             <Setter Property="Margin"
-                    Value="0,0,24,4" />
+                    Value="0" />
         </Style>
 
         <Style x:Key="TrendDate"
@@ -2022,10 +2022,11 @@
                                            MinHeight="80" />
                         </Grid.RowDefinitions>
 
-                        <WrapPanel Grid.Row="0"
-                                   Orientation="Horizontal"
-                                   Margin="0,12,0,0"
-                                   Visibility="{Binding ShowDetailDeltas, Converter={StaticResource BoolToVisibility}}">
+                        <controls:CardColumnsPanel Grid.Row="0"
+                                                   MinColumnWidth="136"
+                                                   Spacing="8"
+                                                   Margin="0,12,0,0"
+                                                   Visibility="{Binding ShowDetailDeltas, Converter={StaticResource BoolToVisibility}}">
                             <StackPanel Style="{StaticResource DeltaCell}"
                                         Visibility="{Binding DetailMessagesDelta, Converter={StaticResource NullToVisibility}}">
                                 <TextBlock Style="{StaticResource StatLabel}"
@@ -2065,7 +2066,7 @@
                                            Tag="{Binding DetailAverageViewersDeltaTone}"
                                            Text="{Binding DetailAverageViewersDelta}" />
                             </StackPanel>
-                        </WrapPanel>
+                        </controls:CardColumnsPanel>
 
                         <ItemsControl Grid.Row="1"
                                       Margin="0,12,0,0"

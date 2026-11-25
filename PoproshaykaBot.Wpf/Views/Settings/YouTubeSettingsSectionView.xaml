@@ -28,55 +28,67 @@
                 BorderBrush="{DynamicResource Border.Subtle}"
                 Margin="0,10,0,12" />
 
-        <DockPanel Margin="0,0,0,8">
+        <keepshell:SettingRowPanel Margin="0,0,0,8">
             <TextBlock Text="Project ID"
-                       Style="{StaticResource Setting.RowLabel}" />
+                       Style="{StaticResource Form.Label}"
+                       TextWrapping="Wrap"
+                       Margin="0,0,12,0" />
             <TextBox Style="{StaticResource TextBox.Form}"
+                     Width="460"
                      Text="{Binding ProjectId, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                      keepshell:PlaceholderBehavior.Placeholder="например, my-stream-bot-123456" />
-        </DockPanel>
+        </keepshell:SettingRowPanel>
 
-        <DockPanel Margin="0,0,0,8">
+        <keepshell:SettingRowPanel Margin="0,0,0,8">
             <TextBlock Text="Client ID"
-                       Style="{StaticResource Setting.RowLabel}" />
+                       Style="{StaticResource Form.Label}"
+                       TextWrapping="Wrap"
+                       Margin="0,0,12,0" />
             <keepshell:RevealableTextBox Password="{Binding ClientId, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                         Width="460"
                                          keepshell:McpPrivacy.IsSensitive="True" />
-        </DockPanel>
+        </keepshell:SettingRowPanel>
 
-        <DockPanel Margin="0,0,0,8">
+        <keepshell:SettingRowPanel Margin="0,0,0,8">
             <TextBlock Text="Client Secret"
-                       Style="{StaticResource Setting.RowLabel}" />
+                       Style="{StaticResource Form.Label}"
+                       TextWrapping="Wrap"
+                       Margin="0,0,12,0" />
             <keepshell:RevealableTextBox Password="{Binding ClientSecret, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                         Width="460"
                                          keepshell:McpPrivacy.IsSensitive="True" />
-        </DockPanel>
+        </keepshell:SettingRowPanel>
 
-        <DockPanel Margin="0,0,0,8"
-                   Visibility="{Binding ShowLegacyChannelField, Mode=OneTime, Converter={StaticResource BoolToVisibility}}">
+        <keepshell:SettingRowPanel Margin="0,0,0,8"
+                                   Visibility="{Binding ShowLegacyChannelField, Mode=OneTime, Converter={StaticResource BoolToVisibility}}">
             <TextBlock Text="Канал стрима"
-                       Style="{StaticResource Setting.RowLabel}" />
+                       Style="{StaticResource Form.Label}"
+                       TextWrapping="Wrap"
+                       Margin="0,0,12,0" />
             <TextBox Style="{StaticResource TextBox.Form}"
                      Width="{DynamicResource Setting.ShortFieldWidth}"
-                     HorizontalAlignment="Left"
                      Text="{Binding Channel, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                      keepshell:PlaceholderBehavior.Placeholder="@handle или UC..." />
-        </DockPanel>
+        </keepshell:SettingRowPanel>
 
-        <DockPanel Margin="0,0,0,12">
-            <TextBlock Text="Бюджет квоты в сутки"
-                       Style="{StaticResource Setting.RowLabel}" />
+        <keepshell:SettingRowPanel Margin="0,0,0,12">
+            <StackPanel Margin="0,0,12,0">
+                <TextBlock Text="Бюджет квоты в сутки"
+                           Style="{StaticResource Form.Label}"
+                           TextWrapping="Wrap" />
+                <TextBlock Text="{Binding QuotaBudgetError}"
+                           Foreground="{DynamicResource State.ErrorText}"
+                           FontSize="{DynamicResource Font.Size.S}"
+                           TextWrapping="Wrap"
+                           Visibility="{Binding HasQuotaBudgetError, Converter={StaticResource BoolToVisibility}}"
+                           Margin="0,4,0,0" />
+            </StackPanel>
             <TextBox Style="{StaticResource TextBox.Form}"
                      Width="{DynamicResource Setting.ShortFieldWidth}"
-                     HorizontalAlignment="Left"
+                     VerticalAlignment="Top"
                      Text="{Binding DailyQuotaBudgetText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                      keepshell:PlaceholderBehavior.Placeholder="10000" />
-        </DockPanel>
-
-        <TextBlock Text="{Binding QuotaBudgetError}"
-                   Foreground="{DynamicResource State.ErrorText}"
-                   FontSize="{DynamicResource Font.Size.S}"
-                   TextWrapping="Wrap"
-                   Visibility="{Binding HasQuotaBudgetError, Converter={StaticResource BoolToVisibility}}"
-                   Margin="0,-6,0,10" />
+        </keepshell:SettingRowPanel>
 
         <Border BorderBrush="{DynamicResource Border.Subtle}"
                 BorderThickness="0,1,0,0"
@@ -99,35 +111,44 @@
                                VerticalAlignment="Center" />
                 </DockPanel>
 
-                <DockPanel Margin="0,0,0,6">
+                <keepshell:SettingRowPanel Margin="0,0,0,6">
                     <TextBlock Text="Чтение чата"
-                               Style="{StaticResource Setting.RowLabel}"
-                               VerticalAlignment="Top" />
+                               Style="{StaticResource Form.Label}"
+                               TextWrapping="Wrap"
+                               VerticalAlignment="Top"
+                               Margin="0,0,12,0" />
                     <TextBlock Text="{Binding QuotaStatus.ChatReadTransportText}"
+                               Width="460"
                                Foreground="{DynamicResource Fg.Primary}"
                                FontSize="{DynamicResource Font.Size.S}"
                                TextWrapping="Wrap" />
-                </DockPanel>
+                </keepshell:SettingRowPanel>
 
-                <DockPanel Margin="0,0,0,6">
+                <keepshell:SettingRowPanel Margin="0,0,0,6">
                     <TextBlock Text="Поиск и мониторинг эфира"
-                               Style="{StaticResource Setting.RowLabel}"
-                               VerticalAlignment="Top" />
+                               Style="{StaticResource Form.Label}"
+                               TextWrapping="Wrap"
+                               VerticalAlignment="Top"
+                               Margin="0,0,12,0" />
                     <TextBlock Text="{Binding QuotaStatus.MonitoringTransportText}"
+                               Width="460"
                                Foreground="{DynamicResource Fg.Primary}"
                                FontSize="{DynamicResource Font.Size.S}"
                                TextWrapping="Wrap" />
-                </DockPanel>
+                </keepshell:SettingRowPanel>
 
-                <DockPanel Margin="0,0,0,10">
+                <keepshell:SettingRowPanel Margin="0,0,0,10">
                     <TextBlock Text="Отправка сообщений бота"
-                               Style="{StaticResource Setting.RowLabel}"
-                               VerticalAlignment="Top" />
+                               Style="{StaticResource Form.Label}"
+                               TextWrapping="Wrap"
+                               VerticalAlignment="Top"
+                               Margin="0,0,12,0" />
                     <TextBlock Text="{Binding QuotaStatus.ChatSendTransportText}"
+                               Width="460"
                                Foreground="{DynamicResource Fg.Primary}"
                                FontSize="{DynamicResource Font.Size.S}"
                                TextWrapping="Wrap" />
-                </DockPanel>
+                </keepshell:SettingRowPanel>
 
                 <Border BorderBrush="{DynamicResource Border.Subtle}"
                         BorderThickness="0,1,0,0"

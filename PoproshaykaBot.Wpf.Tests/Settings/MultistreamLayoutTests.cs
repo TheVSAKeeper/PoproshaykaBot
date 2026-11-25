@@ -360,7 +360,6 @@ public sealed class MultistreamLayoutTests
         var platformSettingsHost = (ItemsControl)view.FindName("PlatformSettingsHost")!;
         var automationSection = (FrameworkElement)view.FindName("AutomationSection")!;
         var channelsTab = Descendants<RadioButton>(view).First(rb => System.Windows.Automation.AutomationProperties.GetAutomationId(rb) == "MultistreamTabChannels");
-        var profilesTab = Descendants<RadioButton>(view).First(rb => System.Windows.Automation.AutomationProperties.GetAutomationId(rb) == "MultistreamAutoTabProfiles");
 
         var baseDetailWidth = channelEditor.ActualWidth;
         var baseTabsY = channelsTab.TransformToAncestor(view).Transform(default).Y;
@@ -411,6 +410,7 @@ public sealed class MultistreamLayoutTests
         harness.Page.OpenAutomationCommand.Execute(null);
         ArrangeWithResponsivePass(host, view, viewport);
         var autoWidth = automationSection.ActualWidth;
+        var profilesTab = Descendants<ListBoxItem>(view).First(item => System.Windows.Automation.AutomationProperties.GetAutomationId(item) == "MultistreamAutoTabProfiles");
         var autoTabsY = profilesTab.TransformToAncestor(view).Transform(default).Y;
 
         Assert.Multiple(() =>
@@ -426,6 +426,48 @@ public sealed class MultistreamLayoutTests
             Assert.That(ytParamsWidth, Is.EqualTo(baseDetailWidth).Within(0.5), $"Ширина прыгнула на длинной вкладке параметров ({width}x{height}): {ytParamsWidth:F1} vs {baseDetailWidth:F1}");
             Assert.That(autoWidth, Is.EqualTo(baseDetailWidth).Within(0.5), $"Ширина прыгнула в «Профили и автоматика» ({width}x{height}): {autoWidth:F1} vs {baseDetailWidth:F1}");
             Assert.That(detailScroll.VerticalOffset, Is.EqualTo(0).Within(0.5), "Открытие «Профили и автоматика» не должно прокручивать заголовок за верх экрана");
+        });
+    }
+
+    [Test]
+    public async Task Multistream_automation_tabs_sync_segmented_listbox_selection_and_automation_ids()
+    {
+        ApplyScale(1.0);
+        await using var harness = CreateHarness();
+        var view = new MultistreamPageView { DataContext = harness.Page };
+        var host = HostWithMainWindowFont(view);
+        Size viewport = new(1180, 620);
+
+        harness.Page.OpenAutomationCommand.Execute(null);
+        ArrangeWithResponsivePass(host, view, viewport);
+
+        var tabsList = (ListBox)view.FindName("AutomationTabsList")!;
+        var items = Descendants<ListBoxItem>(tabsList).ToList();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(items, Has.Count.EqualTo(3));
+            Assert.That(items.Select(System.Windows.Automation.AutomationProperties.GetAutomationId),
+                Is.EqualTo(new[] { "MultistreamAutoTabProfiles", "MultistreamAutoTabAutomation", "MultistreamAutoTabGroups" }));
+            Assert.That(items.Select(System.Windows.Automation.AutomationProperties.GetName),
+                Is.EqualTo(new[] { "Профили трансляции", "Автоматика", "Группы каналов" }));
+            Assert.That(tabsList.SelectedValue, Is.EqualTo(MultistreamAutomationTab.Profiles));
+        });
+
+        items[1].IsSelected = true;
+        ArrangeWithResponsivePass(host, view, viewport);
+        Assert.Multiple(() =>
+        {
+            Assert.That(harness.Page.SelectedAutomationTab, Is.EqualTo(MultistreamAutomationTab.Automation));
+            Assert.That(harness.Page.IsAutomationTabSelected, Is.True);
+        });
+
+        harness.Page.SelectAutomationTabCommand.Execute(MultistreamAutomationTab.Groups);
+        ArrangeWithResponsivePass(host, view, viewport);
+        Assert.Multiple(() =>
+        {
+            Assert.That(tabsList.SelectedValue, Is.EqualTo(MultistreamAutomationTab.Groups));
+            Assert.That(items[2].IsSelected, Is.True);
         });
     }
 

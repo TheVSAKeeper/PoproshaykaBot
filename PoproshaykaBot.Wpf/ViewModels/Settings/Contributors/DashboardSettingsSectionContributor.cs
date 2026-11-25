@@ -41,7 +41,11 @@ public sealed class DashboardSettingsSectionContributor : ISettingsSectionContri
     {
         return
         [
-            new(string.Empty, "Дашборд", null, _dashboardLayout),
+            new(string.Empty, "Дашборд", null, _dashboardLayout)
+            {
+                ResetCommand = _dashboardLayout.ResetLayoutCommand,
+                ResetHint = "Вернуть раскладку панели «Обзор» к расположению по умолчанию.",
+            },
         ];
     }
 

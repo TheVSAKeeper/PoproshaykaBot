@@ -39,7 +39,9 @@
                                     <HeaderedContentControl Style="{StaticResource Form.Panel}"
                                                             Header="{Binding Title, Mode=OneTime}"
                                                             Margin="{StaticResource Setting.BlockGap}"
-                                                            settings:SettingsBlock.Key="{Binding Key, Mode=OneTime}">
+                                                            settings:SettingsBlock.Key="{Binding Key, Mode=OneTime}"
+                                                            keepshell:Form.ResetCommand="{Binding ResetCommand, Mode=OneTime}"
+                                                            keepshell:Form.ResetHint="{Binding ResetHint, Mode=OneTime}">
                                         <StackPanel>
                                             <TextBlock Text="{Binding Hint, Mode=OneTime}"
                                                        Style="{StaticResource Setting.BlockHint}"
@@ -79,7 +81,9 @@
 
                     <HeaderedContentControl Grid.Column="0"
                                             Style="{StaticResource Form.Panel}"
-                                            Header="{Binding Section.Title, Mode=OneTime}">
+                                            Header="{Binding Section.Title, Mode=OneTime}"
+                                            keepshell:Form.ResetCommand="{Binding Blocks[0].ResetCommand, Mode=OneTime}"
+                                            keepshell:Form.ResetHint="{Binding Blocks[0].ResetHint, Mode=OneTime}">
                         <StackPanel>
                             <TextBlock Text="{Binding Blocks[0].Hint, Mode=OneTime}"
                                        Style="{StaticResource Setting.BlockHint}"

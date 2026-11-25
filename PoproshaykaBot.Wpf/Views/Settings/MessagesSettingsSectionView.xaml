@@ -26,14 +26,10 @@
                     <DockPanel Grid.Row="0"
                                LastChildFill="True">
                         <Button DockPanel.Dock="Right"
-                                Style="{StaticResource Button.Icon}"
+                                Style="{StaticResource Form.RowReset}"
                                 Command="{Binding ResetCommand}"
                                 ToolTip="Сбросить к значению по умолчанию"
-                                Margin="8,0,0,0">
-                            <iconPacks:PackIconLucide Kind="{x:Static iconPacks:PackIconLucideKind.RotateCcw}"
-                                                     Width="14"
-                                                     Height="14" />
-                        </Button>
+                                AutomationProperties.Name="{Binding Label, StringFormat='Сбросить: {0}'}" />
 
                         <CheckBox DockPanel.Dock="Left"
                                   Style="{StaticResource CheckBox.Default}"

@@ -45,10 +45,10 @@
                          Text="{Binding ScopesText, UpdateSourceTrigger=PropertyChanged}"
                          keepshell:PlaceholderBehavior.Placeholder="Список scope через пробел" />
                 <Button Grid.Column="1"
-                        Style="{StaticResource Button.Ghost}"
-                        Content="Сбросить"
-                        Margin="8,0,0,0"
-                        Command="{Binding ResetScopesCommand}" />
+                        Style="{StaticResource Form.RowReset}"
+                        Command="{Binding ResetScopesCommand}"
+                        ToolTip="Сбросить права к значению по умолчанию"
+                        AutomationProperties.Name="Сбросить права к умолчанию" />
             </Grid>
         </StackPanel>
 

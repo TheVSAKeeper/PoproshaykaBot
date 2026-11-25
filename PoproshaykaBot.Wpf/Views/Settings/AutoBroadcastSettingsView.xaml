@@ -18,9 +18,11 @@
 
             <Style x:Key="MultilineRowLabel"
                    TargetType="TextBlock"
-                   BasedOn="{StaticResource Setting.RowLabel}">
+                   BasedOn="{StaticResource Form.Label}">
                 <Setter Property="VerticalAlignment"
                         Value="Top" />
+                <Setter Property="TextWrapping"
+                        Value="Wrap" />
                 <Setter Property="Margin"
                         Value="0,9,12,0" />
             </Style>
@@ -29,7 +31,7 @@
     <StackPanel>
         <CheckBox Content="Включить автоматическое управление рассылкой"
                   IsChecked="{Binding AutoBroadcastEnabled, Mode=TwoWay}"
-                  Style="{StaticResource CheckBox.Default}"
+                  Style="{StaticResource CheckBox.ToggleSwitch}"
                   Margin="0,0,0,8" />
         <TextBlock Text="Автоматическое управление отслеживает статус стрима на целевых площадках активного профиля рассылки (Twitch EventSub и мониторинг YouTube). Рассылка запускается при начале эфира и останавливается после его завершения."
                    Style="{StaticResource TextBlock.Subtle}"
@@ -45,39 +47,50 @@
 
         <StackPanel Style="{StaticResource Setting.DependentBlock}"
                     IsEnabled="{Binding StreamStatusNotificationsEnabled}">
-            <DockPanel Margin="0,0,0,8">
+            <keepshell:SettingRowPanel Margin="0,0,0,8">
                 <TextBlock Text="При запуске стрима"
-                           Style="{StaticResource Setting.RowLabel}" />
+                           Style="{StaticResource Form.Label}"
+                           TextWrapping="Wrap"
+                           Margin="0,0,12,0" />
                 <TextBox Text="{Binding StreamStartMessage, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                          Style="{StaticResource TextBox.Form}"
+                         Width="460"
                          AutomationProperties.Name="Сообщение при запуске стрима"
                          keepshell:PlaceholderBehavior.Placeholder="{Binding StreamStartMessagePlaceholder}" />
-            </DockPanel>
+            </keepshell:SettingRowPanel>
 
-            <DockPanel Margin="0,0,0,8">
+            <keepshell:SettingRowPanel Margin="0,0,0,8">
                 <TextBlock Text="При остановке стрима"
-                           Style="{StaticResource Setting.RowLabel}" />
+                           Style="{StaticResource Form.Label}"
+                           TextWrapping="Wrap"
+                           Margin="0,0,12,0" />
                 <TextBox Text="{Binding StreamStopMessage, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                          Style="{StaticResource TextBox.Form}"
+                         Width="460"
                          AutomationProperties.Name="Сообщение при остановке стрима"
                          keepshell:PlaceholderBehavior.Placeholder="{Binding StreamStopMessagePlaceholder}" />
-            </DockPanel>
+            </keepshell:SettingRowPanel>
 
-            <DockPanel>
-                <TextBlock Text="Статистика по завершении"
-                           Style="{StaticResource MultilineRowLabel}" />
+            <keepshell:SettingRowPanel>
+                <StackPanel VerticalAlignment="Top"
+                            Margin="0,9,12,0">
+                    <TextBlock Text="Статистика по завершении"
+                               Style="{StaticResource Form.Label}"
+                               TextWrapping="Wrap" />
+                    <TextBlock Text="Подстановки: {duration}, {messages}, {chatters}, {peakViewers}, {avgViewers}, {title}, {game}, {channel}."
+                               Style="{StaticResource Form.Hint}" />
+                </StackPanel>
                 <TextBox Text="{Binding StreamEndStatsMessage, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                          Style="{StaticResource TextBox.Form}"
+                         Width="460"
+                         VerticalAlignment="Top"
                          AutomationProperties.Name="Сообщение со статистикой по завершении стрима"
                          keepshell:PlaceholderBehavior.Placeholder="{Binding StreamEndStatsMessagePlaceholder}"
                          AcceptsReturn="True"
                          TextWrapping="Wrap"
                          VerticalScrollBarVisibility="Auto"
                          Height="70" />
-            </DockPanel>
-            <TextBlock Text="Подстановки: {duration}, {messages}, {chatters}, {peakViewers}, {avgViewers}, {title}, {game}, {channel}."
-                       Style="{StaticResource Form.Hint}"
-                       Margin="200,6,0,0" />
+            </keepshell:SettingRowPanel>
         </StackPanel>
 
         <TextBlock Text="Периодическая рассылка"
@@ -85,17 +98,18 @@
         <keepshell:NumericSettingField Label="Интервал рассылки, мин"
                                        Value="{Binding BroadcastIntervalMinutes, Mode=TwoWay}"
                                        Margin="0,0,0,8" />
-        <DockPanel>
+        <keepshell:SettingRowPanel>
             <TextBlock Text="Шаблон сообщения"
                        Style="{StaticResource MultilineRowLabel}" />
             <TextBox Text="{Binding BroadcastMessageTemplate, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                      Style="{StaticResource TextBox.Form}"
+                     Width="460"
                      AutomationProperties.Name="Шаблон сообщения рассылки"
                      keepshell:PlaceholderBehavior.Placeholder="{Binding BroadcastMessageTemplatePlaceholder}"
                      AcceptsReturn="True"
                      TextWrapping="Wrap"
                      VerticalScrollBarVisibility="Auto"
                      Height="70" />
-        </DockPanel>
+        </keepshell:SettingRowPanel>
     </StackPanel>
 </UserControl>

@@ -5,25 +5,17 @@
     <sys:Double x:Key="Setting.ContentWidth">780</sys:Double>
 
     <Style x:Key="Setting.SectionTitle"
-           TargetType="TextBlock">
-        <Setter Property="Foreground"
-                Value="{DynamicResource Fg.Primary}" />
+           TargetType="TextBlock"
+           BasedOn="{StaticResource Form.SectionTitle}">
         <Setter Property="FontSize"
                 Value="{DynamicResource Font.Size.XL}" />
-        <Setter Property="FontWeight"
-                Value="{DynamicResource Font.Weight.SemiBold}" />
         <Setter Property="Margin"
                 Value="0,0,0,12" />
     </Style>
 
     <Style x:Key="Setting.BlockHint"
-           TargetType="TextBlock">
-        <Setter Property="Foreground"
-                Value="{DynamicResource Fg.Muted}" />
-        <Setter Property="FontSize"
-                Value="{DynamicResource Font.Size.S}" />
-        <Setter Property="TextWrapping"
-                Value="Wrap" />
+           TargetType="TextBlock"
+           BasedOn="{StaticResource Form.Hint}">
         <Setter Property="Margin"
                 Value="0,0,0,14" />
     </Style>
@@ -60,19 +52,6 @@
            BasedOn="{StaticResource Setting.BlockTitle}">
         <Setter Property="Margin"
                 Value="0,28,0,10" />
-    </Style>
-
-    <Style x:Key="Setting.RowLabel"
-           TargetType="TextBlock"
-           BasedOn="{StaticResource Form.Label}">
-        <Setter Property="VerticalAlignment"
-                Value="Center" />
-        <Setter Property="Width"
-                Value="188" />
-        <Setter Property="Margin"
-                Value="0,0,12,0" />
-        <Setter Property="TextWrapping"
-                Value="Wrap" />
     </Style>
 
     <Style x:Key="Setting.CheckCell"

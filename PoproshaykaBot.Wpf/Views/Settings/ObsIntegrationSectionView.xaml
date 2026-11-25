@@ -65,30 +65,32 @@
     </UserControl.Resources>
 
     <StackPanel>
-        <CheckBox Style="{StaticResource CheckBox.Default}"
+        <CheckBox Style="{StaticResource CheckBox.ToggleSwitch}"
                   IsChecked="{Binding Enabled, Mode=TwoWay}"
                   Content="Включить OBS-интеграцию"
                   Margin="0,0,0,16" />
 
-        <DockPanel Margin="0,0,0,8">
+        <keepshell:SettingRowPanel Margin="0,0,0,8">
             <TextBlock Text="Хост"
-                       Style="{StaticResource Setting.RowLabel}" />
+                       Style="{StaticResource Form.Label}"
+                       TextWrapping="Wrap"
+                       Margin="0,0,12,0" />
             <TextBox Style="{StaticResource TextBox.Form}"
                      Width="{DynamicResource Setting.ShortFieldWidth}"
-                     HorizontalAlignment="Left"
                      AutomationProperties.Name="Хост OBS WebSocket"
                      Text="{Binding Host, UpdateSourceTrigger=PropertyChanged}"
                      keepshell:PlaceholderBehavior.Placeholder="127.0.0.1" />
-        </DockPanel>
+        </keepshell:SettingRowPanel>
 
-        <DockPanel Margin="0,0,0,8">
+        <keepshell:SettingRowPanel Margin="0,0,0,8">
             <TextBlock Text="Пароль OBS WebSocket"
-                       Style="{StaticResource Setting.RowLabel}" />
+                       Style="{StaticResource Form.Label}"
+                       TextWrapping="Wrap"
+                       Margin="0,0,12,0" />
             <keepshell:RevealableTextBox Password="{Binding Password, Mode=TwoWay}"
                                          keepshell:McpPrivacy.IsSensitive="True"
-                                         Width="{DynamicResource Setting.ShortFieldWidth}"
-                                         HorizontalAlignment="Left" />
-        </DockPanel>
+                                         Width="{DynamicResource Setting.ShortFieldWidth}" />
+        </keepshell:SettingRowPanel>
 
         <keepshell:NumericSettingField Label="Порт"
                                        Value="{Binding Port, Mode=TwoWay}"
@@ -98,7 +100,7 @@
                                        DecreaseAutomationName="Уменьшить порт"
                                        Margin="0,0,0,8" />
 
-        <WrapPanel Margin="200,4,0,0">
+        <WrapPanel Margin="0,4,0,0">
             <Button Style="{StaticResource Button.Secondary}"
                     Content="Проверить подключение"
                     Command="{Binding TestConnectionCommand}"
@@ -118,25 +120,27 @@
                    keepshell:SeverityBrushBehavior.Foreground="{Binding StatusSeverity}"
                    FontSize="{DynamicResource Font.Size.S}"
                    TextWrapping="Wrap"
-                   Margin="200,0,0,12" />
+                   Margin="0,0,0,12" />
 
-        <DockPanel Margin="0,0,0,8">
+        <keepshell:SettingRowPanel Margin="0,0,0,8">
             <TextBlock Text="Overlay URL"
-                       Style="{StaticResource Setting.RowLabel}" />
-            <Button DockPanel.Dock="Right"
-                    Style="{StaticResource Button.Secondary}"
-                    Content="Скопировать URL"
-                    Command="{Binding CopyOverlayUrlCommand}"
-                    Margin="12,0,0,0" />
+                       Style="{StaticResource Form.Label}"
+                       TextWrapping="Wrap"
+                       Margin="0,0,12,0" />
             <TextBlock Text="{Binding OverlayUrl}"
                        ToolTip="{Binding OverlayUrl}"
+                       MaxWidth="340"
                        FontFamily="{DynamicResource Font.Mono}"
                        FontSize="{DynamicResource Font.Size.S}"
                        Foreground="{DynamicResource Fg.Primary}"
                        VerticalAlignment="Center"
                        TextWrapping="NoWrap"
-                       TextTrimming="CharacterEllipsis" />
-        </DockPanel>
+                       TextTrimming="CharacterEllipsis"
+                       Margin="0,0,12,0" />
+            <Button Style="{StaticResource Button.Secondary}"
+                    Content="Скопировать URL"
+                    Command="{Binding CopyOverlayUrlCommand}" />
+        </keepshell:SettingRowPanel>
 
         <StackPanel Style="{StaticResource Setting.DependentBlock}"
                     IsEnabled="{Binding Enabled}">
@@ -174,27 +178,33 @@
                        Style="{StaticResource Setting.GroupHeading}" />
         </DockPanel>
 
-        <DockPanel Margin="0,0,0,8">
+        <keepshell:SettingRowPanel Margin="0,0,0,8">
             <TextBlock Text="Сцена OBS"
-                       Style="{StaticResource Setting.RowLabel}" />
+                       Style="{StaticResource Form.Label}"
+                       TextWrapping="Wrap"
+                       Margin="0,0,12,0" />
             <ComboBox Style="{StaticResource ComboBox.Form}"
+                      Width="460"
                       IsEditable="True"
                       AutomationProperties.Name="Сцена OBS"
                       ItemsSource="{Binding Scenes}"
                       Text="{Binding SceneName, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
-        </DockPanel>
+        </keepshell:SettingRowPanel>
 
-        <DockPanel Margin="0,0,0,8">
+        <keepshell:SettingRowPanel Margin="0,0,0,8">
             <TextBlock Text="Имя источника"
-                       Style="{StaticResource Setting.RowLabel}" />
+                       Style="{StaticResource Form.Label}"
+                       TextWrapping="Wrap"
+                       Margin="0,0,12,0" />
             <TextBox Style="{StaticResource TextBox.Form}"
+                     Width="460"
                      AutomationProperties.Name="Имя источника браузера в OBS"
                      Text="{Binding SourceName, UpdateSourceTrigger=PropertyChanged}"
                      keepshell:PlaceholderBehavior.Placeholder="PoproshaykaBot Chat" />
-        </DockPanel>
+        </keepshell:SettingRowPanel>
 
-        <WrapPanel>
-            <keepshell:NumericSettingField Style="{StaticResource Setting.PairCell}"
+        <keepshell:UniformRowPanel>
+            <keepshell:NumericSettingField Margin="0,0,12,8"
                                            Label="Ширина"
                                            Value="{Binding Width, Mode=TwoWay}"
                                            IncreaseCommand="{Binding IncreaseWidthCommand}"
@@ -202,14 +212,14 @@
                                            IncreaseAutomationName="Увеличить ширину"
                                            DecreaseAutomationName="Уменьшить ширину" />
 
-            <keepshell:NumericSettingField Style="{StaticResource Setting.PairCell}"
+            <keepshell:NumericSettingField Margin="0,0,12,8"
                                            Label="Высота"
                                            Value="{Binding Height, Mode=TwoWay}"
                                            IncreaseCommand="{Binding IncreaseHeightCommand}"
                                            DecreaseCommand="{Binding DecreaseHeightCommand}"
                                            IncreaseAutomationName="Увеличить высоту"
                                            DecreaseAutomationName="Уменьшить высоту" />
-        </WrapPanel>
+        </keepshell:UniformRowPanel>
 
         <TextBlock Text="Аудиоисточники дашборда"
                    Style="{StaticResource Setting.GroupHeading}" />

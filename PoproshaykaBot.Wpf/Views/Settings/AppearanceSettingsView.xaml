@@ -32,12 +32,14 @@
                                   Margin="0,20,0,0" />
 
         <CheckBox Content="Показывать заголовок страницы"
+                  Style="{StaticResource CheckBox.ToggleSwitch}"
                   IsChecked="{Binding Shell.ShowPageHeader, Mode=TwoWay}"
                   Margin="0,20,0,0" />
         <TextBlock Style="{StaticResource Form.CheckHint}"
                    Text="Плашка с названием раздела и описанием над содержимым каждой страницы." />
 
         <CheckBox Content="Показывать всплывающие уведомления"
+                  Style="{StaticResource CheckBox.ToggleSwitch}"
                   IsChecked="{Binding Shell.EnableToastNotifications, Mode=TwoWay}"
                   Margin="0,16,0,0" />
         <TextBlock Style="{StaticResource Form.CheckHint}"

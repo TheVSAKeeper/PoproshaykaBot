@@ -1,6 +1,8 @@
 ﻿using System.ComponentModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using KeepShell.ViewModels;
+using MahApps.Metro.IconPacks;
 using Microsoft.Extensions.DependencyInjection;
 using PoproshaykaBot.Core.Platforms;
 using PoproshaykaBot.Core.Platforms.Auth;
@@ -45,6 +47,20 @@ public enum MultistreamGuidedNextAction
     AddChannel = 2,
     AssignAccount = 3,
     RevisitSetup = 4,
+}
+
+public sealed record MultistreamAutomationTabOption(
+    MultistreamAutomationTab Tab,
+    SegmentOption Option,
+    string AutomationId)
+{
+    public PackIconLucideKind Kind => Option.Kind;
+
+    public string Text => Option.Text;
+
+    public string? Tooltip => Option.Tooltip;
+
+    public override string ToString() => Option.ToString();
 }
 
 public sealed partial class MultistreamPlatformCard : ObservableObject
@@ -213,6 +229,13 @@ public sealed partial class MultistreamPageViewModel : ObservableObject, IPageHe
     public PlatformAccountsSectionViewModel? Accounts { get; }
 
     public IReadOnlyList<MultistreamPlatformCard> Cards { get; }
+
+    public IReadOnlyList<MultistreamAutomationTabOption> AutomationTabOptions { get; } =
+    [
+        new(MultistreamAutomationTab.Profiles, new SegmentOption(PackIconLucideKind.ListChecks, "Профили трансляции"), "MultistreamAutoTabProfiles"),
+        new(MultistreamAutomationTab.Automation, new SegmentOption(PackIconLucideKind.Bot, "Автоматика"), "MultistreamAutoTabAutomation"),
+        new(MultistreamAutomationTab.Groups, new SegmentOption(PackIconLucideKind.Users, "Группы каналов"), "MultistreamAutoTabGroups"),
+    ];
 
     public MultistreamPlatformCard? SelectedPlatformCard
     {

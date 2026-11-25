@@ -18,7 +18,7 @@
                    TargetType="ComboBox"
                    BasedOn="{StaticResource ComboBox.Form}">
                 <Setter Property="Width"
-                        Value="240" />
+                        Value="{DynamicResource Setting.ShortFieldWidth}" />
                 <Setter Property="HorizontalAlignment"
                         Value="Left" />
             </Style>
@@ -27,17 +27,18 @@
 
     <StackPanel>
 
-        <DockPanel Margin="0,0,0,8">
+        <keepshell:SettingRowPanel Margin="0,0,0,8">
             <TextBlock Text="Тема оверлея"
-                       Style="{StaticResource Setting.RowLabel}" />
+                       Style="{StaticResource Form.Label}"
+                       TextWrapping="Wrap"
+                       Margin="0,0,12,0" />
             <ComboBox Style="{StaticResource RowCombo}"
-                      Width="{DynamicResource Setting.ShortFieldWidth}"
                       ItemsSource="{Binding OverlayThemeOptions}"
                       DisplayMemberPath="DisplayName"
                       SelectedValuePath="Value"
                       AutomationProperties.Name="Тема оверлея"
                       SelectedValue="{Binding OverlayTheme, Mode=TwoWay}" />
-        </DockPanel>
+        </keepshell:SettingRowPanel>
 
         <TextBlock Text="В теме «Обтекаемый (Flow)» силуэт сообщения, отступы, скругление и вид анимаций задаются обтекаемым макетом и рангом зрителя – цвета, шрифт, аватары, рамки ролей и длительность анимаций продолжают действовать."
                    Style="{StaticResource Setting.BlockHint}" />
@@ -46,130 +47,138 @@
                    Style="{StaticResource Setting.GroupHeading}"
                    Margin="0,6,0,10" />
 
-        <DockPanel Margin="0,0,0,8">
+        <keepshell:SettingRowPanel Margin="0,0,0,8">
             <TextBlock Text="Фон"
-                       Style="{StaticResource Setting.RowLabel}" />
-            <Button DockPanel.Dock="Right"
-                    Content="Сброс"
-                    Style="{StaticResource Button.Ghost}"
-                    Command="{Binding ResetColorCommand}"
-                    CommandParameter="Background"
-                    Margin="8,0,0,0" />
-            <Button DockPanel.Dock="Right"
-                    Content="Изменить"
-                    Style="{StaticResource Button.Secondary}"
-                    Command="{Binding PickColorCommand}"
-                    CommandParameter="Background" />
-            <Border Height="28"
+                       Style="{StaticResource Form.Label}"
+                       TextWrapping="Wrap"
+                       Margin="0,0,12,0" />
+            <Border Width="280"
+                    Height="28"
                     CornerRadius="{DynamicResource Radius.M}"
                     BorderBrush="{DynamicResource Border.Default}"
                     BorderThickness="1"
                     Background="{Binding BackgroundColor, Converter={StaticResource DrawingColorToBrush}}"
                     Margin="0,0,12,0" />
-        </DockPanel>
-
-        <DockPanel Margin="0,0,0,8">
-            <TextBlock Text="Текст"
-                       Style="{StaticResource Setting.RowLabel}" />
-            <Button DockPanel.Dock="Right"
-                    Content="Сброс"
-                    Style="{StaticResource Button.Ghost}"
-                    Command="{Binding ResetColorCommand}"
-                    CommandParameter="Text"
-                    Margin="8,0,0,0" />
-            <Button DockPanel.Dock="Right"
-                    Content="Изменить"
+            <Button Content="Изменить"
                     Style="{StaticResource Button.Secondary}"
                     Command="{Binding PickColorCommand}"
-                    CommandParameter="Text" />
-            <Border Height="28"
+                    CommandParameter="Background" />
+            <Button Content="Сброс"
+                    Style="{StaticResource Button.Ghost}"
+                    Command="{Binding ResetColorCommand}"
+                    CommandParameter="Background"
+                    Margin="8,0,0,0" />
+        </keepshell:SettingRowPanel>
+
+        <keepshell:SettingRowPanel Margin="0,0,0,8">
+            <TextBlock Text="Текст"
+                       Style="{StaticResource Form.Label}"
+                       TextWrapping="Wrap"
+                       Margin="0,0,12,0" />
+            <Border Width="280"
+                    Height="28"
                     CornerRadius="{DynamicResource Radius.M}"
                     BorderBrush="{DynamicResource Border.Default}"
                     BorderThickness="1"
                     Background="{Binding TextColor, Converter={StaticResource DrawingColorToBrush}}"
                     Margin="0,0,12,0" />
-        </DockPanel>
-
-        <DockPanel Margin="0,0,0,8">
-            <TextBlock Text="Имя пользователя"
-                       Style="{StaticResource Setting.RowLabel}" />
-            <Button DockPanel.Dock="Right"
-                    Content="Сброс"
-                    Style="{StaticResource Button.Ghost}"
-                    Command="{Binding ResetColorCommand}"
-                    CommandParameter="Username"
-                    Margin="8,0,0,0" />
-            <Button DockPanel.Dock="Right"
-                    Content="Изменить"
+            <Button Content="Изменить"
                     Style="{StaticResource Button.Secondary}"
                     Command="{Binding PickColorCommand}"
-                    CommandParameter="Username" />
-            <Border Height="28"
+                    CommandParameter="Text" />
+            <Button Content="Сброс"
+                    Style="{StaticResource Button.Ghost}"
+                    Command="{Binding ResetColorCommand}"
+                    CommandParameter="Text"
+                    Margin="8,0,0,0" />
+        </keepshell:SettingRowPanel>
+
+        <keepshell:SettingRowPanel Margin="0,0,0,8">
+            <TextBlock Text="Имя пользователя"
+                       Style="{StaticResource Form.Label}"
+                       TextWrapping="Wrap"
+                       Margin="0,0,12,0" />
+            <Border Width="280"
+                    Height="28"
                     CornerRadius="{DynamicResource Radius.M}"
                     BorderBrush="{DynamicResource Border.Default}"
                     BorderThickness="1"
                     Background="{Binding UsernameColor, Converter={StaticResource DrawingColorToBrush}}"
                     Margin="0,0,12,0" />
-        </DockPanel>
-
-        <DockPanel Margin="0,0,0,8">
-            <TextBlock Text="Системные сообщения"
-                       Style="{StaticResource Setting.RowLabel}" />
-            <Button DockPanel.Dock="Right"
-                    Content="Сброс"
-                    Style="{StaticResource Button.Ghost}"
-                    Command="{Binding ResetColorCommand}"
-                    CommandParameter="System"
-                    Margin="8,0,0,0" />
-            <Button DockPanel.Dock="Right"
-                    Content="Изменить"
+            <Button Content="Изменить"
                     Style="{StaticResource Button.Secondary}"
                     Command="{Binding PickColorCommand}"
-                    CommandParameter="System" />
-            <Border Height="28"
+                    CommandParameter="Username" />
+            <Button Content="Сброс"
+                    Style="{StaticResource Button.Ghost}"
+                    Command="{Binding ResetColorCommand}"
+                    CommandParameter="Username"
+                    Margin="8,0,0,0" />
+        </keepshell:SettingRowPanel>
+
+        <keepshell:SettingRowPanel Margin="0,0,0,8">
+            <TextBlock Text="Системные сообщения"
+                       Style="{StaticResource Form.Label}"
+                       TextWrapping="Wrap"
+                       Margin="0,0,12,0" />
+            <Border Width="280"
+                    Height="28"
                     CornerRadius="{DynamicResource Radius.M}"
                     BorderBrush="{DynamicResource Border.Default}"
                     BorderThickness="1"
                     Background="{Binding SystemMessageColor, Converter={StaticResource DrawingColorToBrush}}"
                     Margin="0,0,12,0" />
-        </DockPanel>
-
-        <DockPanel Margin="0,0,0,8">
-            <TextBlock Text="Время"
-                       Style="{StaticResource Setting.RowLabel}" />
-            <Button DockPanel.Dock="Right"
-                    Content="Сброс"
-                    Style="{StaticResource Button.Ghost}"
-                    Command="{Binding ResetColorCommand}"
-                    CommandParameter="Timestamp"
-                    Margin="8,0,0,0" />
-            <Button DockPanel.Dock="Right"
-                    Content="Изменить"
+            <Button Content="Изменить"
                     Style="{StaticResource Button.Secondary}"
                     Command="{Binding PickColorCommand}"
-                    CommandParameter="Timestamp" />
-            <Border Height="28"
+                    CommandParameter="System" />
+            <Button Content="Сброс"
+                    Style="{StaticResource Button.Ghost}"
+                    Command="{Binding ResetColorCommand}"
+                    CommandParameter="System"
+                    Margin="8,0,0,0" />
+        </keepshell:SettingRowPanel>
+
+        <keepshell:SettingRowPanel Margin="0,0,0,8">
+            <TextBlock Text="Время"
+                       Style="{StaticResource Form.Label}"
+                       TextWrapping="Wrap"
+                       Margin="0,0,12,0" />
+            <Border Width="280"
+                    Height="28"
                     CornerRadius="{DynamicResource Radius.M}"
                     BorderBrush="{DynamicResource Border.Default}"
                     BorderThickness="1"
                     Background="{Binding TimestampColor, Converter={StaticResource DrawingColorToBrush}}"
                     Margin="0,0,12,0" />
-        </DockPanel>
+            <Button Content="Изменить"
+                    Style="{StaticResource Button.Secondary}"
+                    Command="{Binding PickColorCommand}"
+                    CommandParameter="Timestamp" />
+            <Button Content="Сброс"
+                    Style="{StaticResource Button.Ghost}"
+                    Command="{Binding ResetColorCommand}"
+                    CommandParameter="Timestamp"
+                    Margin="8,0,0,0" />
+        </keepshell:SettingRowPanel>
 
         <TextBlock Text="Шрифт"
                    Style="{StaticResource Setting.GroupHeading}" />
 
-        <DockPanel Margin="0,0,0,8">
+        <keepshell:SettingRowPanel Margin="0,0,0,8">
             <TextBlock Text="Семейство шрифтов"
-                       Style="{StaticResource Setting.RowLabel}" />
+                       Style="{StaticResource Form.Label}"
+                       TextWrapping="Wrap"
+                       Margin="0,0,12,0" />
             <TextBox Style="{StaticResource TextBox.Form}"
+                     Width="460"
                      keepshell:PlaceholderBehavior.Placeholder="Например: Inter, Arial, sans-serif"
                      AutomationProperties.Name="Семейство шрифтов"
                      Text="{Binding FontFamily, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
-        </DockPanel>
+        </keepshell:SettingRowPanel>
 
-        <WrapPanel>
-            <keepshell:NumericSettingField Style="{StaticResource Setting.PairCell}"
+        <keepshell:UniformRowPanel>
+            <keepshell:NumericSettingField Margin="0,0,12,8"
                                            Label="Размер шрифта"
                                            Value="{Binding FontSize, Mode=TwoWay}"
                                            IncreaseCommand="{Binding IncreaseFontSizeCommand}"
@@ -181,11 +190,11 @@
                       Content="Жирный шрифт"
                       IsChecked="{Binding FontBold, Mode=TwoWay}"
                       VerticalAlignment="Center"
-                      Margin="0,0,0,8" />
-        </WrapPanel>
+                      Margin="0,0,12,8" />
+        </keepshell:UniformRowPanel>
 
-        <WrapPanel>
-            <StackPanel Style="{StaticResource Setting.PairCell}">
+        <keepshell:UniformRowPanel>
+            <StackPanel Margin="0,0,12,8">
                 <TextBlock Text="Геометрия"
                            Style="{StaticResource Setting.GroupHeading}" />
 
@@ -213,7 +222,7 @@
                                                DecreaseAutomationName="Уменьшить скругление углов" />
             </StackPanel>
 
-            <StackPanel Style="{StaticResource Setting.PairCell}">
+            <StackPanel Margin="0,0,12,8">
                 <TextBlock Text="Сообщения"
                            Style="{StaticResource Setting.GroupHeading}" />
 
@@ -257,7 +266,7 @@
                           AutomationProperties.Name="Значок площадки"
                           SelectedValue="{Binding PlatformBadgeMode, Mode=TwoWay}" />
             </StackPanel>
-        </WrapPanel>
+        </keepshell:UniformRowPanel>
 
         <DockPanel>
             <Button DockPanel.Dock="Right"
@@ -285,60 +294,70 @@
                                            DecreaseAutomationName="Уменьшить длительность появления"
                                            Margin="0,0,0,8" />
 
-            <DockPanel Margin="0,0,0,8">
+            <keepshell:SettingRowPanel Margin="0,0,0,8">
                 <TextBlock Text="Сообщения пользователей"
-                           Style="{StaticResource Setting.RowLabel}" />
+                           Style="{StaticResource Form.Label}"
+                           TextWrapping="Wrap"
+                           Margin="0,0,12,0" />
                 <ComboBox Style="{StaticResource RowCombo}"
                           ItemsSource="{Binding EntryAnimationOptions}"
                           DisplayMemberPath="DisplayName"
                           SelectedValuePath="Value"
                           AutomationProperties.Name="Анимация появления сообщений пользователей"
                           SelectedValue="{Binding UserMessageAnimation, Mode=TwoWay}" />
-            </DockPanel>
+            </keepshell:SettingRowPanel>
 
-            <DockPanel Margin="0,0,0,8">
+            <keepshell:SettingRowPanel Margin="0,0,0,8">
                 <TextBlock Text="Сообщения бота"
-                           Style="{StaticResource Setting.RowLabel}" />
+                           Style="{StaticResource Form.Label}"
+                           TextWrapping="Wrap"
+                           Margin="0,0,12,0" />
                 <ComboBox Style="{StaticResource RowCombo}"
                           ItemsSource="{Binding EntryAnimationOptions}"
                           DisplayMemberPath="DisplayName"
                           SelectedValuePath="Value"
                           AutomationProperties.Name="Анимация появления сообщений бота"
                           SelectedValue="{Binding BotMessageAnimation, Mode=TwoWay}" />
-            </DockPanel>
+            </keepshell:SettingRowPanel>
 
-            <DockPanel Margin="0,0,0,8">
+            <keepshell:SettingRowPanel Margin="0,0,0,8">
                 <TextBlock Text="Системные сообщения"
-                           Style="{StaticResource Setting.RowLabel}" />
+                           Style="{StaticResource Form.Label}"
+                           TextWrapping="Wrap"
+                           Margin="0,0,12,0" />
                 <ComboBox Style="{StaticResource RowCombo}"
                           ItemsSource="{Binding EntryAnimationOptions}"
                           DisplayMemberPath="DisplayName"
                           SelectedValuePath="Value"
                           AutomationProperties.Name="Анимация появления системных сообщений"
                           SelectedValue="{Binding SystemMessageAnimation, Mode=TwoWay}" />
-            </DockPanel>
+            </keepshell:SettingRowPanel>
 
-            <DockPanel Margin="0,0,0,8">
+            <keepshell:SettingRowPanel Margin="0,0,0,8">
                 <TextBlock Text="Сообщения стримера"
-                           Style="{StaticResource Setting.RowLabel}" />
+                           Style="{StaticResource Form.Label}"
+                           TextWrapping="Wrap"
+                           Margin="0,0,12,0" />
                 <ComboBox Style="{StaticResource RowCombo}"
                           ItemsSource="{Binding EntryAnimationOptions}"
                           DisplayMemberPath="DisplayName"
                           SelectedValuePath="Value"
                           AutomationProperties.Name="Анимация появления сообщений стримера"
                           SelectedValue="{Binding BroadcasterMessageAnimation, Mode=TwoWay}" />
-            </DockPanel>
+            </keepshell:SettingRowPanel>
 
-            <DockPanel Margin="0,0,0,8">
+            <keepshell:SettingRowPanel Margin="0,0,0,8">
                 <TextBlock Text="Первое сообщение зрителя"
-                           Style="{StaticResource Setting.RowLabel}" />
+                           Style="{StaticResource Form.Label}"
+                           TextWrapping="Wrap"
+                           Margin="0,0,12,0" />
                 <ComboBox Style="{StaticResource RowCombo}"
                           ItemsSource="{Binding EntryAnimationOptions}"
                           DisplayMemberPath="DisplayName"
                           SelectedValuePath="Value"
                           AutomationProperties.Name="Анимация появления первого сообщения зрителя"
                           SelectedValue="{Binding FirstTimeUserMessageAnimation, Mode=TwoWay}" />
-            </DockPanel>
+            </keepshell:SettingRowPanel>
         </StackPanel>
 
         <CheckBox Style="{StaticResource CheckBox.Default}"
@@ -356,16 +375,18 @@
                                            DecreaseAutomationName="Уменьшить время жизни"
                                            Margin="0,0,0,8" />
 
-            <DockPanel Margin="0,0,0,8">
+            <keepshell:SettingRowPanel Margin="0,0,0,8">
                 <TextBlock Text="Анимация исчезновения"
-                           Style="{StaticResource Setting.RowLabel}" />
+                           Style="{StaticResource Form.Label}"
+                           TextWrapping="Wrap"
+                           Margin="0,0,12,0" />
                 <ComboBox Style="{StaticResource RowCombo}"
                           ItemsSource="{Binding ExitAnimationOptions}"
                           DisplayMemberPath="DisplayName"
                           SelectedValuePath="Value"
                           AutomationProperties.Name="Анимация исчезновения сообщений"
                           SelectedValue="{Binding FadeOutAnimationType, Mode=TwoWay}" />
-            </DockPanel>
+            </keepshell:SettingRowPanel>
 
             <keepshell:NumericSettingField Label="Длительность исчезновения, мс"
                                            Value="{Binding FadeOutAnimationDurationMs, Mode=TwoWay}"
@@ -397,8 +418,8 @@
                       IsChecked="{Binding EnableSpecialEffects, Mode=TwoWay}" />
         </WrapPanel>
 
-        <WrapPanel>
-            <StackPanel Style="{StaticResource Setting.PairCell}">
+        <keepshell:UniformRowPanel>
+            <StackPanel Margin="0,0,12,8">
                 <TextBlock Text="Прокрутка"
                            Style="{StaticResource Setting.GroupHeading}" />
 
@@ -420,7 +441,7 @@
                                                DecreaseAutomationName="Уменьшить длительность прокрутки" />
             </StackPanel>
 
-            <StackPanel Style="{StaticResource Setting.PairCell}">
+            <StackPanel Margin="0,0,12,8">
                 <TextBlock Text="Аватары"
                            Style="{StaticResource Setting.GroupHeading}" />
 
@@ -439,7 +460,7 @@
                                                    DecreaseAutomationName="Уменьшить размер аватара" />
                 </StackPanel>
             </StackPanel>
-        </WrapPanel>
+        </keepshell:UniformRowPanel>
 
         <TextBlock Text="Картинки в сообщениях"
                    Style="{StaticResource Setting.GroupHeading}" />
@@ -451,10 +472,13 @@
 
         <StackPanel Style="{StaticResource Setting.DependentBlock}"
                     IsEnabled="{Binding ShowMessageImages}">
-            <DockPanel Margin="0,0,0,8">
+            <keepshell:SettingRowPanel Margin="0,0,0,8">
                 <TextBlock Text="Чьи ссылки показывать"
-                           Style="{StaticResource Setting.RowLabel}" />
-                <WrapPanel VerticalAlignment="Center">
+                           Style="{StaticResource Form.Label}"
+                           TextWrapping="Wrap"
+                           Margin="0,0,12,0" />
+                <WrapPanel MaxWidth="460"
+                           VerticalAlignment="Center">
                     <CheckBox Style="{StaticResource CheckBox.Default}"
                               Content="Стример"
                               IsChecked="{Binding MessageImagesFromBroadcaster, Mode=TwoWay}"
@@ -480,13 +504,16 @@
                               IsChecked="{Binding MessageImagesFromEveryone, Mode=TwoWay}"
                               Margin="0,2,0,2" />
                 </WrapPanel>
-            </DockPanel>
+            </keepshell:SettingRowPanel>
 
-            <DockPanel Margin="0,0,0,8">
+            <keepshell:SettingRowPanel Margin="0,0,0,8">
                 <TextBlock Text="Разрешённые хосты"
-                           Style="{StaticResource Setting.RowLabel}"
-                           VerticalAlignment="Top" />
+                           Style="{StaticResource Form.Label}"
+                           TextWrapping="Wrap"
+                           VerticalAlignment="Top"
+                           Margin="0,9,12,0" />
                 <TextBox Style="{StaticResource TextBox.Form}"
+                         Width="460"
                          AcceptsReturn="True"
                          MinHeight="96"
                          VerticalScrollBarVisibility="Auto"
@@ -494,10 +521,10 @@
                          AutomationProperties.Name="Разрешённые хосты для картинок, по одному в строке"
                          keepshell:PlaceholderBehavior.Placeholder="По одному хосту в строке, например i.imgur.com"
                          Text="{Binding MessageImageAllowedHostsText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
-            </DockPanel>
+            </keepshell:SettingRowPanel>
 
-            <WrapPanel>
-                <keepshell:NumericSettingField Style="{StaticResource Setting.PairCell}"
+            <keepshell:UniformRowPanel>
+                <keepshell:NumericSettingField Margin="0,0,12,8"
                                                Label="Высота картинки, px"
                                                Value="{Binding MessageImageMaxHeightPixels, Mode=TwoWay}"
                                                IncreaseCommand="{Binding IncreaseMessageImageMaxHeightCommand}"
@@ -507,10 +534,11 @@
 
                 <Button Style="{StaticResource Button.Secondary}"
                         Content="Вернуть хосты по умолчанию"
+                        HorizontalAlignment="Left"
                         VerticalAlignment="Center"
                         Command="{Binding ResetMessageImageHostsCommand}"
                         Margin="0,0,0,8" />
-            </WrapPanel>
+            </keepshell:UniformRowPanel>
         </StackPanel>
 
         <Button Content="Сбросить все настройки чата"
