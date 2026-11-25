@@ -2004,6 +2004,39 @@ public class DashboardPaneLayoutTests
         return layout;
     }
 
+    [Test]
+    public void Default_multistream_layout_fits_default_window_without_stacking()
+    {
+        DashboardTileViewModel[] tiles =
+        [
+            new FakeTile("stream-info", sizesToContent: true, maxWidth: 420, maxHeight: 320, minHeight: 194),
+            new FakeTile("broadcast-status", sizesToContent: true, maxWidth: 360, minHeight: 160),
+            new FakeTile("broadcast-profiles", maxWidth: 500, maxHeight: 320, minHeight: 144),
+            new FakeTile("polls-control", maxWidth: 500, maxHeight: 320, minHeight: 144),
+            new FakeTile("obs-info", sizesToContent: true, maxHeight: 720, minHeight: 154),
+            new FakeTile("stream-preview", sizesToContent: true, maxHeight: 280),
+            new FakeTile("chat-overlay-preview", fills: true, minWidth: 320, minHeight: 234),
+            new FakeTile("twitch-chat", fills: true, minWidth: 280, minHeight: 234),
+            new FakeTile("multiplatform-chat", fills: true, grows: true, minWidth: 280, minHeight: 220),
+            new FakeTile("multistream", grows: true, maxWidth: 500, minWidth: 280, minHeight: 324),
+        ];
+
+        using var dashboard = CreateDashboard(DashboardLayoutDefaults.Create(), tiles);
+
+        var defaultContentWidth = DashboardPreviewReference.DefaultWindow.Width - DashboardPreviewReference.NavWidthExpanded;
+        var compactContentWidth = DashboardPreviewReference.MinWindow.Width - DashboardPreviewReference.NavWidthExpanded;
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(dashboard.Pane, Is.Not.Null);
+            Assert.That(dashboard.Pane!.MinWidth(DashboardPaneSurface.ScaledStarBandMinWidth), Is.EqualTo(1180));
+            Assert.That(DashboardPaneSurface.ShouldStack(defaultContentWidth, dashboard.Pane), Is.False,
+                "Раскладка по умолчанию должна помещаться в стартовое окно с раскрытым рейлом без перехода в стопку.");
+            Assert.That(DashboardPaneSurface.ShouldStack(compactContentWidth, dashboard.Pane), Is.True,
+                "На минимальной ширине 1024 четырёхколоночная раскладка уходит в стопку.");
+        });
+    }
+
     private static void AddTile(DashboardLayoutSettings layout, string typeId, int row, int column, int rowSpan, int columnSpan)
     {
         layout.Tiles.Add(new()

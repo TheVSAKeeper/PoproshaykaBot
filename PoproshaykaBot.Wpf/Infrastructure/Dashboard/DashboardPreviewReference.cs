@@ -10,7 +10,7 @@ public sealed record DashboardPreviewReference(string Label, Size Window)
     public const double NavWidthExpanded = 220;
     public const double NavWidthCollapsed = 56;
 
-    public static readonly Size DefaultWindow = new(1100, 720);
+    public static readonly Size DefaultWindow = new(1440, 800);
 
     public static readonly Size MinWindow = new(1024, 640);
 
