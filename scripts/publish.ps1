@@ -140,6 +140,27 @@ function Invoke-DotnetPublish {
     Write-Output "  -> $zipName"
 }
 
+function Get-TargetFramework {
+    $match = Select-String -LiteralPath $csprojPath -Pattern '<TargetFramework>(.*?)</TargetFramework>'
+    if (-not $match) {
+        throw "Не удалось извлечь <TargetFramework> из $csprojPath."
+    }
+
+    return $match.Matches[0].Groups[1].Value.Trim()
+}
+
+function Get-RuntimeMajor {
+    param(
+        [string]$TargetFramework
+    )
+
+    if ($TargetFramework -match 'Version=v(\d+)' -or $TargetFramework -match 'net(\d+)') {
+        return [int]$Matches[1]
+    }
+
+    throw "Не удалось определить мажорную версию .NET из TargetFramework '$TargetFramework'."
+}
+
 function Write-ReleaseMetadata {
     param(
         [string]$Arch
@@ -157,12 +178,58 @@ function Write-ReleaseMetadata {
     }
     Set-Content -LiteralPath $sumsPath -Value $lines -Encoding ascii
 
-    $tfm = (Select-String -LiteralPath $csprojPath -Pattern '<TargetFramework>(.*?)</TargetFramework>').Matches[0].Groups[1].Value
+    $tfm = Get-TargetFramework
     $runtimePath = Join-Path $OutputDir "RUNTIME-$Arch.txt"
     Set-Content -LiteralPath $runtimePath -Value $tfm -Encoding ascii -NoNewline
 
     Write-Output "  -> SHA256SUMS-$Arch.txt"
     Write-Output "  -> RUNTIME-$Arch.txt"
+}
+
+function Write-UpdateManifest {
+    $exes = @(Get-ChildItem -LiteralPath $OutputDir -Filter "PoproshaykaBot-v$Version-*.exe" | Sort-Object Name)
+    if ($exes.Count -eq 0) {
+        throw "Не найдено ни одного .exe для update-manifest.json в $OutputDir."
+    }
+
+    $runtimeMajor = Get-RuntimeMajor -TargetFramework (Get-TargetFramework)
+    $escapedVersion = [regex]::Escape($Version)
+    $namePattern = "^PoproshaykaBot-v$escapedVersion-(x64|x86)(-portable)?\.exe$"
+
+    $variants = @(foreach ($exe in $exes) {
+        if ($exe.Name -notmatch $namePattern) {
+            continue
+        }
+
+        $exeArch = $Matches[1].ToLowerInvariant()
+        $isPortable = $Matches.ContainsKey(2) -and [bool]$Matches[2]
+        $hash = (Get-FileHash -LiteralPath $exe.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+
+        [ordered]@{
+            kind          = 'SingleFile'
+            arch          = $exeArch
+            selfContained = $isPortable
+            runtimeMajor  = if ($isPortable) { $null } else { $runtimeMajor }
+            asset         = $exe.Name
+            sha256        = $hash
+            size          = [long]$exe.Length
+        }
+    })
+
+    if ($variants.Count -eq 0) {
+        throw "В $OutputDir нет .exe, соответствующих шаблону PoproshaykaBot-v$Version-<arch>[-portable].exe."
+    }
+
+    $manifest = [ordered]@{
+        version  = $Version
+        variants = $variants
+    }
+
+    $manifestPath = Join-Path $OutputDir 'update-manifest.json'
+    $json = $manifest | ConvertTo-Json -Depth 4
+    Set-Content -LiteralPath $manifestPath -Value $json -Encoding utf8NoBOM
+
+    Write-Output "  -> update-manifest.json"
 }
 
 foreach ($a in $Arch) {
@@ -172,6 +239,8 @@ foreach ($a in $Arch) {
 
     Write-ReleaseMetadata -Arch $a
 }
+
+Write-UpdateManifest
 
 if (Test-Path -LiteralPath $publishRoot) {
     Remove-Item -LiteralPath $publishRoot -Recurse -Force

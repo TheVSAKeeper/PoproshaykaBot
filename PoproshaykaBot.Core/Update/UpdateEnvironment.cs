@@ -1,4 +1,5 @@
-﻿using PoproshaykaBot.Core.Infrastructure;
+﻿using KeepShell.Updates;
+using PoproshaykaBot.Core.Infrastructure;
 using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
@@ -11,25 +12,77 @@ public sealed class UpdateEnvironment : IUpdateEnvironment
     private const string RepositoryMetadataKey = "GitHubRepository";
     private const string DefaultRepositorySlug = "MaxNagibator/PoproshaykaBot";
 
-    public UpdateKind Kind { get; } = ResolveKind();
+    private readonly string? _executablePath;
 
-    public string RepositorySlug { get; } = ResolveRepositorySlug();
-
-    public Version CurrentVersion { get; } = ResolveCurrentVersion();
-
-    public int RuntimeMajor { get; } = ResolveRuntimeMajor();
-
-    public string ArchitectureMoniker { get; } = ResolveArchitectureMoniker();
-
-    public string CurrentExecutablePath => Environment.ProcessPath
-                                           ?? throw new UpdateException("Не удалось определить путь к исполняемому файлу.");
-
-    public string StagingDirectory => UpdatePaths.StagingDirectory(CurrentExecutablePath);
-
-    private static UpdateKind ResolveKind()
+    public UpdateEnvironment()
+        : this(
+            ResolveKind(GetEntryOrCurrentAssembly(), AppPaths.IsPortable),
+            ResolveRepositorySlug(GetEntryOrCurrentAssembly()),
+            ResolveCurrentVersion(GetEntryOrCurrentAssembly()),
+            ResolveRuntimeMajor(GetEntryOrCurrentAssembly()),
+            null,
+            null)
     {
-        var assembly = Assembly.GetEntryAssembly() ?? typeof(UpdateEnvironment).Assembly;
+    }
 
+    internal UpdateEnvironment(
+        UpdateKind kind,
+        string repositorySlug,
+        Version currentVersion,
+        int runtimeMajor,
+        string? executablePath = null,
+        string? architecture = null)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(repositorySlug);
+        ArgumentNullException.ThrowIfNull(currentVersion);
+
+        Kind = kind;
+        RepositorySlug = repositorySlug;
+        CurrentVersion = UpdateVersioning.Normalize(currentVersion);
+        RuntimeMajor = runtimeMajor;
+        _executablePath = executablePath;
+        Architecture = string.IsNullOrWhiteSpace(architecture) ? ResolveArchitecture() : architecture;
+    }
+
+    public UpdateKind Kind { get; }
+
+    KeepShell.Updates.UpdateKind KeepShell.Updates.IUpdateEnvironment.Kind => Kind == UpdateKind.Unsupported
+        ? KeepShell.Updates.UpdateKind.None
+        : KeepShell.Updates.UpdateKind.SingleFile;
+
+    public bool SelfContained => Kind == UpdateKind.Portable;
+
+    public string RepositorySlug { get; }
+
+    public Version CurrentVersion { get; }
+
+    public int RuntimeMajor { get; }
+
+    public string Architecture { get; }
+
+    public string ExecutablePath => _executablePath
+        ?? Environment.ProcessPath
+        ?? throw new UpdateException("Не удалось определить путь к исполняемому файлу.");
+
+    public string StagingDirectory => GetStagingDirectory(ExecutablePath);
+
+    public static Version ResolveCurrentVersion()
+    {
+        return ResolveCurrentVersion(GetEntryOrCurrentAssembly());
+    }
+
+    public static string GetStagingDirectory(string executablePath)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(executablePath);
+
+        var directory = Path.GetDirectoryName(executablePath)
+            ?? throw new UpdateException("Не удалось определить каталог исполняемого файла.");
+
+        return Path.Combine(directory, KeepShell.Updates.UpdateEnvironment.StagingFolderName);
+    }
+
+    internal static UpdateKind ResolveKind(Assembly assembly, bool isPortable)
+    {
         var isUpdatableBuild = assembly
             .GetCustomAttributes<AssemblyMetadataAttribute>()
             .Any(a => string.Equals(a.Key, UpdatableMetadataKey, StringComparison.OrdinalIgnoreCase)
@@ -40,58 +93,55 @@ public sealed class UpdateEnvironment : IUpdateEnvironment
             return UpdateKind.Unsupported;
         }
 
-        return AppPaths.IsPortable ? UpdateKind.Portable : UpdateKind.FrameworkDependent;
+        return isPortable ? UpdateKind.Portable : UpdateKind.FrameworkDependent;
     }
 
-    private static string ResolveRepositorySlug()
+    internal static string ResolveRepositorySlug(Assembly assembly)
     {
-        var assembly = Assembly.GetEntryAssembly() ?? typeof(UpdateEnvironment).Assembly;
-
         var slug = assembly
             .GetCustomAttributes<AssemblyMetadataAttribute>()
             .FirstOrDefault(a => string.Equals(a.Key, RepositoryMetadataKey, StringComparison.OrdinalIgnoreCase))
-            ?
-            .Value;
+            ?.Value
+            ?.Trim();
 
-        return string.IsNullOrWhiteSpace(slug) ? DefaultRepositorySlug : slug.Trim();
+        return UpdateRepository.IsValidSlug(slug) ? slug! : DefaultRepositorySlug;
     }
 
-    internal static Version ResolveCurrentVersion()
+    internal static Version ResolveCurrentVersion(Assembly assembly)
     {
-        var assembly = Assembly.GetEntryAssembly() ?? typeof(UpdateEnvironment).Assembly;
-
         var informational = assembly
             .GetCustomAttribute<AssemblyInformationalVersionAttribute>()
-            ?
-            .InformationalVersion;
+            ?.InformationalVersion;
 
         if (UpdateVersioning.TryParseTag(informational, out var fromInformational))
         {
             return fromInformational;
         }
 
-        return assembly.GetName().Version ?? new Version(0, 0);
+        return UpdateVersioning.Normalize(assembly.GetName().Version ?? new Version(0, 0));
     }
 
-    private static int ResolveRuntimeMajor()
+    private static Assembly GetEntryOrCurrentAssembly()
     {
-        var assembly = Assembly.GetEntryAssembly() ?? typeof(UpdateEnvironment).Assembly;
+        return Assembly.GetEntryAssembly() ?? typeof(UpdateEnvironment).Assembly;
+    }
 
+    private static int ResolveRuntimeMajor(Assembly assembly)
+    {
         var frameworkName = assembly
             .GetCustomAttribute<TargetFrameworkAttribute>()
-            ?
-            .FrameworkName;
+            ?.FrameworkName;
 
         return UpdateRuntime.ParseMajor(frameworkName) ?? Environment.Version.Major;
     }
 
-    private static string ResolveArchitectureMoniker()
+    private static string ResolveArchitecture()
     {
         return RuntimeInformation.ProcessArchitecture switch
         {
-            Architecture.X64 => "x64",
-            Architecture.X86 => "x86",
-            Architecture.Arm64 => "arm64",
+            System.Runtime.InteropServices.Architecture.X64 => "x64",
+            System.Runtime.InteropServices.Architecture.X86 => "x86",
+            System.Runtime.InteropServices.Architecture.Arm64 => "arm64",
             var other => other.ToString().ToLowerInvariant(),
         };
     }

@@ -22,9 +22,9 @@
       },
       "KeepShell": {
         "type": "Direct",
-        "requested": "[0.1.331, )",
-        "resolved": "0.1.331",
-        "contentHash": "D7beJwH4chXIGOSktl9yfndKj5sPAYBXDk/NkndgroJiDgJUyiawo3N9cVj5oZoRYeDSharRq97yX6YxjKWBKw==",
+        "requested": "[0.1.332, )",
+        "resolved": "0.1.332",
+        "contentHash": "z2wcNnNdDOzf4Wkjc+fTGlDm0LGaoJJyWr0p54Q2pjo4Mrs0dNp6seTjy+3WzmdndbOR84WLBPEhAzxoxgJEsQ==",
         "dependencies": {
           "CommunityToolkit.Mvvm": "8.4.2",
           "MahApps.Metro.IconPacks.Lucide": "6.2.1",
@@ -37,20 +37,20 @@
       },
       "KeepShell.Automation": {
         "type": "Direct",
-        "requested": "[0.1.331, )",
-        "resolved": "0.1.331",
-        "contentHash": "qxwUVQcvcmNPQ2rp0sm5xf/wcFMmGH3mR8dPpOv4RTCmh6FuT1UKbKCMBUEJXK6NdfdJPYWe9LXaNG0dl2lbug==",
+        "requested": "[0.1.332, )",
+        "resolved": "0.1.332",
+        "contentHash": "hNZB22niTMINEd6VSUnkixiZceJqQfQRIg+wTzOsfyHg/dFfR8LFoCS8N4kJiqryqp5HAyZ+sWI96tMNJL8mjQ==",
         "dependencies": {
-          "KeepShell": "0.1.331"
+          "KeepShell": "0.1.332"
         }
       },
       "KeepShell.Mcp": {
         "type": "Direct",
-        "requested": "[0.1.331, )",
-        "resolved": "0.1.331",
-        "contentHash": "fuoYkAnU9EuEKq4/8b8byrQLQkZi2g6Fe/Uyr8Q0rGruGZBAim+Ho8sQY9jlf0gw5D/8eiAv7SpTmzHBozi51w==",
+        "requested": "[0.1.332, )",
+        "resolved": "0.1.332",
+        "contentHash": "WLElMc+QyQMw1sZFyeShpIxKecX1CgpsvVbiJ92p+DWeU5D9R3LLvrKCgtH8WhTyDiZ449o9Y2MCCkb4S2JQCQ==",
         "dependencies": {
-          "KeepShell": "0.1.331",
+          "KeepShell": "0.1.332",
           "ModelContextProtocol.AspNetCore": "2.4.0"
         }
       },
@@ -186,6 +186,7 @@
         "dependencies": {
           "Google.Protobuf": "[3.36.2, )",
           "Grpc.Net.Client": "[2.85.0, )",
+          "KeepShell.Updates": "[0.1.332, )",
           "Serilog": "[4.4.0, )",
           "Serilog.Extensions.Logging": "[10.0.0, )"
         }
@@ -204,6 +205,12 @@
         "dependencies": {
           "Grpc.Net.Common": "2.85.0"
         }
+      },
+      "KeepShell.Updates": {
+        "type": "CentralTransitive",
+        "requested": "[0.1.332, )",
+        "resolved": "0.1.332",
+        "contentHash": "WHc248IpReeNIEYfyv2KyfrSAqj2WRnlGVIllobdcUEUW5vkauKkfB2ygTwZ76eZW4aQtq50HVG3GS0t1jCI8w=="
       },
       "Serilog": {
         "type": "CentralTransitive",

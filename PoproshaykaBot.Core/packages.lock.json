@@ -35,6 +35,12 @@
         "resolved": "4.0.8",
         "contentHash": "vNi4NMG0CcJyjXxiNDcQ21FwV/whM9o9OEZKD+oP7tuxAqFEzX/x5OhC3OZJqW/w+8GOtCmJPBquYgMWgz0rfQ=="
       },
+      "KeepShell.Updates": {
+        "type": "Direct",
+        "requested": "[0.1.332, )",
+        "resolved": "0.1.332",
+        "contentHash": "WHc248IpReeNIEYfyv2KyfrSAqj2WRnlGVIllobdcUEUW5vkauKkfB2ygTwZ76eZW4aQtq50HVG3GS0t1jCI8w=="
+      },
       "Meziantou.Analyzer": {
         "type": "Direct",
         "requested": "[3.0.79, )",

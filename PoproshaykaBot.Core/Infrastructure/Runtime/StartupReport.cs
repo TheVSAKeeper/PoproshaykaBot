@@ -69,7 +69,7 @@ public static class StartupReport
             logger.LogInformation("Обновления: тип сборки {UpdateKind}, репозиторий {Repository}, архитектура {Architecture}",
                 updateEnvironment.Kind,
                 updateEnvironment.RepositorySlug,
-                updateEnvironment.ArchitectureMoniker);
+                updateEnvironment.Architecture);
         }
 
         foreach (var contributor in services.GetServices<ISettingsSnapshotContributor>())

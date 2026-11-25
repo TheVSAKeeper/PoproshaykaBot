@@ -1,4 +1,4 @@
-﻿using PoproshaykaBot.Core.Update;
+﻿using KeepShell.Updates;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Globalization;

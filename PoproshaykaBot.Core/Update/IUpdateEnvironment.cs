@@ -1,18 +1,8 @@
 ﻿namespace PoproshaykaBot.Core.Update;
 
-public interface IUpdateEnvironment
+public interface IUpdateEnvironment : KeepShell.Updates.IUpdateEnvironment
 {
-    UpdateKind Kind { get; }
+    new UpdateKind Kind { get; }
 
     string RepositorySlug { get; }
-
-    Version CurrentVersion { get; }
-
-    int RuntimeMajor { get; }
-
-    string ArchitectureMoniker { get; }
-
-    string CurrentExecutablePath { get; }
-
-    string StagingDirectory { get; }
 }

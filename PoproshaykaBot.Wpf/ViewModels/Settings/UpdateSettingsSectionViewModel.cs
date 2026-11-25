@@ -371,7 +371,7 @@ public sealed partial class UpdateSettingsSectionViewModel : ObservableObject, I
             RepositoryHintText = $"Пусто – используется {_coordinator.DefaultRepositorySlug} (из сборки).";
             RepositoryHintSeverity = StatusSeverity.None;
         }
-        else if (UpdateRepository.IsValidSlug(text))
+        else if (KeepShell.Updates.UpdateRepository.IsValidSlug(text))
         {
             RepositoryHintText = $"✓ {text}";
             RepositoryHintSeverity = StatusSeverity.Success;

@@ -1,6 +1,7 @@
 ﻿using KeepShell.Diagnostics;
 using KeepShell.Mcp;
 using KeepShell.Bootstrap;
+using KeepShell.Updates;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging;

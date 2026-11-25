@@ -9,6 +9,7 @@ using PoproshaykaBot.Wpf.Tests.Support;
 using PoproshaykaBot.Wpf.ViewModels;
 using PoproshaykaBot.Wpf.ViewModels.Settings;
 using System.IO;
+using UpdateCandidate = KeepShell.Updates.UpdateCandidate;
 
 namespace PoproshaykaBot.Wpf.Tests.Shell;
 
@@ -36,7 +37,13 @@ public sealed class ManualUpdateCancellationTests
     private static UpdateCandidate Candidate(string version = "3.1.0.16")
     {
         var name = $"PoproshaykaBot-v{version}-x64-portable.exe";
-        return new(Version.Parse(version), "v" + version, new(name, "https://example/" + name, 100, "application/octet-stream"), "https://example/notes");
+        return new(
+            Version.Parse(version),
+            "v" + version,
+            new(KeepShell.Updates.UpdateKind.SingleFile, "x64", true, null, name, null, 100),
+            "https://example/" + name,
+            "https://example/notes",
+            string.Empty);
     }
 
     [Test]

@@ -1,4 +1,6 @@
-﻿namespace PoproshaykaBot.Core.Update;
+﻿using KeepShell.Updates;
+
+namespace PoproshaykaBot.Core.Update;
 
 public interface IUpdateCoordinator
 {

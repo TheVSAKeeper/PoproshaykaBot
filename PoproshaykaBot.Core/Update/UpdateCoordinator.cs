@@ -1,9 +1,11 @@
-﻿using Microsoft.Extensions.Logging;
+﻿using KeepShell.Updates;
+using Microsoft.Extensions.Logging;
 using PoproshaykaBot.Core.Infrastructure.Events;
 using PoproshaykaBot.Core.Infrastructure.Events.Update;
 using PoproshaykaBot.Core.Settings.Stores;
-using PoproshaykaBot.Core.Settings.Update;
 using System.Runtime.ExceptionServices;
+using CoreUpdateApplyMode = PoproshaykaBot.Core.Settings.Update.UpdateApplyMode;
+using CoreUpdateSettings = PoproshaykaBot.Core.Settings.Update.UpdateSettings;
 
 namespace PoproshaykaBot.Core.Update;
 
@@ -175,7 +177,7 @@ public sealed class UpdateCoordinator(
     {
         ArgumentNullException.ThrowIfNull(candidate);
 
-        if (store.Load().ApplyMode != UpdateApplyMode.SilentOnExit || !IsUpdatable)
+        if (store.Load().ApplyMode != CoreUpdateApplyMode.SilentOnExit || !IsUpdatable)
         {
             return false;
         }
@@ -237,14 +239,39 @@ public sealed class UpdateCoordinator(
         logger.LogInformation("Версия {Version} помечена как пропущенная", version);
     }
 
-    private static string? DiscardReason(UpdateSettings settings, string version, bool silent)
+    internal static bool DiscardPendingFiles(string stagingDirectory, PendingUpdate pending)
+    {
+        var fullStagingDirectory = Path.TrimEndingDirectorySeparator(Path.GetFullPath(stagingDirectory));
+        var pendingPath = Path.Combine(fullStagingDirectory, PendingUpdateStore.FileName);
+
+        PendingUpdateStore.Remove(fullStagingDirectory);
+
+        if (File.Exists(pendingPath))
+        {
+            return false;
+        }
+
+        var stagedDirectory = Path.GetDirectoryName(Path.GetFullPath(pending.StagedPath));
+
+        if (string.Equals(
+                stagedDirectory is null ? null : Path.TrimEndingDirectorySeparator(stagedDirectory),
+                fullStagingDirectory,
+                StringComparison.OrdinalIgnoreCase))
+        {
+            UpdateDirectory.TryDelete(pending.StagedPath);
+        }
+
+        return true;
+    }
+
+    private static string? DiscardReason(CoreUpdateSettings settings, string version, bool silent)
     {
         if (string.Equals(settings.SkippedVersion, version, StringComparison.Ordinal))
         {
             return "версия пропущена";
         }
 
-        return silent && settings.ApplyMode != UpdateApplyMode.SilentOnExit
+        return silent && settings.ApplyMode != CoreUpdateApplyMode.SilentOnExit
             ? "автоустановка при выходе выключена"
             : null;
     }
@@ -598,7 +625,14 @@ public sealed class UpdateCoordinator(
 
     private bool TryDiscard(string version, string reason)
     {
-        if (!installer.DiscardPending(version))
+        var pending = installer.ReadPending();
+
+        if (pending is null || !string.Equals(pending.Version, version, StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        if (!DiscardPendingFiles(environment.StagingDirectory, pending))
         {
             logger.LogWarning("Не удалось удалить загруженное обновление {Version} ({Reason}) – оно установится при выходе из приложения", version, reason);
             return false;

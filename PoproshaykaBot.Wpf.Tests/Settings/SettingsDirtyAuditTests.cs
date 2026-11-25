@@ -28,6 +28,7 @@ using PoproshaykaBot.Wpf.Tests.Support;
 using PoproshaykaBot.Wpf.ViewModels;
 using PoproshaykaBot.Wpf.ViewModels.Settings;
 using PoproshaykaBot.Wpf.ViewModels.Settings.Contributors;
+using UpdateCandidate = KeepShell.Updates.UpdateCandidate;
 using PoproshaykaBot.Wpf.ViewModels.Tiles;
 using System.Collections.ObjectModel;
 using System.ComponentModel;

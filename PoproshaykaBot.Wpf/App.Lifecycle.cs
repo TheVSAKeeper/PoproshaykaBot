@@ -1,4 +1,5 @@
 ﻿using KeepShell.Diagnostics;
+using Microsoft.Extensions.Logging;
 using PoproshaykaBot.Core.Infrastructure.Hosting;
 using PoproshaykaBot.Core.Infrastructure.Runtime;
 using PoproshaykaBot.Core.Server;
@@ -17,7 +18,7 @@ public partial class App
     private static void FinalizeUpdate()
     {
         using var loggerFactory = new SerilogLoggerFactory(Log.Logger);
-        var logger = loggerFactory.CreateLogger(nameof(UpdateFinalizer));
+        var logger = loggerFactory.CreateLogger(nameof(KeepShell.Updates.UpdateFinalizer));
 
         try
         {
@@ -28,7 +29,7 @@ public partial class App
                 return;
             }
 
-            UpdateFinalizer.Run(UpdatePaths.StagingDirectory(executablePath), executablePath, logger);
+            KeepShell.Updates.UpdateFinalizer.Run(UpdateEnvironment.GetStagingDirectory(executablePath), executablePath, logger);
         }
         catch (Exception exception)
         {
@@ -46,11 +47,16 @@ public partial class App
         }
 
         using var loggerFactory = new SerilogLoggerFactory(Log.Logger);
-        var logger = loggerFactory.CreateLogger(nameof(UpdateApplier));
+        var logger = loggerFactory.CreateLogger(nameof(KeepShell.Updates.UpdateApplier));
 
         try
         {
-            return UpdateApplier.TryApplyPending(UpdatePaths.StagingDirectory(executablePath), executablePath, logger);
+            return KeepShell.Updates.UpdateApplier.TryApplyPending(
+                UpdateEnvironment.GetStagingDirectory(executablePath),
+                executablePath,
+                UpdateEnvironment.ResolveCurrentVersion(),
+                new KeepShell.Updates.ProcessRelauncher(loggerFactory.CreateLogger<KeepShell.Updates.ProcessRelauncher>()),
+                logger);
         }
         catch (Exception exception)
         {
