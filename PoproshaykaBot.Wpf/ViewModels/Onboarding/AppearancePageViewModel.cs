@@ -13,6 +13,7 @@ public sealed class AppearancePageViewModel : OnboardingPageViewModelBase, IDisp
     private readonly bool _initialPageHeader;
     private readonly bool _initialNotifications;
     private bool _committed;
+    private int _disposed;
 
     public AppearancePageViewModel(ThemeSelectionViewModel theme, ShellPreferences shell, ISettingsStore settings)
     {
@@ -55,6 +56,11 @@ public sealed class AppearancePageViewModel : OnboardingPageViewModelBase, IDisp
 
     public void Dispose()
     {
+        if (Interlocked.Exchange(ref _disposed, 1) != 0)
+        {
+            return;
+        }
+
         _draft.Changed -= OnDraftChanged;
         Appearance.Theme.Dispose();
 

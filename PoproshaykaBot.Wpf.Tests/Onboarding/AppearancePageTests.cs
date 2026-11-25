@@ -8,6 +8,9 @@ namespace PoproshaykaBot.Wpf.Tests.Onboarding;
 [TestFixture]
 public sealed class AppearancePageTests
 {
+    [OneTimeSetUp]
+    public void RegisterPackUris() => PackScheme.Ensure();
+
     [TestCase(false)]
     [TestCase(true)]
     public void ShellPreferencesAreSavedOnlyWhenWizardCommits(bool commit)
@@ -35,5 +38,23 @@ public sealed class AppearancePageTests
             Assert.That(saved.EnableToastNotifications, Is.EqualTo(!commit));
             Assert.That(shell.ShowPageHeader, Is.EqualTo(!commit));
         }
+    }
+
+    [Test]
+    public void RepeatedDisposalDoesNotRestorePreviewOverLaterChanges()
+    {
+        var store = new MemorySettings();
+        var shell = new ShellPreferences(store);
+        using var theme = new ThemeSelectionViewModel(store);
+        using var page = new AppearancePageViewModel(theme, shell, store);
+
+        page.Appearance.Shell.ShowPageHeader = false;
+        page.Dispose();
+        Assert.That(shell.ShowPageHeader, Is.True);
+
+        shell.ShowPageHeader = false;
+        page.Dispose();
+
+        Assert.That(shell.ShowPageHeader, Is.False);
     }
 }
