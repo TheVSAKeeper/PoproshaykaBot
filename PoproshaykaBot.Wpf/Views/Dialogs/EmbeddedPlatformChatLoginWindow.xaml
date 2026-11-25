@@ -49,7 +49,8 @@
         <Border Grid.Row="0"
                 Background="{DynamicResource Bg.Surface}"
                 BorderBrush="{DynamicResource Border.Subtle}"
-                BorderThickness="0,0,0,1">
+                BorderThickness="0,0,0,1"
+                keepshell:TitleBarBehavior.IsWindowChrome="True">
             <Grid>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*" />
@@ -70,8 +71,7 @@
                             keepshell:ChromeAction.Action="Close"
                             ToolTip="Закрыть"
                             AutomationProperties.Name="{Binding CloseButtonName}">
-                        <Path Data="M 0,0 L 10,10 M 10,0 L 0,10"
-                              Style="{StaticResource Chrome.Glyph}" />
+                        <Path Style="{StaticResource Chrome.Glyph.Close}" />
                     </Button>
                 </StackPanel>
             </Grid>

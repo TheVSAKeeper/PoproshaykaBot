@@ -38,7 +38,7 @@
                             CornerRadius="0" />
     </shell:WindowChrome.WindowChrome>
 
-    <keepshell:ShellLayout>
+    <keepshell:ShellLayout ModalCoversShell="True">
         <keepshell:ShellLayout.TitleBar>
             <views:TitleBarView />
         </keepshell:ShellLayout.TitleBar>
