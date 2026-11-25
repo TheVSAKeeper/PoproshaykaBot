@@ -12,18 +12,19 @@ namespace PoproshaykaBot.Wpf;
 
 public partial class App
 {
-    private static async Task<(ISettingsStore Settings, TimeSpan ModalWait, LegacyImportResult? Result)> OfferLegacyDataImportAsync(
+    private static async Task<(ISettingsStore Settings, TimeSpan ModalWait, LegacyImportResult? Result, bool ConfigureRequested)> OfferLegacyDataImportAsync(
         ISettingsStore uiSettings,
         string uiSettingsPath,
         ThemePackLoader themePackLoader)
     {
         if (uiSettings.GetBool(SettingsKeys.LegacyImportDismissed))
         {
-            return (uiSettings, TimeSpan.Zero, null);
+            return (uiSettings, TimeSpan.Zero, null, false);
         }
 
         var modalWait = TimeSpan.Zero;
         LegacyImportResult? result = null;
+        var configureRequested = false;
         using var loggerFactory = new SerilogLoggerFactory(Log.Logger);
         var logger = loggerFactory.CreateLogger(nameof(LegacyDataImporter));
 
@@ -33,7 +34,7 @@ public partial class App
 
             if (candidates.Count == 0 && target is not null)
             {
-                return (uiSettings, modalWait, result);
+                return (uiSettings, modalWait, result, configureRequested);
             }
 
             var viewModel = new LegacyImportViewModel(candidates, target, isSettingsEntry: false, new FilePicker(), logger);
@@ -45,6 +46,7 @@ public partial class App
             window.ShowDialog();
             modalWait = Stopwatch.GetElapsedTime(modalStart);
             result = viewModel.Result;
+            configureRequested = viewModel.ConfigureRequested;
 
             if (result is null)
             {
@@ -57,12 +59,12 @@ public partial class App
                 HostLog.Information("Предложение переноса данных отключено пользователем");
             }
 
-            return (ReloadUiSettingsIfImported(uiSettings, uiSettingsPath, result, themePackLoader), modalWait, result);
+            return (ReloadUiSettingsIfImported(uiSettings, uiSettingsPath, result, themePackLoader), modalWait, result, configureRequested);
         }
         catch (Exception exception)
         {
             HostLog.Error(exception, "Диалог переноса данных предыдущей версии не открылся");
-            return (uiSettings, modalWait, result);
+            return (uiSettings, modalWait, result, configureRequested);
         }
     }
 

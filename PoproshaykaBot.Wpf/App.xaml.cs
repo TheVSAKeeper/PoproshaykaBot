@@ -247,6 +247,7 @@ public partial class App : Application
                 AppInfo.Name, AppInfo.Version, "Запуск приложения", 4, splashLoggerFactory.CreateLogger<App>());
 
             LegacyImportResult? startupImport = null;
+            var configureAfterImport = false;
             using (await BeginStartupPhaseAsync(splash, "Подготовка настроек…"))
             {
                 if (_isFinalizeUpdate)
@@ -262,7 +263,8 @@ public partial class App : Application
                 }
                 else
                 {
-                    (uiSettings, var modalWait, startupImport) = await OfferLegacyDataImportAsync(uiSettings, uiSettingsPath, themePackLoader);
+                    (uiSettings, var modalWait, startupImport, configureAfterImport) =
+                        await OfferLegacyDataImportAsync(uiSettings, uiSettingsPath, themePackLoader);
                     interactiveWait += modalWait;
                     await Task.Run(MigrateLegacySettingsLayout);
                 }
@@ -384,7 +386,7 @@ public partial class App : Application
                 _services.GetRequiredService<ShellViewModel>().ReportUncleanPreviousRun();
             }
 
-            MaybeLaunchOnboardingWizard(startupImport);
+            MaybeLaunchOnboardingWizard(startupImport, configureAfterImport);
         }
         catch (Exception ex)
         {

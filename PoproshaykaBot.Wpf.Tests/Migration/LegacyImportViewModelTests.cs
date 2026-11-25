@@ -78,6 +78,45 @@ public class LegacyImportViewModelTests
             "Из настроек окно открывают сами, и «Больше не предлагать» там нечего отключать.");
     }
 
+    [TestCase(false, true, true)]
+    [TestCase(false, false, false)]
+    [TestCase(true, true, false)]
+    public async Task Setup_can_be_requested_only_after_a_startup_import_changes_files(
+        bool isSettingsEntry, bool copiedFile, bool expected)
+    {
+        const string FileName = "settings/settings.json";
+        var source = Summary(_folder, LegacyDataSourceKind.SelectedFolder, FileName);
+        var viewModel = new LegacyImportViewModel([source], null, isSettingsEntry, new FakeFilePicker(_folder), NullLogger.Instance,
+            import: (path, _, _) => new()
+            {
+                SourcePath = path,
+                TargetPath = Path.Combine(_folder, "target"),
+                CopiedFiles = copiedFile ? [FileName] : [],
+                SkippedFiles = [],
+                Failures = [],
+            });
+        viewModel.SelectedSource = viewModel.Sources[0];
+
+        Assert.That(viewModel.ConfigureCommand.CanExecute(null), Is.False);
+        await viewModel.ImportCommand.ExecuteAsync(null);
+
+        var closeRequested = false;
+        viewModel.CloseRequested += (_, _) => closeRequested = true;
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(viewModel.CanConfigure, Is.EqualTo(expected));
+            Assert.That(viewModel.ConfigureCommand.CanExecute(null), Is.EqualTo(expected));
+            Assert.That(viewModel.ConfigureRequested, Is.False);
+        }
+
+        viewModel.ConfigureCommand.Execute(null);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(viewModel.ConfigureRequested, Is.EqualTo(expected));
+            Assert.That(closeRequested, Is.EqualTo(expected));
+        }
+    }
+
     [Test]
     public void Replacing_files_is_offered_for_store_generated_by_monolith_split()
     {

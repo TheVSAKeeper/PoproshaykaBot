@@ -330,13 +330,20 @@
                             Command="{Binding CloseCommand}"
                             MinWidth="120" />
                 </WrapPanel>
-                <Button x:Name="ContinueButton"
-                        Content="Продолжить"
-                        Style="{StaticResource Button.Primary}"
-                        Command="{Binding CloseCommand}"
-                        Visibility="{Binding IsCompleted, Converter={StaticResource BoolToVisibility}}"
-                        HorizontalAlignment="Right"
-                        MinWidth="120" />
+                <WrapPanel HorizontalAlignment="Right"
+                           Visibility="{Binding IsCompleted, Converter={StaticResource BoolToVisibility}}">
+                    <Button Content="Настроить"
+                            Style="{StaticResource Button.Secondary}"
+                            Command="{Binding ConfigureCommand}"
+                            Visibility="{Binding CanConfigure, Converter={StaticResource BoolToVisibility}}"
+                            MinWidth="120"
+                            Margin="0,0,8,0" />
+                    <Button x:Name="ContinueButton"
+                            Content="Продолжить"
+                            Style="{StaticResource Button.Primary}"
+                            Command="{Binding CloseCommand}"
+                            MinWidth="120" />
+                </WrapPanel>
             </StackPanel>
         </Border>
     </Grid>

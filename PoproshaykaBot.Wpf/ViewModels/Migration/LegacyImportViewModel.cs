@@ -41,6 +41,8 @@ public sealed partial class LegacyImportViewModel : ObservableObject
     private bool _neverAskAgain;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CanConfigure))]
+    [NotifyCanExecuteChangedFor(nameof(ConfigureCommand))]
     [NotifyCanExecuteChangedFor(nameof(ImportCommand))]
     [NotifyCanExecuteChangedFor(nameof(PickFolderCommand))]
     private bool _isCompleted;
@@ -129,6 +131,10 @@ public sealed partial class LegacyImportViewModel : ObservableObject
     public string SkipButtonText => _isSettingsEntry ? "Закрыть" : "Пропустить";
 
     public LegacyImportResult? Result { get; private set; }
+
+    public bool CanConfigure => !_isSettingsEntry && IsCompleted && Result?.HasChanges == true;
+
+    public bool ConfigureRequested { get; private set; }
 
     public string? AuthorizationNotice => SelectedSource?.Summary switch
     {
@@ -304,6 +310,18 @@ public sealed partial class LegacyImportViewModel : ObservableObject
     private void Close()
     {
         CloseRequested?.Invoke(this, EventArgs.Empty);
+    }
+
+    [RelayCommand(CanExecute = nameof(CanConfigure))]
+    private void Configure()
+    {
+        if (!CanConfigure)
+        {
+            return;
+        }
+
+        ConfigureRequested = true;
+        Close();
     }
 
     private static bool AreSamePath(string first, string second)

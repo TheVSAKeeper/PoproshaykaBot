@@ -10,8 +10,13 @@ public partial class App
 {
     private bool _onboardingLaunched;
 
-    internal static OnboardingStep? GetStartupWizardStep(OnboardingChecklist checklist, LegacyImportResult? import)
+    internal static OnboardingStep? GetStartupWizardStep(OnboardingChecklist checklist, LegacyImportResult? import, bool configureRequested)
     {
+        if (configureRequested && import?.HasChanges == true)
+        {
+            return OnboardingStep.Appearance;
+        }
+
         if (checklist.RequiresWizard && import?.WroteApplicationSettings != true)
         {
             return OnboardingStep.None;
@@ -26,7 +31,7 @@ public partial class App
         return null;
     }
 
-    private void MaybeLaunchOnboardingWizard(LegacyImportResult? import)
+    private void MaybeLaunchOnboardingWizard(LegacyImportResult? import, bool configureRequested)
     {
         if (_onboardingLaunched || _services is null)
         {
@@ -35,7 +40,7 @@ public partial class App
 
         var checklist = _services.GetRequiredService<OnboardingChecklist>();
 
-        if (GetStartupWizardStep(checklist, import) is not { } step)
+        if (GetStartupWizardStep(checklist, import, configureRequested) is not { } step)
         {
             return;
         }

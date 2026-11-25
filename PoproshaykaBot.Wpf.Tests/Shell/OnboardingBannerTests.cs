@@ -59,14 +59,15 @@ public class OnboardingBannerTests
         Assert.That(banner.IsVisible, Is.False);
     }
 
-    [TestCase(false, null, false, OnboardingStep.None)]
-    [TestCase(true, null, false, null)]
-    [TestCase(false, "users_statistics.json", false, OnboardingStep.None)]
-    [TestCase(false, "settings/settings.json", false, OnboardingStep.Credentials)]
-    [TestCase(true, "settings/settings.json", false, OnboardingStep.BotAuthorization)]
-    [TestCase(true, "settings/settings.json", true, null)]
-    public void StartupWizard_UsesTheFirstMissingStepOnlyAfterImport(
-        bool configured, string? importedFile, bool currentBotGrants, OnboardingStep? expected)
+    [TestCase(false, null, false, false, OnboardingStep.None)]
+    [TestCase(true, null, false, true, null)]
+    [TestCase(false, "users_statistics.json", false, false, OnboardingStep.None)]
+    [TestCase(false, "settings/settings.json", false, false, OnboardingStep.Credentials)]
+    [TestCase(true, "settings/settings.json", false, false, OnboardingStep.BotAuthorization)]
+    [TestCase(true, "settings/settings.json", true, false, null)]
+    [TestCase(true, "settings/settings.json", true, true, OnboardingStep.Appearance)]
+    public void StartupWizard_RoutesByImportResultAndRequestedSetup(
+        bool configured, string? importedFile, bool currentBotGrants, bool configureRequested, OnboardingStep? expected)
     {
         var settings = new SettingsManager(NullLogger<SettingsManager>.Instance, Path.Combine(_directory, "settings.json"));
         var accounts = new AccountsStore(filePath: Path.Combine(_directory, "accounts.json"));
@@ -94,7 +95,7 @@ public class OnboardingBannerTests
         } : null;
         var checklist = new OnboardingChecklist(settings, accounts);
 
-        Assert.That(App.GetStartupWizardStep(checklist, result), Is.EqualTo(expected));
+        Assert.That(App.GetStartupWizardStep(checklist, result, configureRequested), Is.EqualTo(expected));
     }
 
     private OnboardingBannerViewModel CreateBanner()

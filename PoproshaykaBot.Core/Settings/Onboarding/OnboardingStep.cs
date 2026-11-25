@@ -6,4 +6,5 @@ public enum OnboardingStep
     Credentials = 1,
     BotAuthorization = 2,
     YouTube = 3,
+    Appearance = 4,
 }

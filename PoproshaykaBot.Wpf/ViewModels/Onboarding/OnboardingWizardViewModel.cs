@@ -126,6 +126,7 @@ public sealed partial class OnboardingWizardViewModel : ObservableObject
         _context.AutoDetectChannel = !_context.HasConfiguredTwitchChannel;
         var index = _pages.FindIndex(page => step switch
         {
+            OnboardingStep.Appearance => page is AppearancePageViewModel,
             OnboardingStep.Credentials => page is CredentialsPageViewModel,
             OnboardingStep.BotAuthorization => page is BotAuthorizationPageViewModel,
             OnboardingStep.YouTube => page is YouTubeOnboardingPageViewModel,
