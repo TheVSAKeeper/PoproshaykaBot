@@ -274,6 +274,8 @@ public sealed class CompletionPageYouTubeBotOnlyTests
                     Assert.That(refreshed.Any(message => message.Platform == StreamingPlatform.Twitch && message.Role == PlatformAuthRole.Bot), Is.True);
                     Assert.That(wizard.NextCommand.CanExecute(null), Is.False);
                     Assert.That(wizard.CancelCommand.CanExecute(null), Is.True);
+                    Assert.That(wizard.IsPageInteractive, Is.False);
+                    Assert.That(wizard.HeaderTitle, Is.EqualTo("Отмена настройки"));
                     Assert.That(page.Context.SaveSetup(manager, accounts, youtube), Does.Contain("отменяется"));
                 }
             }

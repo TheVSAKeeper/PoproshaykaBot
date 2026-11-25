@@ -193,6 +193,30 @@ public class SettingsWriteGateNoticeTests
     }
 
     [Test]
+    public async Task Отмена_мастера_не_даёт_заново_подключить_бота()
+    {
+        var settingsManager = new SettingsManager(NullLogger<SettingsManager>.Instance, Path.Combine(_root, "settings.json"));
+        var accounts = new AccountsStore(filePath: Path.Combine(_root, "accounts.json"));
+        var connection = new FakeBotConnectionController();
+        var events = new InMemoryEventBus(NullLogger<InMemoryEventBus>.Instance);
+        using var page = new BotConnectionPageViewModel(connection, events, settingsManager, accounts,
+            NullLogger<BotConnectionPageViewModel>.Instance);
+        var context = new OnboardingContext(new(), new(), new());
+        page.OnEnter(context);
+        await events.PublishAsync(new BotLifecyclePhaseChanged(BotLifecyclePhase.Disconnected));
+        Assert.That(page.RetryCommand.CanExecute(null), Is.True);
+        Assert.That(connection.StartCount, Is.EqualTo(1));
+
+        context.CancellationStarted = true;
+        await events.PublishAsync(new BotLifecyclePhaseChanged(BotLifecyclePhase.Disconnected));
+        page.RetryCommand.Execute(null);
+
+        Assert.That(page.ShowRetry, Is.False);
+        Assert.That(page.RetryCommand.CanExecute(null), Is.False);
+        Assert.That(connection.StartCount, Is.EqualTo(1));
+    }
+
+    [Test]
     public async Task Раздел_опросов_называет_незаписанный_файл()
     {
         var pollsPath = Path.Combine(_root, "polls.json");

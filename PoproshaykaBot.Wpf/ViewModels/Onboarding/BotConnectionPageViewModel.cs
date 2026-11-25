@@ -157,6 +157,11 @@ public sealed partial class BotConnectionPageViewModel : OnboardingPageViewModel
     [RelayCommand(CanExecute = nameof(CanRetry))]
     private void Retry()
     {
+        if (!CanRetry())
+        {
+            return;
+        }
+
         ShowRetry = false;
         if (!_setupSaved && _context is { } context)
         {
@@ -167,7 +172,7 @@ public sealed partial class BotConnectionPageViewModel : OnboardingPageViewModel
         TryStartConnection();
     }
 
-    private bool CanRetry() => ShowRetry;
+    private bool CanRetry() => ShowRetry && _context?.CancellationStarted == false;
 
     private void OnPhaseChanged(BotLifecyclePhaseChanged @event)
     {
@@ -189,7 +194,7 @@ public sealed partial class BotConnectionPageViewModel : OnboardingPageViewModel
     private void OnStatusUpdated(BotConnectionStatusUpdated @event)
     {
         _lastStatusMessage = @event.Message;
-        if (_setupSaved)
+        if (_setupSaved && _context?.CancellationStarted == false)
         {
             DetailsText = @event.Message;
         }
@@ -207,6 +212,14 @@ public sealed partial class BotConnectionPageViewModel : OnboardingPageViewModel
     private void ApplyPhase(BotLifecyclePhase phase, string? overrideDetails = null)
     {
         Phase = phase;
+        if (_context?.CancellationStarted == true)
+        {
+            StatusText = "Настройка отменяется";
+            DetailsText = "Закройте мастер, чтобы завершить восстановление настроек.";
+            ShowRetry = false;
+            CanAdvance = false;
+            return;
+        }
 
         switch (phase)
         {

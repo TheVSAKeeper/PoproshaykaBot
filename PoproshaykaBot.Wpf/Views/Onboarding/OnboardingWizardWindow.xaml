@@ -96,7 +96,8 @@
                 BorderBrush="{DynamicResource Border.Subtle}"
                 BorderThickness="1"
                 CornerRadius="{DynamicResource Radius.M}">
-            <ContentControl Content="{Binding CurrentPage}" />
+            <ContentControl Content="{Binding CurrentPage}"
+                            IsEnabled="{Binding IsPageInteractive}" />
         </Border>
 
         <Border Grid.Row="3"

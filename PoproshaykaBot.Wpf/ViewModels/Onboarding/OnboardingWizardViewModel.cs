@@ -104,7 +104,9 @@ public sealed partial class OnboardingWizardViewModel : ObservableObject
 
     public int PageCount => _pages.Count;
 
-    public string HeaderTitle => CurrentPage?.PageTitle ?? string.Empty;
+    public bool IsPageInteractive => !_context.CancellationStarted;
+
+    public string HeaderTitle => IsPageInteractive ? CurrentPage?.PageTitle ?? string.Empty : "Отмена настройки";
 
     public string StepIndicator => _pages.Count == 0
         ? string.Empty
@@ -140,6 +142,8 @@ public sealed partial class OnboardingWizardViewModel : ObservableObject
         }
 
         _context.CancellationStarted = true;
+        OnPropertyChanged(nameof(IsPageInteractive));
+        OnPropertyChanged(nameof(HeaderTitle));
         NextCommand.NotifyCanExecuteChanged();
         BackCommand.NotifyCanExecuteChanged();
 
@@ -207,7 +211,7 @@ public sealed partial class OnboardingWizardViewModel : ObservableObject
 
     private bool CanGoNext()
     {
-        return !_context.CancellationStarted && !IsBusy && CurrentPage?.CanAdvance == true;
+        return IsPageInteractive && !IsBusy && CurrentPage?.CanAdvance == true;
     }
 
     [RelayCommand(CanExecute = nameof(CanGoBack))]
@@ -223,7 +227,7 @@ public sealed partial class OnboardingWizardViewModel : ObservableObject
 
     private bool CanGoBack()
     {
-        return !_context.CancellationStarted && !IsBusy && _currentPageIndex > 0;
+        return IsPageInteractive && !IsBusy && _currentPageIndex > 0;
     }
 
     [RelayCommand(CanExecute = nameof(CanCancel))]
