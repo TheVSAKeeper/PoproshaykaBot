@@ -8,7 +8,7 @@ namespace PoproshaykaBot.Wpf.ViewModels.Settings.Contributors;
 
 public sealed class StreamSettingsSectionContributor : ISettingsSectionContributor
 {
-    private readonly AutoBroadcastSettingsViewModel _autoBroadcast;
+    private readonly BotMessagingLinksViewModel _autoBroadcast;
     private readonly BotLifecycleAutomationSectionViewModel _botLifecycle;
     private readonly PollsSettingsSectionViewModel _polls;
     private readonly PlatformLifecycleSettingsStore? _platformLifecycleStore;
@@ -18,17 +18,21 @@ public sealed class StreamSettingsSectionContributor : ISettingsSectionContribut
     private bool _lifecycleEdited;
 
     public StreamSettingsSectionContributor(
-        AutoBroadcastSettingsViewModel autoBroadcast,
+        BotMessagingNavigation messaging,
         BotLifecycleAutomationSectionViewModel botLifecycle,
         PollsSettingsSectionViewModel polls,
         PlatformLifecycleSettingsStore? platformLifecycleStore = null,
         SettingsManager? settingsManager = null)
     {
-        ArgumentNullException.ThrowIfNull(autoBroadcast);
+        ArgumentNullException.ThrowIfNull(messaging);
         ArgumentNullException.ThrowIfNull(botLifecycle);
         ArgumentNullException.ThrowIfNull(polls);
 
-        _autoBroadcast = autoBroadcast;
+        _autoBroadcast = new(
+            ("Периодическая рассылка", () => messaging.OpenRule("broadcast")),
+            ("Начало эфира", () => messaging.OpenRule("stream-start")),
+            ("Окончание эфира", () => messaging.OpenRule("stream-stop")),
+            ("Итог эфира", () => messaging.OpenRule("stream-stats")));
         _botLifecycle = botLifecycle;
         _polls = polls;
         _platformLifecycleStore = platformLifecycleStore;
@@ -56,8 +60,8 @@ public sealed class StreamSettingsSectionContributor : ISettingsSectionContribut
         [
             new(
                 "stream/auto",
-                "Автоматический режим",
-                "Что бот делает сам, когда стрим начинается и заканчивается.",
+                "Сообщения об эфире и рассылка",
+                "Тексты и условия публикаций доступны на странице «Бот».",
                 _autoBroadcast),
             new(
                 "stream/lifecycle",
@@ -90,7 +94,6 @@ public sealed class StreamSettingsSectionContributor : ISettingsSectionContribut
     {
         ArgumentNullException.ThrowIfNull(session);
 
-        _autoBroadcast.LoadSettings(session.Settings.Twitch.AutoBroadcast);
         _lifecycleDraft = _platformLifecycleStore is not null
             ? JsonStoreClone.DeepClone(_platformLifecycleStore.Load())
             : new();
@@ -105,14 +108,6 @@ public sealed class StreamSettingsSectionContributor : ISettingsSectionContribut
         ArgumentNullException.ThrowIfNull(notifyChangesState);
 
         var subscription = new CompositeSettingsSubscription();
-
-        void OnPropertyChanged(object? sender, PropertyChangedEventArgs e)
-        {
-            if (!string.Equals(e.PropertyName, "HasErrors", StringComparison.Ordinal))
-            {
-                markDirty();
-            }
-        }
 
         void OnLifecyclePropertyChanged(object? sender, PropertyChangedEventArgs e)
         {
@@ -131,7 +126,6 @@ public sealed class StreamSettingsSectionContributor : ISettingsSectionContribut
             }
         }
 
-        subscription.TrackPropertyChanged(_autoBroadcast, OnPropertyChanged);
         subscription.TrackPropertyChanged(_botLifecycle, OnLifecyclePropertyChanged);
         subscription.TrackCollectionItems(_botLifecycle.Platforms, OnLifecyclePropertyChanged);
         subscription.TrackPropertyChanged(_polls, OnPollsChanged);
@@ -143,7 +137,6 @@ public sealed class StreamSettingsSectionContributor : ISettingsSectionContribut
     {
         ArgumentNullException.ThrowIfNull(targetSettings);
 
-        _autoBroadcast.SaveSettings(targetSettings.Twitch.AutoBroadcast);
         if (_lifecycleEdited)
         {
             _botLifecycle.SaveSettings(_lifecycleDraft);

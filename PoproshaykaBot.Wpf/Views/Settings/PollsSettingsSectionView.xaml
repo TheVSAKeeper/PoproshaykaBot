@@ -21,112 +21,13 @@
 
     <StackPanel>
 
-        <StackPanel>
-            <TextBlock Text="Автопост в чат"
-                       Style="{StaticResource Setting.BlockTitle}" />
-
-            <Grid Margin="0,0,0,8">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="200" />
-                    <ColumnDefinition Width="*" />
-                </Grid.ColumnDefinitions>
-                <CheckBox Grid.Column="0"
-                          Style="{StaticResource CheckBox.Default}"
-                          Content="Старт"
-                          IsChecked="{Binding StartEnabled}"
-                          VerticalAlignment="Center" />
-                <TextBox Grid.Column="1"
-                         Style="{StaticResource TextBox.Form}"
-                         AutomationProperties.Name="Шаблон сообщения о старте опроса"
-                         Text="{Binding StartTemplate, UpdateSourceTrigger=PropertyChanged}"
-                         IsEnabled="{Binding StartEnabled}"
-                         keepshell:PlaceholderBehavior.Placeholder="Шаблон при старте голосования" />
-            </Grid>
-
-            <Grid Margin="0,0,0,8">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="200" />
-                    <ColumnDefinition Width="*" />
-                </Grid.ColumnDefinitions>
-                <CheckBox Grid.Column="0"
-                          Style="{StaticResource CheckBox.Default}"
-                          Content="Прогресс"
-                          IsChecked="{Binding ProgressEnabled}"
-                          VerticalAlignment="Center" />
-                <TextBox Grid.Column="1"
-                         Style="{StaticResource TextBox.Form}"
-                         AutomationProperties.Name="Шаблон сообщения о ходе опроса"
-                         Text="{Binding ProgressTemplate, UpdateSourceTrigger=PropertyChanged}"
-                         IsEnabled="{Binding ProgressEnabled}"
-                         keepshell:PlaceholderBehavior.Placeholder="Шаблон промо-сообщения о прогрессе" />
-            </Grid>
-
-            <Grid Margin="0,0,0,8">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="200" />
-                    <ColumnDefinition Width="*" />
-                </Grid.ColumnDefinitions>
-                <CheckBox Grid.Column="0"
-                          Style="{StaticResource CheckBox.Default}"
-                          Content="Финал"
-                          IsChecked="{Binding EndEnabled}"
-                          VerticalAlignment="Center" />
-                <TextBox Grid.Column="1"
-                         Style="{StaticResource TextBox.Form}"
-                         AutomationProperties.Name="Шаблон сообщения о финале опроса"
-                         Text="{Binding EndTemplate, UpdateSourceTrigger=PropertyChanged}"
-                         IsEnabled="{Binding EndEnabled}"
-                         keepshell:PlaceholderBehavior.Placeholder="Шаблон при завершении голосования" />
-            </Grid>
-
-            <Grid Margin="0,0,0,8">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="200" />
-                    <ColumnDefinition Width="*" />
-                </Grid.ColumnDefinitions>
-                <CheckBox Grid.Column="0"
-                          Style="{StaticResource CheckBox.Default}"
-                          Content="Досрочное"
-                          IsChecked="{Binding TerminatedEnabled}"
-                          VerticalAlignment="Center" />
-                <TextBox Grid.Column="1"
-                         Style="{StaticResource TextBox.Form}"
-                         AutomationProperties.Name="Шаблон сообщения о досрочном завершении опроса"
-                         Text="{Binding TerminatedTemplate, UpdateSourceTrigger=PropertyChanged}"
-                         IsEnabled="{Binding TerminatedEnabled}"
-                         keepshell:PlaceholderBehavior.Placeholder="Шаблон при досрочном завершении" />
-            </Grid>
-
-            <Grid Margin="0,0,0,0">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="200" />
-                    <ColumnDefinition Width="*" />
-                </Grid.ColumnDefinitions>
-                <CheckBox Grid.Column="0"
-                          Style="{StaticResource CheckBox.Default}"
-                          Content="Архив"
-                          IsChecked="{Binding ArchivedEnabled}"
-                          VerticalAlignment="Center" />
-                <TextBox Grid.Column="1"
-                         Style="{StaticResource TextBox.Form}"
-                         AutomationProperties.Name="Шаблон сообщения об архивации опроса"
-                         Text="{Binding ArchivedTemplate, UpdateSourceTrigger=PropertyChanged}"
-                         IsEnabled="{Binding ArchivedEnabled}"
-                         keepshell:PlaceholderBehavior.Placeholder="Шаблон при архивировании" />
-            </Grid>
-        </StackPanel>
+        <TextBlock Text="Сообщения в чат Twitch"
+                   Style="{StaticResource Setting.BlockTitle}" />
+        <ContentControl Content="{Binding MessageLinks}" Focusable="False" Margin="0,0,0,12" />
 
         <StackPanel>
             <TextBlock Text="Параметры"
                        Style="{StaticResource Setting.BlockTitle}" />
-
-            <controls:NumericSettingField Label="Promo-интервал (сек)"
-                                          Value="{Binding ProgressIntervalSeconds, Mode=TwoWay}"
-                                          IncreaseCommand="{Binding IncreaseProgressIntervalCommand}"
-                                          DecreaseCommand="{Binding DecreaseProgressIntervalCommand}"
-                                          IncreaseAutomationName="Увеличить интервал промо"
-                                          DecreaseAutomationName="Уменьшить интервал промо"
-                                          Margin="0,0,0,12" />
 
             <controls:NumericSettingField Label="Макс. записей истории"
                                           Value="{Binding HistoryMaxItems, Mode=TwoWay}"

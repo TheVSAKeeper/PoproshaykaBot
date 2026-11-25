@@ -85,6 +85,8 @@ public sealed partial class ShellViewModel : ShellViewModelBase, IDisposable
     private readonly NavigationItem _statisticsSection;
     private readonly NavigationItem _streamHistorySection;
     private readonly NavigationItem _commandsSection;
+    private readonly BotMessagingNavigation? _botMessagingNavigation;
+    private readonly CommandsPageViewModel _commandsPage;
     private readonly UserStatisticsPageViewModel _statisticsPage;
     private readonly StreamHistoryPageViewModel _streamHistoryPage;
     private readonly NavigationItem _overviewSection;
@@ -134,7 +136,9 @@ public sealed partial class ShellViewModel : ShellViewModelBase, IDisposable
         UpdateSettingsSectionViewModel? updateSettings = null,
         MultistreamPageViewModel? multistreamPage = null,
         IMcpConnectNotificationGate? mcpConnectNotificationGate = null,
-        ToastHostViewModel? toasts = null)
+        ToastHostViewModel? toasts = null,
+        BotPageViewModel? botPage = null,
+        BotMessagingNavigation? botMessagingNavigation = null)
         : base(modal)
     {
         _unsavedChangesPrompt = unsavedChangesPrompt;
@@ -182,7 +186,18 @@ public sealed partial class ShellViewModel : ShellViewModelBase, IDisposable
             PackIconLucideKind.History,
             streamHistoryPage,
             key: SectionKeys.Streams);
-        _commandsSection = new("Команды", PackIconLucideKind.Terminal, commandsPage, key: SectionKeys.Commands);
+        _commandsPage = commandsPage;
+        _commandsSection = botPage is null
+            ? new("Команды", PackIconLucideKind.Terminal, commandsPage, key: SectionKeys.Commands)
+            : new("Бот", PackIconLucideKind.Bot, botPage, key: SectionKeys.Bot);
+        _botMessagingNavigation = botMessagingNavigation;
+        if (_botMessagingNavigation is not null)
+        {
+            _botMessagingNavigation.RuleRequested += OpenBotRule;
+            _botMessagingNavigation.CommandRequested += OpenBotCommand;
+            _botMessagingNavigation.ProfileTargetsRequested += OpenProfileTargets;
+            _commandsPage.FarewellRuleRequested += OnFarewellRuleRequested;
+        }
 
         _streamHistoryPage = streamHistoryPage;
         _streamHistoryPage.UserRequested += OnUserRequested;
@@ -340,6 +355,13 @@ public sealed partial class ShellViewModel : ShellViewModelBase, IDisposable
         _uiSettings.WriteFailed -= OnUiSettingsWriteFailed;
         _settingsPage.SettingsSaved -= OnSettingsSaved;
         _settingsPage.MultistreamRequested -= OnMultistreamRequested;
+        if (_botMessagingNavigation is not null)
+        {
+            _botMessagingNavigation.RuleRequested -= OpenBotRule;
+            _botMessagingNavigation.CommandRequested -= OpenBotCommand;
+            _botMessagingNavigation.ProfileTargetsRequested -= OpenProfileTargets;
+            _commandsPage.FarewellRuleRequested -= OnFarewellRuleRequested;
+        }
         _streamHistoryPage.UserRequested -= OnUserRequested;
         Overview.UserRequested -= OnUserRequested;
         Overview.ConnectionToggleRequested -= OnOverviewConnectionToggleRequested;
@@ -387,6 +409,44 @@ public sealed partial class ShellViewModel : ShellViewModelBase, IDisposable
     private void OnOverviewStatusReported(string message, StatusSeverity severity) => SetStatus(message, severity);
 
     private void OnMultistreamRequested(object? sender, StreamingPlatform? platform) => OpenMultistream(platform);
+
+    private void OnFarewellRuleRequested(object? sender, EventArgs args) => OpenBotRule("farewell");
+
+    public void OpenBotRule(string key)
+    {
+        if (_commandsSection.Content is BotPageViewModel page)
+        {
+            NavigateToLinkedPage(_commandsSection, () => page.OpenRule(key));
+        }
+    }
+
+    public void OpenBotCommand(string? canonical = null) => NavigateToLinkedPage(_commandsSection, () =>
+    {
+        if (_commandsSection.Content is BotPageViewModel page)
+        {
+            page.OpenCommands(canonical);
+        }
+        else if (canonical is not null)
+        {
+            _commandsPage.TrySelect(canonical);
+        }
+    });
+
+    private void OpenProfileTargets(Guid? id)
+    {
+        if (_multistreamSection?.Content is MultistreamPageViewModel page)
+        {
+            NavigateToLinkedPage(_multistreamSection, () => page.OpenProfileTargets(id));
+        }
+    }
+
+    private void NavigateToLinkedPage(NavigationItem section, Action open)
+    {
+        if (TryLeaveDirtyPage(section, open))
+        {
+            Navigate(section, open);
+        }
+    }
 
     private void OpenMultistream(StreamingPlatform? platform, bool fromOverview = false)
     {
@@ -505,7 +565,8 @@ public sealed partial class ShellViewModel : ShellViewModelBase, IDisposable
             key = migrated;
         }
 
-        return FindByKey(key);
+        return string.Equals(key, SectionKeys.Commands, StringComparison.OrdinalIgnoreCase)
+            ? _commandsSection : FindByKey(key);
     }
 
     protected override void OnNavCollapsedChanged(bool value)
@@ -555,6 +616,9 @@ public sealed partial class ShellViewModel : ShellViewModelBase, IDisposable
                 break;
             case CommandsPageViewModel commands:
                 commands.OnEnter();
+                break;
+            case BotPageViewModel bot:
+                bot.OnEnter();
                 break;
             case DashboardViewModel overview:
                 overview.OnEnter();

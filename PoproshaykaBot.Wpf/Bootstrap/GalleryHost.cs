@@ -134,7 +134,14 @@ public sealed class GalleryHost : IGalleryHost
             return await CaptureEditAsync(item.Name, context).ConfigureAwait(true);
         }
 
-        Navigate(item.Name);
+        if (item.Name == SectionKeys.BotMessages)
+        {
+            _shell.OpenBotRule("broadcast");
+        }
+        else
+        {
+            Navigate(item.Name);
+        }
 
         await context.SettleAsync().ConfigureAwait(true);
 
@@ -177,6 +184,7 @@ public sealed class GalleryHost : IGalleryHost
         }
 
         return SectionKeys.All
+            .Concat([SectionKeys.Commands, SectionKeys.BotMessages])
             .Concat(SectionKeys.Selected)
             .Concat(SectionKeys.Cards)
             .Concat(SectionKeys.Hidden)
@@ -410,6 +418,13 @@ public sealed class GalleryHost : IGalleryHost
 
     private void Navigate(string page)
     {
+        if (string.Equals(page, SectionKeys.Commands, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(page, SectionKeys.Bot, StringComparison.OrdinalIgnoreCase))
+        {
+            _shell.OpenBotCommand();
+            return;
+        }
+
         if (string.Equals(page, SectionKeys.Settings, StringComparison.OrdinalIgnoreCase))
         {
             _shell.OpenSettingsCommand.Execute(null);

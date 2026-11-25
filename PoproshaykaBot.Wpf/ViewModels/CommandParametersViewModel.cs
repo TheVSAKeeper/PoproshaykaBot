@@ -36,14 +36,14 @@ public sealed class CommandParametersViewModel : ObservableObject
 
         return command switch
         {
-            DonateCommand => new("Параметры команды", [DonateMessage()]),
+            DonateCommand => new("Ответ", [DonateMessage()]),
             TrumpCommand => new("Параметры команды",
             [
+                SuccessMessage(),
+                UnauthorizedMessage(),
                 Coins(),
                 PurchasePrice(),
                 AllowedUsers(),
-                SuccessMessage(),
-                UnauthorizedMessage(),
             ]),
             _ => null,
         };
@@ -84,7 +84,7 @@ public sealed class CommandParametersViewModel : ObservableObject
     private static CommandParameterViewModel DonateMessage()
     {
         return new("Текст ответа",
-            "Тот же текст, что и в настройках: «Основные» – «Шаблоны сообщений»",
+            "Пустое поле вернёт стандартный ответ.",
             CommandParameterKind.Multiline,
             settings => settings.Twitch.Messages.DonateCommandMessage,
             (settings, text) => settings.Twitch.Messages.DonateCommandMessage =

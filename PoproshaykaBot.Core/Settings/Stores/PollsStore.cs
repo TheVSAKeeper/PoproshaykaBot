@@ -48,4 +48,6 @@ public class PollsStore
     {
         return _store.Save(value);
     }
+
+    public bool MutatePersisted(Action<PollsSettings> mutator) => _store.Mutate(mutator, applyWhenBlocked: false);
 }

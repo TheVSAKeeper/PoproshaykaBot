@@ -7,13 +7,16 @@ using KeepShell.Testing;
 using KeepShell.ViewModels;
 using KeepShell.Views.Controls;
 using Microsoft.Extensions.Logging.Abstractions;
+using PoproshaykaBot.Core.Broadcast;
 using PoproshaykaBot.Core.Chat;
 using PoproshaykaBot.Core.Chat.Commands;
+using PoproshaykaBot.Core.Infrastructure.Events;
 using PoproshaykaBot.Core.Platforms;
 using PoproshaykaBot.Core.Settings;
 using PoproshaykaBot.Core.Settings.Stores;
 using PoproshaykaBot.Core.Statistics;
 using PoproshaykaBot.Wpf.Bootstrap;
+using PoproshaykaBot.Wpf.Infrastructure;
 using PoproshaykaBot.Wpf.Tests.Support;
 using PoproshaykaBot.Wpf.ViewModels;
 using PoproshaykaBot.Wpf.ViewModels.Settings;
@@ -21,7 +24,9 @@ using PoproshaykaBot.Wpf.Views;
 using PoproshaykaBot.Wpf.Views.Settings;
 using System.IO;
 using System.Windows;
+using System.Windows.Automation;
 using System.Windows.Controls;
+using System.Windows.Input;
 using System.Windows.Media;
 using KeepShellMcpOptions = KeepShell.Mcp.McpServerOptions;
 
@@ -148,6 +153,54 @@ public sealed class VisualPagesSmokeTests
             Assert.That(BackgroundColor(window), Is.EqualTo(lightBg));
             Assert.That(bindingErrors.Count, Is.Zero, () => bindingErrors.Report);
         });
+    }
+
+    [Test]
+    public async Task AutoMessages_сохраняет_выбор_и_даёт_доступ_с_клавиатуры()
+    {
+        var directory = Directory.CreateTempSubdirectory("pb-visual-auto-messages-");
+        try
+        {
+            var settings = new SettingsManager(NullLogger<SettingsManager>.Instance, Path.Combine(directory.FullName, "settings.json"));
+            var bus = new InMemoryEventBus(NullLogger<InMemoryEventBus>.Instance);
+            var registry = new ChatPlatformRegistry([]);
+            var targets = new DefaultBroadcastPlatformTargetsProvider();
+            await using var scheduler = new BroadcastScheduler(
+                new BroadcastMessenger(registry, NullLogger<BroadcastMessenger>.Instance), targets, settings, bus,
+                TimeProvider.System, NullLogger<BroadcastScheduler>.Instance);
+            var prompt = new FakeUnsavedChangesPrompt { Answer = UnsavedChangesDecision.Stay };
+            using var page = new AutoMessagesPageViewModel(
+                settings, new PollsStore(filePath: Path.Combine(directory.FullName, "polls.json")), prompt, registry,
+                targets, new BroadcastProfilesStore(filePath: Path.Combine(directory.FullName, "broadcast-profiles.json")),
+                scheduler, new BotMessagingNavigation(), bus, NullLogger<AutoMessagesPageViewModel>.Instance);
+            var view = new AutoMessagesPageView { DataContext = page };
+            using var errors = BindingErrorSink.Attach();
+            errors.Clear();
+            using var host = VisualTestHost.Show(CreateHostWindow(view), 760, 480);
+            host.Settle();
+
+            var list = Descendants<ListBox>(view).Single();
+            var editor = Descendants<TextBox>(view).Single(box => AutomationProperties.GetName(box) == "Текст сообщения");
+            editor.Text = "Привет, {username}!";
+            host.Settle();
+            list.SelectedItem = page.Options.Single(item => item.Key == "farewell");
+            host.Settle();
+            var save = Descendants<Button>(view).Single(button => button.Content is "Сохранить");
+
+            Assert.Multiple(() =>
+            {
+                Assert.That(page.SelectedOption.Key, Is.EqualTo("welcome"));
+                Assert.That(list.SelectedItem, Is.SameAs(page.SelectedOption));
+                Assert.That(page.Preview, Is.EqualTo("Привет, Алекс!"));
+                Assert.That(editor.Focusable && KeyboardNavigation.GetIsTabStop(editor), Is.True);
+                Assert.That(save.IsEnabled && save.Focusable && KeyboardNavigation.GetIsTabStop(save), Is.True);
+                Assert.That(errors.Count, Is.Zero, () => errors.Report);
+            });
+        }
+        finally
+        {
+            directory.Delete(recursive: true);
+        }
     }
 
     [Test]

@@ -492,7 +492,7 @@ internal sealed class Stage8Layer2Tests
                 TimeProvider.System,
                 NullLogger<BroadcastScheduler>.Instance);
 
-            using var tile = new BroadcastStatusTileViewModel(scheduler, settings, state, registry, targets, bus, new InertDialogService());
+            using var tile = new BroadcastStatusTileViewModel(scheduler, settings, state, registry, targets, bus);
 
             Assert.Multiple(() =>
             {
@@ -589,23 +589,6 @@ internal sealed class Stage8Layer2Tests
         public IReadOnlySet<StreamingPlatform> LivePlatforms => new HashSet<StreamingPlatform>();
 
         public bool IsPlatformLive(StreamingPlatform platform) => IsAnyLive && platform == StreamingPlatform.YouTube;
-    }
-
-    private sealed class InertDialogService : IDialogService
-    {
-        public Task<bool> ShowAsync(IDialogViewModel viewModel) => Task.FromResult(true);
-
-        public Task<bool> ReplaceAsync(IDialogViewModel viewModel) => Task.FromResult(true);
-
-        public bool Confirm(string title, string message, bool defaultYes = false) => true;
-
-        public bool ConfirmWarning(string title, string message, bool defaultYes = false) => true;
-
-        public void Info(string title, string message) { }
-
-        public void Warning(string title, string message) { }
-
-        public void Error(string title, string message) { }
     }
 
     private sealed class StubPlatformRegistry(params IChatPlatform[] platforms) : IChatPlatformRegistry

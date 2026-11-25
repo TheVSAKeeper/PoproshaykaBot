@@ -513,6 +513,17 @@ public sealed partial class MultistreamPageViewModel : ObservableObject, IPageHe
         Reveal(MultistreamSection.Automation);
     }
 
+    internal void OpenProfileTargets(Guid? profileId)
+    {
+        OpenAutomation();
+        SelectAutomationTab(MultistreamAutomationTab.Profiles);
+        if (profileId is { } id
+            && ProfilesBlocks is [{ Content: BroadcastProfilesSettingsSectionViewModel section }])
+        {
+            section.Profiles.OpenEditor(id);
+        }
+    }
+
     private bool CanOpenWizards() =>
         !Settings.IsSaving
         && SelectedPlatform is not null

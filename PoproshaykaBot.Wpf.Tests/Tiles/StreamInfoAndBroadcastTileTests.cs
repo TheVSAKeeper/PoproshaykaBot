@@ -146,7 +146,6 @@ public sealed class StreamInfoAndBroadcastTileTests
                 registry,
                 targets,
                 bus,
-                new InertDialogService(),
                 uiDispatcher: new ManualUiDispatcher(),
                 catalogStore: catalog);
 
@@ -249,23 +248,6 @@ public sealed class StreamInfoAndBroadcastTileTests
         public IReadOnlySet<StreamingPlatform> LivePlatforms => LiveSet;
 
         public bool IsPlatformLive(StreamingPlatform platform) => LiveSet.Contains(platform);
-    }
-
-    private sealed class InertDialogService : IDialogService
-    {
-        public Task<bool> ShowAsync(IDialogViewModel viewModel) => Task.FromResult(true);
-
-        public Task<bool> ReplaceAsync(IDialogViewModel viewModel) => Task.FromResult(true);
-
-        public bool Confirm(string title, string message, bool defaultYes = false) => true;
-
-        public bool ConfirmWarning(string title, string message, bool defaultYes = false) => true;
-
-        public void Info(string title, string message) { }
-
-        public void Warning(string title, string message) { }
-
-        public void Error(string title, string message) { }
     }
 
     private sealed class StubPlatformRegistry(params IChatPlatform[] platforms) : IChatPlatformRegistry

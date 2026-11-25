@@ -25,7 +25,7 @@ public sealed partial class BroadcastStatusTileViewModel : DashboardTileViewMode
     private readonly IBroadcastState _broadcastState;
     private readonly IChatPlatformRegistry _platformRegistry;
     private readonly IBroadcastPlatformTargetsProvider _platformTargetsProvider;
-    private readonly IDialogService _dialogService;
+    private readonly BotMessagingNavigation? _messaging;
     private readonly IUiDispatcher? _uiDispatcher;
     private readonly YouTubeSettingsStore? _youtubeSettingsStore;
     private readonly ChannelCatalogStore? _catalogStore;
@@ -33,7 +33,6 @@ public sealed partial class BroadcastStatusTileViewModel : DashboardTileViewMode
 
     private readonly ToolbarItemViewModel _startItem;
     private readonly ToolbarItemViewModel _stopItem;
-    private readonly ToolbarItemViewModel _modeToggleItem;
     private readonly ToolbarItemViewModel _sendNowItem;
 
     [ObservableProperty]
@@ -60,6 +59,9 @@ public sealed partial class BroadcastStatusTileViewModel : DashboardTileViewMode
     private int _sentCount;
 
     [ObservableProperty]
+    private string? _lastDispatch;
+
+    [ObservableProperty]
     private string _nextBroadcastText = "–";
 
     public BroadcastStatusTileViewModel(
@@ -69,10 +71,10 @@ public sealed partial class BroadcastStatusTileViewModel : DashboardTileViewMode
         IChatPlatformRegistry platformRegistry,
         IBroadcastPlatformTargetsProvider platformTargetsProvider,
         IEventBus eventBus,
-        IDialogService dialogService,
         YouTubeSettingsStore? youtubeSettingsStore = null,
         IUiDispatcher? uiDispatcher = null,
-        ChannelCatalogStore? catalogStore = null)
+        ChannelCatalogStore? catalogStore = null,
+        BotMessagingNavigation? messaging = null)
         : base("broadcast-status", "Рассылка", maxWidth: 360, minHeight: 160)
     {
         _scheduler = scheduler;
@@ -80,22 +82,25 @@ public sealed partial class BroadcastStatusTileViewModel : DashboardTileViewMode
         _broadcastState = broadcastState;
         _platformRegistry = platformRegistry;
         _platformTargetsProvider = platformTargetsProvider;
-        _dialogService = dialogService;
+        _messaging = messaging;
         _youtubeSettingsStore = youtubeSettingsStore;
         _uiDispatcher = uiDispatcher;
         _catalogStore = catalogStore;
 
         _startItem = new ToolbarItemViewModel(PackIconLucideKind.Play, StartCommand, "Запустить рассылку");
         _stopItem = new ToolbarItemViewModel(PackIconLucideKind.Square, StopCommand, "Остановить рассылку");
-        _modeToggleItem = new ToolbarItemViewModel(PackIconLucideKind.Repeat, ModeToggleCommand, "Переключить режим");
         _sendNowItem = new ToolbarItemViewModel(PackIconLucideKind.Send, SendNowCommand, "Отправить сейчас");
 
         HeaderActions.Add(_startItem);
         HeaderActions.Add(_stopItem);
-        HeaderActions.Add(_modeToggleItem);
         HeaderActions.Add(_sendNowItem);
+        if (_messaging is not null)
+        {
+            HeaderActions.Add(new ToolbarItemViewModel(PackIconLucideKind.Settings, OpenBroadcastRuleCommand, "Настройки рассылки"));
+        }
 
         _subscriptions.Add(eventBus.SubscribeOnUi<BroadcastSchedulerStateChanged>(_ => RefreshState()));
+        _subscriptions.Add(eventBus.SubscribeOnUi<BroadcastScheduleSettingsChanged>(_ => RefreshState()));
         _subscriptions.Add(eventBus.SubscribeOnUi<BroadcastProfilesChanged>(_ => RefreshState()));
         _subscriptions.Add(eventBus.SubscribeOnUi<StreamWentOnline>(_ => RefreshState()));
         _subscriptions.Add(eventBus.SubscribeOnUi<StreamWentOffline>(_ => RefreshState()));
@@ -168,42 +173,7 @@ public sealed partial class BroadcastStatusTileViewModel : DashboardTileViewMode
     }
 
     [RelayCommand]
-    private void ModeToggle()
-    {
-        var willEnableAuto = !_settings.Current.Twitch.AutoBroadcast.AutoBroadcastEnabled;
-
-        if (willEnableAuto && _scheduler.IsActive && !_broadcastState.IsAnyLive)
-        {
-            var confirmed = _dialogService.Confirm(
-                "Переключение режима",
-                "При переключении в автоматический режим активная рассылка будет остановлена, так как стрим сейчас оффлайн.\n\nПродолжить?");
-
-            if (!confirmed)
-            {
-                return;
-            }
-        }
-
-        _settings.Mutate(settings => settings.Twitch.AutoBroadcast.AutoBroadcastEnabled = willEnableAuto);
-
-        if (willEnableAuto)
-        {
-            if (_broadcastState.IsAnyLive)
-            {
-                var channel = ResolvePrimaryChannel();
-                if (!_scheduler.IsActive && !string.IsNullOrEmpty(channel))
-                {
-                    _scheduler.Start(channel);
-                }
-            }
-            else
-            {
-                _scheduler.Stop();
-            }
-        }
-
-        RefreshState();
-    }
+    private void OpenBroadcastRule() => _messaging?.OpenRule("broadcast");
 
     [RelayCommand(CanExecute = nameof(CanSendNow))]
     private async Task SendNowAsync()
@@ -226,7 +196,8 @@ public sealed partial class BroadcastStatusTileViewModel : DashboardTileViewMode
         var targets = _platformTargetsProvider.GetTargetPlatforms();
         PlatformsText = FormatTargetPlatforms(targets);
         RefreshTargetPlatformChips(targets);
-        SentCount = _scheduler.SentMessagesCount;
+        SentCount = _scheduler.QueuedDispatchCount;
+        LastDispatch = BroadcastDeliveryText.Format(_scheduler, _platformRegistry);
 
         var nextTime = _scheduler.NextBroadcastTime;
         NextBroadcastText = nextTime.HasValue ? nextTime.Value.ToString("HH:mm:ss") : "–";

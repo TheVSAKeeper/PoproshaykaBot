@@ -49,6 +49,8 @@ public sealed partial class CommandsPageViewModel : ObservableObject, IPageHeade
     private bool _rebuildingView;
     private CommandRowViewModel? _parametersRow;
 
+    public event EventHandler? FarewellRuleRequested;
+
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsPlatformScope))]
     private PlatformFilterOption _commandScope = GeneralScope;
@@ -182,6 +184,39 @@ public sealed partial class CommandsPageViewModel : ObservableObject, IPageHeade
     public string? ParametersHeading => IsPlatformScope && Parameters is { } parameters
         ? $"{parameters.Heading} · общие для площадок" : Parameters?.Heading;
 
+    public string? ResponseSource => SelectedRow is { } row ? _commands.GetValueOrDefault(row.Canonical) switch
+    {
+        HelloCommand => "Команда отвечает «Привет, имя!». Она работает независимо от автоприветствия.",
+        ByeCommand => "Команда использует общий шаблон прощания. Если прощание выключено, ответа не будет.",
+        TrumpCommand => "Ответ зависит от списка пользователей и данных о покупке.",
+        _ => null,
+    } : null;
+
+    public bool UsesFarewellRule => SelectedRow is { } row && _commands.GetValueOrDefault(row.Canonical) is ByeCommand;
+
+    public string? PlatformSummary
+    {
+        get
+        {
+            if (SelectedRow is not { } row || _platformRegistry is null)
+            {
+                return null;
+            }
+
+            var settings = _settingsStore.Load();
+            var command = _commands[row.Canonical];
+            return string.Join(" · ", _platformRegistry.All.Select(platform =>
+            {
+                var enabled = settings.IsEnabled(row.Canonical, platform.Id)
+                    && ProbeCodeLevel(command, platform.Id, platform.Capabilities) is not null;
+                return $"{platform.DisplayName}: {(enabled ? "вкл." : "выкл.")}";
+            }));
+        }
+    }
+
+    [RelayCommand]
+    private void OpenFarewellRule() => FarewellRuleRequested?.Invoke(this, EventArgs.Empty);
+
     private StreamingPlatform ProbePlatform =>
         CommandScope.Platform ?? (_platformRegistry?.All is { Count: > 0 } all ? all[0].Id : StreamingPlatform.Twitch);
 
@@ -239,6 +274,8 @@ public sealed partial class CommandsPageViewModel : ObservableObject, IPageHeade
         return Task.FromResult(TrySaveParameters());
     }
 
+    internal bool TrySaveDraft() => TrySaveParameters();
+
     public void DiscardUnsavedChanges()
     {
         ReloadParameters();
@@ -277,16 +314,21 @@ public sealed partial class CommandsPageViewModel : ObservableObject, IPageHeade
 
     public bool TrySelect(string canonical)
     {
-        var row = _rows.FirstOrDefault(item => string.Equals(item.Canonical, canonical, StringComparison.OrdinalIgnoreCase));
+        var row = _allRows.FirstOrDefault(item => string.Equals(item.Canonical, canonical, StringComparison.OrdinalIgnoreCase)
+            || _commands[item.Canonical].Aliases.Contains(canonical, StringComparer.OrdinalIgnoreCase));
 
         if (row is null)
         {
             return false;
         }
 
-        SelectedRow = row;
+        if (!_rows.Contains(row))
+        {
+            FilterText = string.Empty;
+        }
 
-        return true;
+        SelectedRow = row;
+        return ReferenceEquals(SelectedRow, row);
     }
 
     private static CommandContext CreateProbe(StreamingPlatform platform, bool isModerator = false, bool isBroadcaster = false)
@@ -504,6 +546,9 @@ public sealed partial class CommandsPageViewModel : ObservableObject, IPageHeade
 
     private void ReloadParameters()
     {
+        OnPropertyChanged(nameof(ResponseSource));
+        OnPropertyChanged(nameof(UsesFarewellRule));
+        OnPropertyChanged(nameof(PlatformSummary));
         ParametersNotice = null;
         ParametersNoticeTone = CommandNoticeTone.Info;
         _parametersRow = SelectedRow;
@@ -757,6 +802,7 @@ public sealed partial class CommandsPageViewModel : ObservableObject, IPageHeade
 
     private void UpdateSummaries()
     {
+        OnPropertyChanged(nameof(PlatformSummary));
         var enabled = _allRows.Count(row => row.IsEnabledInScope);
         var total = _allRows.Sum(row => row.TotalCount).ToString("N0", UiCulture.Russian);
         var stream = _allRows.Sum(row => row.StreamCount).ToString("N0", UiCulture.Russian);

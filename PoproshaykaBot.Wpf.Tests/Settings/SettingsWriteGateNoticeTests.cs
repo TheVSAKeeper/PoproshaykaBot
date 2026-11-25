@@ -224,7 +224,7 @@ public class SettingsWriteGateNoticeTests
             new PollsStore(null, pollsPath, await CreateClosedGateAsync("polls.json")),
             TimeProvider.System);
 
-        section.StartTemplate = "Новый опрос";
+        section.HistoryMaxItems = 90;
         var written = section.SaveChanges();
 
         Assert.Multiple(() =>

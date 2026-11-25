@@ -499,6 +499,66 @@
                                        Margin="0,8,0,0"
                                        AutomationProperties.Name="Описание выделенной команды" />
 
+                            <TextBlock Text="{Binding SelectedRow.TargetSummary}"
+                                       Style="{StaticResource StatLabel}"
+                                       Margin="0,8,0,0"
+                                       TextWrapping="Wrap" />
+                            <TextBlock Text="{Binding PlatformSummary}"
+                                       Style="{StaticResource StatLabel}"
+                                       Margin="0,4,0,0"
+                                       TextWrapping="Wrap" />
+                            <TextBlock Text="{Binding ResponseSource}"
+                                       Margin="0,8,0,0"
+                                       TextWrapping="Wrap"
+                                       Visibility="{Binding ResponseSource, Converter={StaticResource NullToVisibility}}" />
+                            <Button Content="Открыть шаблон прощания"
+                                    Style="{StaticResource Button.Secondary}"
+                                    Margin="0,8,0,0"
+                                    HorizontalAlignment="Left"
+                                    Command="{Binding OpenFarewellRuleCommand}"
+                                    Visibility="{Binding UsesFarewellRule, Converter={StaticResource BoolToVisibility}}" />
+
+                            <StackPanel Visibility="{Binding HasParameters, Converter={StaticResource BoolToVisibility}}">
+                                <TextBlock Style="{StaticResource InspectorSectionHeader}"
+                                           Text="{Binding ParametersHeading}" />
+
+                                <ItemsControl ItemsSource="{Binding Parameters.Items}"
+                                              ItemTemplate="{StaticResource CommandParameterTemplate}" />
+
+                                <Button Content="Сохранить параметры"
+                                        Style="{StaticResource Button.Primary}"
+                                        HorizontalAlignment="Stretch"
+                                        HorizontalContentAlignment="Center"
+                                        Command="{Binding SaveParametersCommand}"
+                                        AutomationProperties.Name="Сохранить параметры выделенной команды" />
+
+                                <TextBlock Margin="0,6,0,0"
+                                           Text="{Binding ParametersNotice}"
+                                           FontSize="{DynamicResource Font.Size.Caption}"
+                                           TextWrapping="Wrap"
+                                           AutomationProperties.LiveSetting="Polite"
+                                           Visibility="{Binding ParametersNotice, Converter={StaticResource NullToVisibility}}">
+                                    <TextBlock.Style>
+                                        <Style TargetType="TextBlock">
+                                            <Setter Property="Foreground"
+                                                    Value="{DynamicResource Fg.Secondary}" />
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding ParametersNoticeTone}"
+                                                             Value="Warning">
+                                                    <Setter Property="Foreground"
+                                                            Value="{DynamicResource State.WarningText}" />
+                                                </DataTrigger>
+                                                <DataTrigger Binding="{Binding ParametersNoticeTone}"
+                                                             Value="Error">
+                                                    <Setter Property="Foreground"
+                                                            Value="{DynamicResource State.ErrorText}" />
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </TextBlock.Style>
+                                </TextBlock>
+                            </StackPanel>
+
                             <TextBlock Style="{StaticResource InspectorSectionHeader}"
                                        Text="Настройки команды" />
 
@@ -576,52 +636,6 @@
                                           AutomationProperties.Name="{Binding SelectedRow.TargetAutomationName}"
                                           ToolTip="{Binding SelectedRow.TargetTooltip}" />
 
-                                <TextBlock Text="{Binding SelectedRow.TargetSummary}"
-                                           Style="{StaticResource StatLabel}"
-                                           Margin="0,6,0,0"
-                                           TextWrapping="Wrap" />
-
-                            </StackPanel>
-
-                            <StackPanel Visibility="{Binding HasParameters, Converter={StaticResource BoolToVisibility}}">
-                                <TextBlock Style="{StaticResource InspectorSectionHeader}"
-                                           Text="{Binding ParametersHeading}" />
-
-                                <ItemsControl ItemsSource="{Binding Parameters.Items}"
-                                              ItemTemplate="{StaticResource CommandParameterTemplate}" />
-
-                                <Button Content="Сохранить параметры"
-                                        Style="{StaticResource Button.Primary}"
-                                        HorizontalAlignment="Stretch"
-                                        HorizontalContentAlignment="Center"
-                                        Command="{Binding SaveParametersCommand}"
-                                        AutomationProperties.Name="Сохранить параметры выделенной команды" />
-
-                                <TextBlock Margin="0,6,0,0"
-                                           Text="{Binding ParametersNotice}"
-                                           FontSize="{DynamicResource Font.Size.Caption}"
-                                           TextWrapping="Wrap"
-                                           AutomationProperties.LiveSetting="Polite"
-                                           Visibility="{Binding ParametersNotice, Converter={StaticResource NullToVisibility}}">
-                                    <TextBlock.Style>
-                                        <Style TargetType="TextBlock">
-                                            <Setter Property="Foreground"
-                                                    Value="{DynamicResource Fg.Secondary}" />
-                                            <Style.Triggers>
-                                                <DataTrigger Binding="{Binding ParametersNoticeTone}"
-                                                             Value="Warning">
-                                                    <Setter Property="Foreground"
-                                                            Value="{DynamicResource State.WarningText}" />
-                                                </DataTrigger>
-                                                <DataTrigger Binding="{Binding ParametersNoticeTone}"
-                                                             Value="Error">
-                                                    <Setter Property="Foreground"
-                                                            Value="{DynamicResource State.ErrorText}" />
-                                                </DataTrigger>
-                                            </Style.Triggers>
-                                        </Style>
-                                    </TextBlock.Style>
-                                </TextBlock>
                             </StackPanel>
 
                             <TextBlock Style="{StaticResource InspectorSectionHeader}"

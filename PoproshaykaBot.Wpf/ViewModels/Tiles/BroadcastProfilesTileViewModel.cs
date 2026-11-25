@@ -225,6 +225,15 @@ public sealed partial class BroadcastProfilesTileViewModel : DashboardTileViewMo
         }
     }
 
+    internal void OpenEditor(Guid profileId)
+    {
+        var item = Items.FirstOrDefault(candidate => candidate.Profile.Id == profileId);
+        if (item?.EditCommand is { } edit && edit.CanExecute(null))
+        {
+            edit.Execute(null);
+        }
+    }
+
     private void DuplicateProfile(BroadcastProfileItemViewModel item)
     {
         var source = item.Profile;

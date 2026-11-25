@@ -672,6 +672,9 @@ public partial class App : Application
         services.AddSingleton<ChatMessageImageProvider>();
         services.AddSingleton<StreamHistoryPageViewModel>();
         services.AddSingleton<CommandsPageViewModel>();
+        services.AddSingleton<BotMessagingNavigation>();
+        services.AddSingleton<AutoMessagesPageViewModel>();
+        services.AddSingleton<BotPageViewModel>();
         services.TryAddSingleton(static _ => CreateThemePackLoader());
         services.AddSingleton<ThemeSelectionViewModel>();
         services.AddSingleton(static _ => new ThemePackCatalog(
@@ -727,14 +730,12 @@ public partial class App : Application
 
         services.AddTransient<BasicSettingsSectionViewModel>();
         services.AddTransient<RateLimitingSettingsViewModel>();
-        services.AddTransient<MessagesSettingsSectionViewModel>();
         services.AddTransient<HttpServerSectionViewModel>();
         services.AddTransient<OAuthSettingsViewModel>();
         services.AddTransient<YouTubeSettingsSectionViewModel>();
         services.AddTransient<ChatSettingsSectionViewModel>();
         services.AddSingleton<ObsChatSettingsSectionViewModel>();
         services.AddSingleton<ObsIntegrationSectionViewModel>();
-        services.AddTransient<AutoBroadcastSettingsViewModel>();
         services.AddTransient<BotLifecycleAutomationSectionViewModel>();
         services.AddTransient<MiscSettingsSectionViewModel>();
         services.AddSingleton<PollsSettingsSectionViewModel>();

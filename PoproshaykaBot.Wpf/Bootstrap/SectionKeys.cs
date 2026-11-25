@@ -7,6 +7,8 @@ public static class SectionKeys
     public const string Users = "users";
     public const string Streams = "streams";
     public const string Commands = "commands";
+    public const string Bot = "bot";
+    public const string BotMessages = Bot + ":messages";
     public const string Logs = "logs";
     public const string Diagnostics = "diagnostics";
     public const string Settings = "settings";
@@ -29,7 +31,7 @@ public static class SectionKeys
     public const string OverviewObsFull = Overview + ObsFullSuffix;
     public const string OverviewEdit = Overview + EditSuffix;
 
-    public static IReadOnlyList<string> All { get; } = [Overview, Multistream, Users, Streams, Commands, Logs, Diagnostics, Settings];
+    public static IReadOnlyList<string> All { get; } = [Overview, Multistream, Users, Streams, Bot, Logs, Diagnostics, Settings];
 
     public static IReadOnlyList<string> Selected { get; } = [UsersSelected, StreamsSelected, CommandsSelected];
 

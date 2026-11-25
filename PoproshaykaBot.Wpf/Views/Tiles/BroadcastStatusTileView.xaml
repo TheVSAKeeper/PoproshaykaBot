@@ -21,6 +21,7 @@
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
         <Grid.Resources>
@@ -122,7 +123,7 @@
         <TextBlock Grid.Row="3"
                    Grid.Column="0"
                    Style="{StaticResource Label}"
-                   Text="Отправлено" />
+                   Text="Принято в очередь" />
         <TextBlock Grid.Row="3"
                    Grid.Column="1"
                    Style="{StaticResource Value}"
@@ -139,5 +140,12 @@
                    Text="{Binding NextBroadcastText}"
                    FontFamily="{DynamicResource Font.Mono}"
                    Margin="0" />
+        <TextBlock Grid.Row="5"
+                   Grid.ColumnSpan="2"
+                   Text="{Binding LastDispatch}"
+                   Style="{StaticResource Value}"
+                   TextWrapping="Wrap"
+                   Margin="0,4,0,0"
+                   Visibility="{Binding LastDispatch, Converter={StaticResource NullToVisibility}}" />
     </Grid>
 </UserControl>

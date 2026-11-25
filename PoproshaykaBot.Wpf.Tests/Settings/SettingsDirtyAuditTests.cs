@@ -98,29 +98,6 @@ public sealed class SettingsDirtyAuditTests
             h => Assert.That(h.SettingsManager.Current.Twitch.ThrottlingPeriodSeconds, Is.EqualTo(60)));
 
         yield return new(
-            "Messages: Entry IsEnabled and Text",
-            h =>
-            {
-                h.Messages.Entries[0].IsEnabled = false;
-                h.Messages.Entries[0].Text = "Привет, {user}!";
-            },
-            h =>
-            {
-                Assert.That(h.SettingsManager.Current.Twitch.Messages.WelcomeEnabled, Is.False);
-                Assert.That(h.SettingsManager.Current.Twitch.Messages.Welcome, Is.EqualTo("Привет, {user}!"));
-            });
-
-        yield return new(
-            "Messages: Entry ResetCommand",
-            async h =>
-            {
-                h.Messages.Entries[0].Text = "Временно";
-                await h.Page.SaveCommand.ExecuteAsync(null);
-                h.Messages.Entries[0].ResetCommand.Execute(null);
-            },
-            h => Assert.That(h.SettingsManager.Current.Twitch.Messages.Welcome, Is.EqualTo(new PoproshaykaBot.Core.Chat.MessageSettings().Welcome)));
-
-        yield return new(
             "Twitch OAuth: ClientId and RedirectUri",
             h =>
             {
@@ -199,21 +176,6 @@ public sealed class SettingsDirtyAuditTests
             });
 
         yield return new(
-            "Stream AutoBroadcast: Interval and Template",
-            h =>
-            {
-                h.AutoBroadcast.AutoBroadcastEnabled = true;
-                h.AutoBroadcast.BroadcastIntervalMinutes = 25;
-                h.AutoBroadcast.BroadcastMessageTemplate = "Подписывайтесь!";
-            },
-            h =>
-            {
-                Assert.That(h.SettingsManager.Current.Twitch.AutoBroadcast.AutoBroadcastEnabled, Is.True);
-                Assert.That(h.SettingsManager.Current.Twitch.AutoBroadcast.BroadcastIntervalMinutes, Is.EqualTo(25));
-                Assert.That(h.SettingsManager.Current.Twitch.AutoBroadcast.BroadcastMessageTemplate, Is.EqualTo("Подписывайтесь!"));
-            });
-
-        yield return new(
             "Stream BotLifecycle: Platform item flags",
             h =>
             {
@@ -228,20 +190,16 @@ public sealed class SettingsDirtyAuditTests
             });
 
         yield return new(
-            "Stream Polls: Template, Interval, KillSwitchToday",
+            "Stream Polls: HistoryMaxItems and KillSwitchToday",
             h =>
             {
-                h.Polls.StartEnabled = true;
-                h.Polls.StartTemplate = "Голосуем: {title}";
-                h.Polls.ProgressIntervalSeconds = 90;
+                h.Polls.HistoryMaxItems = 90;
                 h.Polls.KillSwitchToday = true;
             },
             h =>
             {
                 var saved = h.PollsStore.Load();
-                Assert.That(saved.ChatTemplates.StartEnabled, Is.True);
-                Assert.That(saved.ChatTemplates.StartTemplate, Is.EqualTo("Голосуем: {title}"));
-                Assert.That(saved.ChatTemplates.ProgressAnnounceIntervalSeconds, Is.EqualTo(90));
+                Assert.That(saved.HistoryMaxItems, Is.EqualTo(90));
                 Assert.That(saved.AutoTriggerKillSwitchDateUtc, Is.Not.Null);
             });
 
@@ -664,7 +622,7 @@ public sealed class SettingsDirtyAuditTests
 
             Basic = new();
             RateLimiting = new();
-            Messages = new();
+            var messaging = new BotMessagingNavigation();
             OAuth = new(
                 DispatchProxy.Create<ITwitchOAuthService, InertProxy>(),
                 accountsStore,
@@ -684,7 +642,6 @@ public sealed class SettingsDirtyAuditTests
             Chat = new();
             ObsIntegration = new(obsService, settingsManager, NullLogger<ObsIntegrationSectionViewModel>.Instance, Dialogs, DispatchProxy.Create<IClipboardService, InertProxy>());
             ObsChat = new(ObsChatStore, settingsManager, Dialogs, DispatchProxy.Create<IShellLauncher, InertProxy>());
-            AutoBroadcast = new();
             BotLifecycle = new(registry);
             Polls = new(PollsStore, TimeProvider.System);
             Ranks = new();
@@ -708,12 +665,12 @@ public sealed class SettingsDirtyAuditTests
 
             ISettingsSectionContributor[] contributors =
             [
-                new BasicSettingsSectionContributor(Basic, RateLimiting, Messages, settingsManager, new FakeTargetChannelProvider()),
+                new BasicSettingsSectionContributor(Basic, RateLimiting, messaging, settingsManager, new FakeTargetChannelProvider()),
                 new TwitchConnectionSettingsContributor(OAuth, accountsStore, settingsManager, NullLogger<TwitchConnectionSettingsContributor>.Instance, CatalogStore),
                 new YouTubeConnectionSettingsContributor(YouTube, YouTubeSettingsStore, youTubeAccountsStore),
                 new ChatSettingsSectionContributor(Chat, ChatSettingsStore),
                 new ObsSettingsSectionContributor(ObsIntegration, ObsChat, new(kestrel, Dialogs, null!), ObsIntegrationStore, ObsChatStore, Dialogs),
-                new StreamSettingsSectionContributor(AutoBroadcast, BotLifecycle, Polls, PlatformLifecycleStore),
+                new StreamSettingsSectionContributor(messaging, BotLifecycle, Polls, PlatformLifecycleStore),
                 new RanksSettingsSectionContributor(Ranks),
                 new ChannelsSettingsSectionContributor(ChannelCatalog, ChannelGroups, CatalogStore),
                 new DashboardSettingsSectionContributor(DashboardLayout, new DashboardLayoutCoordinator(LayoutStore)),
@@ -752,13 +709,11 @@ public sealed class SettingsDirtyAuditTests
 
         public BasicSettingsSectionViewModel Basic { get; }
         public RateLimitingSettingsViewModel RateLimiting { get; }
-        public MessagesSettingsSectionViewModel Messages { get; }
         public OAuthSettingsViewModel OAuth { get; }
         public YouTubeSettingsSectionViewModel YouTube { get; }
         public ChatSettingsSectionViewModel Chat { get; }
         public ObsIntegrationSectionViewModel ObsIntegration { get; }
         public ObsChatSettingsSectionViewModel ObsChat { get; }
-        public AutoBroadcastSettingsViewModel AutoBroadcast { get; }
         public BotLifecycleAutomationSectionViewModel BotLifecycle { get; }
         public PollsSettingsSectionViewModel Polls { get; }
         public RanksSettingsSectionViewModel Ranks { get; }

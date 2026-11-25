@@ -11,7 +11,7 @@ public sealed class BasicSettingsSectionContributor : ISettingsSectionContributo
 {
     private readonly BasicSettingsSectionViewModel _basic;
     private readonly RateLimitingSettingsViewModel _rateLimiting;
-    private readonly MessagesSettingsSectionViewModel _messages;
+    private readonly BotMessagingLinksViewModel _messages;
     private readonly SettingsManager _settingsManager;
     private readonly ITargetChannelProvider _targetChannelProvider;
 
@@ -21,19 +21,24 @@ public sealed class BasicSettingsSectionContributor : ISettingsSectionContributo
     public BasicSettingsSectionContributor(
         BasicSettingsSectionViewModel basic,
         RateLimitingSettingsViewModel rateLimiting,
-        MessagesSettingsSectionViewModel messages,
+        BotMessagingNavigation messaging,
         SettingsManager settingsManager,
         ITargetChannelProvider targetChannelProvider)
     {
         ArgumentNullException.ThrowIfNull(basic);
         ArgumentNullException.ThrowIfNull(rateLimiting);
-        ArgumentNullException.ThrowIfNull(messages);
+        ArgumentNullException.ThrowIfNull(messaging);
         ArgumentNullException.ThrowIfNull(settingsManager);
         ArgumentNullException.ThrowIfNull(targetChannelProvider);
 
         _basic = basic;
         _rateLimiting = rateLimiting;
-        _messages = messages;
+        _messages = new(
+            ("Приветствие зрителя", () => messaging.OpenRule("welcome")),
+            ("Прощание со зрителями", () => messaging.OpenRule("farewell")),
+            ("Подключение бота", () => messaging.OpenRule("connect")),
+            ("Отключение бота", () => messaging.OpenRule("disconnect")),
+            ("Ответ !донат", () => messaging.OpenCommand("донат")));
         _settingsManager = settingsManager;
         _targetChannelProvider = targetChannelProvider;
     }
@@ -72,7 +77,7 @@ public sealed class BasicSettingsSectionContributor : ISettingsSectionContributo
             new(
                 "basic/messages",
                 "Шаблоны сообщений",
-                "Тексты, которыми бот здоровается, прощается и отвечает.",
+                "Откройте нужное сообщение на странице «Бот».",
                 _messages),
         ];
     }
@@ -83,7 +88,6 @@ public sealed class BasicSettingsSectionContributor : ISettingsSectionContributo
 
         _basic.LoadSettings(session.Settings.Twitch);
         _rateLimiting.LoadSettings(session.Settings.Twitch);
-        _messages.LoadSettings(session.Settings.Twitch.Messages);
         session.UpdateTwitchChannel(_basic.GetChannel());
     }
 
@@ -113,11 +117,6 @@ public sealed class BasicSettingsSectionContributor : ISettingsSectionContributo
         subscription.TrackPropertyChanged(_basic, OnPropertyChanged);
         subscription.TrackPropertyChanged(_rateLimiting, OnPropertyChanged);
 
-        foreach (var entry in _messages.Entries)
-        {
-            subscription.TrackPropertyChanged(entry, OnPropertyChanged);
-        }
-
         return subscription;
     }
 
@@ -131,7 +130,6 @@ public sealed class BasicSettingsSectionContributor : ISettingsSectionContributo
         _basic.SaveSettings(targetSettings.Twitch);
         targetSettings.Twitch.Channel = _settingsManager.Current.Twitch.Channel;
         _rateLimiting.SaveSettings(targetSettings.Twitch);
-        _messages.SaveSettings(targetSettings.Twitch.Messages);
     }
 
     public Task<SettingsSectionSaveOutcome> SaveAsync(AppSettings targetSettings, bool appSettingsWritten)
