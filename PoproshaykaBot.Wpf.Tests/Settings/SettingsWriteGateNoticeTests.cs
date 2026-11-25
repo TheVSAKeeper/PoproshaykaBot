@@ -9,6 +9,7 @@ using PoproshaykaBot.Core.Infrastructure.Events;
 using PoproshaykaBot.Core.Infrastructure.Events.Lifecycle;
 using PoproshaykaBot.Core.Infrastructure.Hosting;
 using PoproshaykaBot.Core.Platforms;
+using PoproshaykaBot.Core.Platforms.Auth;
 using PoproshaykaBot.Core.Polls;
 using PoproshaykaBot.Core.Settings;
 using PoproshaykaBot.Core.Settings.Stores;
@@ -95,13 +96,13 @@ public class SettingsWriteGateNoticeTests
             Assert.That(File.Exists(settingsPath), Is.False, "Гейт не пустил запись на диск");
             Assert.That(page.CanAdvance, Is.False, "Шаг остановлен, дальше мастер не пускает");
             Assert.That(page.ShowRetry, Is.False, "Повтор здесь не помогает – помогает перезапуск");
-            Assert.That(page.DetailsText, Does.Contain("не записаны").And.Contain("заново"));
+            Assert.That(page.DetailsText, Does.Contain("Не удалось сохранить настройки приложения").And.Contain("перезапустите"));
             Assert.That(connection.StartCount, Is.Zero, "Подключение не начинается поверх незаписанных настроек");
         });
     }
 
-    [TestCase("settings.json", "Настройки применены")]
-    [TestCase("accounts.json", "Вход в Twitch применён")]
+    [TestCase("settings.json", "Не удалось сохранить настройки приложения")]
+    [TestCase("accounts.json", "Не удалось сохранить вход в Twitch")]
     public async Task Мастер_называет_незаписанный_файл_вместо_молчаливого_готово(string revokedFile, string expected)
     {
         var gate = await CreateClosedGateAsync(revokedFile);
@@ -122,16 +123,18 @@ public class SettingsWriteGateNoticeTests
             AutoConnect = false,
         };
 
-        var bot = new TwitchAccountSettings { Login = "bot", AccessToken = "token" };
-        var left = await page.OnLeavingAsync(new(new AppSettings(), bot, new TwitchAccountSettings()));
+        var context = new OnboardingContext(new(), new(), new());
+        Assert.That(context.AcceptTwitchLogin(PlatformAuthRole.Bot, context.BotAccount,
+            new("token", "refresh", [.. TwitchScopes.BotRequired], "bot", "1", 3600)), Is.True);
+        var left = await page.OnLeavingAsync(context);
 
         Assert.Multiple(() =>
         {
-            Assert.That(left, Is.True, "Правка действует в памяти, мастер закрывается");
+            Assert.That(left, Is.False, "При отказе записи мастер остаётся открытым");
             Assert.That(File.Exists(Path.Combine(_root, revokedFile)), Is.False, "Гейт не пустил запись на диск");
-            Assert.That(accountsStore.LoadBot().AccessToken, Is.EqualTo("token"), "Токен действует до перезапуска");
+            Assert.That(accountsStore.LoadBot().AccessToken, Is.Empty, "Неоконченная настройка не оставляет токен в рабочем профиле");
             Assert.That(dialogs.Warnings, Has.Count.EqualTo(1), "Незаписанный файл – не повод для молчаливого «готово»");
-            Assert.That(dialogs.Warnings[0], Does.Contain(expected).And.Contain("Перезапустите"));
+            Assert.That(dialogs.Warnings[0], Does.Contain(expected).And.Contain("перезапустите"));
         });
     }
 
@@ -157,7 +160,7 @@ public class SettingsWriteGateNoticeTests
             Assert.That(File.Exists(Path.Combine(_root, "accounts.json")), Is.False);
             Assert.That(page.CanAdvance, Is.False);
             Assert.That(page.ShowRetry, Is.False);
-            Assert.That(page.DetailsText, Does.Contain("Вход в Twitch").And.Contain("заново"));
+            Assert.That(page.DetailsText, Does.Contain("Не удалось сохранить вход в Twitch").And.Contain("перезапустите"));
             Assert.That(connection.StartCount, Is.Zero);
         });
     }

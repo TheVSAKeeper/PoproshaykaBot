@@ -85,10 +85,10 @@ public sealed partial class CompletionPageViewModel : OnboardingPageViewModelBas
     {
         _context = context;
 
-        var botLogin = string.IsNullOrWhiteSpace(context.BotAccount.Login) ? "–" : context.BotAccount.Login;
-        var broadcasterLogin = string.IsNullOrWhiteSpace(context.BroadcasterAccount.Login)
-            ? "–"
-            : context.BroadcasterAccount.Login;
+        var bot = context.CurrentTwitchAccount(_accountsStore, PlatformAuthRole.Bot);
+        var broadcaster = context.CurrentTwitchAccount(_accountsStore, PlatformAuthRole.Broadcaster);
+        var botLogin = string.IsNullOrWhiteSpace(bot.Login) ? "–" : bot.Login;
+        var broadcasterLogin = string.IsNullOrWhiteSpace(broadcaster.Login) ? "–" : broadcaster.Login;
 
         var summary =
             $"Канал: {context.Settings.Twitch.Channel}"
@@ -132,6 +132,12 @@ public sealed partial class CompletionPageViewModel : OnboardingPageViewModelBas
             return false;
         }
 
+        var bot = context.CurrentTwitchAccount(_accountsStore, PlatformAuthRole.Bot);
+        if (ValidateTwitchRole(context, PlatformAuthRole.Bot, bot).Status == ValidationStatus.Failure)
+        {
+            return ReportNotWritten("Вход бота в Twitch больше недоступен. Вернитесь к авторизации бота и войдите снова.");
+        }
+
         if (_lastChannelCheckResult == ChannelValidationResult.NotFound
             && !ConfirmIgnoreChannelNotFound(context))
         {
@@ -142,33 +148,30 @@ public sealed partial class CompletionPageViewModel : OnboardingPageViewModelBas
         var newPort = context.Settings.Twitch.HttpServerPort;
         var portChanged = oldPort != newPort;
 
-        bool settingsWritten;
-        bool twitchAccountsWritten;
-        bool youtubeAccountsWritten = true;
-
         try
         {
-            settingsWritten = _settingsManager.SaveSettings(context.Settings);
-            context.TwitchSettingsApplied = true;
-            context.TwitchSettingsWritten |= settingsWritten;
-            twitchAccountsWritten = context.SaveTwitchAccounts(_accountsStore);
-            if (_youtubeSettingsStore is not null)
+            if (context.SaveTwitchSetup(_accountsStore, () => context.SaveSettings(_settingsManager)) is { } twitchError)
             {
-                settingsWritten &= _youtubeSettingsStore.Save(context.YouTubeSettings);
+                return ReportNotWritten(twitchError);
             }
 
-            if (_youtubeAccountsStore is not null)
+            if (_youtubeSettingsStore is not null && !_youtubeSettingsStore.Save(context.YouTubeSettings))
             {
-                youtubeAccountsWritten = _youtubeAccountsStore.SaveAll(
+                return ReportNotWritten("Не удалось сохранить настройки YouTube. Если вы только что перенесли данные, перезапустите приложение.");
+            }
+
+            if (_youtubeAccountsStore is not null && !_youtubeAccountsStore.SaveAll(
                     context.YouTubeClientSecret,
                     context.YouTubeBotAccount,
-                    context.YouTubeBroadcasterAccount);
+                    context.YouTubeBroadcasterAccount))
+            {
+                return ReportNotWritten("Не удалось сохранить вход в YouTube. Если вы только что перенесли данные, перезапустите приложение.");
             }
         }
         catch (Exception exception)
         {
             _logger.OnboardingSettingsSaveFailed(exception);
-            _dialogService.Error("Ошибка", $"Не удалось сохранить настройки: {exception.Message}");
+            _dialogService.Error("Настройки не сохранены", "Не удалось завершить сохранение. Повторите попытку или отмените настройку.");
             return false;
         }
 
@@ -179,16 +182,9 @@ public sealed partial class CompletionPageViewModel : OnboardingPageViewModelBas
         await _eventBus.PublishAsync(new PlatformAuthorizationRefreshed(StreamingPlatform.YouTube, PlatformAuthRole.Bot), CancellationToken.None);
         await _eventBus.PublishAsync(new PlatformAuthorizationRefreshed(StreamingPlatform.YouTube, PlatformAuthRole.Broadcaster), CancellationToken.None);
 
-        if (!settingsWritten || !twitchAccountsWritten || !youtubeAccountsWritten)
-        {
-            var accountsWritten = twitchAccountsWritten && youtubeAccountsWritten;
-            _logger.OnboardingCompletionNotWritten(settingsWritten, accountsWritten);
-            _dialogService.Warning("Настройки не записаны", DescribeNotWritten(settingsWritten, twitchAccountsWritten, youtubeAccountsWritten));
-        }
-
         if (portChanged)
         {
-            await TryRestartHttpServerAsync(newPort, settingsWritten);
+            await TryRestartHttpServerAsync(newPort);
         }
 
         if (AutoConnect && _botConnectionManager.CurrentPhase != BotLifecyclePhase.Connected)
@@ -248,17 +244,14 @@ public sealed partial class CompletionPageViewModel : OnboardingPageViewModelBas
         var lines = new List<ValidationLine>();
         var hasCritical = false;
 
-        var twitchBot = _context.BotAccount;
-        var twitchBroadcaster = _context.BroadcasterAccount;
-        var botScopes = ValidateRole("Доступы аккаунта бота", twitchBot.AccessToken, twitchBot.RefreshToken,
-            twitchBot.StoredScopes, twitchBot.Scopes, TwitchScopes.BotRequired, optional: false);
+        var twitchBot = _context.CurrentTwitchAccount(_accountsStore, PlatformAuthRole.Bot);
+        var twitchBroadcaster = _context.CurrentTwitchAccount(_accountsStore, PlatformAuthRole.Broadcaster);
+        var botScopes = ValidateTwitchRole(_context, PlatformAuthRole.Bot, twitchBot);
         lines.Add(botScopes);
         hasCritical |= botScopes.Status == ValidationStatus.Failure;
 
-        var broadcasterScopes = ValidateRole("Доступы аккаунта стримера", twitchBroadcaster.AccessToken, twitchBroadcaster.RefreshToken,
-            twitchBroadcaster.StoredScopes, twitchBroadcaster.Scopes, TwitchScopes.BroadcasterRequired, optional: true);
+        var broadcasterScopes = ValidateTwitchRole(_context, PlatformAuthRole.Broadcaster, twitchBroadcaster);
         lines.Add(broadcasterScopes);
-        hasCritical |= broadcasterScopes.Status == ValidationStatus.Failure;
 
         if (_context.YouTubeSettings.Enabled)
         {
@@ -275,8 +268,10 @@ public sealed partial class CompletionPageViewModel : OnboardingPageViewModelBas
             hasCritical |= ytBroadcasterScopes.Status == ValidationStatus.Failure;
         }
 
-        var loginConsistency = ValidateBroadcasterLogin(_context);
-        lines.Add(loginConsistency);
+        if (broadcasterScopes.Status == ValidationStatus.Success)
+        {
+            lines.Add(ValidateBroadcasterLogin(_context, twitchBroadcaster));
+        }
 
         var channelLine = new ValidationLine("Канал на Twitch", ValidationStatus.Pending, "проверка...");
         lines.Add(channelLine);
@@ -312,7 +307,7 @@ public sealed partial class CompletionPageViewModel : OnboardingPageViewModelBas
         }
 
         var clientId = context.Settings.Twitch.ClientId;
-        var accessToken = context.BotAccount.AccessToken;
+        var accessToken = context.CurrentTwitchAccount(_accountsStore, PlatformAuthRole.Bot).AccessToken;
         if (string.IsNullOrWhiteSpace(clientId) || string.IsNullOrWhiteSpace(accessToken))
         {
             return (ValidationStatus.Skipped, "пропущено: нет client id или токена бота", ChannelValidationResult.Skipped);
@@ -368,28 +363,14 @@ public sealed partial class CompletionPageViewModel : OnboardingPageViewModelBas
             $"Канал «{context.Settings.Twitch.Channel}» не найден на Twitch. Возможно, имя написано с ошибкой.\n\nВсё равно сохранить настройки?");
     }
 
-    private static string DescribeNotWritten(bool settingsWritten, bool twitchAccountsWritten, bool youtubeAccountsWritten)
+    private bool ReportNotWritten(string message)
     {
-        var accountsLabel = (twitchAccountsWritten, youtubeAccountsWritten) switch
-        {
-            (false, false) => "вход в Twitch и YouTube",
-            (false, true) => "вход в Twitch",
-            (true, false) => "вход в YouTube",
-            _ => string.Empty,
-        };
-
-        var what = (settingsWritten, accountsLabel.Length > 0) switch
-        {
-            (false, true) => $"Настройки и {accountsLabel} применены и работают до перезапуска. В файл они не записаны",
-            (false, false) => "Настройки применены и работают до перезапуска. В файл они не записаны",
-            (true, true) => $"{char.ToUpperInvariant(accountsLabel[0])}{accountsLabel[1..]} применён и работает до перезапуска. В файл он не записан",
-            _ => "Настройки не записаны в файл",
-        };
-
-        return $"{what}: туда только что перенесены данные предыдущей версии. Перезапустите приложение и пройдите настройку ещё раз.";
+        _logger.OnboardingCompletionNotWritten(message);
+        _dialogService.Warning("Настройка не завершена", message);
+        return false;
     }
 
-    private async Task TryRestartHttpServerAsync(int newPort, bool settingsWritten)
+    private async Task TryRestartHttpServerAsync(int newPort)
     {
         try
         {
@@ -405,10 +386,22 @@ public sealed partial class CompletionPageViewModel : OnboardingPageViewModelBas
             _logger.OnboardingHttpServerRestartFailed(exception, newPort);
             _dialogService.Warning(
                 "Внимание",
-                settingsWritten
-                    ? $"HTTP сервер не удалось перезапустить на порту {newPort}.\nНастройки сохранены – потребуется перезапуск приложения."
-                    : $"HTTP сервер не удалось перезапустить на порту {newPort}.");
+                $"HTTP сервер не удалось перезапустить на порту {newPort}.\nНастройки сохранены – потребуется перезапуск приложения.");
         }
+    }
+
+    private static ValidationLine ValidateTwitchRole(OnboardingContext context, PlatformAuthRole role, TwitchAccountSettings account)
+    {
+        var isBot = role == PlatformAuthRole.Bot;
+        var title = isBot ? "Доступы аккаунта бота" : "Доступы аккаунта стримера";
+        if (TwitchScopes.HasUsableAuthorization(role, account) && context.CanUseTwitchRole(role, account))
+        {
+            return new(title, ValidationStatus.Success, "все необходимые разрешения получены");
+        }
+
+        return isBot
+            ? new(title, ValidationStatus.Failure, "вернитесь к авторизации бота и войдите в Twitch")
+            : new(title, ValidationStatus.Skipped, "не подключён (режим «только бот»)");
     }
 
     private static ValidationLine ValidateRole(string title, string? accessToken, string? refreshToken,
@@ -439,10 +432,10 @@ public sealed partial class CompletionPageViewModel : OnboardingPageViewModelBas
             $"отсутствуют scope: {string.Join(", ", missing)}. Вернитесь на шаг авторизации и переавторизуйтесь.");
     }
 
-    private static ValidationLine ValidateBroadcasterLogin(OnboardingContext context)
+    private static ValidationLine ValidateBroadcasterLogin(OnboardingContext context, TwitchAccountSettings broadcaster)
     {
         var channel = context.Settings.Twitch.Channel?.Trim() ?? string.Empty;
-        var broadcasterLogin = context.BroadcasterAccount.Login?.Trim() ?? string.Empty;
+        var broadcasterLogin = broadcaster.Login?.Trim() ?? string.Empty;
 
         if (string.IsNullOrWhiteSpace(channel) || string.IsNullOrWhiteSpace(broadcasterLogin))
         {

@@ -14,6 +14,7 @@ public abstract class RoleAccountsStoreBase<TFile, TAccount> : IPlatformAccountD
     where TAccount : class, IRoleAccountSettings, new()
 {
     private readonly JsonStore<TFile> _store;
+    private readonly SettingsWriteGate? _gate;
 
     protected RoleAccountsStoreBase(
         string filePath,
@@ -26,12 +27,15 @@ public abstract class RoleAccountsStoreBase<TFile, TAccount> : IPlatformAccountD
 
         FilePath = filePath;
         Logger = logger;
+        _gate = gate;
         _store = new(filePath, logger, redact, describe: describe, gate: gate);
     }
 
     protected string FilePath { get; }
 
     protected ILogger? Logger { get; }
+
+    public bool IsWriteRevoked => _gate?.IsRevoked(FilePath) == true;
 
     public TAccount LoadBot()
     {
@@ -309,6 +313,75 @@ public abstract class RoleAccountsStoreBase<TFile, TAccount> : IPlatformAccountD
         TFile state,
         IReadOnlyList<(PlatformAuthRole Role, string ContextId, string Label, TAccount Account)> entries)
     {
+    }
+
+    public (bool Applied, bool Written, TAccount? Snapshot) TryReplaceContext(
+        PlatformAuthRole role, string contextId, Func<TAccount?, bool> matches, TAccount? replacement)
+    {
+        PlatformAuthRoles.EnsureActive(role);
+        ArgumentNullException.ThrowIfNull(matches);
+
+        var normalized = AuthContextIds.Normalize(contextId);
+        TAccount? snapshot = null;
+        var (applied, written) = _store.MutateIfWithResult(state =>
+        {
+            var isDefault = AuthContextIds.IsDefault(normalized);
+            var named = isDefault ? null : GetContexts(state).Find(c => c.ContextId == normalized);
+            if (named is not null && named.Role != role)
+            {
+                return false;
+            }
+
+            var current = isDefault ? TakeAccount(state, role, null) : named?.Account;
+            if (current is not null)
+            {
+                EnsureDefaultScopes(current, role);
+            }
+
+            if (!matches(current))
+            {
+                return false;
+            }
+
+            var next = replacement is null ? null : JsonStoreClone.DeepClone(replacement);
+            if (next is not null)
+            {
+                EnsureDefaultScopes(next, role);
+                snapshot = JsonStoreClone.DeepClone(next);
+            }
+
+            if (isDefault)
+            {
+                SetAccount(state, role, next ?? new TAccount());
+            }
+            else if (next is null)
+            {
+                if (named is null)
+                {
+                    return false;
+                }
+
+                GetContexts(state).Remove(named);
+                ClearContextsIfEmpty(state);
+            }
+            else if (named is not null)
+            {
+                named.Account = next;
+            }
+            else
+            {
+                GetContexts(state).Add(new() { ContextId = normalized, Role = role, Label = normalized, Account = next });
+            }
+
+            return true;
+        });
+
+        if (applied)
+        {
+            OnRoleMutated(role, written);
+        }
+
+        return (applied, written, snapshot);
     }
 
     public (bool Applied, bool Written) TryMutateExisting(PlatformAuthRole role, string? contextId, Func<TAccount, bool> mutator)

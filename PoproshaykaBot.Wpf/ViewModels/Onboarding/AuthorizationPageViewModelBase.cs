@@ -2,7 +2,7 @@
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.Extensions.Logging;
 using PoproshaykaBot.Core.Platforms.Auth;
-using PoproshaykaBot.Core.Settings;
+using PoproshaykaBot.Core.Settings.Stores;
 using PoproshaykaBot.Core.Twitch.Auth;
 using PoproshaykaBot.Core.Twitch.Chat;
 using System.Diagnostics;
@@ -19,7 +19,7 @@ public abstract partial class AuthorizationPageViewModelBase : OnboardingPageVie
 
     private readonly PlatformAuthRole _role;
     private readonly ITwitchOAuthService _oauthService;
-    private readonly SettingsManager _settingsManager;
+    private readonly AccountsStore _accountsStore;
     private readonly ILogger _logger;
     private readonly IShellLauncher _shellLauncher;
     private readonly IClipboardService _clipboard;
@@ -57,7 +57,7 @@ public abstract partial class AuthorizationPageViewModelBase : OnboardingPageVie
     protected AuthorizationPageViewModelBase(
         PlatformAuthRole role,
         ITwitchOAuthService oauthService,
-        SettingsManager settingsManager,
+        AccountsStore accountsStore,
         ILogger logger,
         IShellLauncher shellLauncher,
         IClipboardService clipboard,
@@ -66,7 +66,7 @@ public abstract partial class AuthorizationPageViewModelBase : OnboardingPageVie
     {
         _role = role;
         _oauthService = oauthService;
-        _settingsManager = settingsManager;
+        _accountsStore = accountsStore;
         _logger = logger;
         _shellLauncher = shellLauncher;
         _clipboard = clipboard;
@@ -199,7 +199,7 @@ public abstract partial class AuthorizationPageViewModelBase : OnboardingPageVie
             settings.ClientSecret,
             GetDefaultScopes(),
             string.IsNullOrWhiteSpace(settings.RedirectUri) ? null : settings.RedirectUri,
-            _role != PlatformAuthRole.Broadcaster || !_context.AutoDetectChannel);
+            CheckBroadcasterChannel: false);
 
         IsAuthInProgress = true;
         ResultText = string.Empty;
@@ -295,7 +295,6 @@ public abstract partial class AuthorizationPageViewModelBase : OnboardingPageVie
         {
             var scopes = GetDefaultScopes();
             var redirectUri = string.IsNullOrWhiteSpace(settings.RedirectUri) ? null : settings.RedirectUri;
-            var checkBroadcasterChannel = _role != PlatformAuthRole.Broadcaster || !_context.AutoDetectChannel;
 
             var result = await _oauthService.StartOAuthFlowToDraftAsync(
                 _role,
@@ -304,7 +303,7 @@ public abstract partial class AuthorizationPageViewModelBase : OnboardingPageVie
                 scopes,
                 redirectUri,
                 onAuthUrlReady,
-                checkBroadcasterChannel,
+                checkBroadcasterChannel: false,
                 cts.Token);
 
             if (!ReferenceEquals(_authCts, cts))
@@ -365,7 +364,7 @@ public abstract partial class AuthorizationPageViewModelBase : OnboardingPageVie
             return false;
         }
 
-        if (_role != PlatformAuthRole.Broadcaster
+        if (_role != PlatformAuthRole.Broadcaster || _context.TwitchChannel is not null
             || !_context.AutoDetectChannel
             || string.IsNullOrWhiteSpace(result.Login))
         {
@@ -373,13 +372,12 @@ public abstract partial class AuthorizationPageViewModelBase : OnboardingPageVie
         }
 
         _context.Settings.Twitch.Channel = result.Login;
-        _settingsManager.UpdateCurrent(settings => settings.Twitch.Channel = result.Login);
         return true;
     }
 
     private void RefreshFromContext()
     {
-        var account = GetAccount();
+        var account = _context?.CurrentTwitchAccount(_accountsStore, _role) ?? GetAccount();
         HasToken = TwitchScopes.HasUsableAuthorization(_role, account) && _context?.CanUseTwitchRole(_role, account) == true;
 
         if (HasToken)

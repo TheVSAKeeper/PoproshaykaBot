@@ -19,8 +19,6 @@ public sealed partial class BotConnectionPageViewModel : OnboardingPageViewModel
 {
     private const string SettingsNotWrittenDetails = "Настройки применены и работают до перезапуска. В файл они не записаны: туда только что перенесены данные предыдущей версии. Закройте приложение, запустите его заново и пройдите настройку ещё раз.";
 
-    private const string AccountsNotWrittenDetails = "Вход в Twitch применён и работает до перезапуска. В файл он не записан: туда только что перенесены данные предыдущей версии. Закройте приложение, запустите его заново и пройдите настройку ещё раз.";
-
     private const string YouTubeAccountsNotWrittenDetails = "Вход в YouTube применён и работает до перезапуска. В файл он не записан: туда только что перенесены данные предыдущей версии. Закройте приложение, запустите его заново и пройдите настройку ещё раз.";
 
     private readonly IBotConnectionController _botConnectionManager;
@@ -84,26 +82,22 @@ public sealed partial class BotConnectionPageViewModel : OnboardingPageViewModel
 
         try
         {
-            var settingsWritten = _settingsManager.SaveSettings(context.Settings);
-            context.TwitchSettingsApplied = true;
-            context.TwitchSettingsWritten |= settingsWritten;
-            if (!settingsWritten)
+            if (context.SaveTwitchSetup(_accountsStore, () => context.SaveSettings(_settingsManager)) is { } twitchError)
             {
-                _logger.BotConnectionSettingsNotWritten();
-                ApplyPhase(BotLifecyclePhase.Failed, SettingsNotWrittenDetails);
-                StatusText = "Настройки не записаны в файл";
-                ShowRetry = false;
-                return;
-            }
-            if (!context.SaveTwitchAccounts(_accountsStore))
-            {
-                _logger.BotConnectionAccountsNotWritten();
-                ApplyPhase(BotLifecyclePhase.Failed, AccountsNotWrittenDetails);
-                StatusText = "Вход в Twitch не записан в файл";
-                ShowRetry = false;
-                return;
-            }
+                if (twitchError == OnboardingContext.TwitchSettingsNotWritten)
+                {
+                    _logger.BotConnectionSettingsNotWritten();
+                }
+                else
+                {
+                    _logger.BotConnectionAccountsNotWritten();
+                }
 
+                ApplyPhase(BotLifecyclePhase.Failed, twitchError);
+                StatusText = "Подключение не запущено";
+                ShowRetry = false;
+                return;
+            }
             if (_youtubeSettingsStore is not null && !_youtubeSettingsStore.Save(context.YouTubeSettings))
             {
                 _logger.BotConnectionSettingsNotWritten();

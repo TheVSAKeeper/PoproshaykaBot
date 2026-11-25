@@ -9,17 +9,22 @@ namespace PoproshaykaBot.Core.Settings.Stores;
 public sealed class ChannelCatalogStore
 {
     private readonly JsonStore<ChannelsSettings> _store;
+    private readonly SettingsWriteGate? _gate;
+    private readonly string _path;
 
     public ChannelCatalogStore(
         ILogger<ChannelCatalogStore>? logger = null,
         string? filePath = null,
         SettingsWriteGate? gate = null)
     {
-        var path = filePath ?? AppPaths.SettingsFile(LegacyDataCatalog.ChannelsFileName);
-        _store = new(path, logger, describe: Describe, gate: gate);
+        _path = filePath ?? AppPaths.SettingsFile(LegacyDataCatalog.ChannelsFileName);
+        _gate = gate;
+        _store = new(_path, logger, describe: Describe, gate: gate);
     }
 
     public event EventHandler? Changed;
+
+    public bool IsWriteRevoked => _gate?.IsRevoked(_path) == true;
 
     public ChannelsSettings Load()
     {
@@ -60,6 +65,30 @@ public sealed class ChannelCatalogStore
     public IReadOnlyList<ChannelGroupDefinition> GetGroups()
     {
         return Normalize(_store.Load()).Groups;
+    }
+
+    public (bool Applied, bool Written) TryMutateChannel(
+        ChannelKey key, bool requireActive, Func<ChannelCatalogEntry, bool> mutator)
+    {
+        ArgumentNullException.ThrowIfNull(mutator);
+
+        var result = _store.MutateIfWithResult(settings =>
+        {
+            if (requireActive && GetActiveChannel(settings, key.Platform)?.Key != key)
+            {
+                return false;
+            }
+
+            var entry = settings.Channels.Find(channel => channel.Key == key);
+            return entry is not null && mutator(entry);
+        });
+
+        if (result.Applied)
+        {
+            Changed?.Invoke(this, EventArgs.Empty);
+        }
+
+        return result;
     }
 
     public PlatformChannelRoutingSettings GetPlatformSettings(StreamingPlatform platform)

@@ -12,6 +12,7 @@ using PoproshaykaBot.Core.Infrastructure.Events;
 using PoproshaykaBot.Core.Infrastructure.Hosting;
 using PoproshaykaBot.Core.Infrastructure.Logging;
 using PoproshaykaBot.Core.Obs;
+using PoproshaykaBot.Core.Platforms;
 using PoproshaykaBot.Core.Polls;
 using PoproshaykaBot.Core.Server;
 using PoproshaykaBot.Core.Settings;
@@ -35,9 +36,12 @@ namespace PoproshaykaBot.Wpf.Tests.Onboarding;
 [TestFixture]
 public sealed class CompletionPageYouTubeBotOnlyTests
 {
-    [TestCase(false)]
-    [TestCase(true)]
-    public async Task BotOnly_Without_Broadcaster_Allows_Completing_Onboarding(bool twitchBroadcasterAuthorized)
+    [TestCase(false, false, false)]
+    [TestCase(true, false, false)]
+    [TestCase(true, true, false)]
+    [TestCase(true, false, true)]
+    public async Task TwitchCompletionKeepsBroadcasterOptionalAndRequiresUsableBot(
+        bool hasStaleBroadcaster, bool expiredBot, bool changeActiveChannel)
     {
         var tempDir = Path.Combine(Path.GetTempPath(), $"yt-onboard-{Guid.NewGuid():N}");
         Directory.CreateDirectory(tempDir);
@@ -50,6 +54,13 @@ public sealed class CompletionPageYouTubeBotOnlyTests
             var ytSettingsStore = new YouTubeSettingsStore(NullLogger<YouTubeSettingsStore>.Instance, Path.Combine(tempDir, "youtube.json"));
             var ytAccountsStore = new YouTubeAccountsStore(NullLogger<YouTubeAccountsStore>.Instance, Path.Combine(tempDir, "youtube-accounts.json"));
             var validator = new StubChannelValidator();
+            var dialogs = new NoOpDialogService();
+            var catalog = new ChannelCatalogStore(filePath: Path.Combine(tempDir, "channels.json"));
+            catalog.Save(new() { Channels = [new()
+            {
+                Platform = StreamingPlatform.Twitch, ChannelId = "42", IsConfigured = true,
+                BotAccountId = "1", BotVerifiedSubjectId = "1",
+            }] });
 
             using var page = new CompletionPageViewModel(
                 settingsManager,
@@ -59,7 +70,7 @@ public sealed class CompletionPageYouTubeBotOnlyTests
                 validator,
                 provider.GetRequiredService<BotConnectionManager>(),
                 NullLogger<CompletionPageViewModel>.Instance,
-                new NoOpDialogService(),
+                dialogs,
                 ytSettingsStore,
                 ytAccountsStore);
 
@@ -68,9 +79,18 @@ public sealed class CompletionPageYouTubeBotOnlyTests
                 {
                     Twitch = new TwitchSettings { ClientId = "tw-client", ClientSecret = "tw-secret", Channel = "streamer" },
                 },
-                new TwitchAccountSettings { Login = "twbot", AccessToken = "tw-bot-token", RefreshToken = "tw-bot-refresh", Scopes = [.. TwitchScopes.BotRequired], StoredScopes = [.. TwitchScopes.BotRequired] },
-                twitchBroadcasterAuthorized
-                    ? new TwitchAccountSettings { Login = "streamer", AccessToken = "tw-streamer-token", Scopes = [.. TwitchScopes.BroadcasterRequired] }
+                new TwitchAccountSettings
+                {
+                    Login = "twbot",
+                    UserId = "1",
+                    AccessToken = "tw-bot-token",
+                    RefreshToken = expiredBot ? string.Empty : "tw-bot-refresh",
+                    AccessTokenExpiresAt = DateTimeOffset.UtcNow.AddMinutes(-15),
+                    Scopes = [.. TwitchScopes.BotRequired],
+                    StoredScopes = [.. TwitchScopes.BotRequired],
+                },
+                hasStaleBroadcaster
+                    ? new TwitchAccountSettings { Login = "streamer", RefreshToken = "streamer-refresh", StoredScopes = [TwitchScopes.ChannelBot] }
                     : new TwitchAccountSettings(),
                 new YouTubeSettings { Enabled = true, ClientId = "yt-client", Channel = "@foreign" },
                 "yt-secret",
@@ -80,11 +100,15 @@ public sealed class CompletionPageYouTubeBotOnlyTests
                     AccessToken = "yt-bot-token",
                     Scopes = [.. YouTubeScopes.BotRequired],
                 },
-                new YouTubeAccountSettings { Scopes = [.. YouTubeScopes.BroadcasterRequired] });
+                new YouTubeAccountSettings { Scopes = [.. YouTubeScopes.BroadcasterRequired] })
+            {
+                TwitchCatalog = catalog,
+                TwitchChannel = catalog.GetActiveChannel(StreamingPlatform.Twitch),
+            };
 
             Assert.That(settingsManager.SaveSettings(context.Settings), Is.True);
             Assert.That(accountsStore.SaveAll(context.BotAccount, context.BroadcasterAccount), Is.True);
-            Assert.That(new OnboardingChecklist(settingsManager, accountsStore).IsComplete, Is.True);
+            Assert.That(new OnboardingChecklist(settingsManager, accountsStore).IsComplete, Is.EqualTo(!expiredBot));
 
             var doneTcs = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
             page.PropertyChanged += (_, args) =>
@@ -103,14 +127,24 @@ public sealed class CompletionPageYouTubeBotOnlyTests
 
             Assert.Multiple(() =>
             {
-                Assert.That(page.CanAdvance, Is.True);
-                Assert.That(page.IsValidationFailure, Is.False);
-                Assert.That(page.ValidationText, Does.Contain("режим «только бот»"));
-                if (!twitchBroadcasterAuthorized)
-                {
-                    Assert.That(page.ValidationText, Does.Contain("Доступы аккаунта стримера: не подключён (режим «только бот»)"));
-                }
+                Assert.That(page.CanAdvance, Is.EqualTo(!expiredBot));
+                Assert.That(page.IsValidationFailure, Is.EqualTo(expiredBot));
+                Assert.That(page.ValidationText, Does.Contain("Доступы аккаунта стримера: не подключён (режим «только бот»)"));
             });
+
+            if (changeActiveChannel)
+            {
+                catalog.Mutate(state => state.Channels[0].ChannelId = "99");
+                context.Settings.Twitch.ClientId = "draft-client";
+                Assert.That(await page.OnLeavingAsync(context), Is.False);
+                using (Assert.EnterMultipleScope())
+                {
+                    Assert.That(dialogs.WarningMessage, Does.Contain("Канал или назначенный аккаунт Twitch изменились"));
+                    Assert.That(settingsManager.Current.Twitch.ClientId, Is.EqualTo("tw-client"));
+                    Assert.That(new SettingsManager(NullLogger<SettingsManager>.Instance,
+                        Path.Combine(tempDir, "settings.json")).Current.Twitch.ClientId, Is.EqualTo("tw-client"));
+                }
+            }
         }
         finally
         {
@@ -209,12 +243,13 @@ public sealed class CompletionPageYouTubeBotOnlyTests
 
     private sealed class NoOpDialogService : IDialogService
     {
+        public string? WarningMessage { get; private set; }
         public Task<bool> ShowAsync(IDialogViewModel viewModel) => Task.FromResult(false);
         public Task<bool> ReplaceAsync(IDialogViewModel viewModel) => Task.FromResult(false);
         public bool Confirm(string title, string message, bool defaultYes = false) => true;
         public bool ConfirmWarning(string title, string message, bool defaultYes = false) => true;
         public void Info(string title, string message) { }
-        public void Warning(string title, string message) { }
+        public void Warning(string title, string message) => WarningMessage = message;
         public void Error(string title, string message) { }
     }
 }

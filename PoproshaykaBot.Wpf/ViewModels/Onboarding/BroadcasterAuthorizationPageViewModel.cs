@@ -1,6 +1,6 @@
 ﻿using Microsoft.Extensions.Logging;
 using PoproshaykaBot.Core.Platforms.Auth;
-using PoproshaykaBot.Core.Settings;
+using PoproshaykaBot.Core.Settings.Stores;
 using PoproshaykaBot.Core.Twitch.Auth;
 using PoproshaykaBot.Wpf.Infrastructure;
 
@@ -10,13 +10,13 @@ public sealed class BroadcasterAuthorizationPageViewModel : AuthorizationPageVie
 {
     public BroadcasterAuthorizationPageViewModel(
         ITwitchOAuthService oauthService,
-        SettingsManager settingsManager,
+        AccountsStore accountsStore,
         ILogger<BroadcasterAuthorizationPageViewModel> logger,
         IShellLauncher shellLauncher,
         IClipboardService clipboard,
         IEmbeddedTwitchAuthDialog embeddedAuth,
         IUiDispatcher uiDispatcher)
-        : base(PlatformAuthRole.Broadcaster, oauthService, settingsManager, logger, shellLauncher, clipboard, embeddedAuth, uiDispatcher)
+        : base(PlatformAuthRole.Broadcaster, oauthService, accountsStore, logger, shellLauncher, clipboard, embeddedAuth, uiDispatcher)
     {
     }
 }

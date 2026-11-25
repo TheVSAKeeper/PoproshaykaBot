@@ -43,10 +43,19 @@ public sealed class OnboardingContext(
 
     internal ChannelCatalogEntry? TwitchChannel { get; init; }
 
-    internal bool TwitchAccountsApplied { get; private set; }
-
     private readonly HashSet<PlatformAuthRole> _reauthorizedTwitchRoles = [];
-    private readonly HashSet<PlatformAuthRole> _changedTwitchAssignments = [];
+    private readonly HashSet<PlatformAuthRole> _pendingTwitchRoles = [];
+    private readonly Dictionary<PlatformAuthRole, TwitchAccountSettings?> _expectedTwitchAccounts = [];
+    private readonly Dictionary<PlatformAuthRole, TwitchAccountChange> _appliedTwitchAccounts = [];
+    private readonly Dictionary<PlatformAuthRole, TwitchAssignment> _appliedTwitchAssignments = [];
+
+    private const string ChannelChanged = "Канал или назначенный аккаунт Twitch изменились. Закройте мастер и откройте его снова.";
+    private const string AccountChanged = "Аккаунт Twitch изменился во время настройки. Закройте мастер и откройте его снова.";
+    private const string AccountNotWritten = "Не удалось сохранить вход в Twitch. Если вы только что перенесли настройки, перезапустите приложение.";
+    private const string AssignmentNotWritten = "Не удалось сохранить назначение аккаунта Twitch. Если вы только что перенесли настройки, перезапустите приложение.";
+    internal const string TwitchSettingsNotWritten = "Не удалось сохранить настройки приложения. Если вы только что перенесли данные, перезапустите приложение.";
+
+    internal bool TwitchAccountsApplied => _appliedTwitchAccounts.Count > 0 || _appliedTwitchAssignments.Count > 0;
 
     internal string TwitchContextId(PlatformAuthRole role) => AuthContextIds.Normalize(
         role == PlatformAuthRole.Bot ? TwitchChannel?.BotContextId : TwitchChannel?.BroadcasterContextId);
@@ -54,10 +63,53 @@ public sealed class OnboardingContext(
     internal bool HasConfiguredTwitchChannel =>
         TwitchChannel is not null || !string.IsNullOrWhiteSpace(Settings.Twitch.Channel);
 
-    internal bool CanUseTwitchRole(PlatformAuthRole role, TwitchAccountSettings account) =>
-        TwitchChannel is null || _reauthorizedTwitchRoles.Contains(role)
-        || (TwitchChannel.GetAccountAssignment(role) is { IsVerified: true } assignment
-            && string.Equals(assignment.Account.AccountId, account.UserId, StringComparison.Ordinal));
+    internal bool CanUseTwitchRole(PlatformAuthRole role, TwitchAccountSettings account)
+    {
+        if (!MatchesBroadcaster(role, account.UserId, account.Login))
+        {
+            return false;
+        }
+
+        if (TwitchChannel is null || (_pendingTwitchRoles.Contains(role) && _reauthorizedTwitchRoles.Contains(role)))
+        {
+            return true;
+        }
+
+        var assignment = ExpectedTwitchAssignment(role);
+        return !string.IsNullOrWhiteSpace(account.UserId)
+            && string.Equals(assignment.VerifiedSubject, account.UserId, StringComparison.Ordinal)
+            && string.Equals(assignment.AccountId ?? assignment.VerifiedSubject, account.UserId, StringComparison.Ordinal);
+    }
+
+    internal void CaptureTwitchAccounts(TwitchAccountSettings? bot, TwitchAccountSettings? broadcaster)
+    {
+        _expectedTwitchAccounts[PlatformAuthRole.Bot] = bot;
+        _expectedTwitchAccounts[PlatformAuthRole.Broadcaster] = broadcaster;
+    }
+
+    internal TwitchAccountSettings CurrentTwitchAccount(AccountsStore accounts, PlatformAuthRole role) =>
+        _pendingTwitchRoles.Contains(role)
+            ? DraftTwitchAccount(role)
+            : accounts.Load(role, TwitchContextId(role));
+
+    private TwitchAccountSettings DraftTwitchAccount(PlatformAuthRole role) =>
+        role == PlatformAuthRole.Bot ? BotAccount : BroadcasterAccount;
+
+    private bool MatchesBroadcaster(PlatformAuthRole role, string userId, string login)
+    {
+        if (role != PlatformAuthRole.Broadcaster)
+        {
+            return true;
+        }
+
+        if (TwitchChannel is { } channel)
+        {
+            return string.Equals(channel.ChannelId, userId, StringComparison.Ordinal);
+        }
+
+        var handle = Settings.Twitch.Channel?.Trim().TrimStart('@');
+        return AutoDetectChannel || string.IsNullOrEmpty(handle) || string.Equals(handle, login, StringComparison.OrdinalIgnoreCase);
+    }
 
     internal bool AcceptTwitchLogin(PlatformAuthRole role, TwitchAccountSettings account, OAuthFlowResult login)
     {
@@ -71,7 +123,7 @@ public sealed class OnboardingContext(
             currentSubject = account.UserId;
         }
 
-        if (string.IsNullOrWhiteSpace(login.UserId)
+        if (string.IsNullOrWhiteSpace(login.UserId) || !MatchesBroadcaster(role, login.UserId, login.Login)
             || (!string.IsNullOrWhiteSpace(currentSubject) && !string.Equals(currentSubject, login.UserId, StringComparison.Ordinal)))
         {
             return false;
@@ -79,121 +131,230 @@ public sealed class OnboardingContext(
 
         login.ApplyTo(account, DateTimeOffset.UtcNow);
         _reauthorizedTwitchRoles.Add(role);
+        _pendingTwitchRoles.Add(role);
         return true;
     }
 
-    internal void ClearTwitchLogin(PlatformAuthRole role) => _reauthorizedTwitchRoles.Remove(role);
-
-    internal bool SaveTwitchAccounts(AccountsStore accounts)
+    internal void ClearTwitchLogin(PlatformAuthRole role)
     {
-        if (TwitchCatalog is not null && TwitchChannel is { } channel
-            && TwitchCatalog.GetActiveChannel(StreamingPlatform.Twitch)?.Key != channel.Key)
+        if (_reauthorizedTwitchRoles.Remove(role)
+            || _expectedTwitchAccounts.GetValueOrDefault(role) is not null)
         {
-            return false;
+            _pendingTwitchRoles.Add(role);
+        }
+    }
+
+    internal string? SaveTwitchSetup(AccountsStore accounts, Func<bool> saveSettings)
+    {
+        if (accounts.IsWriteRevoked)
+        {
+            return AccountNotWritten;
         }
 
-        var botContextId = TwitchContextId(PlatformAuthRole.Bot);
-        var broadcasterContextId = TwitchContextId(PlatformAuthRole.Broadcaster);
-        if ((!AuthContextIds.IsDefault(botContextId) && accounts.ListContexts(PlatformAuthRole.Broadcaster).Any(c => c.ContextId == botContextId))
-            || (!AuthContextIds.IsDefault(broadcasterContextId)
-                && (broadcasterContextId == botContextId || accounts.ListContexts(PlatformAuthRole.Bot).Any(c => c.ContextId == broadcasterContextId))))
+        if (TwitchCatalog?.IsWriteRevoked == true)
         {
-            return false;
+            return AssignmentNotWritten;
         }
 
-        var changes = new List<(PlatformAuthRole Role, string ContextId, string Label, TwitchAccountSettings Account)>();
-        AddAccount(PlatformAuthRole.Bot, botContextId, BotAccount);
-        AddAccount(PlatformAuthRole.Broadcaster, broadcasterContextId, BroadcasterAccount);
-        TwitchAccountsApplied |= changes.Count > 0;
-        var written = accounts.UpsertContexts(changes);
-        return written && SaveTwitchAssignments(accounts);
-
-        void AddAccount(PlatformAuthRole role, string contextId, TwitchAccountSettings account)
+        if (TwitchCatalog is not null && !MatchesTwitchChannel(TwitchCatalog.GetActiveChannel(StreamingPlatform.Twitch)))
         {
-            if (_reauthorizedTwitchRoles.Contains(role) || accounts.TryLoadContext(role, contextId, out _))
+            return ChannelChanged;
+        }
+
+        var accountsWritten = new Dictionary<PlatformAuthRole, TwitchAccountChange>();
+        var assignmentsWritten = new Dictionary<PlatformAuthRole, TwitchAssignment>();
+        var assignmentsApplied = false;
+        var succeeded = false;
+        try
+        {
+            foreach (var role in _pendingTwitchRoles)
             {
-                changes.Add((role, contextId, GetContextLabel(accounts, role, contextId), account));
+                var contextId = TwitchContextId(role);
+                var draft = DraftTwitchAccount(role);
+                if (!_expectedTwitchAccounts.TryGetValue(role, out var previous))
+                {
+                    accounts.TryLoadContext(role, contextId, out previous);
+                }
+
+                var result = accounts.TryReplaceContext(role, contextId, current => SameAccount(current, previous), draft);
+                if (!result.Applied)
+                {
+                    return AccountChanged;
+                }
+
+                accountsWritten.Add(role, new(previous, result.Snapshot!));
+                if (!result.Written)
+                {
+                    return AccountNotWritten;
+                }
+
+                if (TwitchChannel is not null && _reauthorizedTwitchRoles.Contains(role))
+                {
+                    if (!accounts.VerifyPersistedAuthorization(role, contextId, draft.UserId))
+                    {
+                        return AccountNotWritten;
+                    }
+
+                    assignmentsWritten.Add(role, new(draft.UserId, contextId, draft.UserId));
+                }
+            }
+
+            if (TwitchCatalog is not null && TwitchChannel is { } channel && assignmentsWritten.Count > 0)
+            {
+                var (applied, written) = TwitchCatalog.TryMutateChannel(channel.Key, requireActive: true, entry =>
+                {
+                    if (!MatchesTwitchChannel(entry))
+                    {
+                        return false;
+                    }
+
+                    foreach (var (role, binding) in assignmentsWritten)
+                    {
+                        binding.Apply(entry, role);
+                    }
+
+                    return true;
+                });
+                assignmentsApplied = applied;
+                if (!applied || !written)
+                {
+                    return applied ? AssignmentNotWritten : ChannelChanged;
+                }
+            }
+
+            if (!saveSettings())
+            {
+                return TwitchSettingsNotWritten;
+            }
+
+            foreach (var (role, change) in accountsWritten)
+            {
+                _expectedTwitchAccounts[role] = change.Written;
+                _appliedTwitchAccounts[role] = _appliedTwitchAccounts.TryGetValue(role, out var earlier)
+                    ? change with { Original = earlier.Original }
+                    : change;
+            }
+
+            foreach (var (role, binding) in assignmentsWritten)
+            {
+                _appliedTwitchAssignments[role] = binding;
+            }
+
+            _pendingTwitchRoles.Clear();
+            succeeded = true;
+            return null;
+        }
+        finally
+        {
+            if (!succeeded)
+            {
+                try
+                {
+                    if (assignmentsApplied)
+                    {
+                        RestoreTwitchAssignments(assignmentsWritten, useOriginal: false);
+                    }
+                }
+                finally
+                {
+                    RestoreTwitchAccounts(accounts, accountsWritten);
+                }
             }
         }
     }
 
-    internal static string GetContextLabel(AccountsStore accounts, PlatformAuthRole role, string contextId) =>
-        accounts.ListContexts(role).FirstOrDefault(context => context.ContextId == contextId)?.Label ?? contextId;
-
-    private bool SaveTwitchAssignments(AccountsStore accounts)
+    internal bool SaveSettings(SettingsManager settingsManager)
     {
-        if (TwitchCatalog is null || TwitchChannel is not { } original || _reauthorizedTwitchRoles.Count == 0)
+        var written = settingsManager.SaveSettings(Settings);
+        TwitchSettingsApplied = true;
+        TwitchSettingsWritten |= written;
+        return written;
+    }
+
+    private bool MatchesTwitchChannel(ChannelCatalogEntry? entry) =>
+        entry?.Key == TwitchChannel?.Key && (entry is null || PlatformAuthRoles.Active.All(role =>
+            TwitchAssignment.From(entry, role) == ExpectedTwitchAssignment(role)));
+
+    private TwitchAssignment ExpectedTwitchAssignment(PlatformAuthRole role) =>
+        _appliedTwitchAssignments.TryGetValue(role, out var applied) ? applied : TwitchAssignment.From(TwitchChannel!, role);
+
+    internal bool RestoreTwitchChanges(AccountsStore accounts)
+    {
+        var bindingsWritten = RestoreTwitchAssignments(_appliedTwitchAssignments, useOriginal: true);
+        return RestoreTwitchAccounts(accounts, _appliedTwitchAccounts) && bindingsWritten;
+    }
+
+    private bool RestoreTwitchAssignments(Dictionary<PlatformAuthRole, TwitchAssignment> changes, bool useOriginal)
+    {
+        if (TwitchCatalog is null || TwitchChannel is not { } original || changes.Count == 0)
         {
             return true;
         }
 
-        foreach (var role in _reauthorizedTwitchRoles)
+        var (applied, written) = TwitchCatalog.TryMutateChannel(original.Key, requireActive: false, entry =>
         {
-            var account = role == PlatformAuthRole.Bot ? BotAccount : BroadcasterAccount;
-            if (!accounts.VerifyPersistedAuthorization(role, TwitchContextId(role), account.UserId))
+            var changed = false;
+            foreach (var (role, binding) in changes)
             {
-                return false;
-            }
-        }
-
-        var found = false;
-        var written = TwitchCatalog.Mutate(settings =>
-        {
-            var entry = settings.Channels.FirstOrDefault(channel => channel.Key == original.Key);
-            if (entry is null)
-            {
-                return;
+                if (TwitchAssignment.From(entry, role) == binding)
+                {
+                    var restore = useOriginal ? TwitchAssignment.From(original, role) : ExpectedTwitchAssignment(role);
+                    if (restore != binding)
+                    {
+                        restore.Apply(entry, role);
+                        changed = true;
+                    }
+                }
             }
 
-            found = true;
-            if (_reauthorizedTwitchRoles.Contains(PlatformAuthRole.Bot))
-            {
-                entry.BotAccountId = BotAccount.UserId;
-                entry.BotContextId = TwitchContextId(PlatformAuthRole.Bot);
-                entry.BotVerifiedSubjectId = BotAccount.UserId;
-                _changedTwitchAssignments.Add(PlatformAuthRole.Bot);
-            }
-
-            if (_reauthorizedTwitchRoles.Contains(PlatformAuthRole.Broadcaster))
-            {
-                entry.BroadcasterAccountId = BroadcasterAccount.UserId;
-                entry.BroadcasterContextId = TwitchContextId(PlatformAuthRole.Broadcaster);
-                entry.BroadcasterVerifiedSubjectId = BroadcasterAccount.UserId;
-                _changedTwitchAssignments.Add(PlatformAuthRole.Broadcaster);
-            }
+            return changed;
         });
-        return written && found && TwitchCatalog.VerifyPersisted();
+        return !applied || written;
     }
 
-    internal void RestoreTwitchAssignments()
+    private bool RestoreTwitchAccounts(AccountsStore accounts, Dictionary<PlatformAuthRole, TwitchAccountChange> changes)
     {
-        if (TwitchCatalog is null || TwitchChannel is not { } original || _changedTwitchAssignments.Count == 0)
+        var written = true;
+        foreach (var (role, change) in changes)
         {
-            return;
+            var result = accounts.TryReplaceContext(role, TwitchContextId(role), current => SameAccount(current, change.Written), change.Original);
+            written &= !result.Applied || result.Written;
         }
 
-        TwitchCatalog.Mutate(settings =>
+        return written;
+    }
+
+    private static bool SameAccount(TwitchAccountSettings? left, TwitchAccountSettings? right) =>
+        left is null || right is null ? left is null && right is null
+            : string.Equals(left.AccessToken, right.AccessToken, StringComparison.Ordinal)
+            && string.Equals(left.RefreshToken, right.RefreshToken, StringComparison.Ordinal)
+            && string.Equals(left.Login, right.Login, StringComparison.Ordinal)
+            && string.Equals(left.UserId, right.UserId, StringComparison.Ordinal)
+            && left.AccessTokenExpiresAt == right.AccessTokenExpiresAt
+            && left.Scopes.SequenceEqual(right.Scopes, StringComparer.Ordinal)
+            && left.StoredScopes.SequenceEqual(right.StoredScopes, StringComparer.Ordinal)
+            && string.Equals(left.BrowserProfileName, right.BrowserProfileName, StringComparison.Ordinal);
+
+    private sealed record TwitchAccountChange(TwitchAccountSettings? Original, TwitchAccountSettings Written);
+
+    private readonly record struct TwitchAssignment(string? AccountId, string? ContextId, string? VerifiedSubject)
+    {
+        internal static TwitchAssignment From(ChannelCatalogEntry entry, PlatformAuthRole role) =>
+            role == PlatformAuthRole.Bot
+                ? new(entry.BotAccountId, AuthContextIds.Normalize(entry.BotContextId), entry.BotVerifiedSubjectId)
+                : new(entry.BroadcasterAccountId, AuthContextIds.Normalize(entry.BroadcasterContextId), entry.BroadcasterVerifiedSubjectId);
+
+        internal void Apply(ChannelCatalogEntry entry, PlatformAuthRole role)
         {
-            var entry = settings.Channels.FirstOrDefault(channel => channel.Key == original.Key);
-            if (entry is null)
+            if (role == PlatformAuthRole.Bot)
             {
-                return;
+                (entry.BotAccountId, entry.BotContextId, entry.BotVerifiedSubjectId) = (AccountId, ContextId, VerifiedSubject);
             }
-
-            if (_changedTwitchAssignments.Contains(PlatformAuthRole.Bot))
+            else
             {
-                entry.BotAccountId = original.BotAccountId;
-                entry.BotContextId = original.BotContextId;
-                entry.BotVerifiedSubjectId = original.BotVerifiedSubjectId;
+                (entry.BroadcasterAccountId, entry.BroadcasterContextId, entry.BroadcasterVerifiedSubjectId) = (AccountId, ContextId, VerifiedSubject);
             }
-
-            if (_changedTwitchAssignments.Contains(PlatformAuthRole.Broadcaster))
-            {
-                entry.BroadcasterAccountId = original.BroadcasterAccountId;
-                entry.BroadcasterContextId = original.BroadcasterContextId;
-                entry.BroadcasterVerifiedSubjectId = original.BroadcasterVerifiedSubjectId;
-            }
-        });
+        }
     }
 
     public void RaiseCredentialsChanged()

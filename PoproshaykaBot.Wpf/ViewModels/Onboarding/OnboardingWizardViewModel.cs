@@ -31,10 +31,6 @@ public sealed partial class OnboardingWizardViewModel : ObservableObject
     private readonly OnboardingContext _context;
     private readonly List<IOnboardingPageViewModel> _pages;
     private readonly TwitchSettings _originalTwitch;
-    private readonly TwitchAccountSettings _originalBotAccount;
-    private readonly TwitchAccountSettings _originalBroadcasterAccount;
-    private readonly bool _hadBotAccount;
-    private readonly bool _hadBroadcasterAccount;
     private readonly YouTubeSettings _originalYouTubeSettings;
     private readonly string _originalYouTubeClientSecret;
     private readonly YouTubeAccountSettings _originalYouTubeBotAccount;
@@ -86,10 +82,8 @@ public sealed partial class OnboardingWizardViewModel : ObservableObject
 
         _originalTwitch = DeepClone(settingsManager.Current.Twitch);
         var twitchChannel = twitchCatalog?.GetActiveChannel(StreamingPlatform.Twitch);
-        _hadBotAccount = accountsStore.TryLoadContext(PlatformAuthRole.Bot, twitchChannel?.BotContextId, out var originalBot);
-        _hadBroadcasterAccount = accountsStore.TryLoadContext(PlatformAuthRole.Broadcaster, twitchChannel?.BroadcasterContextId, out var originalBroadcaster);
-        _originalBotAccount = originalBot is null ? new() : DeepClone(originalBot);
-        _originalBroadcasterAccount = originalBroadcaster is null ? new() : DeepClone(originalBroadcaster);
+        accountsStore.TryLoadContext(PlatformAuthRole.Bot, twitchChannel?.BotContextId, out var originalBot);
+        accountsStore.TryLoadContext(PlatformAuthRole.Broadcaster, twitchChannel?.BroadcasterContextId, out var originalBroadcaster);
         _originalYouTubeSettings = youtubeSettingsStore is not null ? DeepClone(youtubeSettingsStore.Load()) : new();
         _originalYouTubeClientSecret = youtubeAccountsStore?.LoadClientSecret() ?? string.Empty;
         _originalYouTubeBotAccount = youtubeAccountsStore is not null ? DeepClone(youtubeAccountsStore.LoadBot()) : new();
@@ -97,8 +91,8 @@ public sealed partial class OnboardingWizardViewModel : ObservableObject
 
         _context = new(
             DeepClone(settingsManager.Current),
-            DeepClone(_originalBotAccount),
-            DeepClone(_originalBroadcasterAccount),
+            originalBot is null ? new() : DeepClone(originalBot),
+            originalBroadcaster is null ? new() : DeepClone(originalBroadcaster),
             DeepClone(_originalYouTubeSettings),
             _originalYouTubeClientSecret,
             DeepClone(_originalYouTubeBotAccount),
@@ -106,7 +100,9 @@ public sealed partial class OnboardingWizardViewModel : ObservableObject
         {
             TwitchCatalog = twitchCatalog,
             TwitchChannel = twitchChannel,
+            AutoDetectChannel = twitchChannel is null,
         };
+        _context.CaptureTwitchAccounts(originalBot, originalBroadcaster);
         if (twitchChannel is not null && !string.IsNullOrWhiteSpace(twitchChannel.Handle))
         {
             _context.Settings.Twitch.Channel = twitchChannel.Handle.TrimStart('@');
@@ -198,18 +194,6 @@ public sealed partial class OnboardingWizardViewModel : ObservableObject
                 }
             }
         }
-    }
-
-    private static bool AccountsEqual(TwitchAccountSettings left, TwitchAccountSettings right)
-    {
-        return string.Equals(left.AccessToken, right.AccessToken, StringComparison.Ordinal)
-               && string.Equals(left.RefreshToken, right.RefreshToken, StringComparison.Ordinal)
-               && string.Equals(left.Login, right.Login, StringComparison.Ordinal)
-               && string.Equals(left.UserId, right.UserId, StringComparison.Ordinal)
-               && left.AccessTokenExpiresAt == right.AccessTokenExpiresAt
-               && (left.Scopes ?? []).SequenceEqual(right.Scopes ?? [], StringComparer.Ordinal)
-               && (left.StoredScopes ?? []).SequenceEqual(right.StoredScopes ?? [], StringComparer.Ordinal)
-               && string.Equals(left.BrowserProfileName, right.BrowserProfileName, StringComparison.Ordinal);
     }
 
     private static T DeepClone<T>(T source) where T : class, new()
@@ -340,15 +324,13 @@ public sealed partial class OnboardingWizardViewModel : ObservableObject
 
         try
         {
-            var botWritten = RestoreTwitchAccount(PlatformAuthRole.Bot, _hadBotAccount, _originalBotAccount);
-            var broadcasterWritten = RestoreTwitchAccount(PlatformAuthRole.Broadcaster, _hadBroadcasterAccount, _originalBroadcasterAccount);
-            _context.RestoreTwitchAssignments();
+            var written = _context.RestoreTwitchChanges(_accountsStore);
             await _eventBus.PublishAsync(new PlatformAuthorizationRefreshed(StreamingPlatform.Twitch, PlatformAuthRole.Bot,
                 _context.TwitchContextId(PlatformAuthRole.Bot)));
             await _eventBus.PublishAsync(new PlatformAuthorizationRefreshed(StreamingPlatform.Twitch, PlatformAuthRole.Broadcaster,
                 _context.TwitchContextId(PlatformAuthRole.Broadcaster)));
 
-            if (botWritten && broadcasterWritten)
+            if (written)
             {
                 _logger.OnboardingAccountsRolledBack();
             }
@@ -361,19 +343,6 @@ public sealed partial class OnboardingWizardViewModel : ObservableObject
         {
             _logger.OnboardingAccountsRollbackFailed(exception);
         }
-    }
-
-    private bool RestoreTwitchAccount(PlatformAuthRole role, bool hadAccount, TwitchAccountSettings original)
-    {
-        var contextId = _context.TwitchContextId(role);
-        _accountsStore.TryLoadContext(role, contextId, out var live);
-        if (!hadAccount)
-        {
-            return live is null || _accountsStore.RemoveRoleContext(role, contextId).Written;
-        }
-
-        return live is not null && AccountsEqual(live, original)
-            || _accountsStore.UpsertContext(role, contextId, OnboardingContext.GetContextLabel(_accountsStore, role, contextId), original);
     }
 
     private void RollbackYouTubeSettings()
@@ -435,13 +404,6 @@ public sealed partial class OnboardingWizardViewModel : ObservableObject
     {
         if (!_context.TwitchSettingsApplied)
         {
-            var channel = _originalTwitch.Channel;
-            if (!string.Equals(_settingsManager.Current.Twitch.Channel, channel, StringComparison.Ordinal))
-            {
-                _settingsManager.UpdateCurrent(settings => settings.Twitch.Channel = channel);
-                _logger.OnboardingChannelRolledBack(channel);
-            }
-
             return;
         }
 
