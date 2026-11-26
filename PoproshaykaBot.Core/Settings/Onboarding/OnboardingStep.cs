@@ -9,4 +9,5 @@ public enum OnboardingStep
     Appearance = 4,
     LegacyImport = 5,
     Platforms = 6,
+    BroadcasterAuthorization = 7,
 }

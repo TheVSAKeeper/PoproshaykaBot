@@ -558,8 +558,9 @@ public sealed class MultistreamOnboardingWizardTests
         Assert.Multiple(() =>
         {
             Assert.That(page.ShowRetry, Is.True);
-            Assert.That(page.CanAdvance, Is.False);
-            Assert.That(page.DetailsText, Is.EqualTo("Ошибка сети при подключении"));
+            Assert.That(page.CanAdvance, Is.True);
+            Assert.That(page.PlatformStatuses[0].DetailsText, Is.EqualTo("Ошибка сети при подключении"));
+            Assert.That(page.DetailsText, Does.Not.Contain("Ошибка сети при подключении"));
             Assert.That(page.DetailsText, Does.Not.Contain("Twitch"));
         });
 

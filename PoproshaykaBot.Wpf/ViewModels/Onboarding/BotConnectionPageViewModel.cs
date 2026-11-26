@@ -1,5 +1,6 @@
 ﻿using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using KeepShell.ViewModels;
 using Microsoft.Extensions.Logging;
 using PoproshaykaBot.Core.Infrastructure.Events;
 using PoproshaykaBot.Core.Infrastructure.Events.Lifecycle;
@@ -36,6 +37,9 @@ public sealed partial class BotConnectionPageViewModel : OnboardingPageViewModel
 
     [ObservableProperty]
     private BotLifecyclePhase _phase = BotLifecyclePhase.Idle;
+
+    [ObservableProperty]
+    private StatusSeverity _headerSeverity = StatusSeverity.None;
 
     [ObservableProperty]
     private string _statusText = "Готовимся к подключению…";
@@ -154,12 +158,55 @@ public sealed partial class BotConnectionPageViewModel : OnboardingPageViewModel
             try
             {
                 _botConnectionManager.StartConnection(platform.Id);
+                if (PlatformStatuses.FirstOrDefault(r => r.Platform == platform.Id) is { } row)
+                {
+                    UpdateRow(row, BotLifecyclePhase.Connecting, null);
+                }
             }
             catch (InvalidOperationException exception)
             {
                 _logger.BotConnectionStartRejected(exception);
             }
         }
+
+        RefreshAggregateFromRows();
+    }
+
+    private void RetryPlatform(StreamingPlatform platform)
+    {
+        if (!_setupSaved || _context?.CancellationStarted == true)
+        {
+            return;
+        }
+
+        if (_botConnectionManager.IsPlatformBusy(platform) || _botConnectionManager.GetPhase(platform) == BotLifecyclePhase.Connected)
+        {
+            return;
+        }
+
+        try
+        {
+            if (_platformRegistry is null && PlatformStatuses.Count <= 1)
+            {
+                _botConnectionManager.StartConnection();
+            }
+            else
+            {
+                _botConnectionManager.StartConnection(platform);
+            }
+        }
+        catch (InvalidOperationException exception)
+        {
+            _logger.BotConnectionStartRejected(exception);
+            return;
+        }
+
+        if (PlatformStatuses.FirstOrDefault(r => r.Platform == platform) is { } row)
+        {
+            UpdateRow(row, BotLifecyclePhase.Connecting, null);
+        }
+
+        RefreshAggregateFromRows();
     }
 
     [RelayCommand(CanExecute = nameof(CanRetry))]
@@ -240,7 +287,9 @@ public sealed partial class BotConnectionPageViewModel : OnboardingPageViewModel
     private void OnStatusUpdated(BotConnectionStatusUpdated @event)
     {
         _lastStatusMessage = @event.Message;
-        if (_setupSaved && _context?.CancellationStarted == false)
+        if (_setupSaved
+            && _context?.CancellationStarted == false
+            && Phase is BotLifecyclePhase.Idle or BotLifecyclePhase.Connecting or BotLifecyclePhase.Disconnecting)
         {
             DetailsText = @event.Message;
         }
@@ -269,12 +318,12 @@ public sealed partial class BotConnectionPageViewModel : OnboardingPageViewModel
 
         if (context.Settings.Twitch.Enabled)
         {
-            PlatformStatuses.Add(new PlatformConnectionRow(StreamingPlatform.Twitch, PlatformVisuals.GetDisplayName(StreamingPlatform.Twitch)));
+            PlatformStatuses.Add(new PlatformConnectionRow(StreamingPlatform.Twitch, PlatformVisuals.GetDisplayName(StreamingPlatform.Twitch), RetryPlatform));
         }
 
         if (context.YouTubeSettings.Enabled)
         {
-            PlatformStatuses.Add(new PlatformConnectionRow(StreamingPlatform.YouTube, PlatformVisuals.GetDisplayName(StreamingPlatform.YouTube)));
+            PlatformStatuses.Add(new PlatformConnectionRow(StreamingPlatform.YouTube, PlatformVisuals.GetDisplayName(StreamingPlatform.YouTube), RetryPlatform));
         }
     }
 
@@ -305,6 +354,10 @@ public sealed partial class BotConnectionPageViewModel : OnboardingPageViewModel
         row.DetailsText = phase == BotLifecyclePhase.Failed
             ? (errorDetails ?? string.Empty)
             : string.Empty;
+        row.ShowRetry = _setupSaved
+            && _context?.CancellationStarted != true
+            && PlatformStatuses.Count > 1
+            && phase is BotLifecyclePhase.Failed or BotLifecyclePhase.Cancelled or BotLifecyclePhase.Disconnected;
     }
 
     private string FormatConnectedPlatformStatus(StreamingPlatform platform)
@@ -322,6 +375,17 @@ public sealed partial class BotConnectionPageViewModel : OnboardingPageViewModel
 
     private void RefreshAggregateFromRows(BotLifecyclePhase? fallbackPhase = null)
     {
+        if (_context?.CancellationStarted == true)
+        {
+            foreach (var row in PlatformStatuses)
+            {
+                row.ShowRetry = false;
+            }
+
+            ApplyPhase(fallbackPhase ?? Phase);
+            return;
+        }
+
         if (PlatformStatuses.Count == 0)
         {
             ApplyPhase(fallbackPhase ?? _botConnectionManager.CurrentPhase);
@@ -346,10 +410,33 @@ public sealed partial class BotConnectionPageViewModel : OnboardingPageViewModel
             return;
         }
 
-        if (PlatformStatuses.FirstOrDefault(r => r.Phase == BotLifecyclePhase.Failed) is { } failedRow)
+        if (PlatformStatuses.Any(r => r.Phase == BotLifecyclePhase.Idle))
         {
-            var details = !string.IsNullOrWhiteSpace(failedRow.DetailsText) ? failedRow.DetailsText : _lastStatusMessage;
-            ApplyPhase(BotLifecyclePhase.Failed, details);
+            ApplyPhase(PlatformStatuses.All(r => r.Phase == BotLifecyclePhase.Idle)
+                ? BotLifecyclePhase.Idle
+                : BotLifecyclePhase.Connecting);
+            return;
+        }
+
+        var connectedCount = PlatformStatuses.Count(r => r.Phase == BotLifecyclePhase.Connected);
+        if (connectedCount > 0 && connectedCount < PlatformStatuses.Count)
+        {
+            Phase = PlatformStatuses.Any(r => r.Phase == BotLifecyclePhase.Failed)
+                ? BotLifecyclePhase.Failed
+                : BotLifecyclePhase.Cancelled;
+            HeaderSeverity = StatusSeverity.Warning;
+            StatusText = connectedCount == 1
+                ? $"Подключена 1 из {PlatformStatuses.Count} площадок"
+                : $"Подключены {connectedCount} из {PlatformStatuses.Count} площадок";
+            DetailsText = "Можно повторить подключение для отказавшей площадки или продолжить настройку.";
+            ShowRetry = false;
+            CanAdvance = true;
+            return;
+        }
+
+        if (PlatformStatuses.Any(r => r.Phase == BotLifecyclePhase.Failed))
+        {
+            ApplyPhase(BotLifecyclePhase.Failed);
             return;
         }
 
@@ -373,6 +460,7 @@ public sealed partial class BotConnectionPageViewModel : OnboardingPageViewModel
         Phase = phase;
         if (_context?.CancellationStarted == true)
         {
+            HeaderSeverity = StatusSeverity.Warning;
             StatusText = "Настройка отменяется";
             DetailsText = "Закройте мастер, чтобы завершить восстановление настроек.";
             ShowRetry = false;
@@ -380,9 +468,15 @@ public sealed partial class BotConnectionPageViewModel : OnboardingPageViewModel
             return;
         }
 
+        var singleOrUnsavedRetry = !_setupSaved || PlatformStatuses.Count <= 1;
+        var finishedGuidance = PlatformStatuses.Count > 1
+            ? "Можно повторить подключение нужной площадки или продолжить настройку."
+            : "Можно повторить подключение или продолжить настройку.";
+
         switch (phase)
         {
             case BotLifecyclePhase.Connecting:
+                HeaderSeverity = StatusSeverity.Info;
                 StatusText = "Подключение…";
                 DetailsText = overrideDetails ?? _lastStatusMessage;
                 ShowRetry = false;
@@ -390,6 +484,7 @@ public sealed partial class BotConnectionPageViewModel : OnboardingPageViewModel
                 break;
 
             case BotLifecyclePhase.Connected:
+                HeaderSeverity = StatusSeverity.Success;
                 StatusText = PlatformStatuses.Count == 1
                     ? $"{PlatformStatuses[0].PlatformName}: {PlatformStatuses[0].StatusText.ToLowerInvariant()}"
                     : "Бот подключён ко всем выбранным площадкам";
@@ -399,6 +494,7 @@ public sealed partial class BotConnectionPageViewModel : OnboardingPageViewModel
                 break;
 
             case BotLifecyclePhase.Disconnecting:
+                HeaderSeverity = StatusSeverity.Warning;
                 StatusText = "Отключение…";
                 DetailsText = overrideDetails ?? _lastStatusMessage;
                 ShowRetry = false;
@@ -406,27 +502,37 @@ public sealed partial class BotConnectionPageViewModel : OnboardingPageViewModel
                 break;
 
             case BotLifecyclePhase.Disconnected:
+                HeaderSeverity = StatusSeverity.None;
                 StatusText = "Бот отключён";
-                DetailsText = "Нажмите «Повторить подключение».";
-                ShowRetry = true;
-                CanAdvance = false;
+                DetailsText = _setupSaved && PlatformStatuses.Count > 0
+                    ? finishedGuidance
+                    : "Нажмите «Повторить подключение».";
+                ShowRetry = singleOrUnsavedRetry;
+                CanAdvance = _setupSaved;
                 break;
 
             case BotLifecyclePhase.Cancelled:
+                HeaderSeverity = StatusSeverity.Warning;
                 StatusText = "Подключение отменено";
-                DetailsText = "Нажмите «Повторить подключение».";
-                ShowRetry = true;
-                CanAdvance = false;
+                DetailsText = _setupSaved && PlatformStatuses.Count > 0
+                    ? finishedGuidance
+                    : "Нажмите «Повторить подключение».";
+                ShowRetry = singleOrUnsavedRetry;
+                CanAdvance = _setupSaved;
                 break;
 
             case BotLifecyclePhase.Failed:
+                HeaderSeverity = StatusSeverity.Error;
                 StatusText = "Не удалось подключиться";
-                DetailsText = overrideDetails ?? _lastStatusMessage;
-                ShowRetry = true;
-                CanAdvance = false;
+                DetailsText = _setupSaved && PlatformStatuses.Count > 0
+                    ? finishedGuidance
+                    : (overrideDetails ?? _lastStatusMessage);
+                ShowRetry = singleOrUnsavedRetry;
+                CanAdvance = _setupSaved;
                 break;
 
             default:
+                HeaderSeverity = StatusSeverity.None;
                 StatusText = "Готовимся к подключению…";
                 DetailsText = overrideDetails ?? _lastStatusMessage;
                 ShowRetry = false;
@@ -466,11 +572,16 @@ public sealed partial class BotConnectionPageViewModel : OnboardingPageViewModel
         }
     }
 
-    public sealed partial class PlatformConnectionRow(StreamingPlatform platform, string platformName) : ObservableObject
+    public sealed partial class PlatformConnectionRow(
+        StreamingPlatform platform,
+        string platformName,
+        Action<StreamingPlatform> retryAction) : ObservableObject
     {
         public StreamingPlatform Platform { get; } = platform;
 
         public string PlatformName { get; } = platformName;
+
+        public string RetryButtonText => $"Повторить для {PlatformName}";
 
         [ObservableProperty]
         private BotLifecyclePhase _phase = BotLifecyclePhase.Idle;
@@ -480,5 +591,14 @@ public sealed partial class BotConnectionPageViewModel : OnboardingPageViewModel
 
         [ObservableProperty]
         private string _detailsText = string.Empty;
+
+        [ObservableProperty]
+        [NotifyCanExecuteChangedFor(nameof(RetryCommand))]
+        private bool _showRetry;
+
+        [RelayCommand(CanExecute = nameof(CanRetryRow))]
+        private void Retry() => retryAction(Platform);
+
+        private bool CanRetryRow() => ShowRetry;
     }
 }

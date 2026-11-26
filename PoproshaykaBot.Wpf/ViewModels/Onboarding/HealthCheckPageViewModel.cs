@@ -1,10 +1,14 @@
 ﻿using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using KeepShell.Services.Platform;
+using KeepShell.ViewModels;
 using Microsoft.Extensions.Logging;
 using PoproshaykaBot.Core.Chat;
 using PoproshaykaBot.Core.Infrastructure.Events;
 using PoproshaykaBot.Core.Infrastructure.Events.Chat;
+using PoproshaykaBot.Core.Infrastructure.Events.Lifecycle;
 using PoproshaykaBot.Core.Platforms;
+using PoproshaykaBot.Core.Platforms.Auth;
 using PoproshaykaBot.Core.Twitch.Chat;
 using PoproshaykaBot.Core.Users;
 using PoproshaykaBot.Wpf.Bootstrap;
@@ -15,14 +19,24 @@ namespace PoproshaykaBot.Wpf.ViewModels.Onboarding;
 
 public sealed partial class HealthCheckPageViewModel : OnboardingPageViewModelBase, IDisposable
 {
+    private const string DefaultChatTestStatusText = "Не выполнено";
+
     private readonly IBroadcastMessenger _chatMessenger;
     private readonly ILogger<HealthCheckPageViewModel> _logger;
     private readonly IShellLauncher _shellLauncher;
+    private readonly IClipboardService? _clipboard;
     private readonly List<IDisposable> _subs = [];
     private readonly Dictionary<StreamingPlatform, string> _botStatusByPlatform = [];
+    private readonly Dictionary<StreamingPlatform, ChatTestResultState> _chatTestStateByPlatform = [];
 
     [ObservableProperty]
     private string _overlayUrl = string.Empty;
+
+    [ObservableProperty]
+    private string _overlayCopyFeedback = string.Empty;
+
+    [ObservableProperty]
+    private StatusSeverity _overlayCopyFeedbackSeverity = StatusSeverity.None;
 
     [ObservableProperty]
     private string _botStatusText = "Бот в чате: ожидание сообщения…";
@@ -48,7 +62,7 @@ public sealed partial class HealthCheckPageViewModel : OnboardingPageViewModelBa
     private string _chatTestMessage = string.Empty;
 
     [ObservableProperty]
-    private string _chatTestStatusText = "Не выполнено";
+    private string _chatTestStatusText = DefaultChatTestStatusText;
 
     [ObservableProperty]
     private bool _chatTestSuccess;
@@ -56,17 +70,23 @@ public sealed partial class HealthCheckPageViewModel : OnboardingPageViewModelBa
     [ObservableProperty]
     private bool _chatTestError;
 
+    [ObservableProperty]
+    private StatusSeverity _chatTestSeverity = StatusSeverity.None;
+
     public HealthCheckPageViewModel(
         IBroadcastMessenger chatMessenger,
         IEventBus eventBus,
         ILogger<HealthCheckPageViewModel> logger,
-        IShellLauncher shellLauncher)
+        IShellLauncher shellLauncher,
+        IClipboardService? clipboard = null)
     {
         _chatMessenger = chatMessenger;
         _logger = logger;
         _shellLauncher = shellLauncher;
+        _clipboard = clipboard;
 
         _subs.Add(eventBus.SubscribeOnUi<ChatMessageReceived>(OnChatMessageReceived));
+        _subs.Add(eventBus.SubscribeOnUi<PlatformAuthorizationRefreshed>(OnAuthorizationRefreshed));
     }
 
     public override string PageTitle => "Диагностика (опционально)";
@@ -106,6 +126,8 @@ public sealed partial class HealthCheckPageViewModel : OnboardingPageViewModelBa
         ArgumentNullException.ThrowIfNull(context);
 
         OverlayUrl = $"http://localhost:{context.Settings.Twitch.HttpServerPort}/chat";
+        OverlayCopyFeedback = string.Empty;
+        OverlayCopyFeedbackSeverity = StatusSeverity.None;
         HasTwitchEnabled = context.Settings.Twitch.Enabled;
         HasYouTubeEnabled = context.YouTubeSettings.Enabled;
 
@@ -122,10 +144,25 @@ public sealed partial class HealthCheckPageViewModel : OnboardingPageViewModelBa
 
         EnabledPlatforms = enabled;
         ShowPlatformSelector = enabled.Count > 1;
-        SelectedPlatform = enabled.Count > 0 ? enabled[0] : StreamingPlatform.Twitch;
+        _botStatusByPlatform.Clear();
+        _chatTestStateByPlatform.Clear();
 
-        ResetChatTestStatus();
+        var initialPlatform = enabled.Count > 0 ? enabled[0] : StreamingPlatform.Twitch;
+        if (SelectedPlatform != initialPlatform)
+        {
+            SelectedPlatform = initialPlatform;
+        }
+        else
+        {
+            ApplySelectedPlatformState();
+        }
+
         CanAdvance = true;
+    }
+
+    partial void OnSelectedPlatformChanged(StreamingPlatform value)
+    {
+        ApplySelectedPlatformState();
     }
 
     [RelayCommand]
@@ -135,9 +172,7 @@ public sealed partial class HealthCheckPageViewModel : OnboardingPageViewModelBa
 
         if (string.IsNullOrEmpty(message))
         {
-            ChatTestStatusText = "Введите текст сообщения.";
-            ChatTestSuccess = false;
-            ChatTestError = false;
+            SetChatTestState(SelectedPlatform, new("Введите текст сообщения.", false, false, StatusSeverity.Warning));
             return;
         }
 
@@ -147,24 +182,37 @@ public sealed partial class HealthCheckPageViewModel : OnboardingPageViewModelBa
 
             if (result is ChatEnqueueResult.Queued)
             {
-                ChatTestStatusText = "✓ Сообщение поставлено в очередь отправки.";
-                ChatTestSuccess = true;
-                ChatTestError = false;
+                SetChatTestState(SelectedPlatform, new("Сообщение поставлено в очередь отправки.", true, false, StatusSeverity.Success));
             }
             else
             {
-                ChatTestStatusText = $"✗ Сообщение не отправлено: {ChatEnqueueResults.DescribeRefusal(result)}.";
-                ChatTestSuccess = false;
-                ChatTestError = true;
+                SetChatTestState(SelectedPlatform, new($"Сообщение не отправлено: {ChatEnqueueResults.DescribeRefusal(result)}.", false, true, StatusSeverity.Error));
             }
         }
         catch (Exception exception)
         {
             _logger.OnboardingChatTestEnqueueFailed(exception);
-            ChatTestStatusText = "✗ Не удалось поставить сообщение в очередь.";
-            ChatTestSuccess = false;
-            ChatTestError = true;
+            SetChatTestState(SelectedPlatform, new("Не удалось поставить сообщение в очередь.", false, true, StatusSeverity.Error));
         }
+    }
+
+    [RelayCommand]
+    private void CopyOverlayUrl()
+    {
+        if (string.IsNullOrWhiteSpace(OverlayUrl))
+        {
+            return;
+        }
+
+        if (_clipboard?.TrySetText(OverlayUrl) == true)
+        {
+            OverlayCopyFeedback = "Ссылка скопирована";
+            OverlayCopyFeedbackSeverity = StatusSeverity.Success;
+            return;
+        }
+
+        OverlayCopyFeedback = "Не удалось скопировать ссылку.";
+        OverlayCopyFeedbackSeverity = StatusSeverity.Error;
     }
 
     [RelayCommand]
@@ -191,20 +239,66 @@ public sealed partial class HealthCheckPageViewModel : OnboardingPageViewModelBa
         }
 
         var status = DescribeBotStatus(@event.Status);
-        if (!_botStatusByPlatform.TryAdd(@event.Platform, status))
+        _botStatusByPlatform[@event.Platform] = status;
+        if (@event.Platform == SelectedPlatform)
+        {
+            ApplySelectedPlatformBotStatus();
+        }
+    }
+
+    private void OnAuthorizationRefreshed(PlatformAuthorizationRefreshed @event)
+    {
+        if (!_botStatusByPlatform.Remove(@event.Platform))
         {
             return;
         }
 
-        BotStatusKnown = true;
-        BotStatusText = "Бот в чате: " + string.Join(", ", _botStatusByPlatform.Select(static pair => $"{PlatformVisuals.GetDisplayName(pair.Key)} – {pair.Value}"));
+        if (@event.Platform == SelectedPlatform)
+        {
+            ApplySelectedPlatformBotStatus();
+        }
     }
 
-    private void ResetChatTestStatus()
+    private void SetChatTestState(StreamingPlatform platform, ChatTestResultState state)
     {
-        ChatTestStatusText = "Не выполнено";
-        ChatTestSuccess = false;
-        ChatTestError = false;
+        _chatTestStateByPlatform[platform] = state;
+        if (platform == SelectedPlatform)
+        {
+            ApplyChatTestState(state);
+        }
+    }
+
+    private void ApplySelectedPlatformState()
+    {
+        ApplySelectedPlatformBotStatus();
+        var state = _chatTestStateByPlatform.TryGetValue(SelectedPlatform, out var saved)
+            ? saved
+            : ChatTestResultState.Initial;
+        ApplyChatTestState(state);
+    }
+
+    private void ApplySelectedPlatformBotStatus()
+    {
+        var platformName = PlatformVisuals.GetDisplayName(SelectedPlatform);
+        if (_botStatusByPlatform.TryGetValue(SelectedPlatform, out var status))
+        {
+            BotStatusKnown = true;
+            BotStatusText = $"Бот в чате ({platformName}): {status}";
+            return;
+        }
+
+        BotStatusKnown = false;
+        BotStatusText = ShowPlatformSelector
+            ? $"Бот в чате ({platformName}): ожидание сообщения…"
+            : "Бот в чате: ожидание сообщения…";
+    }
+
+    private void ApplyChatTestState(ChatTestResultState state)
+    {
+        ChatTestStatusText = state.StatusText;
+        ChatTestSuccess = state.IsSuccess;
+        ChatTestError = state.IsError;
+        ChatTestSeverity = state.Severity;
     }
 
     private static string DescribeBotStatus(UserStatus status)
@@ -220,5 +314,10 @@ public sealed partial class HealthCheckPageViewModel : OnboardingPageViewModelBa
         }
 
         return "обычный пользователь";
+    }
+
+    private readonly record struct ChatTestResultState(string StatusText, bool IsSuccess, bool IsError, StatusSeverity Severity)
+    {
+        public static ChatTestResultState Initial => new(DefaultChatTestStatusText, false, false, StatusSeverity.None);
     }
 }

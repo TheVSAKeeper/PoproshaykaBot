@@ -96,7 +96,12 @@ public sealed partial class OnboardingWizardViewModel : ObservableObject, IDispo
         foreach (var importPage in _pages.OfType<LegacyImportPageViewModel>())
         {
             importPage.FinishRequested += OnImportFinishRequested;
-            importPage.NavigateToStepRequested += OnImportNavigateToStepRequested;
+            importPage.NavigateToStepRequested += OnNavigateToStepRequested;
+        }
+
+        foreach (var completionPage in _pages.OfType<CompletionPageViewModel>())
+        {
+            completionPage.NavigateToStepRequested += OnNavigateToStepRequested;
         }
 
         (_originalTwitch, _originalYouTube, _originalYouTubeClientSecret, _context) = BuildContext(
@@ -221,6 +226,11 @@ public sealed partial class OnboardingWizardViewModel : ObservableObject, IDispo
                 continue;
             }
 
+            if (page is CompletionPageViewModel completionPage)
+            {
+                completionPage.NavigateToStepRequested -= OnNavigateToStepRequested;
+            }
+
             if (page is IDisposable disposable)
             {
                 disposable.Dispose();
@@ -269,6 +279,11 @@ public sealed partial class OnboardingWizardViewModel : ObservableObject, IDispo
                 continue;
             }
 
+            if (page is CompletionPageViewModel completionPage)
+            {
+                completionPage.NavigateToStepRequested += OnNavigateToStepRequested;
+            }
+
             _pages.Add(page);
         }
 
@@ -309,6 +324,7 @@ public sealed partial class OnboardingWizardViewModel : ObservableObject, IDispo
             OnboardingStep.Platforms => page is PlatformsPageViewModel,
             OnboardingStep.Credentials => page is CredentialsPageViewModel,
             OnboardingStep.BotAuthorization => page is BotAuthorizationPageViewModel,
+            OnboardingStep.BroadcasterAuthorization => page is BroadcasterAuthorizationPageViewModel,
             OnboardingStep.YouTube => page is YouTubeOnboardingPageViewModel,
             _ => false,
         });
@@ -383,7 +399,12 @@ public sealed partial class OnboardingWizardViewModel : ObservableObject, IDispo
         foreach (var importPage in _pages.OfType<LegacyImportPageViewModel>())
         {
             importPage.FinishRequested -= OnImportFinishRequested;
-            importPage.NavigateToStepRequested -= OnImportNavigateToStepRequested;
+            importPage.NavigateToStepRequested -= OnNavigateToStepRequested;
+        }
+
+        foreach (var completionPage in _pages.OfType<CompletionPageViewModel>())
+        {
+            completionPage.NavigateToStepRequested -= OnNavigateToStepRequested;
         }
 
         foreach (var disposable in _pages.OfType<IDisposable>())
@@ -529,7 +550,7 @@ public sealed partial class OnboardingWizardViewModel : ObservableObject, IDispo
         CompleteWizard();
     }
 
-    private void OnImportNavigateToStepRequested(OnboardingStep step)
+    private void OnNavigateToStepRequested(OnboardingStep step)
     {
         if (_context.CancellationStarted || IsOperationBusy)
         {
@@ -595,6 +616,11 @@ public sealed partial class OnboardingWizardViewModel : ObservableObject, IDispo
             or null)
         {
             OnPropertyChanged(nameof(NextButtonText));
+        }
+
+        if (e.PropertyName is nameof(IOnboardingPageViewModel.PageTitle) or null)
+        {
+            OnPropertyChanged(nameof(HeaderTitle));
         }
     }
 

@@ -11,8 +11,8 @@ namespace PoproshaykaBot.Wpf.Tests.Onboarding;
 [TestFixture]
 public sealed class HealthCheckPageViewModelTests
 {
-    [TestCase(ChatEnqueueResult.Queued, true, "✓ Сообщение поставлено в очередь отправки.")]
-    [TestCase(ChatEnqueueResult.ObserverMode, false, "✗ Сообщение не отправлено: режим наблюдателя.")]
+    [TestCase(ChatEnqueueResult.Queued, true, "Сообщение поставлено в очередь отправки.")]
+    [TestCase(ChatEnqueueResult.ObserverMode, false, "Сообщение не отправлено: режим наблюдателя.")]
     public void Тест_чата_показывает_исход_постановки(ChatEnqueueResult outcome, bool success, string expectedText)
     {
         var messenger = new FakeChatMessenger(outcome);
