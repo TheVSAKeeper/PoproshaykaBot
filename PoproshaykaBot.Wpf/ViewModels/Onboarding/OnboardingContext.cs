@@ -484,26 +484,51 @@ public sealed class OnboardingContext(
             }));
         }
 
-        if (accountsStore is not null &&
-            (!string.Equals(accounts.Secret, _savedYouTubeAccounts.Secret, StringComparison.Ordinal)
-             || !JsonStoreClone.SameValues(accounts.Bot, _savedYouTubeAccounts.Bot)
-             || !JsonStoreClone.SameValues(accounts.Broadcaster, _savedYouTubeAccounts.Broadcaster)))
+        if (accountsStore is not null)
         {
-            var botContextId = YouTubeContextId(PlatformAuthRole.Bot);
-            var broadcasterContextId = YouTubeContextId(PlatformAuthRole.Broadcaster);
-            var original = _savedYouTubeAccounts;
-            var replacement = (accounts.Secret, JsonStoreClone.DeepClone(accounts.Bot), JsonStoreClone.DeepClone(accounts.Broadcaster));
-            var written = accountsStore.TryReplaceAccounts(botContextId, broadcasterContextId, original, replacement);
-            if (!written.Written)
+            if (!string.Equals(accounts.Secret, _savedYouTubeAccounts.Secret, StringComparison.Ordinal))
             {
-                return written.Matched ? YouTubeAccountsNotWritten : YouTubeAccountsChanged;
+                var originalSecret = _savedYouTubeAccounts.Secret;
+                var replacementSecret = accounts.Secret;
+                var written = accountsStore.TryReplaceClientSecret(originalSecret, replacementSecret);
+                if (!written.Written)
+                {
+                    return written.Matched ? YouTubeAccountsNotWritten : YouTubeAccountsChanged;
+                }
+
+                undo.Add(new(new(accountsStore, PlatformAuthRole.None, StreamingPlatform.YouTube), () =>
+                {
+                    var result = accountsStore.TryReplaceClientSecret(replacementSecret, originalSecret);
+                    return !result.Matched || result.Written;
+                }));
             }
 
-            undo.Add(new(new(accountsStore), () =>
+            foreach (var (role, expectedAccount, draftAccount) in new[]
             {
-                var result = accountsStore.TryReplaceAccounts(botContextId, broadcasterContextId, replacement, original);
-                return !result.Matched || result.Written;
-            }));
+                (PlatformAuthRole.Bot, _savedYouTubeAccounts.Bot, accounts.Bot),
+                (PlatformAuthRole.Broadcaster, _savedYouTubeAccounts.Broadcaster, accounts.Broadcaster),
+            })
+            {
+                if (JsonStoreClone.SameValues(draftAccount, expectedAccount))
+                {
+                    continue;
+                }
+
+                var contextId = YouTubeContextId(role);
+                var originalAccount = expectedAccount;
+                var replacementAccount = JsonStoreClone.DeepClone(draftAccount);
+                var written = accountsStore.TryReplaceAccount(role, contextId, originalAccount, replacementAccount);
+                if (!written.Written)
+                {
+                    return written.Matched ? YouTubeAccountsNotWritten : YouTubeAccountsChanged;
+                }
+
+                undo.Add(new(new(accountsStore, role, StreamingPlatform.YouTube), () =>
+                {
+                    var result = accountsStore.TryReplaceAccount(role, contextId, replacementAccount, originalAccount);
+                    return !result.Matched || result.Written;
+                }));
+            }
         }
 
         return null;
@@ -729,10 +754,7 @@ public sealed class OnboardingContext(
         else if (YouTubeChannel is { } existing
             && !string.IsNullOrWhiteSpace(existing.ChannelId)
             && (string.IsNullOrWhiteSpace(rawInput)
-                || string.Equals(rawInput, existing.Handle, StringComparison.OrdinalIgnoreCase)
-                || string.Equals(rawInput, existing.ChannelId, StringComparison.Ordinal)
-                || (YouTubeChannelInput.NormalizeHandle(rawInput) is { } normInput
-                    && string.Equals(normInput, YouTubeChannelInput.NormalizeHandle(existing.Handle), StringComparison.OrdinalIgnoreCase))))
+                || YouTubeChannelInput.MatchesChannel(rawInput, existing.ChannelId, existing.Handle)))
         {
             channelId = existing.ChannelId;
             handle = string.IsNullOrWhiteSpace(rawInput) ? existing.Handle : rawInput;

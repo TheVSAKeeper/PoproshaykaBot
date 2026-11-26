@@ -51,6 +51,30 @@ public static partial class YouTubeChannelInput
         return string.IsNullOrWhiteSpace(stripped) ? null : "@" + stripped;
     }
 
+    public static bool MatchesChannel(string? rawInput, string? channelId, string? handle)
+    {
+        if (string.IsNullOrWhiteSpace(rawInput) || string.IsNullOrWhiteSpace(channelId))
+        {
+            return false;
+        }
+
+        var trimmed = rawInput.Trim();
+        if (string.Equals(trimmed, channelId.Trim(), StringComparison.Ordinal))
+        {
+            return true;
+        }
+
+        if (!string.IsNullOrWhiteSpace(handle)
+            && string.Equals(trimmed, handle.Trim(), StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        return NormalizeHandle(trimmed) is { } normalizedInput
+            && NormalizeHandle(handle) is { } normalizedHandle
+            && string.Equals(normalizedInput, normalizedHandle, StringComparison.OrdinalIgnoreCase);
+    }
+
     [GeneratedRegex(@"^https?://(?:www\.|m\.)?youtube\.com/channel/(?<id>UC[A-Za-z0-9_-]{10,})(?:[/?#].*)?$", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant, matchTimeoutMilliseconds: 500)]
     private static partial Regex ChannelUrlRegex();
 

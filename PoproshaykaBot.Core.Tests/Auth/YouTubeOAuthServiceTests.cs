@@ -761,6 +761,32 @@ public sealed class YouTubeOAuthServiceTests
     }
 
     [Test]
+    public void YouTubeScopes_HasUsableTokenAndAuthorization_RespectFiveMinuteMarginDeterministically()
+    {
+        var utcNow = new DateTimeOffset(2026, 6, 1, 12, 0, 0, TimeSpan.Zero);
+        var belowMargin = new YouTubeAccountSettings
+        {
+            AccessToken = "at",
+            AccessTokenExpiresAt = utcNow.AddMinutes(4).AddSeconds(59),
+            StoredScopes = [YouTubeScopes.ForceSsl],
+        };
+        var aboveMargin = new YouTubeAccountSettings
+        {
+            AccessToken = "at",
+            AccessTokenExpiresAt = utcNow.AddMinutes(5).AddSeconds(1),
+            StoredScopes = [YouTubeScopes.ForceSsl],
+        };
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(YouTubeScopes.HasUsableToken(belowMargin, utcNow), Is.False);
+            Assert.That(YouTubeScopes.HasUsableAuthorization(PlatformAuthRole.Bot, belowMargin, utcNow), Is.False);
+            Assert.That(YouTubeScopes.HasUsableToken(aboveMargin, utcNow), Is.True);
+            Assert.That(YouTubeScopes.HasUsableAuthorization(PlatformAuthRole.Bot, aboveMargin, utcNow), Is.True);
+        }
+    }
+
+    [Test]
     public async Task YouTubeChannelIdentityClient_ResolveChannelByHandleAsync_FindsChannelAndReturnsNullWhenEmpty()
     {
         var client = new YouTubeChannelIdentityClient(_httpFactory, _options, NullLogger<YouTubeChannelIdentityClient>.Instance);
@@ -796,6 +822,11 @@ public sealed class YouTubeOAuthServiceTests
             Assert.That(PoproshaykaBot.Core.YouTube.YouTubeChannelInput.NormalizeHandle("https://youtube.com/@streamer/live"), Is.EqualTo("@streamer"));
             Assert.That(PoproshaykaBot.Core.YouTube.YouTubeChannelInput.NormalizeHandle("streamer"), Is.EqualTo("@streamer"));
             Assert.That(PoproshaykaBot.Core.YouTube.YouTubeChannelInput.NormalizeHandle("https://youtube.com/c/legacy"), Is.Null);
+            Assert.That(PoproshaykaBot.Core.YouTube.YouTubeChannelInput.MatchesChannel("UC1234567890123456789012", "UC1234567890123456789012", "@streamer"), Is.True);
+            Assert.That(PoproshaykaBot.Core.YouTube.YouTubeChannelInput.MatchesChannel("@STREAMER", "UC1234567890123456789012", "@streamer"), Is.True);
+            Assert.That(PoproshaykaBot.Core.YouTube.YouTubeChannelInput.MatchesChannel("https://youtube.com/@Streamer/live", "UC1234567890123456789012", "streamer"), Is.True);
+            Assert.That(PoproshaykaBot.Core.YouTube.YouTubeChannelInput.MatchesChannel("@other", "UC1234567890123456789012", "@streamer"), Is.False);
+            Assert.That(PoproshaykaBot.Core.YouTube.YouTubeChannelInput.MatchesChannel(string.Empty, "UC1234567890123456789012", "@streamer"), Is.False);
         }
     }
 

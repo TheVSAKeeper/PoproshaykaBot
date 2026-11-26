@@ -458,6 +458,103 @@ public sealed class Stage1DomainOnboardingTests
         Assert.That(await page.OnLeavingAsync(context), Is.True);
     }
 
+    [TestCase(true)]
+    [TestCase(false)]
+    public async Task YouTubeOnboardingPage_HandleResolutionTimeout_DoesNotThrowAndShowsNetworkHint(bool useAdapterFallback)
+    {
+        using var editor = CreateYouTubeEditor();
+        CancellationToken observedToken = default;
+        IYouTubeChannelIdentityClient? identityClient = useAdapterFallback
+            ? null
+            : new StubIdentityClient((_, _, ct) =>
+            {
+                observedToken = ct;
+                return Task.FromException<YouTubeChannelIdentity?>(new TaskCanceledException("timeout"));
+            });
+        IPlatformChannelAdapter[]? adapters = useAdapterFallback
+            ? [new TimeoutYouTubeAdapter(ct => observedToken = ct)]
+            : null;
+
+        using var page = new YouTubeOnboardingPageViewModel(editor, identityClient, adapters);
+        var context = new OnboardingContext(
+            new AppSettings { Twitch = new TwitchSettings { Enabled = false } },
+            new(),
+            new(),
+            new YouTubeSettings { Enabled = true, ClientId = "yt-client" },
+            youTubeBotAccount: new YouTubeAccountSettings
+            {
+                ChannelId = "UC_BOT_0000000000000001",
+                AccessToken = "live-bot-token",
+                RefreshToken = "bot-refresh",
+                AccessTokenExpiresAt = DateTimeOffset.UtcNow.AddHours(1),
+                Scopes = [.. YouTubeScopes.BotRequired],
+                StoredScopes = [.. YouTubeScopes.BotRequired],
+            });
+
+        page.OnEnter(context);
+        editor.Channel = "@fixture";
+
+        var left = await page.OnLeavingAsync(context);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(left, Is.False);
+            Assert.That(observedToken.CanBeCanceled, Is.True);
+            Assert.That(page.HasValidationHint, Is.True);
+            Assert.That(page.ValidationHint, Does.Contain("сеть"));
+            Assert.That(page.ValidationHint, Does.Contain("UC-ID"));
+            Assert.That(context.YouTubeResolvedChannel, Is.Null);
+        }
+    }
+
+    [Test]
+    public void OnboardingContext_RestoreProvisionalWrites_RollsBackSecretAndBotWhenBroadcasterUpdatedExternally()
+    {
+        var settingsManager = new SettingsManager(NullLogger<SettingsManager>.Instance, Path.Combine(_tempDir, "settings.json"));
+        var accountsStore = new AccountsStore(filePath: Path.Combine(_tempDir, "accounts.json"));
+        var ytSettingsStore = new YouTubeSettingsStore(filePath: Path.Combine(_tempDir, "youtube.json"));
+        var ytAccountsStore = new YouTubeAccountsStore(filePath: Path.Combine(_tempDir, "youtube-accounts.json"));
+
+        var origBot = new YouTubeAccountSettings
+        {
+            ChannelId = "UC_BOT",
+            RefreshToken = "orig-bot-rt",
+            StoredScopes = [YouTubeScopes.ForceSsl],
+        };
+        var origBroadcaster = new YouTubeAccountSettings
+        {
+            ChannelId = "UC_STR",
+            RefreshToken = "orig-str-rt",
+            StoredScopes = [YouTubeScopes.ForceSsl],
+        };
+        ytAccountsStore.SaveAll("orig-secret", origBot, origBroadcaster);
+
+        var context = new OnboardingContext(
+            new AppSettings { Twitch = new TwitchSettings { Enabled = false } },
+            new(),
+            new(),
+            ytSettingsStore.Load(),
+            ytAccountsStore.LoadClientSecret(),
+            ytAccountsStore.LoadBot(),
+            ytAccountsStore.LoadBroadcaster());
+
+        context.YouTubeClientSecret = "wizard-secret";
+        context.YouTubeBotAccount.RefreshToken = "wizard-bot-rt";
+        context.YouTubeBroadcasterAccount.RefreshToken = "wizard-str-rt";
+
+        Assert.That(context.SaveSetup(settingsManager, accountsStore, ytSettingsStore, ytAccountsStore), Is.Null);
+
+        ytAccountsStore.Mutate(PlatformAuthRole.Broadcaster, account => account.RefreshToken = "external-str-rt");
+
+        context.RestoreProvisionalWrites();
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(ytAccountsStore.LoadClientSecret(), Is.EqualTo("orig-secret"));
+            Assert.That(ytAccountsStore.LoadBot().RefreshToken, Is.EqualTo("orig-bot-rt"));
+            Assert.That(ytAccountsStore.LoadBroadcaster().RefreshToken, Is.EqualTo("external-str-rt"));
+        }
+    }
+
     private static YouTubeSettingsSectionViewModel CreateYouTubeEditor() =>
         new(
             new StubYouTubeOAuthService(),
@@ -515,14 +612,51 @@ public sealed class Stage1DomainOnboardingTests
         }
     }
 
-    private sealed class StubIdentityClient(
-        Func<string, string, Task<YouTubeChannelIdentity?>> resolveByHandle) : IYouTubeChannelIdentityClient
+    private sealed class StubIdentityClient : IYouTubeChannelIdentityClient
     {
+        private readonly Func<string, string, CancellationToken, Task<YouTubeChannelIdentity?>> _resolveByHandle;
+
+        public StubIdentityClient(Func<string, string, Task<YouTubeChannelIdentity?>> resolveByHandle)
+        {
+            _resolveByHandle = (handle, token, _) => resolveByHandle(handle, token);
+        }
+
+        public StubIdentityClient(Func<string, string, CancellationToken, Task<YouTubeChannelIdentity?>> resolveByHandle)
+        {
+            _resolveByHandle = resolveByHandle;
+        }
+
         public Task<YouTubeChannelIdentity> GetOwnChannelAsync(string accessToken, CancellationToken ct = default)
             => Task.FromResult(new YouTubeChannelIdentity("UC_OWN", "Own"));
 
         public Task<YouTubeChannelIdentity?> ResolveChannelByHandleAsync(string handle, string accessToken, CancellationToken ct = default)
-            => resolveByHandle(handle, accessToken);
+            => _resolveByHandle(handle, accessToken, ct);
+    }
+
+    private sealed class TimeoutYouTubeAdapter(Action<CancellationToken> onResolve) : IPlatformChannelAdapter
+    {
+        public StreamingPlatform Platform => StreamingPlatform.YouTube;
+
+        public PlatformCapabilities Capabilities => PlatformCapabilities.None;
+
+        public Task<ResolvedChannelIdentity?> ResolveChannelIdentityAsync(
+            string rawInput,
+            string? preferredContextId,
+            CancellationToken cancellationToken)
+        {
+            onResolve(cancellationToken);
+            return Task.FromException<ResolvedChannelIdentity?>(new OperationCanceledException(cancellationToken));
+        }
+
+        public Task<ChannelAccessVerification> VerifyChannelAccessAsync(
+            ChannelKey channel,
+            PlatformAuthRole role,
+            string contextId,
+            CancellationToken cancellationToken) => throw new NotSupportedException();
+
+        public Task<ChannelLiveProbeResult> ProbeChannelLiveAsync(
+            ChannelCatalogEntry channel,
+            CancellationToken cancellationToken) => throw new NotSupportedException();
     }
 
     private sealed class StubEmbeddedTwitchAuth(OAuthFlowResult flow) : IEmbeddedTwitchAuthDialog

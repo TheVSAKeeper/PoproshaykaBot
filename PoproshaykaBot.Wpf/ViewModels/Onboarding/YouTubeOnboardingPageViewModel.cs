@@ -13,6 +13,8 @@ namespace PoproshaykaBot.Wpf.ViewModels.Onboarding;
 
 public sealed partial class YouTubeOnboardingPageViewModel : OnboardingPageViewModelBase, IDisposable
 {
+    private static readonly TimeSpan ChannelResolutionTimeout = TimeSpan.FromSeconds(10);
+
     private readonly IYouTubeChannelIdentityClient? _identityClient;
     private readonly IPlatformChannelAdapter? _youtubeAdapter;
     private OnboardingContext? _context;
@@ -208,20 +210,16 @@ public sealed partial class YouTubeOnboardingPageViewModel : OnboardingPageViewM
         string normalizedHandle,
         out OnboardingContext.ResolvedYouTubeChannelInfo? resolved)
     {
-        if (context.YouTubeChannel is { } existing && !string.IsNullOrWhiteSpace(existing.ChannelId))
+        if (context.YouTubeChannel is { } existing
+            && !string.IsNullOrWhiteSpace(existing.ChannelId)
+            && YouTubeChannelInput.MatchesChannel(rawInput, existing.ChannelId, existing.Handle))
         {
-            var existingNormalized = YouTubeChannelInput.NormalizeHandle(existing.Handle);
-            if (string.Equals(rawInput, existing.ChannelId, StringComparison.Ordinal)
-                || string.Equals(rawInput, existing.Handle, StringComparison.OrdinalIgnoreCase)
-                || (existingNormalized is not null && string.Equals(normalizedHandle, existingNormalized, StringComparison.OrdinalIgnoreCase)))
-            {
-                resolved = new(
-                    rawInput,
-                    existing.ChannelId,
-                    string.IsNullOrWhiteSpace(existing.DisplayName) ? normalizedHandle : existing.DisplayName,
-                    string.IsNullOrWhiteSpace(existing.ChannelUrl) ? $"https://youtube.com/{normalizedHandle}" : existing.ChannelUrl);
-                return true;
-            }
+            resolved = new(
+                rawInput,
+                existing.ChannelId,
+                string.IsNullOrWhiteSpace(existing.DisplayName) ? normalizedHandle : existing.DisplayName,
+                string.IsNullOrWhiteSpace(existing.ChannelUrl) ? $"https://youtube.com/{normalizedHandle}" : existing.ChannelUrl);
+            return true;
         }
 
         resolved = null;
@@ -253,8 +251,9 @@ public sealed partial class YouTubeOnboardingPageViewModel : OnboardingPageViewM
                 hasUsableTokenCandidate = true;
                 try
                 {
+                    using var timeoutCts = new CancellationTokenSource(ChannelResolutionTimeout);
                     var identity = await _identityClient
-                        .ResolveChannelByHandleAsync(normalizedHandle, candidate.AccessToken.Trim(), CancellationToken.None)
+                        .ResolveChannelByHandleAsync(normalizedHandle, candidate.AccessToken.Trim(), timeoutCts.Token)
                         .ConfigureAwait(true);
                     if (identity is not null && !string.IsNullOrWhiteSpace(identity.ChannelId))
                     {
@@ -269,7 +268,7 @@ public sealed partial class YouTubeOnboardingPageViewModel : OnboardingPageViewM
                 {
                     unauthorizedEncountered = true;
                 }
-                catch (Exception exception) when (exception is not OperationCanceledException)
+                catch (Exception exception)
                 {
                     SetResolutionError(FormatResolutionFailure(rawInput, exception));
                     return null;
@@ -281,8 +280,9 @@ public sealed partial class YouTubeOnboardingPageViewModel : OnboardingPageViewM
         {
             try
             {
+                using var timeoutCts = new CancellationTokenSource(ChannelResolutionTimeout);
                 var identity = await _youtubeAdapter
-                    .ResolveChannelIdentityAsync(rawInput, context.YouTubeContextId(PlatformAuthRole.Bot), CancellationToken.None)
+                    .ResolveChannelIdentityAsync(rawInput, context.YouTubeContextId(PlatformAuthRole.Bot), timeoutCts.Token)
                     .ConfigureAwait(true);
                 if (identity is not null && !string.IsNullOrWhiteSpace(identity.Channel.ChannelId))
                 {
@@ -296,7 +296,7 @@ public sealed partial class YouTubeOnboardingPageViewModel : OnboardingPageViewM
                     : $"Не удалось определить ID канала «{rawInput}»: нет действующего токена для поиска. Переавторизуйтесь или укажите прямой UC-ID / ссылку вида youtube.com/channel/UC…");
                 return null;
             }
-            catch (Exception exception) when (exception is not OperationCanceledException)
+            catch (Exception exception)
             {
                 SetResolutionError(FormatResolutionFailure(rawInput, exception));
                 return null;
@@ -317,9 +317,14 @@ public sealed partial class YouTubeOnboardingPageViewModel : OnboardingPageViewM
 
     private static string FormatResolutionFailure(string rawInput, Exception exception)
     {
-        if (exception is HttpRequestException or TaskCanceledException)
+        if (exception is OperationCanceledException)
         {
-            return $"Не удалось проверить канал «{rawInput}» (нет связи с YouTube). Повторите попытку или укажите прямой UC-ID / ссылку вида youtube.com/channel/UC…";
+            return $"Не удалось проверить канал «{rawInput}»: истекло время ожидания ответа YouTube. Проверьте сеть или укажите прямой UC-ID / ссылку вида youtube.com/channel/UC…";
+        }
+
+        if (exception is HttpRequestException)
+        {
+            return $"Не удалось проверить канал «{rawInput}» (нет связи с YouTube). Проверьте сеть, повторите попытку или укажите прямой UC-ID / ссылку вида youtube.com/channel/UC…";
         }
 
         var safe = StreamingErrorMessages.SafeMessage(exception);

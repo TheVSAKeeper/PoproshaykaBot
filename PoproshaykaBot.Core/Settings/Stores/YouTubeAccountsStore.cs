@@ -68,6 +68,49 @@ public sealed class YouTubeAccountsStore : RoleAccountsStoreBase<YouTubeAccounts
         return MutateFile(state => { state.ClientSecret = clientSecret; });
     }
 
+    public (bool Matched, bool Written) TryReplaceClientSecret(string expected, string replacement)
+    {
+        ArgumentNullException.ThrowIfNull(expected);
+        ArgumentNullException.ThrowIfNull(replacement);
+
+        return TryMutateFile(state =>
+        {
+            if (!string.Equals(state.ClientSecret ?? string.Empty, expected, StringComparison.Ordinal))
+            {
+                return false;
+            }
+
+            state.ClientSecret = replacement;
+            return true;
+        });
+    }
+
+    public (bool Matched, bool Written) TryReplaceAccount(
+        PlatformAuthRole role,
+        string? contextId,
+        YouTubeAccountSettings expected,
+        YouTubeAccountSettings replacement)
+    {
+        PlatformAuthRoles.EnsureActive(role);
+        ArgumentNullException.ThrowIfNull(expected);
+        ArgumentNullException.ThrowIfNull(replacement);
+
+        var normalizedContext = AuthContextIds.Normalize(contextId);
+        var expectedAccount = JsonStoreClone.DeepClone(expected);
+        EnsureDefaultScopes(expectedAccount, role);
+        return TryMutateFile(state =>
+        {
+            var current = PeekContextAccount(state, role, normalizedContext);
+            if (!JsonStoreClone.SameValues(current, expectedAccount))
+            {
+                return false;
+            }
+
+            ReplaceContextAccount(state, role, normalizedContext, replacement);
+            return true;
+        });
+    }
+
     public (bool Matched, bool Written) TryReplaceDefaultAccounts(
         (string Secret, YouTubeAccountSettings Bot, YouTubeAccountSettings Broadcaster) expected,
         (string Secret, YouTubeAccountSettings Bot, YouTubeAccountSettings Broadcaster) replacement)

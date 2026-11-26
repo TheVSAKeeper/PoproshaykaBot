@@ -48,6 +48,9 @@ public sealed partial class HttpServerCheckPageViewModel : OnboardingPageViewMod
     private OnboardingContext? _context;
     private bool _suppressPortTextChanged;
     private int? _verifiedPort;
+    private int _checkGeneration;
+
+    internal Func<int, int, Task<bool>>? RestartServerAsyncOverride { get; init; }
 
     public HttpServerCheckPageViewModel(
         SettingsManager settingsManager,
@@ -70,6 +73,7 @@ public sealed partial class HttpServerCheckPageViewModel : OnboardingPageViewMod
         ArgumentNullException.ThrowIfNull(context);
 
         _context = context;
+        _checkGeneration++;
         _verifiedPort = null;
         PortErrorText = string.Empty;
         IsTwitchEnabled = context.Settings.Twitch.Enabled;
@@ -133,6 +137,7 @@ public sealed partial class HttpServerCheckPageViewModel : OnboardingPageViewMod
             return;
         }
 
+        _checkGeneration++;
         _verifiedPort = null;
         CanAdvance = false;
         IsRetryVisible = false;
@@ -163,6 +168,7 @@ public sealed partial class HttpServerCheckPageViewModel : OnboardingPageViewMod
             return;
         }
 
+        var generation = ++_checkGeneration;
         IsChecking = true;
         IsRetryVisible = false;
         CanAdvance = false;
@@ -172,17 +178,17 @@ public sealed partial class HttpServerCheckPageViewModel : OnboardingPageViewMod
         {
             ShowStatus("Проверка…", "Info", string.Empty);
 
-            int port;
+            int checkedPort;
             if (IsTwitchEnabled)
             {
-                if (!RedirectUriPortResolver.TryResolve(_context.Settings.Twitch.RedirectUri, out port))
+                if (!RedirectUriPortResolver.TryResolve(_context.Settings.Twitch.RedirectUri, out checkedPort))
                 {
                     ShowStatus("Некорректный Redirect URI", "Error", "Вернитесь на шаг «Настройка Twitch» и исправьте URI.");
                     IsRetryVisible = true;
                     return;
                 }
             }
-            else if (!TryParsePort(PortText, out port))
+            else if (!TryParsePort(PortText, out checkedPort))
             {
                 PortErrorText = "Укажите целое число от 1 до 65535.";
                 ShowStatus("Некорректный номер порта", "Error", "Исправьте значение выше и нажмите «Проверить порт».");
@@ -190,29 +196,33 @@ public sealed partial class HttpServerCheckPageViewModel : OnboardingPageViewMod
                 return;
             }
 
-            _context.Settings.Twitch.HttpServerPort = port;
-
             var livePort = _settingsManager.Current.Twitch.HttpServerPort;
 
-            if (_kestrelHttpServer.IsRunning && livePort == port)
+            if (_kestrelHttpServer.IsRunning && livePort == checkedPort)
             {
-                _verifiedPort = port;
-                ShowStatus($"HTTP-сервер уже слушает порт {port}", "Success", "Можно переходить дальше.");
+                if (IsStaleCheck(generation, checkedPort))
+                {
+                    return;
+                }
+
+                _context.Settings.Twitch.HttpServerPort = checkedPort;
+                _verifiedPort = checkedPort;
+                ShowStatus($"HTTP-сервер уже слушает порт {checkedPort}", "Success", "Можно переходить дальше.");
                 CanAdvance = true;
                 return;
             }
 
             var restartingMessage = _kestrelHttpServer.IsRunning
-                ? $"Перезапуск HTTP-сервера на порту {port}…"
-                : $"Запуск HTTP-сервера на порту {port}…";
+                ? $"Перезапуск HTTP-сервера на порту {checkedPort}…"
+                : $"Запуск HTTP-сервера на порту {checkedPort}…";
 
             ShowStatus(restartingMessage, "Info", string.Empty);
 
-            if (!_kestrelHttpServer.IsRunning && !TryBindPort(port))
+            if (!_kestrelHttpServer.IsRunning && !TryBindPort(checkedPort))
             {
-                _logger.OnboardingPortUnavailable(port);
+                _logger.OnboardingPortUnavailable(checkedPort);
                 ShowStatus(
-                    $"Порт {port} занят другим приложением",
+                    $"Порт {checkedPort} занят другим приложением",
                     "Error",
                     IsTwitchEnabled
                         ? "Закройте конфликтующее приложение или измените Redirect URI на предыдущем шаге."
@@ -221,12 +231,19 @@ public sealed partial class HttpServerCheckPageViewModel : OnboardingPageViewMod
                 return;
             }
 
-            var started = await TryRestartServerAsync(port, livePort);
+            var started = await (RestartServerAsyncOverride is { } restartOverride
+                ? restartOverride(checkedPort, livePort)
+                : TryRestartServerAsync(checkedPort, livePort));
+
+            if (IsStaleCheck(generation, checkedPort))
+            {
+                return;
+            }
 
             if (!started)
             {
                 ShowStatus(
-                    $"Не удалось запустить HTTP-сервер на порту {port}",
+                    $"Не удалось запустить HTTP-сервер на порту {checkedPort}",
                     "Error",
                     IsTwitchEnabled
                         ? "Закройте конфликтующее приложение или измените Redirect URI на предыдущем шаге."
@@ -235,14 +252,25 @@ public sealed partial class HttpServerCheckPageViewModel : OnboardingPageViewMod
                 return;
             }
 
-            _verifiedPort = port;
-            ShowStatus($"HTTP-сервер слушает порт {port}", "Success", "Можно переходить дальше.");
+            _context.Settings.Twitch.HttpServerPort = checkedPort;
+            _verifiedPort = checkedPort;
+            ShowStatus($"HTTP-сервер слушает порт {checkedPort}", "Success", "Можно переходить дальше.");
             CanAdvance = true;
         }
         finally
         {
             IsChecking = false;
         }
+    }
+
+    private bool IsStaleCheck(int generation, int checkedPort)
+    {
+        if (generation != _checkGeneration)
+        {
+            return true;
+        }
+
+        return !IsTwitchEnabled && (!TryParsePort(PortText, out var currentPort) || currentPort != checkedPort);
     }
 
     private async Task<bool> TryRestartServerAsync(int newPort, int previousLivePort)

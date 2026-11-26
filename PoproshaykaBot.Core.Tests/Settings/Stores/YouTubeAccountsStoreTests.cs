@@ -169,6 +169,38 @@ public sealed class YouTubeAccountsStoreTests
         }
     }
 
+    [Test]
+    public void TryReplaceClientSecretAndAccount_RollBackIndependentlyWhenOtherSlotChangedExternally()
+    {
+        var store = Store();
+        var origBot = new YouTubeAccountSettings { ChannelId = "UC_BOT", RefreshToken = "orig-bot-rt", StoredScopes = [YouTubeScopes.ForceSsl] };
+        var origBroadcaster = new YouTubeAccountSettings { ChannelId = "UC_STR", RefreshToken = "orig-str-rt", StoredScopes = [YouTubeScopes.ForceSsl] };
+        store.SaveAll("orig-secret", origBot, origBroadcaster);
+
+        var wizardBot = new YouTubeAccountSettings { ChannelId = "UC_BOT", RefreshToken = "wizard-bot-rt", StoredScopes = [YouTubeScopes.ForceSsl] };
+        var wizardBroadcaster = new YouTubeAccountSettings { ChannelId = "UC_STR", RefreshToken = "wizard-str-rt", StoredScopes = [YouTubeScopes.ForceSsl] };
+
+        Assert.That(store.TryReplaceClientSecret("orig-secret", "wizard-secret").Written, Is.True);
+        Assert.That(store.TryReplaceAccount(PlatformAuthRole.Bot, AuthContextIds.Default, origBot, wizardBot).Written, Is.True);
+        Assert.That(store.TryReplaceAccount(PlatformAuthRole.Broadcaster, AuthContextIds.Default, origBroadcaster, wizardBroadcaster).Written, Is.True);
+
+        store.Mutate(PlatformAuthRole.Broadcaster, account => account.RefreshToken = "external-str-rt");
+
+        var rollbackSecret = store.TryReplaceClientSecret("wizard-secret", "orig-secret");
+        var rollbackBot = store.TryReplaceAccount(PlatformAuthRole.Bot, AuthContextIds.Default, wizardBot, origBot);
+        var rollbackBroadcaster = store.TryReplaceAccount(PlatformAuthRole.Broadcaster, AuthContextIds.Default, wizardBroadcaster, origBroadcaster);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(rollbackSecret, Is.EqualTo((true, true)));
+            Assert.That(rollbackBot, Is.EqualTo((true, true)));
+            Assert.That(rollbackBroadcaster, Is.EqualTo((false, false)));
+            Assert.That(store.LoadClientSecret(), Is.EqualTo("orig-secret"));
+            Assert.That(store.LoadBot().RefreshToken, Is.EqualTo("orig-bot-rt"));
+            Assert.That(store.LoadBroadcaster().RefreshToken, Is.EqualTo("external-str-rt"));
+        }
+    }
+
     private static string RedactedOriginal()
     {
         var expected = JsonNode.Parse(ParseableButInvalid)!;

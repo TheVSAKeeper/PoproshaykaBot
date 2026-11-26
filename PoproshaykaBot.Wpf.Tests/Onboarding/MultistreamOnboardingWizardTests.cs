@@ -682,6 +682,64 @@ public sealed class MultistreamOnboardingWizardTests
         });
     }
 
+    [Test]
+    public async Task HttpServerCheckPage_EditingPortDuringAsyncCheck_IgnoresStaleCompletion()
+    {
+        await using var provider = BuildProvider();
+        var firstPort = ReserveFreeLoopbackPort();
+        var secondPort = ReserveFreeLoopbackPort();
+        var settingsManager = new SettingsManager(NullLogger<SettingsManager>.Instance, Path.Combine(_tempDir, "settings.json"));
+        var server = provider.GetRequiredService<KestrelHttpServer>();
+
+        var checkStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var allowCheckFinish = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var overrideCalls = 0;
+
+        var page = new HttpServerCheckPageViewModel(settingsManager, server, NullLogger<HttpServerCheckPageViewModel>.Instance)
+        {
+            RestartServerAsyncOverride = (_, _) =>
+            {
+                if (Interlocked.Increment(ref overrideCalls) == 1)
+                {
+                    checkStarted.TrySetResult();
+                    return allowCheckFinish.Task;
+                }
+
+                return Task.FromResult(true);
+            },
+        };
+
+        var context = new OnboardingContext(
+            new AppSettings { Twitch = new TwitchSettings { Enabled = false, HttpServerPort = firstPort } },
+            new(),
+            new(),
+            new YouTubeSettings { Enabled = true });
+
+        page.OnEnter(context);
+        await checkStarted.Task.WaitAsync(TimeSpan.FromSeconds(5));
+
+        page.PortText = secondPort.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        allowCheckFinish.SetResult(true);
+        await WaitUntilCheckCompletesAsync(page);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(page.CanAdvance, Is.False);
+            Assert.That(page.StatusSeverity, Is.Not.EqualTo("Success"));
+            Assert.That(page.StatusText, Is.EqualTo("Порт изменён – требуется проверка"));
+        });
+        Assert.That(await page.OnLeavingAsync(context), Is.False);
+
+        await page.RetryCommand.ExecuteAsync(null);
+        Assert.Multiple(() =>
+        {
+            Assert.That(page.CanAdvance, Is.True);
+            Assert.That(page.StatusSeverity, Is.EqualTo("Success"));
+            Assert.That(context.Settings.Twitch.HttpServerPort, Is.EqualTo(secondPort));
+        });
+        Assert.That(await page.OnLeavingAsync(context), Is.True);
+    }
+
     private static int ReserveFreeLoopbackPort()
     {
         using var listener = new System.Net.Sockets.TcpListener(System.Net.IPAddress.Loopback, 0);

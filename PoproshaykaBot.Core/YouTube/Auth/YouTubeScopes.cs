@@ -82,9 +82,9 @@ public static class YouTubeScopes
             .SetEquals(new HashSet<string>(right, StringComparer.Ordinal));
     }
 
-    public static bool HasUsableAuthorization(PlatformAuthRole role, YouTubeAccountSettings? account)
+    public static bool HasUsableAuthorization(PlatformAuthRole role, YouTubeAccountSettings? account, DateTimeOffset? utcNow = null)
     {
-        if (!HasUsableToken(account))
+        if (!HasUsableToken(account, utcNow))
         {
             return false;
         }
@@ -93,12 +93,13 @@ public static class YouTubeScopes
             && ContainsUsableScopes(role, account.StoredScopes);
     }
 
-    public static bool HasUsableToken(YouTubeAccountSettings? account)
+    public static bool HasUsableToken(YouTubeAccountSettings? account, DateTimeOffset? utcNow = null)
     {
+        var now = utcNow ?? DateTimeOffset.UtcNow;
         return account is not null
             && (!string.IsNullOrWhiteSpace(account.RefreshToken)
                 || (!string.IsNullOrWhiteSpace(account.AccessToken)
                     && account.AccessTokenExpiresAt is { } expiresAt
-                    && expiresAt - DateTimeOffset.UtcNow > AccessTokenRefreshMargin));
+                    && expiresAt - now > AccessTokenRefreshMargin));
     }
 }
