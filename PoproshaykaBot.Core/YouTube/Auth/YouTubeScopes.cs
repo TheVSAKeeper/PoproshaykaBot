@@ -4,6 +4,8 @@ namespace PoproshaykaBot.Core.YouTube.Auth;
 
 public static class YouTubeScopes
 {
+    internal static readonly TimeSpan AccessTokenRefreshMargin = TimeSpan.FromMinutes(5);
+
     public const string ForceSsl = "https://www.googleapis.com/auth/youtube.force-ssl";
     public const string ReadOnly = "https://www.googleapis.com/auth/youtube.readonly";
 
@@ -78,5 +80,25 @@ public static class YouTubeScopes
     {
         return new HashSet<string>(left, StringComparer.Ordinal)
             .SetEquals(new HashSet<string>(right, StringComparer.Ordinal));
+    }
+
+    public static bool HasUsableAuthorization(PlatformAuthRole role, YouTubeAccountSettings? account)
+    {
+        if (!HasUsableToken(account))
+        {
+            return false;
+        }
+
+        return account!.StoredScopes is not null
+            && ContainsUsableScopes(role, account.StoredScopes);
+    }
+
+    public static bool HasUsableToken(YouTubeAccountSettings? account)
+    {
+        return account is not null
+            && (!string.IsNullOrWhiteSpace(account.RefreshToken)
+                || (!string.IsNullOrWhiteSpace(account.AccessToken)
+                    && account.AccessTokenExpiresAt is { } expiresAt
+                    && expiresAt - DateTimeOffset.UtcNow > AccessTokenRefreshMargin));
     }
 }

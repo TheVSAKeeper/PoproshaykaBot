@@ -16,15 +16,34 @@ public sealed class YouTubeChannelIdentityClient(
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(accessToken);
 
+        return await FetchFirstChannelAsync("part=snippet&mine=true", accessToken, ct).ConfigureAwait(false)
+            ?? throw new YouTubeOAuthException("У выбранного Google-аккаунта не найден канал YouTube.");
+    }
+
+    public Task<YouTubeChannelIdentity?> ResolveChannelByHandleAsync(
+        string handle,
+        string accessToken,
+        CancellationToken ct = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(handle);
+        ArgumentException.ThrowIfNullOrWhiteSpace(accessToken);
+
+        var trimmed = handle.Trim();
+        var normalized = trimmed.StartsWith('@') ? trimmed : "@" + trimmed;
+        return FetchFirstChannelAsync($"part=snippet&forHandle={Uri.EscapeDataString(normalized)}", accessToken, ct);
+    }
+
+    private async Task<YouTubeChannelIdentity?> FetchFirstChannelAsync(string query, string accessToken, CancellationToken ct)
+    {
         using var client = httpClientFactory.CreateClient(YouTubeOAuthOptions.HttpClientName);
         var separator = options.ChannelsEndpoint.Contains('?', StringComparison.Ordinal) ? '&' : '?';
-        var requestUri = $"{options.ChannelsEndpoint}{separator}part=snippet&mine=true";
+        var requestUri = $"{options.ChannelsEndpoint}{separator}{query}";
 
         using var request = new HttpRequestMessage(HttpMethod.Get, requestUri);
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
 
-        using var response = await client.SendAsync(request, ct);
-        var content = await response.Content.ReadAsStringAsync(ct);
+        using var response = await client.SendAsync(request, ct).ConfigureAwait(false);
+        var content = await response.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
 
         if (!response.IsSuccessStatusCode)
         {
@@ -40,13 +59,12 @@ public sealed class YouTubeChannelIdentityClient(
 
         var dto = JsonSerializer.Deserialize<YouTubeChannelsResponseDto>(content);
         var channel = dto?.Items?.FirstOrDefault();
-
         if (channel is null || string.IsNullOrWhiteSpace(channel.Id))
         {
-            throw new YouTubeOAuthException("У выбранного Google-аккаунта не найден канал YouTube.");
+            return null;
         }
 
-        return new(channel.Id, channel.Snippet?.Title ?? channel.Id);
+        return new(channel.Id.Trim(), channel.Snippet?.Title ?? channel.Id.Trim());
     }
 
     private static YouTubeOAuthException CreateApiException(HttpStatusCode statusCode, string? reason)

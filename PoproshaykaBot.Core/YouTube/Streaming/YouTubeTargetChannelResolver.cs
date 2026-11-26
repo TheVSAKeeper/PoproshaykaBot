@@ -2,11 +2,10 @@
 using PoproshaykaBot.Core.Platforms.Auth;
 using PoproshaykaBot.Core.Settings.Stores;
 using PoproshaykaBot.Core.YouTube.Quota;
-using System.Text.RegularExpressions;
 
 namespace PoproshaykaBot.Core.YouTube.Streaming;
 
-internal sealed partial class YouTubeTargetChannelResolver(
+internal sealed class YouTubeTargetChannelResolver(
     IYouTubeLiveBroadcastClient client,
     YouTubeAccountsStore accountsStore,
     ILogger<YouTubeTargetChannelResolver> logger)
@@ -102,50 +101,9 @@ internal sealed partial class YouTubeTargetChannelResolver(
         return resolvedChannelId;
     }
 
-    internal static bool TryExtractDirectChannelId(string rawInput, out string channelId)
-    {
-        var trimmed = rawInput.Trim();
+    internal static bool TryExtractDirectChannelId(string rawInput, out string channelId) =>
+        YouTubeChannelInput.TryExtractDirectChannelId(rawInput, out channelId);
 
-        if (ChannelUrlRegex().Match(trimmed) is { Success: true } urlMatch)
-        {
-            channelId = urlMatch.Groups["id"].Value;
-            return true;
-        }
-
-        if (BareChannelIdRegex().IsMatch(trimmed))
-        {
-            channelId = trimmed;
-            return true;
-        }
-
-        channelId = string.Empty;
-        return false;
-    }
-
-    internal static string? NormalizeHandle(string rawInput)
-    {
-        var trimmed = rawInput.Trim();
-
-        if (HandleUrlRegex().Match(trimmed) is { Success: true } urlMatch)
-        {
-            return "@" + urlMatch.Groups["handle"].Value.TrimStart('@');
-        }
-
-        if (trimmed.Contains('/', StringComparison.Ordinal))
-        {
-            return null;
-        }
-
-        var stripped = trimmed.TrimStart('@');
-        return string.IsNullOrWhiteSpace(stripped) ? null : "@" + stripped;
-    }
-
-    [GeneratedRegex(@"^https?://(?:www\.|m\.)?youtube\.com/channel/(?<id>UC[A-Za-z0-9_-]{10,})(?:[/?#].*)?$", RegexOptions.IgnoreCase, matchTimeoutMilliseconds: 500)]
-    private static partial Regex ChannelUrlRegex();
-
-    [GeneratedRegex(@"^UC[A-Za-z0-9_-]{20,}$", RegexOptions.None, matchTimeoutMilliseconds: 500)]
-    private static partial Regex BareChannelIdRegex();
-
-    [GeneratedRegex(@"^https?://(?:www\.|m\.)?youtube\.com/@(?<handle>[^/?#\s]+)(?:[/?#].*)?$", RegexOptions.IgnoreCase, matchTimeoutMilliseconds: 500)]
-    private static partial Regex HandleUrlRegex();
+    internal static string? NormalizeHandle(string rawInput) =>
+        YouTubeChannelInput.NormalizeHandle(rawInput);
 }

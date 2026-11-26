@@ -133,6 +133,75 @@ public sealed class OnboardingChecklistTests
         }
     }
 
+    [Test]
+    public void FreshTwitchSettings_DefaultsToEmptyChannelAndRequiresChannel()
+    {
+        var fresh = new TwitchSettings();
+        var settingsManager = CreateSettingsManager();
+        settingsManager.SaveSettings(new AppSettings
+        {
+            Twitch = new TwitchSettings
+            {
+                Enabled = true,
+                ClientId = "tw-id",
+                ClientSecret = "tw-secret",
+            },
+        });
+        var accountsStore = new AccountsStore(filePath: Path.Combine(_directory.FullName, "accounts-fresh.json"));
+        SeedTwitchBot(accountsStore, null);
+
+        var checklist = new OnboardingChecklist(settingsManager, accountsStore);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(fresh.Channel, Is.Empty);
+            Assert.That(checklist.IsComplete, Is.False);
+            Assert.That(checklist.FirstMissingStep, Is.EqualTo(OnboardingStep.Credentials));
+            Assert.That(checklist.GetMissingItems(), Is.EqualTo(new[] { "канал" }));
+        }
+    }
+
+    [TestCase(true, false)]
+    [TestCase(false, true)]
+    public void YouTubeOnly_UnusableBotAuthorization_RequiresYouTubeStep(bool readOnlyScope, bool expiredWithoutRefresh)
+    {
+        var settingsManager = CreateSettingsManager();
+        settingsManager.SaveSettings(new AppSettings { Twitch = new TwitchSettings { Enabled = false } });
+        var accountsStore = new AccountsStore(filePath: Path.Combine(_directory.FullName, "accounts-yt-unusable.json"));
+        var youtubeSettings = new YouTubeSettingsStore(filePath: Path.Combine(_directory.FullName, "youtube-unusable.json"));
+        youtubeSettings.Save(new YouTubeSettings
+        {
+            Enabled = true,
+            ClientId = "yt-id",
+            Channel = "UC1234567890123456789012",
+        });
+        var youtubeAccounts = new YouTubeAccountsStore(filePath: Path.Combine(_directory.FullName, "youtube-accounts-unusable.json"));
+        youtubeAccounts.Mutate(PlatformAuthRole.Bot, account =>
+        {
+            account.ChannelId = "UC_BOT";
+            account.AccessToken = "yt-access";
+            account.RefreshToken = expiredWithoutRefresh ? string.Empty : "yt-refresh";
+            account.AccessTokenExpiresAt = expiredWithoutRefresh
+                ? DateTimeOffset.UtcNow.AddMinutes(-10)
+                : DateTimeOffset.UtcNow.AddHours(1);
+            account.Scopes = readOnlyScope ? [YouTubeScopes.ReadOnly] : [.. YouTubeScopes.BotRequired];
+            account.StoredScopes = readOnlyScope ? [YouTubeScopes.ReadOnly] : [.. YouTubeScopes.BotRequired];
+        });
+
+        var checklist = new OnboardingChecklist(
+            settingsManager,
+            accountsStore,
+            youtubeSettings: youtubeSettings,
+            youtubeAccounts: youtubeAccounts);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(checklist.IsComplete, Is.False);
+            Assert.That(checklist.FirstMissingStep, Is.EqualTo(OnboardingStep.YouTube));
+            Assert.That(checklist.GetMissingItems(), Is.EqualTo(new[] { "авторизация бота YouTube" }));
+        }
+    }
+
     private SettingsManager CreateSettingsManager() =>
         new(NullLogger<SettingsManager>.Instance, Path.Combine(_directory.FullName, "settings.json"));
 

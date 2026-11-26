@@ -9,7 +9,7 @@ public sealed class TwitchSettings
 {
     public bool Enabled { get; set; } = true;
 
-    public string Channel { get; set; } = "bobito217";
+    public string Channel { get; set; } = string.Empty;
 
     public int MessagesAllowedInPeriod { get; set; } = 750;
 

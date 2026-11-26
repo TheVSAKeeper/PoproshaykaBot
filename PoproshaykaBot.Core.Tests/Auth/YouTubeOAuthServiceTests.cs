@@ -715,6 +715,90 @@ public sealed class YouTubeOAuthServiceTests
         }
     }
 
+    [Test]
+    public void YouTubeScopes_HasUsableAuthorization_ChecksTokenLifetimeAndRoleScopes()
+    {
+        var future = DateTimeOffset.UtcNow.AddMinutes(30);
+        var expiringSoon = DateTimeOffset.UtcNow.AddMinutes(3);
+
+        var botValidRefresh = new YouTubeAccountSettings
+        {
+            RefreshToken = "rt",
+            StoredScopes = [YouTubeScopes.ForceSsl],
+        };
+        var botValidAccessOnly = new YouTubeAccountSettings
+        {
+            AccessToken = "at",
+            AccessTokenExpiresAt = future,
+            StoredScopes = [YouTubeScopes.ForceSsl],
+        };
+        var botExpiringAccessOnly = new YouTubeAccountSettings
+        {
+            AccessToken = "at",
+            AccessTokenExpiresAt = expiringSoon,
+            StoredScopes = [YouTubeScopes.ForceSsl],
+        };
+        var botReadOnly = new YouTubeAccountSettings
+        {
+            RefreshToken = "rt",
+            StoredScopes = [YouTubeScopes.ReadOnly],
+        };
+        var broadcasterReadOnly = new YouTubeAccountSettings
+        {
+            RefreshToken = "rt",
+            StoredScopes = [YouTubeScopes.ReadOnly],
+        };
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(YouTubeScopes.HasUsableAuthorization(PlatformAuthRole.Bot, null), Is.False);
+            Assert.That(YouTubeScopes.HasUsableAuthorization(PlatformAuthRole.Bot, botValidRefresh), Is.True);
+            Assert.That(YouTubeScopes.HasUsableAuthorization(PlatformAuthRole.Bot, botValidAccessOnly), Is.True);
+            Assert.That(YouTubeScopes.HasUsableAuthorization(PlatformAuthRole.Bot, botExpiringAccessOnly), Is.False);
+            Assert.That(YouTubeScopes.HasUsableAuthorization(PlatformAuthRole.Bot, botReadOnly), Is.False);
+            Assert.That(YouTubeScopes.HasUsableAuthorization(PlatformAuthRole.Broadcaster, broadcasterReadOnly), Is.True);
+        }
+    }
+
+    [Test]
+    public async Task YouTubeChannelIdentityClient_ResolveChannelByHandleAsync_FindsChannelAndReturnsNullWhenEmpty()
+    {
+        var client = new YouTubeChannelIdentityClient(_httpFactory, _options, NullLogger<YouTubeChannelIdentityClient>.Instance);
+        _handler.Responder = (request, _) => request.RequestUri!.Query.Contains("forHandle=%40found", StringComparison.Ordinal)
+            ? MakeJson(HttpStatusCode.OK, """{"items":[{"id":"UC1234567890123456789012","snippet":{"title":"Found Channel"}}]}""")
+            : MakeJson(HttpStatusCode.OK, """{"items":[]}""");
+
+        var found = await client.ResolveChannelByHandleAsync("found", "access-token");
+        var missing = await client.ResolveChannelByHandleAsync("@missing", "access-token");
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(found, Is.EqualTo(new YouTubeChannelIdentity("UC1234567890123456789012", "Found Channel")));
+            Assert.That(missing, Is.Null);
+        }
+    }
+
+    [Test]
+    public void YouTubeChannelInput_ExtractsDirectIdAndNormalizesHandle()
+    {
+        var extractedFromUrl = PoproshaykaBot.Core.YouTube.YouTubeChannelInput.TryExtractDirectChannelId(
+            "https://www.youtube.com/channel/UC1234567890123456789012?sub_confirmation=1",
+            out var urlChannelId);
+        var extractedFromHandle = PoproshaykaBot.Core.YouTube.YouTubeChannelInput.TryExtractDirectChannelId(
+            "@streamer",
+            out _);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(extractedFromUrl, Is.True);
+            Assert.That(urlChannelId, Is.EqualTo("UC1234567890123456789012"));
+            Assert.That(extractedFromHandle, Is.False);
+            Assert.That(PoproshaykaBot.Core.YouTube.YouTubeChannelInput.NormalizeHandle("https://youtube.com/@streamer/live"), Is.EqualTo("@streamer"));
+            Assert.That(PoproshaykaBot.Core.YouTube.YouTubeChannelInput.NormalizeHandle("streamer"), Is.EqualTo("@streamer"));
+            Assert.That(PoproshaykaBot.Core.YouTube.YouTubeChannelInput.NormalizeHandle("https://youtube.com/c/legacy"), Is.Null);
+        }
+    }
+
     private static HttpResponseMessage MakeJson(HttpStatusCode status, string body)
     {
         return new(status)

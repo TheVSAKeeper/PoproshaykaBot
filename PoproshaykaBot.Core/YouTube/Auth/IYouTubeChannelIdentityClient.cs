@@ -7,4 +7,9 @@ public sealed record YouTubeChannelIdentity(
 public interface IYouTubeChannelIdentityClient
 {
     Task<YouTubeChannelIdentity> GetOwnChannelAsync(string accessToken, CancellationToken ct = default);
+
+    Task<YouTubeChannelIdentity?> ResolveChannelByHandleAsync(
+        string handle,
+        string accessToken,
+        CancellationToken ct = default) => Task.FromResult<YouTubeChannelIdentity?>(null);
 }

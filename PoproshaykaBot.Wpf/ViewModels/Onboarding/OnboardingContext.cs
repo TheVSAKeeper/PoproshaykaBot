@@ -8,11 +8,10 @@ using PoproshaykaBot.Core.Settings.Stores;
 using PoproshaykaBot.Core.YouTube;
 using PoproshaykaBot.Core.YouTube.Auth;
 using System.Runtime.ExceptionServices;
-using System.Text.RegularExpressions;
 
 namespace PoproshaykaBot.Wpf.ViewModels.Onboarding;
 
-public sealed partial class OnboardingContext(
+public sealed class OnboardingContext(
     AppSettings settings,
     TwitchAccountSettings botAccount,
     TwitchAccountSettings broadcasterAccount,
@@ -86,6 +85,9 @@ public sealed partial class OnboardingContext(
 
     internal string TwitchContextId(PlatformAuthRole role) => AuthContextIds.Normalize(
         role == PlatformAuthRole.Bot ? TwitchChannel?.BotContextId : TwitchChannel?.BroadcasterContextId);
+
+    internal string YouTubeContextId(PlatformAuthRole role) => AuthContextIds.Normalize(
+        role == PlatformAuthRole.Bot ? YouTubeChannel?.BotContextId : YouTubeChannel?.BroadcasterContextId);
 
     internal bool HasConfiguredTwitchChannel =>
         TwitchChannel is not null || !string.IsNullOrWhiteSpace(Settings.Twitch.Channel);
@@ -385,9 +387,11 @@ public sealed partial class OnboardingContext(
              || !JsonStoreClone.SameValues(accounts.Bot, _savedYouTubeAccounts.Bot)
              || !JsonStoreClone.SameValues(accounts.Broadcaster, _savedYouTubeAccounts.Broadcaster)))
         {
+            var botContextId = YouTubeContextId(PlatformAuthRole.Bot);
+            var broadcasterContextId = YouTubeContextId(PlatformAuthRole.Broadcaster);
             var original = _savedYouTubeAccounts;
             var replacement = (accounts.Secret, JsonStoreClone.DeepClone(accounts.Bot), JsonStoreClone.DeepClone(accounts.Broadcaster));
-            var written = accountsStore.TryReplaceDefaultAccounts(original, replacement);
+            var written = accountsStore.TryReplaceAccounts(botContextId, broadcasterContextId, original, replacement);
             if (!written.Written)
             {
                 return written.Matched ? YouTubeAccountsNotWritten : YouTubeAccountsChanged;
@@ -395,7 +399,7 @@ public sealed partial class OnboardingContext(
 
             undo.Add(new(new(accountsStore), () =>
             {
-                var result = accountsStore.TryReplaceDefaultAccounts(replacement, original);
+                var result = accountsStore.TryReplaceAccounts(botContextId, broadcasterContextId, replacement, original);
                 return !result.Matched || result.Written;
             }));
         }
@@ -483,6 +487,8 @@ public sealed partial class OnboardingContext(
                 {
                     Platform = StreamingPlatform.YouTube,
                     ChannelId = identity.ChannelId,
+                    BotContextId = YouTubeContextId(PlatformAuthRole.Bot),
+                    BroadcasterContextId = YouTubeContextId(PlatformAuthRole.Broadcaster),
                 };
                 settings.Channels.Add(entry);
             }
@@ -622,7 +628,9 @@ public sealed partial class OnboardingContext(
             && !string.IsNullOrWhiteSpace(existing.ChannelId)
             && (string.IsNullOrWhiteSpace(rawInput)
                 || string.Equals(rawInput, existing.Handle, StringComparison.OrdinalIgnoreCase)
-                || string.Equals(rawInput, existing.ChannelId, StringComparison.Ordinal)))
+                || string.Equals(rawInput, existing.ChannelId, StringComparison.Ordinal)
+                || (YouTubeChannelInput.NormalizeHandle(rawInput) is { } normInput
+                    && string.Equals(normInput, YouTubeChannelInput.NormalizeHandle(existing.Handle), StringComparison.OrdinalIgnoreCase))))
         {
             channelId = existing.ChannelId;
             handle = string.IsNullOrWhiteSpace(rawInput) ? existing.Handle : rawInput;
@@ -653,36 +661,8 @@ public sealed partial class OnboardingContext(
         return (channelId, displayName, handle, channelUrl);
     }
 
-    internal static bool TryExtractYouTubeChannelId(string? rawInput, out string channelId)
-    {
-        if (string.IsNullOrWhiteSpace(rawInput))
-        {
-            channelId = string.Empty;
-            return false;
-        }
-
-        var trimmed = rawInput.Trim();
-        if (YouTubeChannelUrlRegex().Match(trimmed) is { Success: true } urlMatch)
-        {
-            channelId = urlMatch.Groups["id"].Value;
-            return true;
-        }
-
-        if (YouTubeBareChannelIdRegex().IsMatch(trimmed))
-        {
-            channelId = trimmed;
-            return true;
-        }
-
-        channelId = string.Empty;
-        return false;
-    }
-
-    [GeneratedRegex(@"^https?://(?:www\.|m\.)?youtube\.com/channel/(?<id>UC[A-Za-z0-9_-]{10,})(?:[/?#].*)?$", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant, matchTimeoutMilliseconds: 500)]
-    private static partial Regex YouTubeChannelUrlRegex();
-
-    [GeneratedRegex(@"^UC[A-Za-z0-9_-]{20,}$", RegexOptions.CultureInvariant, matchTimeoutMilliseconds: 500)]
-    private static partial Regex YouTubeBareChannelIdRegex();
+    internal static bool TryExtractYouTubeChannelId(string? rawInput, out string channelId) =>
+        YouTubeChannelInput.TryExtractDirectChannelId(rawInput, out channelId);
 
     private static bool SameAccount(TwitchAccountSettings? left, TwitchAccountSettings? right) =>
         left is null || right is null ? left is null && right is null

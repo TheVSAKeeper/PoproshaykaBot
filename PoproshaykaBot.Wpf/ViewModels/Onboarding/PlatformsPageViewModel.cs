@@ -1,6 +1,7 @@
 ﻿using CommunityToolkit.Mvvm.ComponentModel;
 using PoproshaykaBot.Core.Platforms.Auth;
 using PoproshaykaBot.Core.Twitch.Chat;
+using PoproshaykaBot.Core.YouTube.Auth;
 using PoproshaykaBot.Wpf.Bootstrap;
 
 namespace PoproshaykaBot.Wpf.ViewModels.Onboarding;
@@ -123,9 +124,7 @@ public sealed partial class PlatformsPageViewModel : OnboardingPageViewModelBase
 
         var hasYouTubeCredentials = !string.IsNullOrWhiteSpace(context.YouTubeSettings.ClientId);
         var hasYouTubeChannel = context.YouTubeChannel is not null || !string.IsNullOrWhiteSpace(context.YouTubeSettings.Channel);
-        var hasYouTubeBot = PlatformAuthRoles.HasCredentials(
-            context.YouTubeBotAccount.AccessToken,
-            context.YouTubeBotAccount.RefreshToken);
+        var hasYouTubeBot = YouTubeScopes.HasUsableAuthorization(PlatformAuthRole.Bot, context.YouTubeBotAccount);
 
         (YouTubeStatusText, YouTubeStatusSeverity) = (hasYouTubeCredentials, hasYouTubeChannel, hasYouTubeBot) switch
         {

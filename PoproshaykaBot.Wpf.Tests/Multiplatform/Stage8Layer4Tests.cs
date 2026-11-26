@@ -41,7 +41,7 @@ public sealed class Stage8Layer4Tests
             new ManualUiDispatcher(),
             TimeProvider.System,
             NullLoggerFactory.Instance);
-        using var page = new YouTubeOnboardingPageViewModel(editor);
+        using var page = new YouTubeOnboardingPageViewModel(editor, new StubYouTubeIdentityClient());
 
         var disabledContext = new OnboardingContext(new AppSettings(), new(), new());
         Assert.Multiple(() =>
@@ -73,6 +73,7 @@ public sealed class Stage8Layer4Tests
             AccessToken = "yt-bot-token",
             RefreshToken = "yt-bot-refresh",
             Scopes = [.. YouTubeScopes.BotRequired],
+            StoredScopes = [.. YouTubeScopes.BotRequired],
         });
         Assert.That(page.CanAdvance, Is.True);
 
@@ -370,5 +371,14 @@ public sealed class Stage8Layer4Tests
     {
         private readonly AppSettings _settings = new();
         public override AppSettings Current => _settings;
+    }
+
+    private sealed class StubYouTubeIdentityClient : IYouTubeChannelIdentityClient
+    {
+        public Task<YouTubeChannelIdentity> GetOwnChannelAsync(string accessToken, CancellationToken ct = default)
+            => Task.FromResult(new YouTubeChannelIdentity("UC_YTCHAN_00000000000001", "YT Chan"));
+
+        public Task<YouTubeChannelIdentity?> ResolveChannelByHandleAsync(string handle, string accessToken, CancellationToken ct = default)
+            => Task.FromResult<YouTubeChannelIdentity?>(new YouTubeChannelIdentity("UC_YTCHAN_00000000000001", "YT Chan"));
     }
 }

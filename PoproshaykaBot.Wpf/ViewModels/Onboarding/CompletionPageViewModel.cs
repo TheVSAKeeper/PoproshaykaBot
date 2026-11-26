@@ -183,8 +183,10 @@ public sealed partial class CompletionPageViewModel : OnboardingPageViewModelBas
             context.TwitchContextId(PlatformAuthRole.Bot)), CancellationToken.None);
         await _eventBus.PublishAsync(new PlatformAuthorizationRefreshed(StreamingPlatform.Twitch, PlatformAuthRole.Broadcaster,
             context.TwitchContextId(PlatformAuthRole.Broadcaster)), CancellationToken.None);
-        await _eventBus.PublishAsync(new PlatformAuthorizationRefreshed(StreamingPlatform.YouTube, PlatformAuthRole.Bot), CancellationToken.None);
-        await _eventBus.PublishAsync(new PlatformAuthorizationRefreshed(StreamingPlatform.YouTube, PlatformAuthRole.Broadcaster), CancellationToken.None);
+        await _eventBus.PublishAsync(new PlatformAuthorizationRefreshed(StreamingPlatform.YouTube, PlatformAuthRole.Bot,
+            context.YouTubeContextId(PlatformAuthRole.Bot)), CancellationToken.None);
+        await _eventBus.PublishAsync(new PlatformAuthorizationRefreshed(StreamingPlatform.YouTube, PlatformAuthRole.Broadcaster,
+            context.YouTubeContextId(PlatformAuthRole.Broadcaster)), CancellationToken.None);
 
         if (portChanged)
         {
@@ -297,7 +299,8 @@ public sealed partial class CompletionPageViewModel : OnboardingPageViewModelBas
             hasCritical |= ytBotScopes.Status == ValidationStatus.Failure;
 
             var ytBroadcasterScopes = ValidateRole("Доступы YouTube стримера", youtubeBroadcaster.AccessToken, youtubeBroadcaster.RefreshToken,
-                youtubeBroadcaster.StoredScopes, youtubeBroadcaster.Scopes, YouTubeScopes.BroadcasterRequired, optional: true);
+                youtubeBroadcaster.StoredScopes, youtubeBroadcaster.Scopes, YouTubeScopes.BroadcasterRequired, optional: true,
+                allowReadOnlyYouTube: true);
             lines.Add(ytBroadcasterScopes);
             hasCritical |= ytBroadcasterScopes.Status == ValidationStatus.Failure;
         }
@@ -437,7 +440,8 @@ public sealed partial class CompletionPageViewModel : OnboardingPageViewModelBas
     }
 
     private static ValidationLine ValidateRole(string title, string? accessToken, string? refreshToken,
-        IReadOnlyCollection<string> granted, IReadOnlyCollection<string> requested, IReadOnlyList<string> required, bool optional)
+        IReadOnlyCollection<string> granted, IReadOnlyCollection<string> requested, IReadOnlyList<string> required, bool optional,
+        bool allowReadOnlyYouTube = false)
     {
         if (!PlatformAuthRoles.HasCredentials(accessToken, refreshToken))
         {
@@ -446,7 +450,17 @@ public sealed partial class CompletionPageViewModel : OnboardingPageViewModelBas
                 : new(title, ValidationStatus.Failure, "требуется авторизация бота");
         }
 
-        return ValidateScopes(title, granted.Count > 0 ? granted : requested, required);
+        var actual = granted.Count > 0 ? granted : requested;
+        var result = ValidateScopes(title, actual, required);
+        if (result.Status == ValidationStatus.Failure
+            && allowReadOnlyYouTube
+            && YouTubeScopes.ContainsUsableScopes(PlatformAuthRole.Broadcaster, actual))
+        {
+            return new(title, ValidationStatus.Warning,
+                "доступно чтение данных эфира (youtube.readonly); для обновления названия и описания нужна полная авторизация (youtube.force-ssl)");
+        }
+
+        return result;
     }
 
     private static ValidationLine ValidateScopes(string title, IReadOnlyCollection<string> actual, IReadOnlyList<string> required)

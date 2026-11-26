@@ -72,24 +72,107 @@ public sealed class YouTubeAccountsStore : RoleAccountsStoreBase<YouTubeAccounts
         (string Secret, YouTubeAccountSettings Bot, YouTubeAccountSettings Broadcaster) expected,
         (string Secret, YouTubeAccountSettings Bot, YouTubeAccountSettings Broadcaster) replacement)
     {
+        return TryReplaceAccounts(
+            AuthContextIds.Default,
+            AuthContextIds.Default,
+            expected,
+            replacement);
+    }
+
+    public (bool Matched, bool Written) TryReplaceAccounts(
+        string? botContextId,
+        string? broadcasterContextId,
+        (string Secret, YouTubeAccountSettings Bot, YouTubeAccountSettings Broadcaster) expected,
+        (string Secret, YouTubeAccountSettings Bot, YouTubeAccountSettings Broadcaster) replacement)
+    {
+        var normalizedBotContext = AuthContextIds.Normalize(botContextId);
+        var normalizedBroadcasterContext = AuthContextIds.Normalize(broadcasterContextId);
         var expectedBot = JsonStoreClone.DeepClone(expected.Bot);
         var expectedBroadcaster = JsonStoreClone.DeepClone(expected.Broadcaster);
         EnsureDefaultScopes(expectedBot, PlatformAuthRole.Bot);
         EnsureDefaultScopes(expectedBroadcaster, PlatformAuthRole.Broadcaster);
         return TryMutateFile(state =>
         {
+            var currentBot = PeekContextAccount(state, PlatformAuthRole.Bot, normalizedBotContext);
+            var currentBroadcaster = PeekContextAccount(state, PlatformAuthRole.Broadcaster, normalizedBroadcasterContext);
             if (!string.Equals(state.ClientSecret ?? string.Empty, expected.Secret, StringComparison.Ordinal)
-                || !JsonStoreClone.SameValues(TakeAccount(state, PlatformAuthRole.Bot), expectedBot)
-                || !JsonStoreClone.SameValues(TakeAccount(state, PlatformAuthRole.Broadcaster), expectedBroadcaster))
+                || !JsonStoreClone.SameValues(currentBot, expectedBot)
+                || !JsonStoreClone.SameValues(currentBroadcaster, expectedBroadcaster))
             {
                 return false;
             }
 
             state.ClientSecret = replacement.Secret;
-            state.BotAccount = JsonStoreClone.DeepClone(replacement.Bot);
-            state.BroadcasterAccount = JsonStoreClone.DeepClone(replacement.Broadcaster);
+            ReplaceContextAccount(state, PlatformAuthRole.Bot, normalizedBotContext, replacement.Bot);
+            ReplaceContextAccount(state, PlatformAuthRole.Broadcaster, normalizedBroadcasterContext, replacement.Broadcaster);
             return true;
         });
+    }
+
+    private YouTubeAccountSettings PeekContextAccount(YouTubeAccountsFileDto state, PlatformAuthRole role, string normalizedContextId)
+    {
+        if (AuthContextIds.IsDefault(normalizedContextId))
+        {
+            return TakeAccount(state, role, null);
+        }
+
+        var existing = GetContexts(state).FirstOrDefault(c =>
+            c.Role == role && string.Equals(c.ContextId, normalizedContextId, StringComparison.Ordinal));
+        var account = existing?.Account is null ? new() : JsonStoreClone.DeepClone(existing.Account);
+        EnsureDefaultScopes(account, role);
+        return account;
+    }
+
+    private void ReplaceContextAccount(
+        YouTubeAccountsFileDto state,
+        PlatformAuthRole role,
+        string normalizedContextId,
+        YouTubeAccountSettings replacement)
+    {
+        var next = JsonStoreClone.DeepClone(replacement);
+        EnsureDefaultScopes(next, role);
+        if (AuthContextIds.IsDefault(normalizedContextId))
+        {
+            SetAccount(state, role, next);
+            return;
+        }
+
+        var contexts = GetContexts(state);
+        var existing = contexts.FirstOrDefault(c =>
+            c.Role == role && string.Equals(c.ContextId, normalizedContextId, StringComparison.Ordinal));
+        var isEmpty = string.IsNullOrWhiteSpace(next.AccessToken)
+            && string.IsNullOrWhiteSpace(next.RefreshToken)
+            && string.IsNullOrWhiteSpace(next.ChannelId)
+            && string.IsNullOrWhiteSpace(next.ChannelTitle)
+            && next.StoredScopes.Length == 0
+            && next.AccessTokenExpiresAt is null
+            && string.IsNullOrWhiteSpace(next.BrowserProfileName);
+
+        if (isEmpty)
+        {
+            if (existing is not null)
+            {
+                contexts.Remove(existing);
+                ClearContextsIfEmpty(state);
+            }
+
+            return;
+        }
+
+        if (existing is not null)
+        {
+            existing.Account = next;
+        }
+        else
+        {
+            contexts.Add(new()
+            {
+                ContextId = normalizedContextId,
+                Role = role,
+                Label = normalizedContextId,
+                Account = next,
+            });
+        }
     }
 
     public bool SaveAll(string clientSecret, YouTubeAccountSettings bot, YouTubeAccountSettings broadcaster)

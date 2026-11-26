@@ -4,6 +4,7 @@ using PoproshaykaBot.Core.Platforms;
 using PoproshaykaBot.Core.Server;
 using PoproshaykaBot.Core.Twitch;
 using PoproshaykaBot.Core.Twitch.Chat;
+using PoproshaykaBot.Core.YouTube.Auth;
 
 namespace PoproshaykaBot.Core.Settings.Onboarding;
 
@@ -104,7 +105,7 @@ public sealed class OnboardingChecklist(
                 missing.Add("канал YouTube");
             }
 
-            if (!PlatformAuthRoles.HasCredentials(bot?.AccessToken, bot?.RefreshToken))
+            if (!YouTubeScopes.HasUsableAuthorization(PlatformAuthRole.Bot, bot))
             {
                 missing.Add("авторизация бота YouTube");
             }

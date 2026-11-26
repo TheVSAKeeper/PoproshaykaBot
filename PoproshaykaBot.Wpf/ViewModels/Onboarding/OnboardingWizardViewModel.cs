@@ -549,8 +549,8 @@ public sealed partial class OnboardingWizardViewModel : ObservableObject, IDispo
             originalBroadcaster is null ? new() : DeepClone(originalBroadcaster),
             youtubeSettingsStore?.Load(),
             youtubeAccountsStore?.LoadClientSecret() ?? string.Empty,
-            youtubeAccountsStore?.LoadBot(),
-            youtubeAccountsStore?.LoadBroadcaster())
+            youtubeAccountsStore?.Load(PlatformAuthRole.Bot, youtubeChannel?.BotContextId),
+            youtubeAccountsStore?.Load(PlatformAuthRole.Broadcaster, youtubeChannel?.BroadcasterContextId))
         {
             TwitchCatalog = twitchCatalog,
             TwitchChannel = twitchChannel,
@@ -616,8 +616,10 @@ public sealed partial class OnboardingWizardViewModel : ObservableObject, IDispo
             _context.TwitchContextId(PlatformAuthRole.Bot)));
         await _eventBus.PublishAsync(new PlatformAuthorizationRefreshed(StreamingPlatform.Twitch, PlatformAuthRole.Broadcaster,
             _context.TwitchContextId(PlatformAuthRole.Broadcaster)));
-        await _eventBus.PublishAsync(new PlatformAuthorizationRefreshed(StreamingPlatform.YouTube, PlatformAuthRole.Bot));
-        await _eventBus.PublishAsync(new PlatformAuthorizationRefreshed(StreamingPlatform.YouTube, PlatformAuthRole.Broadcaster));
+        await _eventBus.PublishAsync(new PlatformAuthorizationRefreshed(StreamingPlatform.YouTube, PlatformAuthRole.Bot,
+            _context.YouTubeContextId(PlatformAuthRole.Bot)));
+        await _eventBus.PublishAsync(new PlatformAuthorizationRefreshed(StreamingPlatform.YouTube, PlatformAuthRole.Broadcaster,
+            _context.YouTubeContextId(PlatformAuthRole.Broadcaster)));
         if (restored)
         {
             _logger.OnboardingAccountsRolledBack();

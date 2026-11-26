@@ -109,6 +109,66 @@ public sealed class YouTubeAccountsStoreTests
         }
     }
 
+    [Test]
+    public void TryReplaceAccounts_TargetsNamedContextsWithoutTouchingDefault()
+    {
+        var store = Store();
+        store.SaveAll("orig-secret",
+            new() { ChannelId = "UC_DEF_BOT", RefreshToken = "def-bot-rt" },
+            new() { ChannelId = "UC_DEF_STR", RefreshToken = "def-str-rt" });
+        store.UpsertContext(PlatformAuthRole.Bot, "yt-bot-2", "Бот 2",
+            new() { ChannelId = "UC_BOT_2", RefreshToken = "bot2-rt", StoredScopes = [YouTubeScopes.ForceSsl] });
+        store.UpsertContext(PlatformAuthRole.Broadcaster, "yt-str-2", "Стример 2",
+            new() { ChannelId = "UC_STR_2", RefreshToken = "str2-rt", StoredScopes = [YouTubeScopes.ReadOnly] });
+
+        var expectedBot = store.Load(PlatformAuthRole.Bot, "yt-bot-2");
+        var expectedBroadcaster = store.Load(PlatformAuthRole.Broadcaster, "yt-str-2");
+        var updatedBot = new YouTubeAccountSettings
+        {
+            ChannelId = "UC_BOT_2",
+            RefreshToken = "bot2-rt-new",
+            StoredScopes = [YouTubeScopes.ForceSsl],
+        };
+        var updatedBroadcaster = new YouTubeAccountSettings
+        {
+            ChannelId = "UC_STR_2",
+            RefreshToken = "str2-rt-new",
+            StoredScopes = [YouTubeScopes.ForceSsl],
+        };
+
+        var replaced = store.TryReplaceAccounts(
+            "yt-bot-2",
+            "yt-str-2",
+            ("orig-secret", expectedBot, expectedBroadcaster),
+            ("new-secret", updatedBot, updatedBroadcaster));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(replaced.Matched, Is.True);
+            Assert.That(replaced.Written, Is.True);
+            Assert.That(store.LoadClientSecret(), Is.EqualTo("new-secret"));
+            Assert.That(store.Load(PlatformAuthRole.Bot, "yt-bot-2").RefreshToken, Is.EqualTo("bot2-rt-new"));
+            Assert.That(store.Load(PlatformAuthRole.Broadcaster, "yt-str-2").RefreshToken, Is.EqualTo("str2-rt-new"));
+            Assert.That(store.LoadBot().RefreshToken, Is.EqualTo("def-bot-rt"));
+            Assert.That(store.LoadBroadcaster().RefreshToken, Is.EqualTo("def-str-rt"));
+        }
+
+        var rolledBack = store.TryReplaceAccounts(
+            "yt-bot-2",
+            "yt-str-2",
+            ("new-secret", updatedBot, updatedBroadcaster),
+            ("orig-secret", expectedBot, expectedBroadcaster));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(rolledBack.Matched, Is.True);
+            Assert.That(rolledBack.Written, Is.True);
+            Assert.That(store.LoadClientSecret(), Is.EqualTo("orig-secret"));
+            Assert.That(store.Load(PlatformAuthRole.Bot, "yt-bot-2").RefreshToken, Is.EqualTo("bot2-rt"));
+            Assert.That(store.Load(PlatformAuthRole.Broadcaster, "yt-str-2").RefreshToken, Is.EqualTo("str2-rt"));
+        }
+    }
+
     private static string RedactedOriginal()
     {
         var expected = JsonNode.Parse(ParseableButInvalid)!;
