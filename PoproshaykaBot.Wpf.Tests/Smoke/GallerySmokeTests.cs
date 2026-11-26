@@ -1,5 +1,6 @@
 ﻿using KeepShell.Automation;
 using KeepShell.Bootstrap;
+using KeepShell.Testing;
 using PoproshaykaBot.Wpf.Bootstrap;
 using PoproshaykaBot.Core.Platforms;
 using PoproshaykaBot.Core.Settings.Stores;
@@ -20,6 +21,9 @@ public class GallerySmokeTests
 
     private string _baseDirectory = string.Empty;
     private string _outputDirectory = string.Empty;
+
+    [OneTimeSetUp]
+    public void RegisterPackUris() => PackScheme.Ensure();
 
     [SetUp]
     public void Setup()
