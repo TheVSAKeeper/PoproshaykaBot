@@ -11,6 +11,7 @@ using PoproshaykaBot.Wpf.Infrastructure;
 using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.IO;
+using System.Text.Json.Nodes;
 
 namespace PoproshaykaBot.Wpf.ViewModels.Migration;
 
@@ -34,9 +35,12 @@ public sealed partial class LegacyImportViewModel : ObservableObject
     [NotifyPropertyChangedFor(nameof(AuthorizationNotice))]
     [NotifyPropertyChangedFor(nameof(CanOverwriteExisting))]
     [NotifyPropertyChangedFor(nameof(ConflictNotice))]
+    [NotifyPropertyChangedFor(nameof(SelectionSummaryTitle))]
+    [NotifyPropertyChangedFor(nameof(SelectionSummaryDetail))]
     private LegacyImportSourceViewModel? _selectedSource;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(SelectionSummaryDetail))]
     private bool _overwriteExisting;
 
     [ObservableProperty]
@@ -50,11 +54,19 @@ public sealed partial class LegacyImportViewModel : ObservableObject
     private bool _isCompleted;
 
     [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(ResetAfterInterruptionCommand))]
+    private bool _isInterrupted;
+
+    [ObservableProperty]
+    private bool _isReloadFailed;
+
+    [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsBusy))]
     [NotifyPropertyChangedFor(nameof(CanSelectSource))]
     [NotifyCanExecuteChangedFor(nameof(ImportCommand))]
     [NotifyCanExecuteChangedFor(nameof(PickFolderCommand))]
     [NotifyCanExecuteChangedFor(nameof(CloseCommand))]
+    [NotifyCanExecuteChangedFor(nameof(ResetAfterInterruptionCommand))]
     private string? _busyMessage;
 
     [ObservableProperty]
@@ -69,6 +81,7 @@ public sealed partial class LegacyImportViewModel : ObservableObject
     [NotifyPropertyChangedFor(nameof(CanSelectSource))]
     [NotifyCanExecuteChangedFor(nameof(ImportCommand))]
     [NotifyCanExecuteChangedFor(nameof(PickFolderCommand))]
+    [NotifyCanExecuteChangedFor(nameof(ResetAfterInterruptionCommand))]
     private string? _blockedNotice;
 
     [ObservableProperty]
@@ -147,6 +160,35 @@ public sealed partial class LegacyImportViewModel : ObservableObject
 
     public bool ConfigureRequested { get; private set; }
 
+    public string SelectionSummaryTitle => SelectedSource is { } source
+        ? source.Title
+        : "Папка не выбрана";
+
+    public string SelectionSummaryDetail
+    {
+        get
+        {
+            if (SelectedSource is not { } source)
+            {
+                return "Выберите папку из списка или укажите её вручную.";
+            }
+
+            if (source.Summary.Kind == LegacyDataSourceKind.CurrentBaseDirectory)
+            {
+                return "Режим: подготовка файлов на месте без копирования";
+            }
+
+            if (!CanOverwriteExisting)
+            {
+                return "Режим: копирование в рабочую папку";
+            }
+
+            return OverwriteExisting
+                ? "Режим: копирование с заменой существующих файлов"
+                : "Режим: только недостающие файлы (существующие сохранятся)";
+        }
+    }
+
     public string? AuthorizationNotice => SelectedSource?.Summary switch
     {
         { HasFlatTwitchTokens: true } => "Старые токены из общего файла настроек не переносятся. После переноса проверим, нужно ли снова войти в Twitch.",
@@ -211,6 +253,8 @@ public sealed partial class LegacyImportViewModel : ObservableObject
 
         var path = source.Path;
         var overwrite = CanOverwriteExisting && OverwriteExisting;
+        IsInterrupted = false;
+        IsReloadFailed = false;
         BusyMessage = "Идёт перенос данных…";
 
         LegacyImportResult Import()
@@ -247,8 +291,14 @@ public sealed partial class LegacyImportViewModel : ObservableObject
             catch (Exception exception)
             {
                 _logger.LegacyImportInterrupted(exception);
+                Result = null;
+                ResultCounts.Clear();
+                ResultFailures.Clear();
+                ResultAuthorizationNotice = null;
+                ResultUnmigratedNotice = null;
+                IsInterrupted = true;
                 ResultHeadline = "Перенос прервался";
-                ResultRestartNotice = "Часть файлов могла перенестись. Перезапустите приложение, чтобы оно перечитало рабочую папку.";
+                ResultRestartNotice = "Часть файлов могла уже записаться. Закройте мастер и перезапустите приложение или повторите выбор папки.";
                 IsCompleted = true;
                 return;
             }
@@ -259,7 +309,12 @@ public sealed partial class LegacyImportViewModel : ObservableObject
             ResultHeadline = LegacyImportText.BuildHeadline(result);
             Fill(ResultCounts, LegacyImportText.BuildCounts(result));
             Fill(ResultFailures, LegacyImportText.BuildFailures(result));
-            ResultAuthorizationNotice = LegacyImportText.BuildAuthorizationNotice(result, _isSettingsEntry);
+            ResultAuthorizationNotice = LegacyImportText.BuildAuthorizationNotice(
+                result,
+                _isSettingsEntry,
+                IsTwitchEnabledInTarget(result.TargetPath),
+                result.BotAuthorizationRequired,
+                youtubeBotRequired: false);
             ResultUnmigratedNotice = LegacyImportText.DescribeUnmigrated(result);
             ResultRestartNotice = LegacyImportText.BuildRestartNotice(result, _isSettingsEntry);
             IsCompleted = true;
@@ -273,6 +328,8 @@ public sealed partial class LegacyImportViewModel : ObservableObject
                 catch (Exception exception)
                 {
                     _logger.LegacyImportReloadFailed(exception);
+                    IsReloadFailed = true;
+                    ResultAuthorizationNotice = null;
                     ResultRestartNotice = "Данные перенесены, но обновить мастер на лету не удалось. Перезапустите приложение, чтобы применить перенесённые настройки.";
                 }
             }
@@ -349,6 +406,58 @@ public sealed partial class LegacyImportViewModel : ObservableObject
 
         ConfigureRequested = true;
         Close();
+    }
+
+    private bool CanResetAfterInterruption() => !IsBusy && IsInterrupted && !IsBlocked;
+
+    [RelayCommand(CanExecute = nameof(CanResetAfterInterruption))]
+    private void ResetAfterInterruption()
+    {
+        if (!CanResetAfterInterruption())
+        {
+            return;
+        }
+
+        Result = null;
+        ResultHeadline = string.Empty;
+        ResultCounts.Clear();
+        ResultFailures.Clear();
+        ResultAuthorizationNotice = null;
+        ResultUnmigratedNotice = null;
+        ResultRestartNotice = null;
+        IsInterrupted = false;
+        IsReloadFailed = false;
+        IsCompleted = false;
+    }
+
+    private static bool IsTwitchEnabledInTarget(string targetPath)
+    {
+        if (string.IsNullOrWhiteSpace(targetPath))
+        {
+            return true;
+        }
+
+        var settingsPath = Path.Combine(targetPath, "settings", "settings.json");
+        if (!File.Exists(settingsPath))
+        {
+            settingsPath = Path.Combine(targetPath, "settings.json");
+            if (!File.Exists(settingsPath))
+            {
+                return true;
+            }
+        }
+
+        try
+        {
+            var root = JsonNode.Parse(File.ReadAllText(settingsPath)) as JsonObject;
+            var twitch = root?.FirstOrDefault(pair => string.Equals(pair.Key, "twitch", StringComparison.OrdinalIgnoreCase)).Value as JsonObject;
+            var enabled = twitch?.FirstOrDefault(pair => string.Equals(pair.Key, "enabled", StringComparison.OrdinalIgnoreCase)).Value;
+            return enabled is not JsonValue value || !value.TryGetValue(out bool flag) || flag;
+        }
+        catch
+        {
+            return true;
+        }
     }
 
     private static bool AreSamePath(string first, string second)

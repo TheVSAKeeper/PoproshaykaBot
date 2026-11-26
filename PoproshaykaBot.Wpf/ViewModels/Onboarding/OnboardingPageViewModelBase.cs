@@ -13,6 +13,8 @@ public abstract partial class OnboardingPageViewModelBase : ObservableObject, IO
 
     public abstract string PageTitle { get; }
 
+    public virtual string? NextButtonText => null;
+
     public virtual bool IsBusy => false;
 
     public virtual bool IsApplicable(OnboardingContext context) => true;

@@ -199,6 +199,66 @@ public class LegacyImportViewModelTests
         Assert.That(viewModel.Result?.SourcePath, Is.EqualTo(paths[0]));
     }
 
+    [Test]
+    public async Task Interrupted_import_exposes_error_state_and_allows_resetting_to_pick_again()
+    {
+        var source = Summary(_folder, LegacyDataSourceKind.SelectedFolder, "settings/settings.json");
+        var viewModel = new LegacyImportViewModel(
+            [source],
+            null,
+            isSettingsEntry: false,
+            new FakeFilePicker(_folder),
+            NullLogger.Instance,
+            import: (_, _, _) => throw new IOException("disk full"));
+
+        viewModel.SelectedSource = viewModel.Sources[0];
+        await viewModel.ImportCommand.ExecuteAsync(null);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(viewModel.IsCompleted, Is.True);
+            Assert.That(viewModel.IsInterrupted, Is.True);
+            Assert.That(viewModel.Result, Is.Null);
+            Assert.That(viewModel.ResultHeadline, Is.EqualTo("Перенос прервался"));
+            Assert.That(viewModel.ResultRestartNotice, Does.Contain("перезапустите приложение").IgnoreCase);
+            Assert.That(viewModel.ResetAfterInterruptionCommand.CanExecute(null), Is.True);
+            Assert.That(viewModel.CloseCommand.CanExecute(null), Is.True);
+        }
+
+        viewModel.ResetAfterInterruptionCommand.Execute(null);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(viewModel.IsCompleted, Is.False);
+            Assert.That(viewModel.IsInterrupted, Is.False);
+            Assert.That(viewModel.ResultHeadline, Is.Empty);
+            Assert.That(viewModel.ResultRestartNotice, Is.Null);
+            Assert.That(viewModel.PickFolderCommand.CanExecute(null), Is.True);
+            Assert.That(viewModel.ImportCommand.CanExecute(null), Is.True);
+        }
+    }
+
+    [Test]
+    public void Selection_summary_tracks_selected_folder_and_overwrite_mode()
+    {
+        var relative = Path.Combine("settings", "settings.json");
+        var first = Summary(Path.Combine(_folder, "profile-a"), LegacyDataSourceKind.SelectedFolder, relative);
+        var target = Summary(AppPaths.BaseDirectory, LegacyDataSourceKind.CurrentBaseDirectory, relative);
+        var viewModel = new LegacyImportViewModel([first], target, false, new FakeFilePicker(_folder), NullLogger.Instance);
+
+        Assert.That(viewModel.SelectionSummaryTitle, Is.EqualTo("Папка не выбрана"));
+
+        viewModel.SelectedSource = viewModel.Sources[0];
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(viewModel.SelectionSummaryTitle, Is.EqualTo("profile-a"));
+            Assert.That(viewModel.SelectionSummaryDetail, Does.Contain("только недостающие файлы"));
+        }
+
+        viewModel.OverwriteExisting = true;
+        Assert.That(viewModel.SelectionSummaryDetail, Does.Contain("с заменой существующих файлов"));
+    }
+
     private static LegacyDataSummary Summary(string path, LegacyDataSourceKind kind, string relative) => new()
     {
         SourcePath = path,

@@ -90,6 +90,7 @@ public sealed partial class OnboardingWizardViewModel : ObservableObject, IDispo
         foreach (var importPage in _pages.OfType<LegacyImportPageViewModel>())
         {
             importPage.FinishRequested += OnImportFinishRequested;
+            importPage.NavigateToStepRequested += OnImportNavigateToStepRequested;
         }
 
         (_originalTwitch, _context) = BuildContext(
@@ -149,7 +150,8 @@ public sealed partial class OnboardingWizardViewModel : ObservableObject, IDispo
         }
     }
 
-    public string NextButtonText => IsLastPage ? "Готово" : "Далее →";
+    public string NextButtonText => (CurrentPage as OnboardingPageViewModelBase)?.NextButtonText
+        ?? (IsLastPage ? "Готово" : "Далее →");
 
     private IReadOnlyList<IOnboardingPageViewModel> ActivePages =>
         [.. _pages.Where(page => page.IsApplicable(_context))];
@@ -356,11 +358,16 @@ public sealed partial class OnboardingWizardViewModel : ObservableObject, IDispo
         {
             previous.CanAdvanceChanged -= OnCurrentPageCanAdvanceChanged;
             previous.IsBusyChanged -= OnCurrentPageIsBusyChanged;
+            if (previous is System.ComponentModel.INotifyPropertyChanged previousNotify)
+            {
+                previousNotify.PropertyChanged -= OnCurrentPagePropertyChanged;
+            }
         }
 
         foreach (var importPage in _pages.OfType<LegacyImportPageViewModel>())
         {
             importPage.FinishRequested -= OnImportFinishRequested;
+            importPage.NavigateToStepRequested -= OnImportNavigateToStepRequested;
         }
 
         foreach (var disposable in _pages.OfType<IDisposable>())
@@ -388,6 +395,21 @@ public sealed partial class OnboardingWizardViewModel : ObservableObject, IDispo
         finally
         {
             IsBusy = false;
+        }
+
+        if (current is LegacyImportPageViewModel importPage)
+        {
+            if (importPage.IsProfileComplete)
+            {
+                CompleteWizard();
+                return;
+            }
+
+            if (importPage.HasMissingStep)
+            {
+                StartAt(importPage.FirstMissingStep);
+                return;
+            }
         }
 
         var active = ActivePages;
@@ -469,6 +491,16 @@ public sealed partial class OnboardingWizardViewModel : ObservableObject, IDispo
         CompleteWizard();
     }
 
+    private void OnImportNavigateToStepRequested(OnboardingStep step)
+    {
+        if (_context.CancellationStarted || IsOperationBusy)
+        {
+            return;
+        }
+
+        StartAt(step);
+    }
+
     private void OnContextPlatformsChanged(object? sender, EventArgs e)
     {
         NotifyNavigationStateChanged();
@@ -492,14 +524,30 @@ public sealed partial class OnboardingWizardViewModel : ObservableObject, IDispo
         {
             previous.CanAdvanceChanged -= OnCurrentPageCanAdvanceChanged;
             previous.IsBusyChanged -= OnCurrentPageIsBusyChanged;
+            if (previous is System.ComponentModel.INotifyPropertyChanged previousNotify)
+            {
+                previousNotify.PropertyChanged -= OnCurrentPagePropertyChanged;
+            }
         }
 
         page.OnEnter(_context);
         page.CanAdvanceChanged += OnCurrentPageCanAdvanceChanged;
         page.IsBusyChanged += OnCurrentPageIsBusyChanged;
+        if (page is System.ComponentModel.INotifyPropertyChanged notify)
+        {
+            notify.PropertyChanged += OnCurrentPagePropertyChanged;
+        }
 
         CurrentPage = page;
         NotifyNavigationStateChanged();
+    }
+
+    private void OnCurrentPagePropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(OnboardingPageViewModelBase.NextButtonText))
+        {
+            OnPropertyChanged(nameof(NextButtonText));
+        }
     }
 
     private void OnCurrentPageCanAdvanceChanged(object? sender, EventArgs e)

@@ -8,7 +8,7 @@ public sealed class LegacyImportSourceViewModel
     public LegacyImportSourceViewModel(LegacyDataSummary summary)
     {
         Summary = summary;
-        Title = LegacyImportText.DescribeKind(summary.Kind);
+        Title = LegacyImportText.DescribeSourceTitle(summary);
         Path = summary.SourcePath;
         Modified = LegacyImportText.DescribeModified(summary);
         Content = LegacyImportText.DescribeContent(summary);

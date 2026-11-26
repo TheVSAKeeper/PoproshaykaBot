@@ -53,6 +53,30 @@ public static class LegacyImportText
         };
     }
 
+    public static string DescribeSourceTitle(LegacyDataSummary summary)
+    {
+        ArgumentNullException.ThrowIfNull(summary);
+
+        if (summary.Kind != LegacyDataSourceKind.SelectedFolder)
+        {
+            return DescribeKind(summary.Kind);
+        }
+
+        var trimmedPath = summary.SourcePath.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        var folderName = Path.GetFileName(trimmedPath);
+        var channel = string.IsNullOrWhiteSpace(summary.Channel)
+            ? null
+            : $"@{summary.Channel.Trim().TrimStart('@')}";
+
+        return (string.IsNullOrWhiteSpace(folderName), channel) switch
+        {
+            (false, not null) => $"{folderName} ({channel})",
+            (false, null) => folderName,
+            (true, not null) => $"Профиль {channel}",
+            (true, null) => string.IsNullOrWhiteSpace(trimmedPath) ? "Выбранная папка" : trimmedPath,
+        };
+    }
+
     public static string DescribeContent(LegacyDataSummary summary)
     {
         var parts = new List<string>();
@@ -251,10 +275,48 @@ public static class LegacyImportText
 
     public static string? BuildAuthorizationNotice(LegacyImportResult result, bool isSettingsEntry)
     {
-        var bot = result.BotAuthorizationRequired
-            ? isSettingsEntry ? "После перезапуска войдите в Twitch с аккаунтом бота." : "Для работы бота нужно войти в Twitch."
-            : null;
-        var broadcaster = result.BroadcasterAuthorizationRecommended
+        ArgumentNullException.ThrowIfNull(result);
+
+        return BuildAuthorizationNotice(
+            result,
+            isSettingsEntry,
+            twitchEnabled: true,
+            twitchBotRequired: result.BotAuthorizationRequired,
+            youtubeBotRequired: false);
+    }
+
+    public static string? BuildAuthorizationNotice(
+        LegacyImportResult result,
+        bool isSettingsEntry,
+        bool twitchEnabled,
+        bool twitchBotRequired,
+        bool youtubeBotRequired)
+    {
+        ArgumentNullException.ThrowIfNull(result);
+
+        var missingBotPlatforms = new List<string>();
+        if (twitchEnabled && twitchBotRequired)
+        {
+            missingBotPlatforms.Add("Twitch");
+        }
+
+        if (youtubeBotRequired)
+        {
+            missingBotPlatforms.Add("YouTube");
+        }
+
+        var bot = missingBotPlatforms.Count switch
+        {
+            0 => null,
+            1 => isSettingsEntry
+                ? $"После перезапуска войдите в {missingBotPlatforms[0]} с аккаунтом бота."
+                : $"Для работы бота нужно войти в {missingBotPlatforms[0]}.",
+            _ => isSettingsEntry
+                ? $"После перезапуска войдите в {string.Join(" и ", missingBotPlatforms)} с аккаунтом бота."
+                : $"Для работы бота нужно войти в {string.Join(" и ", missingBotPlatforms)}.",
+        };
+
+        var broadcaster = twitchEnabled && result.BroadcasterAuthorizationRecommended
             ? "Вход с аккаунтом стримера можно восстановить отдельно, если нужны опросы и управление эфиром."
             : null;
 

@@ -98,6 +98,89 @@ public class LegacyImportTextTests
         }
     }
 
+    [Test]
+    public void DescribeSourceTitle_ShowsFolderNameAndChannelForManuallySelectedFolders()
+    {
+        var first = new LegacyDataSummary
+        {
+            SourcePath = @"C:\Backups\MayBackup",
+            Kind = LegacyDataSourceKind.SelectedFolder,
+            HasMonolithicSettings = false,
+            HasSettingsDirectory = true,
+            HasOAuthTokens = false,
+            Channel = "streamer_one",
+            Files = [],
+        };
+        var second = new LegacyDataSummary
+        {
+            SourcePath = @"C:\Backups\JuneBackup\",
+            Kind = LegacyDataSourceKind.SelectedFolder,
+            HasMonolithicSettings = false,
+            HasSettingsDirectory = true,
+            HasOAuthTokens = false,
+            Files = [],
+        };
+        var working = new LegacyDataSummary
+        {
+            SourcePath = @"C:\App",
+            Kind = LegacyDataSourceKind.CurrentBaseDirectory,
+            HasMonolithicSettings = true,
+            HasSettingsDirectory = false,
+            HasOAuthTokens = false,
+            Files = [],
+        };
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(LegacyImportText.DescribeSourceTitle(first), Is.EqualTo("MayBackup (@streamer_one)"));
+            Assert.That(LegacyImportText.DescribeSourceTitle(second), Is.EqualTo("JuneBackup"));
+            Assert.That(LegacyImportText.DescribeSourceTitle(first), Does.Not.Contain("Выбранная папка"));
+            Assert.That(LegacyImportText.DescribeSourceTitle(working), Is.EqualTo("Данные в рабочей папке"));
+        }
+    }
+
+    [TestCase(false, true, false, null)]
+    [TestCase(false, false, true, "Для работы бота нужно войти в YouTube.")]
+    [TestCase(true, true, false, "Для работы бота нужно войти в Twitch.")]
+    [TestCase(true, true, true, "Для работы бота нужно войти в Twitch и YouTube.")]
+    public void BuildAuthorizationNotice_RespectsEnabledPlatformsAndMissingBotRoles(
+        bool twitchEnabled,
+        bool twitchBotRequired,
+        bool youtubeBotRequired,
+        string? expected)
+    {
+        var result = new LegacyImportResult
+        {
+            SourcePath = @"C:\old",
+            TargetPath = @"C:\new",
+            CopiedFiles = ["settings/settings.json"],
+            SkippedFiles = [],
+            Failures = [],
+            BotAuthorizationRequired = true,
+            BroadcasterAuthorizationRecommended = true,
+        };
+
+        var actual = LegacyImportText.BuildAuthorizationNotice(
+            result,
+            isSettingsEntry: false,
+            twitchEnabled: twitchEnabled,
+            twitchBotRequired: twitchBotRequired,
+            youtubeBotRequired: youtubeBotRequired);
+
+        if (!twitchEnabled)
+        {
+            Assert.That(actual, Is.EqualTo(expected));
+            if (actual is not null)
+            {
+                Assert.That(actual, Does.Not.Contain("Twitch"));
+            }
+        }
+        else
+        {
+            Assert.That(actual, Does.StartWith(expected!));
+        }
+    }
+
     private static LegacyImportResult Build(
         IReadOnlyList<string>? copied = null,
         bool inPlace = false,
