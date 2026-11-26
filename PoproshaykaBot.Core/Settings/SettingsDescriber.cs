@@ -24,7 +24,7 @@ public static class SettingsDescriber
         var broadcast = twitch.AutoBroadcast;
         var lifecycle = twitch.BotLifecycleAutomation;
 
-        return $"канал {Value(twitch.Channel)}, clientId {Present(twitch.ClientId)}, clientSecret {Present(twitch.ClientSecret)}, "
+        return $"включено {OnOff(twitch.Enabled)}, канал {Value(twitch.Channel)}, clientId {Present(twitch.ClientId)}, clientSecret {Present(twitch.ClientSecret)}, "
             + $"redirectUri {Value(twitch.RedirectUri)}, порт {twitch.HttpServerPort}, аккаунт чата {twitch.ChatDisplayAccount}, "
             + $"недавняя история Twitch {OnOff(twitch.FetchRecentMessages)}, "
             + $"лимит {twitch.MessagesAllowedInPeriod} сообщений за {twitch.ThrottlingPeriodSeconds} с, "

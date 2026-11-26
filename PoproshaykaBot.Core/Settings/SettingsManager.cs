@@ -36,6 +36,8 @@ public class SettingsManager
         }
     }
 
+    public event Action? SettingsSaved;
+
     public bool IsWriteRevoked => _store.IsWriteRevoked;
 
     public virtual bool SaveSettings(AppSettings settings) => SaveSettingsCore(settings, applyWhenBlocked: true);
@@ -48,18 +50,19 @@ public class SettingsManager
 
         _logger.LogDebug("Начало сохранения user-настроек в {SettingsFilePath}", _settingsFilePath);
 
+        bool written;
+        var notify = false;
         lock (_syncLock)
         {
             try
             {
-                var written = _store.Save(settings, applyWhenBlocked);
+                written = _store.Save(settings, applyWhenBlocked);
                 if (written || applyWhenBlocked)
                 {
                     _currentSettings = _store.Load();
                     LogApplied(written);
+                    notify = true;
                 }
-
-                return written;
             }
             catch (Exception exception)
             {
@@ -67,6 +70,13 @@ public class SettingsManager
                 throw new InvalidOperationException($"Ошибка сохранения настроек: {exception.Message}", exception);
             }
         }
+
+        if (notify)
+        {
+            NotifySettingsSaved();
+        }
+
+        return written;
     }
 
     public virtual bool Mutate(Action<AppSettings> mutator) => MutateCore(mutator, applyWhenBlocked: true);
@@ -77,23 +87,52 @@ public class SettingsManager
     {
         ArgumentNullException.ThrowIfNull(mutator);
 
+        bool written;
+        var notify = false;
         lock (_syncLock)
         {
             try
             {
-                var written = _store.Mutate(mutator, applyWhenBlocked);
+                written = _store.Mutate(mutator, applyWhenBlocked);
                 if (written || applyWhenBlocked)
                 {
                     _currentSettings = _store.Load();
                     LogApplied(written);
+                    notify = true;
                 }
-
-                return written;
             }
             catch (Exception exception)
             {
                 _logger.LogError(exception, "Критическая ошибка при сохранении настроек в {SettingsFilePath}", _settingsFilePath);
                 throw new InvalidOperationException($"Ошибка сохранения настроек: {exception.Message}", exception);
+            }
+        }
+
+        if (notify)
+        {
+            NotifySettingsSaved();
+        }
+
+        return written;
+    }
+
+    private void NotifySettingsSaved()
+    {
+        var handlers = SettingsSaved;
+        if (handlers is null)
+        {
+            return;
+        }
+
+        foreach (Action handler in handlers.GetInvocationList())
+        {
+            try
+            {
+                handler();
+            }
+            catch (Exception exception)
+            {
+                _logger.LogWarning(exception, "Ошибка обработчика SettingsSaved");
             }
         }
     }

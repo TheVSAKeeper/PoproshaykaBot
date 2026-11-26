@@ -7,6 +7,7 @@ using PoproshaykaBot.Core.Infrastructure.Events.Lifecycle;
 using PoproshaykaBot.Core.Infrastructure.Hosting;
 using PoproshaykaBot.Core.Platforms;
 using PoproshaykaBot.Core.Platforms.Auth;
+using PoproshaykaBot.Core.Settings;
 using PoproshaykaBot.Core.Settings.Stores;
 using PoproshaykaBot.Core.Streaming;
 using PoproshaykaBot.Core.Twitch.Chat;
@@ -23,7 +24,8 @@ public sealed class TwitchChatPlatform(
     ITargetChannelProvider? targetChannelProvider = null,
     TwitchChannelAuthorization? authorization = null,
     ChatIngestionService? chatIngestion = null,
-    [FromKeyedServices(StreamingPlatform.Twitch)] PlatformHost? platformHost = null) : IChatPlatform
+    [FromKeyedServices(StreamingPlatform.Twitch)] PlatformHost? platformHost = null,
+    SettingsManager? settingsManager = null) : IChatPlatform
 {
     private const string BotFallbackDisplayName = "PoproshaykaBot";
 
@@ -38,7 +40,8 @@ public sealed class TwitchChatPlatform(
         | PlatformCapabilities.ChannelMetadataEdit
         | PlatformCapabilities.EmotePositions;
 
-    public bool IsEnabled => true;
+    public bool IsEnabled => targetChannelProvider?.Current.IsDebugSession == true
+        || settingsManager?.Current?.Twitch?.Enabled != false;
 
     public bool IsConnected =>
         !string.IsNullOrWhiteSpace(channels.GetChannel(StreamingPlatform.Twitch))

@@ -7,4 +7,6 @@ public enum OnboardingStep
     BotAuthorization = 2,
     YouTube = 3,
     Appearance = 4,
+    LegacyImport = 5,
+    Platforms = 6,
 }

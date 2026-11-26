@@ -1,10 +1,12 @@
 ﻿using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging;
+using PoproshaykaBot.Core.Debugging;
 using PoproshaykaBot.Core.Infrastructure.Events;
 using PoproshaykaBot.Core.Infrastructure.Hosting;
 using PoproshaykaBot.Core.Platforms;
 using PoproshaykaBot.Core.Platforms.Auth;
+using PoproshaykaBot.Core.Settings;
 using PoproshaykaBot.Core.Settings.Stores;
 using PoproshaykaBot.Core.Streaming.Switching;
 using PoproshaykaBot.Core.Twitch;
@@ -64,6 +66,8 @@ public static class StreamingServiceCollectionExtensions
             sp.GetRequiredService<IEventBus>(),
             sp.GetRequiredService<ILogger<EventSubConnectionHost>>(),
             sp.GetService<TwitchChannelAuthorization>(),
-            sp.GetService<ChannelCatalogStore>());
+            sp.GetService<ChannelCatalogStore>(),
+            sp.GetService<SettingsManager>(),
+            sp.GetService<ITargetChannelProvider>());
     }
 }

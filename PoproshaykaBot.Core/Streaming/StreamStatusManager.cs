@@ -1192,6 +1192,24 @@ public sealed class StreamStatusManager : IStreamStatus, IPlatformChannelMonitor
 
     private async Task<IReadOnlyList<TwitchChannelSlot>> EnsureMonitoredSlotsAsync(CancellationToken cancellationToken)
     {
+        if (!_targetChannelProvider.Current.IsDebugSession && _settingsManager?.Current?.Twitch?.Enabled == false)
+        {
+            List<TwitchChannelSlot> disabledSlots;
+            lock (_slotsLock)
+            {
+                disabledSlots = [.. _slots.Values];
+                _slots.Clear();
+                _activeSlotId = null;
+            }
+
+            foreach (var slot in disabledSlots)
+            {
+                await slot.MetadataRetryLoop.CancelAndDrainAsync().ConfigureAwait(false);
+            }
+
+            return [];
+        }
+
         var entries = _channelCatalogStore?.GetMonitoredChannels(StreamingPlatform.Twitch) ?? [];
 
         if (entries.Count == 0 || _targetChannelProvider.Current.IsDebugSession)

@@ -1,10 +1,12 @@
 ﻿using Microsoft.Extensions.Logging;
+using PoproshaykaBot.Core.Debugging;
 using PoproshaykaBot.Core.Infrastructure.Events;
 using PoproshaykaBot.Core.Infrastructure.Events.Streaming;
 using PoproshaykaBot.Core.Infrastructure.Hosting;
 using PoproshaykaBot.Core.Infrastructure.Reconnection;
 using PoproshaykaBot.Core.Platforms;
 using PoproshaykaBot.Core.Platforms.Auth;
+using PoproshaykaBot.Core.Settings;
 using PoproshaykaBot.Core.Settings.Stores;
 using PoproshaykaBot.Core.Streaming;
 
@@ -26,6 +28,8 @@ public sealed class EventSubConnectionHost :
     private readonly ILogger<EventSubConnectionHost> _logger;
     private readonly TwitchChannelAuthorization? _channelAuthorization;
     private readonly ChannelCatalogStore? _channelCatalogStore;
+    private readonly SettingsManager? _settingsManager;
+    private readonly ITargetChannelProvider? _targetChannelProvider;
     private readonly ExponentialBackoffPolicy _reconnectionPolicy = new(MaxReconnectAttempts);
     private readonly SemaphoreSlim _lifecycleGate = new(1, 1);
     private readonly IDisposable _authSubscription;
@@ -37,6 +41,7 @@ public sealed class EventSubConnectionHost :
     private bool _stopRequested;
     private bool _monitoringActive;
     private bool _disposed;
+    private bool _lastTwitchEnabled;
     private string? _activeContextId;
     private int _unusedCloseStreak;
     private StreamMonitoringStatus? _status;
@@ -49,7 +54,9 @@ public sealed class EventSubConnectionHost :
         IEventBus eventBus,
         ILogger<EventSubConnectionHost> logger,
         TwitchChannelAuthorization? channelAuthorization = null,
-        ChannelCatalogStore? channelCatalogStore = null)
+        ChannelCatalogStore? channelCatalogStore = null,
+        SettingsManager? settingsManager = null,
+        ITargetChannelProvider? targetChannelProvider = null)
     {
         _role = role;
         _eventSubClient = eventSubClient;
@@ -58,6 +65,9 @@ public sealed class EventSubConnectionHost :
         _logger = logger;
         _channelAuthorization = channelAuthorization;
         _channelCatalogStore = channelCatalogStore;
+        _settingsManager = settingsManager;
+        _targetChannelProvider = targetChannelProvider;
+        _lastTwitchEnabled = IsTwitchEnabled();
 
         _eventSubClient.OnSessionWelcome += OnSessionWelcomeAsync;
         _eventSubClient.OnNotification += OnNotificationAsync;
@@ -67,6 +77,10 @@ public sealed class EventSubConnectionHost :
         if (_channelCatalogStore is not null)
         {
             _channelCatalogStore.Changed += OnCatalogChanged;
+        }
+        if (_settingsManager is not null)
+        {
+            _settingsManager.SettingsSaved += OnSettingsSaved;
         }
     }
 
@@ -115,6 +129,12 @@ public sealed class EventSubConnectionHost :
             lock (_lockObj)
             {
                 _monitoringActive = true;
+            }
+
+            if (!IsTwitchEnabled())
+            {
+                _logger.LogInformation("EventSub WebSocket ({Role}): запуск отложен – площадка Twitch выключена.", _role);
+                return;
             }
 
             if (!TryResolveActiveContext(out var contextId))
@@ -263,6 +283,27 @@ public sealed class EventSubConnectionHost :
         _ = ReconcileCatalogChangeAsync();
     }
 
+    private void OnSettingsSaved()
+    {
+        if (_disposed)
+        {
+            return;
+        }
+
+        lock (_lockObj)
+        {
+            var currentEnabled = IsTwitchEnabled();
+            if (currentEnabled == _lastTwitchEnabled)
+            {
+                return;
+            }
+
+            _lastTwitchEnabled = currentEnabled;
+        }
+
+        _ = ReconcileCatalogChangeAsync();
+    }
+
     private async Task ReconcileCatalogChangeAsync()
     {
         try
@@ -380,6 +421,10 @@ public sealed class EventSubConnectionHost :
         if (_channelCatalogStore is not null)
         {
             _channelCatalogStore.Changed -= OnCatalogChanged;
+        }
+        if (_settingsManager is not null)
+        {
+            _settingsManager.SettingsSaved -= OnSettingsSaved;
         }
         _eventSubClient.OnSessionWelcome -= OnSessionWelcomeAsync;
         _eventSubClient.OnNotification -= OnNotificationAsync;
@@ -522,9 +567,18 @@ public sealed class EventSubConnectionHost :
         }
     }
 
+    private bool IsTwitchEnabled() =>
+        _targetChannelProvider?.Current.IsDebugSession == true
+        || _settingsManager?.Current?.Twitch?.Enabled != false;
+
     private bool TryResolveActiveContext(out string contextId)
     {
         contextId = AuthContextIds.Default;
+
+        if (!IsTwitchEnabled())
+        {
+            return false;
+        }
 
         try
         {

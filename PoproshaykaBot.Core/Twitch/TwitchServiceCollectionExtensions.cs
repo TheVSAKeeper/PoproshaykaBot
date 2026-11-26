@@ -64,6 +64,9 @@ public static class TwitchServiceCollectionExtensions
         services.AddSingleton<IPlatformChannelIdentitySource>(static provider => new TwitchChannelIdentitySource(
             provider.GetService<AccountsStore>(),
             provider.GetService<SettingsManager>()));
+        services.AddSingleton<TwitchPlatformEnablementSource>();
+        services.AddSingleton<IPlatformEnablementSource>(
+            static provider => provider.GetRequiredService<TwitchPlatformEnablementSource>());
 
         services.AddSingleton<ISettingsSnapshotContributor>(static provider => new DelegateSettingsSnapshotContributor(() =>
         {

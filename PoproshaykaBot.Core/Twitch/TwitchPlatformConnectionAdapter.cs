@@ -19,12 +19,14 @@ internal sealed class TwitchPlatformConnectionAdapter(
     ChannelCatalogStore? channelCatalogStore = null,
     PlatformChannelRegistry? channelRegistry = null,
     ChatIngestionService? chatIngestionService = null,
-    AccountsStore? accountsStore = null)
+    AccountsStore? accountsStore = null,
+    SettingsManager? settingsManager = null)
     : IPlatformConnectionAdapter
 {
     public StreamingPlatform Platform => StreamingPlatform.Twitch;
 
-    public bool IsEnabled => true;
+    public bool IsEnabled => targetChannelProvider.Current.IsDebugSession
+        || settingsManager?.Current?.Twitch?.Enabled != false;
 
     public PlatformHost Host => platformHost;
 
