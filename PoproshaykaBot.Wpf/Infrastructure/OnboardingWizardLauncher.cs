@@ -33,7 +33,7 @@ public sealed class OnboardingWizardLauncher(
             using var scope = scopeFactory.CreateScope();
             var wizard = scope.ServiceProvider.GetRequiredService<OnboardingWizardWindow>();
             wizard.StartAt(step);
-            wizard.Owner = Application.Current.MainWindow;
+            wizard.ConfigureWindowPlacement(Application.Current?.MainWindow);
 
             if (App.IsHeadless)
             {

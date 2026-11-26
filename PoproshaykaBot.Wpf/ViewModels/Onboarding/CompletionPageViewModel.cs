@@ -55,6 +55,9 @@ public sealed partial class CompletionPageViewModel : OnboardingPageViewModelBas
     [ObservableProperty]
     private PlatformAuthRole _chatDisplayAccount = PlatformAuthRole.Bot;
 
+    [ObservableProperty]
+    private bool _showTwitchChatDisplayOption = true;
+
     public CompletionPageViewModel(
         SettingsManager settingsManager,
         AccountsStore accountsStore,
@@ -83,37 +86,38 @@ public sealed partial class CompletionPageViewModel : OnboardingPageViewModelBas
 
     public override void OnEnter(OnboardingContext context)
     {
+        ArgumentNullException.ThrowIfNull(context);
+
         _context = context;
+        ShowTwitchChatDisplayOption = context.Settings.Twitch.Enabled;
 
-        var bot = context.CurrentTwitchAccount(_accountsStore, PlatformAuthRole.Bot);
-        var broadcaster = context.CurrentTwitchAccount(_accountsStore, PlatformAuthRole.Broadcaster);
-        var botLogin = string.IsNullOrWhiteSpace(bot.Login) ? "–" : bot.Login;
-        var broadcasterLogin = string.IsNullOrWhiteSpace(broadcaster.Login) ? "–" : broadcaster.Login;
-
-        var summary =
-            $"Канал: {context.Settings.Twitch.Channel}"
-            + Environment.NewLine
-            + $"Аккаунт бота: @{botLogin}"
-            + Environment.NewLine
-            + $"Аккаунт стримера: @{broadcasterLogin}";
+        var summaryLines = new List<string>();
+        if (context.Settings.Twitch.Enabled)
+        {
+            var bot = context.CurrentTwitchAccount(_accountsStore, PlatformAuthRole.Bot);
+            var broadcaster = context.CurrentTwitchAccount(_accountsStore, PlatformAuthRole.Broadcaster);
+            var botLogin = string.IsNullOrWhiteSpace(bot.Login) ? "–" : bot.Login;
+            var broadcasterLogin = string.IsNullOrWhiteSpace(broadcaster.Login) ? "–" : broadcaster.Login;
+            var channel = string.IsNullOrWhiteSpace(context.Settings.Twitch.Channel) ? "–" : context.Settings.Twitch.Channel;
+            summaryLines.Add($"Twitch: канал {channel} (бот: @{botLogin}, стример: @{broadcasterLogin})");
+        }
 
         if (context.YouTubeSettings.Enabled)
         {
             var ytBot = string.IsNullOrWhiteSpace(context.YouTubeBotAccount.ChannelTitle) ? "–" : context.YouTubeBotAccount.ChannelTitle;
             var ytBroadcaster = string.IsNullOrWhiteSpace(context.YouTubeBroadcasterAccount.ChannelTitle) ? "–" : context.YouTubeBroadcasterAccount.ChannelTitle;
-            summary += Environment.NewLine
-                + $"YouTube: {context.YouTubeSettings.Channel} (бот: {ytBot}, стример: {ytBroadcaster})";
+            var ytChannel = string.IsNullOrWhiteSpace(context.YouTubeSettings.Channel) ? "–" : context.YouTubeSettings.Channel;
+            summaryLines.Add($"YouTube: {ytChannel} (бот: {ytBot}, стример: {ytBroadcaster})");
         }
 
-        SummaryText = summary;
-
+        SummaryText = string.Join(Environment.NewLine, summaryLines);
         ChatDisplayAccount = context.Settings.Twitch.ChatDisplayAccount;
 
         CanAdvance = false;
         _hasCriticalIssue = false;
         _lastChannelCheckResult = ChannelValidationResult.Skipped;
 
-        ValidationText = "Выполняется проверка...";
+        ValidationText = "Выполняется проверка…";
         IsValidationPending = true;
         IsValidationWarning = false;
         IsValidationFailure = false;
@@ -127,21 +131,32 @@ public sealed partial class CompletionPageViewModel : OnboardingPageViewModelBas
 
     public override async Task<bool> OnLeavingAsync(OnboardingContext context)
     {
+        ArgumentNullException.ThrowIfNull(context);
+
         if (_hasCriticalIssue)
         {
             return false;
         }
 
-        var bot = context.CurrentTwitchAccount(_accountsStore, PlatformAuthRole.Bot);
-        if (ValidateTwitchRole(context, PlatformAuthRole.Bot, bot).Status == ValidationStatus.Failure)
+        if (context.Settings.Twitch.Enabled)
         {
-            return ReportNotWritten("Вход бота в Twitch больше недоступен. Вернитесь к авторизации бота и войдите снова.");
+            var bot = context.CurrentTwitchAccount(_accountsStore, PlatformAuthRole.Bot);
+            if (ValidateTwitchRole(context, PlatformAuthRole.Bot, bot).Status == ValidationStatus.Failure)
+            {
+                return ReportNotWritten("Вход бота в Twitch больше недоступен. Вернитесь к авторизации бота и войдите снова.");
+            }
+
+            if (_lastChannelCheckResult == ChannelValidationResult.NotFound
+                && !ConfirmIgnoreChannelNotFound(context))
+            {
+                return false;
+            }
         }
 
-        if (_lastChannelCheckResult == ChannelValidationResult.NotFound
-            && !ConfirmIgnoreChannelNotFound(context))
+        if (context.YouTubeSettings.Enabled
+            && !PlatformAuthRoles.HasCredentials(context.YouTubeBotAccount.AccessToken, context.YouTubeBotAccount.RefreshToken))
         {
-            return false;
+            return ReportNotWritten("Вход бота в YouTube больше недоступен. Вернитесь к настройке YouTube и войдите снова.");
         }
 
         var oldPort = _settingsManager.Current.Twitch.HttpServerPort;
@@ -239,17 +254,41 @@ public sealed partial class CompletionPageViewModel : OnboardingPageViewModelBas
         var lines = new List<ValidationLine>();
         var hasCritical = false;
 
-        var twitchBot = _context.CurrentTwitchAccount(_accountsStore, PlatformAuthRole.Bot);
-        var twitchBroadcaster = _context.CurrentTwitchAccount(_accountsStore, PlatformAuthRole.Broadcaster);
-        var botScopes = ValidateTwitchRole(_context, PlatformAuthRole.Bot, twitchBot);
-        lines.Add(botScopes);
-        hasCritical |= botScopes.Status == ValidationStatus.Failure;
+        if (!_context.Settings.Twitch.Enabled && !_context.YouTubeSettings.Enabled)
+        {
+            lines.Add(new("Площадки трансляции", ValidationStatus.Failure, "выберите хотя бы одну площадку"));
+            UpdateValidation(lines);
+            _hasCriticalIssue = true;
+            CanAdvance = false;
+            return;
+        }
 
-        var broadcasterScopes = ValidateTwitchRole(_context, PlatformAuthRole.Broadcaster, twitchBroadcaster);
-        lines.Add(broadcasterScopes);
+        if (_context.Settings.Twitch.Enabled)
+        {
+            var twitchBot = _context.CurrentTwitchAccount(_accountsStore, PlatformAuthRole.Bot);
+            var twitchBroadcaster = _context.CurrentTwitchAccount(_accountsStore, PlatformAuthRole.Broadcaster);
+            var botScopes = ValidateTwitchRole(_context, PlatformAuthRole.Bot, twitchBot);
+            lines.Add(botScopes);
+            hasCritical |= botScopes.Status == ValidationStatus.Failure;
+
+            var broadcasterScopes = ValidateTwitchRole(_context, PlatformAuthRole.Broadcaster, twitchBroadcaster);
+            lines.Add(broadcasterScopes);
+
+            if (broadcasterScopes.Status == ValidationStatus.Success)
+            {
+                lines.Add(ValidateBroadcasterLogin(_context, twitchBroadcaster));
+            }
+        }
 
         if (_context.YouTubeSettings.Enabled)
         {
+            var ytChannelConfigured = !string.IsNullOrWhiteSpace(_context.YouTubeSettings.Channel);
+            var ytChannelLine = ytChannelConfigured
+                ? new ValidationLine("Канал YouTube", ValidationStatus.Success, _context.YouTubeSettings.Channel.Trim())
+                : new ValidationLine("Канал YouTube", ValidationStatus.Failure, "укажите канал на шаге настройки YouTube");
+            lines.Add(ytChannelLine);
+            hasCritical |= ytChannelLine.Status == ValidationStatus.Failure;
+
             var youtubeBot = _context.YouTubeBotAccount;
             var youtubeBroadcaster = _context.YouTubeBroadcasterAccount;
             var ytBotScopes = ValidateRole("Доступы YouTube бота", youtubeBot.AccessToken, youtubeBot.RefreshToken,
@@ -263,27 +302,25 @@ public sealed partial class CompletionPageViewModel : OnboardingPageViewModelBas
             hasCritical |= ytBroadcasterScopes.Status == ValidationStatus.Failure;
         }
 
-        if (broadcasterScopes.Status == ValidationStatus.Success)
+        if (_context.Settings.Twitch.Enabled)
         {
-            lines.Add(ValidateBroadcasterLogin(_context, twitchBroadcaster));
+            var channelLine = new ValidationLine("Канал на Twitch", ValidationStatus.Pending, "проверка…");
+            lines.Add(channelLine);
+
+            UpdateValidation(lines);
+
+            var (channelStatus, channelDetail, channelResult) =
+                await CheckChannelExistsAsync(_context, cancellationToken);
+
+            if (cancellationToken.IsCancellationRequested)
+            {
+                return;
+            }
+
+            _lastChannelCheckResult = channelResult;
+            lines[^1] = channelLine with { Status = channelStatus, Detail = channelDetail };
+            hasCritical |= channelStatus == ValidationStatus.Failure;
         }
-
-        var channelLine = new ValidationLine("Канал на Twitch", ValidationStatus.Pending, "проверка...");
-        lines.Add(channelLine);
-
-        UpdateValidation(lines);
-
-        var (channelStatus, channelDetail, channelResult) =
-            await CheckChannelExistsAsync(_context, cancellationToken);
-
-        if (cancellationToken.IsCancellationRequested)
-        {
-            return;
-        }
-
-        _lastChannelCheckResult = channelResult;
-        lines[^1] = channelLine with { Status = channelStatus, Detail = channelDetail };
-        hasCritical |= channelStatus == ValidationStatus.Failure;
 
         UpdateValidation(lines);
 
@@ -321,7 +358,7 @@ public sealed partial class CompletionPageViewModel : OnboardingPageViewModelBas
                     (ValidationStatus.Success, $"найден @{channel}", result),
                 ChannelValidationResult.NotFound =>
                     (ValidationStatus.Failure,
-                        $"канал «{channel}» не найден. Возможно, имя написано с ошибкой – вернитесь на шаг учётных данных.",
+                        $"канал «{channel}» не найден. Возможно, имя написано с ошибкой – вернитесь на шаг настройки Twitch.",
                         result),
                 _ =>
                     (ValidationStatus.Skipped, "не удалось проверить (сеть)", result),
@@ -381,7 +418,7 @@ public sealed partial class CompletionPageViewModel : OnboardingPageViewModelBas
             _logger.OnboardingHttpServerRestartFailed(exception, newPort);
             _dialogService.Warning(
                 "Внимание",
-                $"HTTP сервер не удалось перезапустить на порту {newPort}.\nНастройки сохранены – потребуется перезапуск приложения.");
+                $"HTTP-сервер не удалось перезапустить на порту {newPort}.\nНастройки сохранены – потребуется перезапуск приложения.");
         }
     }
 

@@ -310,6 +310,9 @@ internal static partial class AppLog
     [LoggerMessage(EventId = 1331, Level = LogLevel.Error, Message = "Перенос данных предыдущей версии прервался")]
     public static partial void LegacyImportInterrupted(this ILogger logger, Exception exception);
 
+    [LoggerMessage(EventId = 1333, Level = LogLevel.Error, Message = "Не удалось обновить мастер после переноса данных")]
+    public static partial void LegacyImportReloadFailed(this ILogger logger, Exception exception);
+
     [LoggerMessage(EventId = 1332, Level = LogLevel.Information, Message = "Поиск данных предыдущей версии занял {ElapsedMs:F0} мс")]
     public static partial void LegacyImportSearchCompleted(this ILogger logger, double elapsedMs);
 

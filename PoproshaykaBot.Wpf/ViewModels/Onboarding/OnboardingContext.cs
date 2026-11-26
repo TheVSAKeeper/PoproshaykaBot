@@ -1,4 +1,6 @@
 ﻿using PoproshaykaBot.Core.Settings;
+using PoproshaykaBot.Core.Settings.Migrations.LegacyImport;
+using PoproshaykaBot.Core.Settings.Onboarding;
 using PoproshaykaBot.Core.Twitch.Auth;
 using PoproshaykaBot.Core.Platforms;
 using PoproshaykaBot.Core.Platforms.Auth;
@@ -6,10 +8,11 @@ using PoproshaykaBot.Core.Settings.Stores;
 using PoproshaykaBot.Core.YouTube;
 using PoproshaykaBot.Core.YouTube.Auth;
 using System.Runtime.ExceptionServices;
+using System.Text.RegularExpressions;
 
 namespace PoproshaykaBot.Wpf.ViewModels.Onboarding;
 
-public sealed class OnboardingContext(
+public sealed partial class OnboardingContext(
     AppSettings settings,
     TwitchAccountSettings botAccount,
     TwitchAccountSettings broadcasterAccount,
@@ -19,6 +22,8 @@ public sealed class OnboardingContext(
     YouTubeAccountSettings? youTubeBroadcasterAccount = null)
 {
     public event EventHandler? CredentialsChanged;
+
+    public event EventHandler? PlatformsChanged;
 
     public AppSettings Settings { get; } = settings;
 
@@ -36,11 +41,23 @@ public sealed class OnboardingContext(
 
     public bool AutoDetectChannel { get; set; } = true;
 
+    public bool IncludeLegacyImport { get; set; }
+
+    public LegacyImportResult? ImportResult { get; set; }
+
+    internal OnboardingChecklist? Checklist { get; set; }
+
     internal bool TwitchSettingsWritten { get; set; }
 
     internal ChannelCatalogStore? TwitchCatalog { get; init; }
 
     internal ChannelCatalogEntry? TwitchChannel { get; init; }
+
+    internal ChannelCatalogEntry? YouTubeChannel { get; set; }
+
+    internal ResolvedYouTubeChannelInfo? YouTubeResolvedChannel { get; set; }
+
+    internal sealed record ResolvedYouTubeChannelInfo(string Input, string ChannelId, string DisplayName, string ChannelUrl);
 
     private readonly HashSet<PlatformAuthRole> _reauthorizedTwitchRoles = [];
     private readonly HashSet<PlatformAuthRole> _pendingTwitchRoles = [];
@@ -196,7 +213,8 @@ public sealed class OnboardingContext(
         try
         {
             error = WriteTwitchAccounts(accounts, undo, accountSnapshots, assignments)
-                ?? WriteYouTube(youtubeSettingsStore, youtubeAccountsStore, youtubeDraft, undo);
+                ?? WriteYouTube(youtubeSettingsStore, youtubeAccountsStore, youtubeDraft, undo)
+                ?? WriteYouTubeCatalog(undo);
             if (error is null && !settingsManager.SaveSettingsIfWritable(Settings))
             {
                 error = TwitchSettingsNotWritten;
@@ -431,7 +449,240 @@ public sealed class OnboardingContext(
 
     private sealed record ProvisionalWrite(WriteKey Key, Func<bool> Undo);
 
-    private readonly record struct WriteKey(object Store, PlatformAuthRole Role = PlatformAuthRole.None);
+    private readonly record struct WriteKey(object Store, PlatformAuthRole Role = PlatformAuthRole.None, StreamingPlatform? Platform = null);
+
+    private string? WriteYouTubeCatalog(List<ProvisionalWrite> undo)
+    {
+        if (TwitchCatalog is not { } catalog || !YouTubeSettings.Enabled)
+        {
+            return null;
+        }
+
+        if (ResolveYouTubeCatalogIdentity() is not { } identity)
+        {
+            return null;
+        }
+
+        var before = catalog.Load();
+        var previousEntry = before.Channels.FirstOrDefault(channel =>
+            channel.Platform == StreamingPlatform.YouTube
+            && string.Equals(channel.ChannelId, identity.ChannelId, StringComparison.Ordinal));
+        var previousSnapshot = previousEntry is null ? null : JsonStoreClone.DeepClone(previousEntry);
+        var previousRouting = before.Platforms.FirstOrDefault(platform => platform.Platform == StreamingPlatform.YouTube);
+        var previousRoutingSnapshot = previousRouting is null ? null : JsonStoreClone.DeepClone(previousRouting);
+
+        var written = catalog.Mutate(settings =>
+        {
+            var entry = settings.Channels.FirstOrDefault(channel =>
+                channel.Platform == StreamingPlatform.YouTube
+                && string.Equals(channel.ChannelId, identity.ChannelId, StringComparison.Ordinal));
+
+            if (entry is null)
+            {
+                entry = new()
+                {
+                    Platform = StreamingPlatform.YouTube,
+                    ChannelId = identity.ChannelId,
+                };
+                settings.Channels.Add(entry);
+            }
+
+            entry.IsConfigured = true;
+            entry.MonitoringEnabled = true;
+            entry.DisplayName = identity.DisplayName;
+            if (!string.IsNullOrWhiteSpace(identity.Handle))
+            {
+                entry.Handle = identity.Handle;
+            }
+
+            entry.ChannelUrl = identity.ChannelUrl;
+
+            entry.BotContextId = AuthContextIds.Normalize(entry.BotContextId);
+            if (PlatformAuthRoles.HasCredentials(YouTubeBotAccount.AccessToken, YouTubeBotAccount.RefreshToken)
+                && !string.IsNullOrWhiteSpace(YouTubeBotAccount.ChannelId))
+            {
+                var botId = YouTubeBotAccount.ChannelId.Trim();
+                entry.BotAccountId = botId;
+                entry.BotVerifiedSubjectId = botId;
+            }
+
+            entry.BroadcasterContextId = AuthContextIds.Normalize(entry.BroadcasterContextId);
+            if (PlatformAuthRoles.HasCredentials(YouTubeBroadcasterAccount.AccessToken, YouTubeBroadcasterAccount.RefreshToken)
+                && string.Equals(YouTubeBroadcasterAccount.ChannelId?.Trim(), identity.ChannelId, StringComparison.Ordinal))
+            {
+                entry.BroadcasterAccountId = identity.ChannelId;
+                entry.BroadcasterVerifiedSubjectId = identity.ChannelId;
+            }
+
+            var routing = settings.Platforms.FirstOrDefault(platform => platform.Platform == StreamingPlatform.YouTube);
+            if (routing is null)
+            {
+                settings.Platforms.Add(new()
+                {
+                    Platform = StreamingPlatform.YouTube,
+                    ActiveChannelId = identity.ChannelId,
+                    SwitchMode = ChannelSwitchMode.Manual,
+                });
+            }
+            else
+            {
+                routing.ActiveChannelId = identity.ChannelId;
+            }
+        });
+
+        if (!written)
+        {
+            return AssignmentNotWritten;
+        }
+
+        var updatedEntry = catalog.FindEntry(new ChannelKey(StreamingPlatform.YouTube, identity.ChannelId));
+        var updatedSnapshot = updatedEntry is null ? null : JsonStoreClone.DeepClone(updatedEntry);
+        if (updatedEntry is not null)
+        {
+            YouTubeChannel = updatedEntry;
+        }
+
+        undo.Add(new(new(catalog, Platform: StreamingPlatform.YouTube), () =>
+        {
+            return catalog.Mutate(settings =>
+            {
+                var current = settings.Channels.FirstOrDefault(channel =>
+                    channel.Platform == StreamingPlatform.YouTube
+                    && string.Equals(channel.ChannelId, identity.ChannelId, StringComparison.Ordinal));
+
+                if (previousSnapshot is null)
+                {
+                    if (current is not null && updatedSnapshot is not null && JsonStoreClone.SameValues(current, updatedSnapshot))
+                    {
+                        settings.Channels.Remove(current);
+                    }
+                }
+                else if (current is not null)
+                {
+                    if (updatedSnapshot is null || JsonStoreClone.SameValues(current, updatedSnapshot))
+                    {
+                        var index = settings.Channels.IndexOf(current);
+                        settings.Channels[index] = JsonStoreClone.DeepClone(previousSnapshot);
+                    }
+                }
+                else
+                {
+                    settings.Channels.Add(JsonStoreClone.DeepClone(previousSnapshot));
+                }
+
+                var routing = settings.Platforms.FirstOrDefault(platform => platform.Platform == StreamingPlatform.YouTube);
+                if (previousRoutingSnapshot is null)
+                {
+                    if (routing is not null && string.Equals(routing.ActiveChannelId, identity.ChannelId, StringComparison.Ordinal))
+                    {
+                        settings.Platforms.Remove(routing);
+                    }
+                }
+                else if (routing is not null)
+                {
+                    if (string.Equals(routing.ActiveChannelId, identity.ChannelId, StringComparison.Ordinal))
+                    {
+                        var index = settings.Platforms.IndexOf(routing);
+                        settings.Platforms[index] = JsonStoreClone.DeepClone(previousRoutingSnapshot);
+                    }
+                }
+                else
+                {
+                    settings.Platforms.Add(JsonStoreClone.DeepClone(previousRoutingSnapshot));
+                }
+            });
+        }));
+
+        return null;
+    }
+
+    private (string ChannelId, string DisplayName, string Handle, string ChannelUrl)? ResolveYouTubeCatalogIdentity()
+    {
+        var rawInput = YouTubeSettings.Channel?.Trim() ?? string.Empty;
+        string? channelId = null;
+        var handle = string.Empty;
+        string? resolvedDisplayName = null;
+        string? resolvedUrl = null;
+
+        if (!string.IsNullOrWhiteSpace(rawInput) && TryExtractYouTubeChannelId(rawInput, out var directId))
+        {
+            channelId = directId;
+            handle = rawInput;
+        }
+        else if (YouTubeResolvedChannel is { } resolved
+            && !string.IsNullOrWhiteSpace(resolved.ChannelId)
+            && string.Equals(resolved.Input, rawInput, StringComparison.OrdinalIgnoreCase))
+        {
+            channelId = resolved.ChannelId;
+            handle = rawInput;
+            resolvedDisplayName = resolved.DisplayName;
+            resolvedUrl = resolved.ChannelUrl;
+        }
+        else if (YouTubeChannel is { } existing
+            && !string.IsNullOrWhiteSpace(existing.ChannelId)
+            && (string.IsNullOrWhiteSpace(rawInput)
+                || string.Equals(rawInput, existing.Handle, StringComparison.OrdinalIgnoreCase)
+                || string.Equals(rawInput, existing.ChannelId, StringComparison.Ordinal)))
+        {
+            channelId = existing.ChannelId;
+            handle = string.IsNullOrWhiteSpace(rawInput) ? existing.Handle : rawInput;
+            resolvedDisplayName = existing.DisplayName;
+            resolvedUrl = existing.ChannelUrl;
+        }
+        else if (string.IsNullOrWhiteSpace(rawInput) && !string.IsNullOrWhiteSpace(YouTubeBroadcasterAccount.ChannelId))
+        {
+            channelId = YouTubeBroadcasterAccount.ChannelId.Trim();
+            handle = YouTubeBroadcasterAccount.ChannelTitle ?? string.Empty;
+        }
+
+        if (string.IsNullOrWhiteSpace(channelId))
+        {
+            return null;
+        }
+
+        var displayName = !string.IsNullOrWhiteSpace(YouTubeBroadcasterAccount.ChannelTitle)
+            && string.Equals(YouTubeBroadcasterAccount.ChannelId?.Trim(), channelId, StringComparison.Ordinal)
+            ? YouTubeBroadcasterAccount.ChannelTitle.Trim()
+            : (!string.IsNullOrWhiteSpace(resolvedDisplayName)
+                ? resolvedDisplayName
+                : (!string.IsNullOrWhiteSpace(handle) ? handle : channelId));
+        var channelUrl = !string.IsNullOrWhiteSpace(resolvedUrl)
+            ? resolvedUrl
+            : $"https://youtube.com/channel/{channelId}";
+
+        return (channelId, displayName, handle, channelUrl);
+    }
+
+    internal static bool TryExtractYouTubeChannelId(string? rawInput, out string channelId)
+    {
+        if (string.IsNullOrWhiteSpace(rawInput))
+        {
+            channelId = string.Empty;
+            return false;
+        }
+
+        var trimmed = rawInput.Trim();
+        if (YouTubeChannelUrlRegex().Match(trimmed) is { Success: true } urlMatch)
+        {
+            channelId = urlMatch.Groups["id"].Value;
+            return true;
+        }
+
+        if (YouTubeBareChannelIdRegex().IsMatch(trimmed))
+        {
+            channelId = trimmed;
+            return true;
+        }
+
+        channelId = string.Empty;
+        return false;
+    }
+
+    [GeneratedRegex(@"^https?://(?:www\.|m\.)?youtube\.com/channel/(?<id>UC[A-Za-z0-9_-]{10,})(?:[/?#].*)?$", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant, matchTimeoutMilliseconds: 500)]
+    private static partial Regex YouTubeChannelUrlRegex();
+
+    [GeneratedRegex(@"^UC[A-Za-z0-9_-]{20,}$", RegexOptions.CultureInvariant, matchTimeoutMilliseconds: 500)]
+    private static partial Regex YouTubeBareChannelIdRegex();
 
     private static bool SameAccount(TwitchAccountSettings? left, TwitchAccountSettings? right) =>
         left is null || right is null ? left is null && right is null
@@ -467,5 +718,10 @@ public sealed class OnboardingContext(
     public void RaiseCredentialsChanged()
     {
         CredentialsChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    public void RaisePlatformsChanged()
+    {
+        PlatformsChanged?.Invoke(this, EventArgs.Empty);
     }
 }

@@ -75,12 +75,14 @@ public abstract partial class AuthorizationPageViewModelBase : OnboardingPageVie
     }
 
     public override string PageTitle => _role == PlatformAuthRole.Broadcaster
-        ? "Авторизация стримера"
-        : "Авторизация бота";
+        ? "Авторизация стримера Twitch"
+        : "Авторизация бота Twitch";
+
+    public override bool IsApplicable(OnboardingContext context) => context.Settings.Twitch.Enabled;
 
     public string IntroText => _role == PlatformAuthRole.Broadcaster
-        ? "Для режима «только бот» укажите канал вручную на шаге «Учётные данные приложения» и пропустите этот шаг. Авторизация стримера нужна для опросов и управления эфиром."
-        : "Авторизуйте аккаунт бота. От его имени бот будет писать в чат и слушать сообщения.";
+        ? "Для режима «только бот» укажите канал вручную на шаге «Настройка Twitch» и пропустите этот шаг. Авторизация стримера нужна для опросов и управления эфиром."
+        : "Авторизуйте аккаунт бота Twitch. От его имени бот будет писать в чат и слушать сообщения.";
 
     public string OpenBrowserButtonText => HasToken
         ? "Сменить через браузер"

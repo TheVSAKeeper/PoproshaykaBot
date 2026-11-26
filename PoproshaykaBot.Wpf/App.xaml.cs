@@ -23,6 +23,7 @@ using PoproshaykaBot.Core.Server;
 using PoproshaykaBot.Core.Settings;
 using PoproshaykaBot.Core.Settings.Migrations;
 using PoproshaykaBot.Core.Settings.Migrations.LegacyImport;
+using PoproshaykaBot.Core.Settings.Onboarding;
 using PoproshaykaBot.Core.Statistics;
 using PoproshaykaBot.Core.Streaming;
 using PoproshaykaBot.Core.Twitch;
@@ -243,150 +244,161 @@ public partial class App : Application
             ReportEnvironment(e.Args, _previousRunState);
 
             using var splashLoggerFactory = new SerilogLoggerFactory(Log.Logger);
-            using var splash = IsHeadless ? null : new StartupSplash(
+            StartupSplash? splash = IsHeadless ? null : new StartupSplash(
                 AppInfo.Name, AppInfo.Version, "Запуск приложения", 4, splashLoggerFactory.CreateLogger<App>());
 
-            LegacyImportResult? startupImport = null;
-            var configureAfterImport = false;
-            using (await BeginStartupPhaseAsync(splash, "Подготовка настроек…"))
+            try
             {
-                if (_isFinalizeUpdate)
+                var offerImport = false;
+                IReadOnlyList<LegacyDataSummary> importCandidates = [];
+                LegacyDataSummary? importTarget = null;
+
+                using (await BeginStartupPhaseAsync(splash, "Подготовка настроек…"))
                 {
-                    FinalizeUpdate();
+                    if (_isFinalizeUpdate)
+                    {
+                        FinalizeUpdate();
+                    }
+
+                    ViewLocator.InstallIntoApplication();
+
+                    if (IsHeadless)
+                    {
+                        MigrateLegacySettingsLayout();
+                    }
+                    else
+                    {
+                        await Task.Run(MigrateLegacySettingsLayout);
+                        (offerImport, importCandidates, importTarget) = await ScanLegacyImportCandidatesAsync(uiSettings);
+                    }
                 }
 
-                ViewLocator.InstallIntoApplication();
+                using (await BeginStartupPhaseAsync(splash, "Подготовка приложения…"))
+                {
+                    _services = BuildAndInitializeServices(uiSettings, coreUiLogSink, themePackLoader);
+                }
+
+                if (_galleryArguments is not null)
+                {
+                    _services.GetRequiredService<StatisticsPreload>().Start();
+                    _appLifetime = _services.GetRequiredService<AppLifetime>();
+                    RunGallery(_galleryArguments, _services);
+                    return;
+                }
+
+                var checklist = _services.GetRequiredService<OnboardingChecklist>();
+                var onboardingPlan = GetStartupOnboardingPlan(checklist, offerImport);
+
+                if (onboardingPlan.ShouldShow)
+                {
+                    splash?.Dispose();
+                    splash = null;
+
+                    var (modalWait, _) = await ShowStartupOnboardingWizardAsync(
+                        onboardingPlan,
+                        importCandidates,
+                        importTarget,
+                        uiSettings,
+                        uiSettingsPath,
+                        themePackLoader,
+                        coreUiLogSink);
+                    interactiveWait += modalWait;
+                }
+
+                _services.GetRequiredService<StatisticsPreload>().Start();
+                _appLifetime = _services.GetRequiredService<AppLifetime>();
 
                 if (IsHeadless)
                 {
-                    MigrateLegacySettingsLayout();
+                    _services.GetRequiredService<ChannelSwitchPromptBannerViewModel>().Suppress();
+                    HostLog.Information("Запуск в режиме UI smoke-теста. HTTP сервер и сетевые подсистемы отключены");
                 }
                 else
                 {
-                    (uiSettings, var modalWait, startupImport, configureAfterImport) =
-                        await OfferLegacyDataImportAsync(uiSettings, uiSettingsPath, themePackLoader);
-                    interactiveWait += modalWait;
-                    await Task.Run(MigrateLegacySettingsLayout);
-                }
-            }
-
-            using (await BeginStartupPhaseAsync(splash, "Подготовка приложения…"))
-            {
-                var services = new ServiceCollection();
-                services.AddSingleton(themePackLoader);
-                ConfigureServices(
-                    services,
-                    coreUiLogSink,
-                    uiSettings,
-                    _loggingOptions!,
-                    _bindingErrors,
-                    IsGallery ? null : _mcpStartupOptions.DiscoveryFilePath);
-                services.AddKeepShellLogging(_logging!);
-                services.AddSingleton(_unhandledExceptionJournal);
-                services.AddSingleton(_previousRunState);
-                services.AddSingleton(UnobservedTaskExceptions);
-
-                _services = services.BuildServiceProvider(new ServiceProviderOptions
-                {
-                    ValidateOnBuild = true,
-                    ValidateScopes = true,
-                });
-
-                _services.GetRequiredService<IBroadcastDraftCoordinator>().RecoverCompletedDraftOnStartup();
-                _services.ActivateEventSubscribers(typeof(InfrastructureServiceCollectionExtensions).Assembly);
-                _services.GetRequiredService<ChannelCatalogReconciler>().ReconcileStartup();
-                ReportConfiguration(_services);
-                _services.GetRequiredService<StatisticsPreload>().Start();
-                _appLifetime = _services.GetRequiredService<AppLifetime>();
-            }
-
-            if (IsHeadless)
-            {
-                _services.GetRequiredService<ChannelSwitchPromptBannerViewModel>().Suppress();
-                HostLog.Information("Запуск в режиме UI smoke-теста. HTTP сервер и сетевые подсистемы отключены");
-            }
-            else
-            {
-                using var launchSpan = await BeginStartupPhaseAsync(splash, "Запуск сервисов…");
-                var settingsManager = _services.GetRequiredService<SettingsManager>();
-                await StartAppLifetimeAsync(_appLifetime);
-                _kestrelServer = _services.GetRequiredService<KestrelHttpServer>();
-                await StartHttpServerIfNeededAsync(settingsManager, _kestrelServer);
-                await StartStreamMonitoringAsync(_services.GetServices<StreamMonitoringHost>(), _startedStreamMonitoringHosts);
-                _memoryWatchdog = new(new SerilogLoggerFactory(Log.Logger).CreateLogger(nameof(MemoryWatchdog)),
-                    static () =>
+                    using var launchSpan = await BeginStartupPhaseAsync(splash, "Запуск сервисов…");
+                    var settingsManager = _services.GetRequiredService<SettingsManager>();
+                    await StartAppLifetimeAsync(_appLifetime);
+                    _kestrelServer = _services.GetRequiredService<KestrelHttpServer>();
+                    if (!_kestrelServer.IsRunning)
                     {
-                        _runStateStore?.MarkFailure(RunStateStatus.MemoryWatchdog);
-                        Log.CloseAndFlush();
-                    },
-                    _services.GetRequiredService<MemoryUsageSink>());
-            }
+                        await StartHttpServerIfNeededAsync(settingsManager, _kestrelServer);
+                    }
 
-            if (_galleryArguments is not null)
-            {
-                RunGallery(_galleryArguments, _services);
-                return;
-            }
-
-            using (await BeginStartupPhaseAsync(splash, "Открытие главного окна…"))
-            {
-                var window = _services.GetRequiredService<MainWindow>();
-                MainWindow = window;
-
-                if (IsHeadless)
-                {
-                    OffScreenWindow.Prepare(window, window.Width, window.Height);
+                    await StartStreamMonitoringAsync(_services.GetServices<StreamMonitoringHost>(), _startedStreamMonitoringHosts);
+                    _memoryWatchdog = new(new SerilogLoggerFactory(Log.Logger).CreateLogger(nameof(MemoryWatchdog)),
+                        static () =>
+                        {
+                            _runStateStore?.MarkFailure(RunStateStatus.MemoryWatchdog);
+                            Log.CloseAndFlush();
+                        },
+                        _services.GetRequiredService<MemoryUsageSink>());
                 }
 
-                window.Show();
-
-                if (splash is not null)
+                using (await BeginStartupPhaseAsync(splash, "Открытие главного окна…"))
                 {
-                    await Dispatcher.Yield(DispatcherPriority.Loaded);
-                }
-            }
+                    var window = _services.GetRequiredService<MainWindow>();
+                    MainWindow = window;
 
-            splash?.Dispose();
-
-            if ((!IsHeadless || _mcpStartupOptions.ForceEnable) && !IsGallery)
-            {
-                var mcpPreferences = _services.GetRequiredService<McpPreferences>();
-
-                if (_mcpStartupOptions.HasOverrides)
-                {
-                    mcpPreferences.ApplyRuntimeOverrides(
-                        enabled: _mcpStartupOptions.ForceEnable ? true : null,
-                        port: _mcpStartupOptions.Port,
-                        token: _mcpStartupOptions.Token,
-                        allowMutations: _mcpStartupOptions.AllowMutations);
-                }
-
-                _services.GetRequiredService<McpServerHost>().Apply();
-            }
-
-            ShutdownMode = ShutdownMode.OnMainWindowClose;
-
-            _services.GetRequiredService<PerformanceMonitor>().ReportStartup(ComputeStartupElapsed(startupTimestamp, interactiveWait));
-
-            if (!IsHeadless && !IsGallery)
-            {
-                _themeUpdatesCts = new CancellationTokenSource();
-                var themeUpdates = _services.GetRequiredService<ThemePackUpdateService>();
-                var themeUpdatesToken = _themeUpdatesCts.Token;
-                _ = UiAsync.RunGuardedAsync(
-                    async () =>
+                    if (IsHeadless)
                     {
-                        _ = await themeUpdates.CheckOnStartupAsync(themeUpdatesToken);
-                    },
-                    static exception => HostLog.Warning(exception, "Не удалось проверить обновления пакетов тем"));
-            }
+                        OffScreenWindow.Prepare(window, window.Width, window.Height);
+                    }
 
-            if (_previousRunState.WasUnclean && !IsHeadless)
+                    window.Show();
+
+                    if (splash is not null)
+                    {
+                        await Dispatcher.Yield(DispatcherPriority.Loaded);
+                    }
+                }
+
+                splash?.Dispose();
+                splash = null;
+
+                if ((!IsHeadless || _mcpStartupOptions.ForceEnable) && !IsGallery)
+                {
+                    var mcpPreferences = _services.GetRequiredService<McpPreferences>();
+
+                    if (_mcpStartupOptions.HasOverrides)
+                    {
+                        mcpPreferences.ApplyRuntimeOverrides(
+                            enabled: _mcpStartupOptions.ForceEnable ? true : null,
+                            port: _mcpStartupOptions.Port,
+                            token: _mcpStartupOptions.Token,
+                            allowMutations: _mcpStartupOptions.AllowMutations);
+                    }
+
+                    _services.GetRequiredService<McpServerHost>().Apply();
+                }
+
+                ShutdownMode = ShutdownMode.OnMainWindowClose;
+
+                _services.GetRequiredService<PerformanceMonitor>().ReportStartup(ComputeStartupElapsed(startupTimestamp, interactiveWait));
+
+                if (!IsHeadless && !IsGallery)
+                {
+                    _themeUpdatesCts = new CancellationTokenSource();
+                    var themeUpdates = _services.GetRequiredService<ThemePackUpdateService>();
+                    var themeUpdatesToken = _themeUpdatesCts.Token;
+                    _ = UiAsync.RunGuardedAsync(
+                        async () =>
+                        {
+                            _ = await themeUpdates.CheckOnStartupAsync(themeUpdatesToken);
+                        },
+                        static exception => HostLog.Warning(exception, "Не удалось проверить обновления пакетов тем"));
+                }
+
+                if (_previousRunState.WasUnclean && !IsHeadless)
+                {
+                    _services.GetRequiredService<ShellViewModel>().ReportUncleanPreviousRun();
+                }
+
+                _services.GetRequiredService<OnboardingBannerViewModel>().Refresh();
+            }
+            finally
             {
-                _services.GetRequiredService<ShellViewModel>().ReportUncleanPreviousRun();
+                splash?.Dispose();
             }
-
-            MaybeLaunchOnboardingWizard(startupImport, configureAfterImport);
         }
         catch (Exception ex)
         {
@@ -771,7 +783,9 @@ public partial class App : Application
         services.AddSingleton<SettingsPageViewModel>();
 
         services.AddTransient<IOnboardingPageViewModel, WelcomePageViewModel>();
+        services.AddTransient<IOnboardingPageViewModel, LegacyImportPageViewModel>();
         services.AddTransient<IOnboardingPageViewModel, AppearancePageViewModel>();
+        services.AddTransient<IOnboardingPageViewModel, PlatformsPageViewModel>();
         services.AddTransient<IOnboardingPageViewModel, CredentialsPageViewModel>();
         services.AddTransient<IOnboardingPageViewModel, HttpServerCheckPageViewModel>();
         services.AddTransient<IOnboardingPageViewModel, BotAuthorizationPageViewModel>();
@@ -783,6 +797,39 @@ public partial class App : Application
 
         services.AddTransient<OnboardingWizardViewModel>();
         services.AddTransient<OnboardingWizardWindow>();
+    }
+
+    private ServiceProvider BuildAndInitializeServices(
+        ISettingsStore uiSettings,
+        UiLogSink coreUiLogSink,
+        ThemePackLoader themePackLoader)
+    {
+        var services = new ServiceCollection();
+        services.AddSingleton(themePackLoader);
+        ConfigureServices(
+            services,
+            coreUiLogSink,
+            uiSettings,
+            _loggingOptions!,
+            _bindingErrors,
+            IsGallery ? null : _mcpStartupOptions.DiscoveryFilePath);
+        services.AddKeepShellLogging(_logging!);
+        services.AddSingleton(_unhandledExceptionJournal);
+        services.AddSingleton(_previousRunState);
+        services.AddSingleton(UnobservedTaskExceptions);
+
+        var provider = services.BuildServiceProvider(new ServiceProviderOptions
+        {
+            ValidateOnBuild = true,
+            ValidateScopes = true,
+        });
+
+        provider.GetRequiredService<IBroadcastDraftCoordinator>().RecoverCompletedDraftOnStartup();
+        provider.ActivateEventSubscribers(typeof(InfrastructureServiceCollectionExtensions).Assembly);
+        provider.GetRequiredService<ChannelCatalogReconciler>().ReconcileStartup();
+        ReportConfiguration(provider);
+
+        return provider;
     }
 
     internal async Task StopMcpBeforeExitAsync()

@@ -83,6 +83,8 @@ public sealed partial class YouTubeSettingsSectionViewModel : ObservableObject, 
 
     public bool ShowLegacyChannelField { get; set; } = true;
 
+    public bool ShowEnableToggle { get; set; } = true;
+
     public YouTubeQuotaStatusViewModel QuotaStatus { get; }
 
     public bool HasQuotaBudgetError => !TryParsePositiveQuotaBudget(DailyQuotaBudgetText, out _);

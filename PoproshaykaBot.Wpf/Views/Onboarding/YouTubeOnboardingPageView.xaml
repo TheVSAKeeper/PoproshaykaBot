@@ -9,20 +9,15 @@
              d:DesignHeight="520"
              d:DesignWidth="688">
 
-    <ScrollViewer AutomationProperties.Name="Подключение YouTube"
+    <ScrollViewer AutomationProperties.Name="Настройка YouTube"
                   VerticalScrollBarVisibility="Auto"
                   HorizontalScrollBarVisibility="Disabled">
         <StackPanel Margin="20,18">
-            <TextBlock Text="Подключите YouTube, если хотите читать и отправлять сообщения в чате YouTube-трансляций вместе с Twitch. Если используете только Twitch, просто нажмите «Далее →»."
+            <TextBlock Text="Укажите параметры проекта Google Cloud, канал трансляций и авторизуйте аккаунт бота YouTube."
                        Foreground="{DynamicResource Fg.Secondary}"
                        FontSize="{DynamicResource Font.Size.S}"
                        TextWrapping="Wrap"
                        Margin="0,0,0,14" />
-
-            <CheckBox Style="{StaticResource CheckBox.Default}"
-                      IsChecked="{Binding Editor.Enabled, Mode=TwoWay}"
-                      Content="Включить интеграцию YouTube"
-                      Margin="0,0,0,14" />
 
             <ContentControl Content="{Binding Editor}"
                             Focusable="False" />
@@ -34,8 +29,7 @@
                        Margin="0,10,0,0"
                        Visibility="{Binding HasValidationHint, Converter={StaticResource BoolToVisibility}}" />
 
-            <StackPanel Visibility="{Binding Editor.Enabled, Converter={StaticResource BoolToVisibility}}"
-                        Margin="0,16,0,0">
+            <StackPanel Margin="0,16,0,0">
                 <TextBlock Text="Аккаунт бота (YouTube)"
                            FontWeight="{DynamicResource Font.Weight.SemiBold}"
                            Foreground="{DynamicResource Fg.Primary}"

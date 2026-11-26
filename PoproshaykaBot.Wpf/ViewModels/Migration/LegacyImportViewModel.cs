@@ -27,6 +27,8 @@ public sealed partial class LegacyImportViewModel : ObservableObject
     private readonly Func<string, LegacyDataSummary?> _inspect;
     private HashSet<string> _targetFiles = new(StringComparer.OrdinalIgnoreCase);
 
+    internal Func<LegacyImportResult, bool, Task>? AfterImportAsync { get; set; }
+
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(ImportCommand))]
     [NotifyPropertyChangedFor(nameof(AuthorizationNotice))]
@@ -61,6 +63,13 @@ public sealed partial class LegacyImportViewModel : ObservableObject
 
     [ObservableProperty]
     private string? _pickerNotice;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsBlocked))]
+    [NotifyPropertyChangedFor(nameof(CanSelectSource))]
+    [NotifyCanExecuteChangedFor(nameof(ImportCommand))]
+    [NotifyCanExecuteChangedFor(nameof(PickFolderCommand))]
+    private string? _blockedNotice;
 
     [ObservableProperty]
     private string _resultHeadline = string.Empty;
@@ -110,7 +119,9 @@ public sealed partial class LegacyImportViewModel : ObservableObject
 
     public bool IsBusy => BusyMessage is not null;
 
-    public bool CanSelectSource => !IsBusy;
+    public bool IsBlocked => !string.IsNullOrEmpty(BlockedNotice);
+
+    public bool CanSelectSource => !IsBusy && !IsBlocked;
 
     public bool CanOverwriteExisting => SelectedSource is { Summary.Kind: not LegacyDataSourceKind.CurrentBaseDirectory } source
         && source.Summary.Files.Select(file => file.RelativeTargetPath).Concat(source.Summary.GeneratedTargetPaths)
@@ -143,7 +154,7 @@ public sealed partial class LegacyImportViewModel : ObservableObject
         _ => null,
     };
 
-    private bool CanPickFolder() => !IsBusy && !IsCompleted;
+    private bool CanPickFolder() => !IsBusy && !IsCompleted && !IsBlocked;
 
     private bool CanImport() => CanPickFolder() && SelectedSource is not null;
 
@@ -227,43 +238,59 @@ public sealed partial class LegacyImportViewModel : ObservableObject
 
         try
         {
-            result = await Task.Run(() => _settingsWriteGate is null
-                ? WithCacheScopeAsync()
-                : _settingsWriteGate.RunExternalWriteAsync(WithCacheScopeAsync, static imported => imported.RewrittenSettingsFiles));
+            try
+            {
+                result = await Task.Run(() => _settingsWriteGate is null
+                    ? WithCacheScopeAsync()
+                    : _settingsWriteGate.RunExternalWriteAsync(WithCacheScopeAsync, static imported => imported.RewrittenSettingsFiles));
+            }
+            catch (Exception exception)
+            {
+                _logger.LegacyImportInterrupted(exception);
+                ResultHeadline = "Перенос прервался";
+                ResultRestartNotice = "Часть файлов могла перенестись. Перезапустите приложение, чтобы оно перечитало рабочую папку.";
+                IsCompleted = true;
+                return;
+            }
 
             uiPreferencesKept = !result.CopiedUiPreferences;
-        }
-        catch (Exception exception)
-        {
-            _logger.LegacyImportInterrupted(exception);
-            ResultHeadline = "Перенос прервался";
-            ResultRestartNotice = "Часть файлов могла перенестись. Перезапустите приложение, чтобы оно перечитало рабочую папку.";
+
+            Result = result;
+            ResultHeadline = LegacyImportText.BuildHeadline(result);
+            Fill(ResultCounts, LegacyImportText.BuildCounts(result));
+            Fill(ResultFailures, LegacyImportText.BuildFailures(result));
+            ResultAuthorizationNotice = LegacyImportText.BuildAuthorizationNotice(result, _isSettingsEntry);
+            ResultUnmigratedNotice = LegacyImportText.DescribeUnmigrated(result);
+            ResultRestartNotice = LegacyImportText.BuildRestartNotice(result, _isSettingsEntry);
             IsCompleted = true;
-            return;
+
+            if (AfterImportAsync is { } afterImport)
+            {
+                try
+                {
+                    await afterImport(result, NeverAskAgain);
+                }
+                catch (Exception exception)
+                {
+                    _logger.LegacyImportReloadFailed(exception);
+                    ResultRestartNotice = "Данные перенесены, но обновить мастер на лету не удалось. Перезапустите приложение, чтобы применить перенесённые настройки.";
+                }
+            }
         }
         finally
         {
             _uiSettingsGuard?.Resume(rewritten: !uiPreferencesKept);
             BusyMessage = null;
         }
-
-        Result = result;
-        ResultHeadline = LegacyImportText.BuildHeadline(result);
-        Fill(ResultCounts, LegacyImportText.BuildCounts(result));
-        Fill(ResultFailures, LegacyImportText.BuildFailures(result));
-
-        ResultAuthorizationNotice = LegacyImportText.BuildAuthorizationNotice(result, _isSettingsEntry);
-
-        ResultUnmigratedNotice = LegacyImportText.DescribeUnmigrated(result);
-
-        ResultRestartNotice = LegacyImportText.BuildRestartNotice(result, _isSettingsEntry);
-
-        IsCompleted = true;
     }
 
     [RelayCommand(CanExecute = nameof(CanPickFolder))]
     private async Task PickFolderAsync()
     {
+        if (!CanPickFolder())
+        {
+            return;
+        }
         var path = _filePicker.PickFolder("Папка с данными предыдущей версии");
 
         if (string.IsNullOrEmpty(path))

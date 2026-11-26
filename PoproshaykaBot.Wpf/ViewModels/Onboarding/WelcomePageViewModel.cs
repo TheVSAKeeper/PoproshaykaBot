@@ -1,39 +1,41 @@
-﻿using CommunityToolkit.Mvvm.Input;
+﻿using CommunityToolkit.Mvvm.ComponentModel;
 
 namespace PoproshaykaBot.Wpf.ViewModels.Onboarding;
 
 public sealed partial class WelcomePageViewModel : OnboardingPageViewModelBase
 {
-    private const string TwitchDevConsoleUrl = "https://dev.twitch.tv/console/apps";
-
-    private readonly IShellLauncher _shellLauncher;
-
-    public WelcomePageViewModel(IShellLauncher shellLauncher)
-    {
-        _shellLauncher = shellLauncher;
-    }
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(BodyText))]
+    private bool _includeLegacyImport;
 
     public override string PageTitle => "Добро пожаловать";
 
-    public string IntroText => "Этот мастер поможет настроить бота за несколько шагов.";
+    public string IntroText => "Этот мастер поможет настроить PoproshaykaBot за несколько шагов.";
 
-    public string BodyText =>
-        "Понадобится приложение в Twitch Developer Console: оно даёт пару Client ID + Client Secret и принимает Redirect URI."
-        + Environment.NewLine + Environment.NewLine
-        + "Если приложения ещё нет – откройте консоль, создайте новое приложение, укажите Redirect URI http://localhost:3000 (порт можно поменять)."
-        + Environment.NewLine + Environment.NewLine
-        + "Если уже есть – переходите к следующему шагу.";
+    public string BodyText
+    {
+        get
+        {
+            var text =
+                "Бот поддерживает Twitch, YouTube или обе площадки сразу (мультистрим), локальный оверлей чата для OBS, команды и историю стримов."
+                + Environment.NewLine + Environment.NewLine
+                + "На следующих шагах вы сможете выбрать оформление, подключить нужные площадки, настроить локальный HTTP-сервер и проверить работу бота в чате.";
 
-    public string HintText => "Нажмите «Далее», чтобы продолжить.";
+            if (IncludeLegacyImport)
+            {
+                text += Environment.NewLine + Environment.NewLine
+                    + "Если вы уже пользовались предыдущей версией (WinForms), на следующем шаге можно сразу перенести настройки, аккаунты и статистику.";
+            }
+
+            return text;
+        }
+    }
+
+    public string HintText => "Нажмите «Далее →», чтобы продолжить.";
 
     public override void OnEnter(OnboardingContext context)
     {
+        IncludeLegacyImport = context.IncludeLegacyImport;
         CanAdvance = true;
-    }
-
-    [RelayCommand]
-    private void OpenDevConsole()
-    {
-        _shellLauncher.Open(TwitchDevConsoleUrl);
     }
 }

@@ -10,50 +10,108 @@
              d:DesignHeight="376"
              d:DesignWidth="688">
 
-    <StackPanel Margin="20,18">
+    <ScrollViewer AutomationProperties.Name="Подключение бота"
+                  VerticalScrollBarVisibility="Auto"
+                  HorizontalScrollBarVisibility="Disabled">
+        <StackPanel Margin="20,18">
+            <TextBlock Text="{Binding StatusText}"
+                       FontWeight="SemiBold"
+                       FontSize="{DynamicResource Font.Size.L}"
+                       TextWrapping="Wrap"
+                       Margin="0,0,0,8">
+                <TextBlock.Style>
+                    <Style TargetType="TextBlock">
+                        <Setter Property="Foreground" Value="{DynamicResource Fg.Primary}" />
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding Phase}" Value="{x:Static lifecycle:BotLifecyclePhase.Connected}">
+                                <Setter Property="Foreground" Value="{DynamicResource State.SuccessText}" />
+                            </DataTrigger>
+                            <DataTrigger Binding="{Binding Phase}" Value="{x:Static lifecycle:BotLifecyclePhase.Connecting}">
+                                <Setter Property="Foreground" Value="{DynamicResource State.InfoText}" />
+                            </DataTrigger>
+                            <DataTrigger Binding="{Binding Phase}" Value="{x:Static lifecycle:BotLifecyclePhase.Disconnecting}">
+                                <Setter Property="Foreground" Value="{DynamicResource State.WarningText}" />
+                            </DataTrigger>
+                            <DataTrigger Binding="{Binding Phase}" Value="{x:Static lifecycle:BotLifecyclePhase.Disconnected}">
+                                <Setter Property="Foreground" Value="{DynamicResource Fg.Secondary}" />
+                            </DataTrigger>
+                            <DataTrigger Binding="{Binding Phase}" Value="{x:Static lifecycle:BotLifecyclePhase.Cancelled}">
+                                <Setter Property="Foreground" Value="{DynamicResource State.WarningText}" />
+                            </DataTrigger>
+                            <DataTrigger Binding="{Binding Phase}" Value="{x:Static lifecycle:BotLifecyclePhase.Failed}">
+                                <Setter Property="Foreground" Value="{DynamicResource State.ErrorText}" />
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </TextBlock.Style>
+            </TextBlock>
 
-        <TextBlock Text="{Binding StatusText}"
-                   FontWeight="SemiBold"
-                   FontSize="{DynamicResource Font.Size.L}"
-                   TextWrapping="Wrap"
-                   Margin="0,0,0,8">
-            <TextBlock.Style>
-                <Style TargetType="TextBlock">
-                    <Setter Property="Foreground" Value="{DynamicResource Fg.Primary}" />
-                    <Style.Triggers>
-                        <DataTrigger Binding="{Binding Phase}" Value="{x:Static lifecycle:BotLifecyclePhase.Connected}">
-                            <Setter Property="Foreground" Value="{DynamicResource State.SuccessText}" />
-                        </DataTrigger>
-                        <DataTrigger Binding="{Binding Phase}" Value="{x:Static lifecycle:BotLifecyclePhase.Connecting}">
-                            <Setter Property="Foreground" Value="{DynamicResource State.InfoText}" />
-                        </DataTrigger>
-                        <DataTrigger Binding="{Binding Phase}" Value="{x:Static lifecycle:BotLifecyclePhase.Disconnecting}">
-                            <Setter Property="Foreground" Value="{DynamicResource State.WarningText}" />
-                        </DataTrigger>
-                        <DataTrigger Binding="{Binding Phase}" Value="{x:Static lifecycle:BotLifecyclePhase.Disconnected}">
-                            <Setter Property="Foreground" Value="{DynamicResource Fg.Secondary}" />
-                        </DataTrigger>
-                        <DataTrigger Binding="{Binding Phase}" Value="{x:Static lifecycle:BotLifecyclePhase.Cancelled}">
-                            <Setter Property="Foreground" Value="{DynamicResource State.WarningText}" />
-                        </DataTrigger>
-                        <DataTrigger Binding="{Binding Phase}" Value="{x:Static lifecycle:BotLifecyclePhase.Failed}">
-                            <Setter Property="Foreground" Value="{DynamicResource State.ErrorText}" />
-                        </DataTrigger>
-                    </Style.Triggers>
-                </Style>
-            </TextBlock.Style>
-        </TextBlock>
+            <TextBlock Text="{Binding DetailsText}"
+                       Foreground="{DynamicResource Fg.Secondary}"
+                       TextWrapping="Wrap"
+                       Margin="0,0,0,14" />
 
-        <TextBlock Text="{Binding DetailsText}"
-                   Foreground="{DynamicResource Fg.Secondary}"
-                   TextWrapping="Wrap"
-                   Margin="0,0,0,16" />
+            <ItemsControl ItemsSource="{Binding PlatformStatuses}"
+                          Margin="0,0,0,14">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate>
+                        <Border Background="{DynamicResource Bg.Base}"
+                                BorderBrush="{DynamicResource Border.Subtle}"
+                                BorderThickness="1"
+                                CornerRadius="{DynamicResource Radius.S}"
+                                Padding="12,10"
+                                Margin="0,0,0,8">
+                            <StackPanel>
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="120" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0"
+                                               Text="{Binding PlatformName}"
+                                               FontWeight="SemiBold"
+                                               TextWrapping="Wrap" />
+                                    <TextBlock Grid.Column="1"
+                                               Text="{Binding StatusText}"
+                                               TextWrapping="Wrap">
+                                        <TextBlock.Style>
+                                            <Style TargetType="TextBlock">
+                                                <Setter Property="Foreground" Value="{DynamicResource Fg.Primary}" />
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding Phase}" Value="{x:Static lifecycle:BotLifecyclePhase.Connected}">
+                                                        <Setter Property="Foreground" Value="{DynamicResource State.SuccessText}" />
+                                                    </DataTrigger>
+                                                    <DataTrigger Binding="{Binding Phase}" Value="{x:Static lifecycle:BotLifecyclePhase.Connecting}">
+                                                        <Setter Property="Foreground" Value="{DynamicResource State.InfoText}" />
+                                                    </DataTrigger>
+                                                    <DataTrigger Binding="{Binding Phase}" Value="{x:Static lifecycle:BotLifecyclePhase.Failed}">
+                                                        <Setter Property="Foreground" Value="{DynamicResource State.ErrorText}" />
+                                                    </DataTrigger>
+                                                    <DataTrigger Binding="{Binding Phase}" Value="{x:Static lifecycle:BotLifecyclePhase.Cancelled}">
+                                                        <Setter Property="Foreground" Value="{DynamicResource State.WarningText}" />
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </TextBlock.Style>
+                                    </TextBlock>
+                                </Grid>
+                                <TextBlock Text="{Binding DetailsText}"
+                                           Visibility="{Binding DetailsText, Converter={StaticResource NullToVisibility}}"
+                                           Foreground="{DynamicResource State.ErrorText}"
+                                           FontSize="{DynamicResource Font.Size.S}"
+                                           TextWrapping="Wrap"
+                                           Margin="0,4,0,0" />
+                            </StackPanel>
+                        </Border>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
 
-        <Button Command="{Binding RetryCommand}"
-                Content="Повторить подключение"
-                Style="{StaticResource Button.Ghost}"
-                HorizontalAlignment="Left"
-                Visibility="{Binding ShowRetry, Converter={StaticResource BoolToVisibility}}" />
-
-    </StackPanel>
+            <Button Command="{Binding RetryCommand}"
+                    Content="Повторить подключение"
+                    Style="{StaticResource Button.Ghost}"
+                    HorizontalAlignment="Left"
+                    Visibility="{Binding ShowRetry, Converter={StaticResource BoolToVisibility}}" />
+        </StackPanel>
+    </ScrollViewer>
 </UserControl>

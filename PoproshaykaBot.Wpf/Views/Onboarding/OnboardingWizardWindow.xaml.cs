@@ -21,9 +21,21 @@ public partial class OnboardingWizardWindow : Window
 
         _viewModel.CloseRequested += OnCloseRequested;
         Closing += OnClosing;
+        Closed += (_, _) => _viewModel.Dispose();
     }
 
     internal void StartAt(OnboardingStep step) => _viewModel.StartAt(step);
+
+    internal void AttachStartupSession(StartupOnboardingSession session) => _viewModel.AttachStartupSession(session);
+
+    internal void ConfigureWindowPlacement(Window? owner)
+    {
+        Owner = owner;
+        ShowInTaskbar = owner is null;
+        WindowStartupLocation = owner is null
+            ? WindowStartupLocation.CenterScreen
+            : WindowStartupLocation.CenterOwner;
+    }
 
     private void OnCloseRequested()
     {
@@ -40,12 +52,13 @@ public partial class OnboardingWizardWindow : Window
         if (_closeConfirmed)
         {
             _viewModel.CloseRequested -= OnCloseRequested;
+            _viewModel.Dispose();
             return;
         }
 
         e.Cancel = true;
 
-        if (_closing || _viewModel.IsBusy)
+        if (_closing || _viewModel.IsOperationBusy)
         {
             return;
         }

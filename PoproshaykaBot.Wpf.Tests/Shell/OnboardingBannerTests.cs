@@ -59,43 +59,55 @@ public class OnboardingBannerTests
         Assert.That(banner.IsVisible, Is.False);
     }
 
-    [TestCase(false, null, false, false, OnboardingStep.None)]
-    [TestCase(true, null, false, true, null)]
-    [TestCase(false, "users_statistics.json", false, false, OnboardingStep.None)]
-    [TestCase(false, "settings/settings.json", false, false, OnboardingStep.Credentials)]
-    [TestCase(true, "settings/settings.json", false, false, OnboardingStep.BotAuthorization)]
-    [TestCase(true, "settings/settings.json", true, false, null)]
-    [TestCase(true, "settings/settings.json", true, true, OnboardingStep.Appearance)]
-    public void StartupWizard_RoutesByImportResultAndRequestedSetup(
-        bool configured, string? importedFile, bool currentBotGrants, bool configureRequested, OnboardingStep? expected)
+    [TestCase(false, false, false, false, true, OnboardingStep.None, false)]
+    [TestCase(false, false, false, true, true, OnboardingStep.None, true)]
+    [TestCase(true, false, false, false, false, OnboardingStep.None, false)]
+    [TestCase(true, false, false, true, true, OnboardingStep.None, true)]
+    [TestCase(false, true, true, false, false, OnboardingStep.None, false)]
+    [TestCase(false, true, false, false, true, OnboardingStep.None, false)]
+    public void StartupOnboardingPlan_RoutesByChecklistAndImportOffer(
+        bool twitchConfigured,
+        bool youtubeEnabled,
+        bool youtubeConfigured,
+        bool hasImportOffer,
+        bool expectedShow,
+        OnboardingStep expectedStep,
+        bool expectedIncludeImport)
     {
         var settings = new SettingsManager(NullLogger<SettingsManager>.Instance, Path.Combine(_directory, "settings.json"));
         var accounts = new AccountsStore(filePath: Path.Combine(_directory, "accounts.json"));
-        if (configured)
+        var ytSettings = new YouTubeSettingsStore(filePath: Path.Combine(_directory, "youtube.json"));
+        var ytAccounts = new YouTubeAccountsStore(filePath: Path.Combine(_directory, "youtube-accounts.json"));
+
+        settings.SaveSettings(new AppSettings
         {
-            settings.SaveSettings(new AppSettings
+            Twitch = new TwitchSettings
             {
-                Twitch = new TwitchSettings { ClientId = "client", ClientSecret = "secret", Channel = "streamer" },
+                Enabled = twitchConfigured || !youtubeEnabled,
+                ClientId = twitchConfigured ? "client" : string.Empty,
+                ClientSecret = twitchConfigured ? "secret" : string.Empty,
+                Channel = twitchConfigured ? "streamer" : string.Empty,
+            },
+        });
+        if (youtubeEnabled)
+        {
+            ytSettings.Save(new Core.YouTube.YouTubeSettings
+            {
+                Enabled = true,
+                ClientId = youtubeConfigured ? "yt-client" : string.Empty,
+                Channel = youtubeConfigured ? "@yt" : string.Empty,
             });
-            accounts.SaveAll(new TwitchAccountSettings
-            {
-                AccessToken = "bot",
-                RefreshToken = "refresh",
-                StoredScopes = currentBotGrants ? [.. TwitchScopes.BotRequired] : ["chat:read"],
-            }, new TwitchAccountSettings());
         }
 
-        var result = importedFile is not null ? new LegacyImportResult
-        {
-            SourcePath = "old",
-            TargetPath = "new",
-            CopiedFiles = [importedFile],
-            Failures = [new("settings/commands.json", "I/O")],
-            SkippedFiles = [],
-        } : null;
-        var checklist = new OnboardingChecklist(settings, accounts);
+        var checklist = new OnboardingChecklist(settings, accounts, youtubeSettings: ytSettings, youtubeAccounts: ytAccounts);
+        var plan = App.GetStartupOnboardingPlan(checklist, hasImportOffer);
 
-        Assert.That(App.GetStartupWizardStep(checklist, result, configureRequested), Is.EqualTo(expected));
+        Assert.Multiple(() =>
+        {
+            Assert.That(plan.ShouldShow, Is.EqualTo(expectedShow));
+            Assert.That(plan.InitialStep, Is.EqualTo(expectedStep));
+            Assert.That(plan.IncludeLegacyImport, Is.EqualTo(expectedIncludeImport));
+        });
     }
 
     private OnboardingBannerViewModel CreateBanner()

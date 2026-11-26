@@ -1,4 +1,6 @@
 ﻿using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.Input;
+using KeepShell.Services.Platform;
 using KeepShell.ViewModels;
 using Microsoft.Extensions.Logging;
 using PoproshaykaBot.Core.Server;
@@ -11,9 +13,12 @@ namespace PoproshaykaBot.Wpf.ViewModels.Onboarding;
 
 public sealed partial class CredentialsPageViewModel : OnboardingPageViewModelBase, IDisposable
 {
+    private const string TwitchDevConsoleUrl = "https://dev.twitch.tv/console/apps";
+
     private readonly IClientCredentialsValidator _clientCredentialsValidator;
     private readonly IOnboardingChannelValidator _channelValidator;
     private readonly ILogger<CredentialsPageViewModel> _logger;
+    private readonly IShellLauncher? _shellLauncher;
 
     private readonly IUiTimer _clientDebounce;
     private readonly IUiTimer _channelDebounce;
@@ -71,11 +76,13 @@ public sealed partial class CredentialsPageViewModel : OnboardingPageViewModelBa
         IClientCredentialsValidator clientCredentialsValidator,
         IOnboardingChannelValidator channelValidator,
         ILogger<CredentialsPageViewModel> logger,
-        IUiDispatcher uiDispatcher)
+        IUiDispatcher uiDispatcher,
+        IShellLauncher? shellLauncher = null)
     {
         _clientCredentialsValidator = clientCredentialsValidator;
         _channelValidator = channelValidator;
         _logger = logger;
+        _shellLauncher = shellLauncher;
 
         _clientDebounce = uiDispatcher.CreateAsyncTimer(
             TimeSpan.FromMilliseconds(800),
@@ -88,9 +95,17 @@ public sealed partial class CredentialsPageViewModel : OnboardingPageViewModelBa
             exception => _logger.OnboardingChannelCredentialsCheckFailed(exception, Channel.Trim()));
     }
 
-    public override string PageTitle => "Учётные данные приложения";
+    public override string PageTitle => "Настройка Twitch";
 
     public bool IsChannelReadOnly => AutoDetectChannel;
+
+    public override bool IsApplicable(OnboardingContext context) => context.Settings.Twitch.Enabled;
+
+    [RelayCommand]
+    private void OpenDevConsole()
+    {
+        _shellLauncher?.Open(TwitchDevConsoleUrl);
+    }
 
     public override void OnEnter(OnboardingContext context)
     {

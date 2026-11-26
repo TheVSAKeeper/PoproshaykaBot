@@ -13,6 +13,7 @@ public sealed class AppearancePageViewModel : OnboardingPageViewModelBase, IDisp
     private readonly bool _initialPageHeader;
     private readonly bool _initialNotifications;
     private bool _committed;
+    private bool _skipRollback;
     private int _disposed;
 
     public AppearancePageViewModel(ThemeSelectionViewModel theme, ShellPreferences shell, ISettingsStore settings)
@@ -54,6 +55,11 @@ public sealed class AppearancePageViewModel : OnboardingPageViewModelBase, IDisp
         _committed = true;
     }
 
+    internal void DiscardRollback()
+    {
+        _skipRollback = true;
+    }
+
     public void Dispose()
     {
         if (Interlocked.Exchange(ref _disposed, 1) != 0)
@@ -64,7 +70,7 @@ public sealed class AppearancePageViewModel : OnboardingPageViewModelBase, IDisp
         _draft.Changed -= OnDraftChanged;
         Appearance.Theme.Dispose();
 
-        if (_committed)
+        if (_committed || _skipRollback)
         {
             return;
         }

@@ -9,8 +9,10 @@ using PoproshaykaBot.Core.Platforms.Auth;
 using PoproshaykaBot.Core.Settings;
 using PoproshaykaBot.Core.Settings.Stores;
 using PoproshaykaBot.Core.Twitch.Auth;
-using PoproshaykaBot.Wpf.Infrastructure;
 using PoproshaykaBot.Wpf.Bootstrap;
+using PoproshaykaBot.Wpf.Infrastructure;
+using PoproshaykaBot.Wpf.Infrastructure.Platforms;
+using System.Collections.ObjectModel;
 using System.Net.Http;
 
 namespace PoproshaykaBot.Wpf.ViewModels.Onboarding;
@@ -26,17 +28,17 @@ public sealed partial class BotConnectionPageViewModel : OnboardingPageViewModel
     private readonly IChatPlatformRegistry? _platformRegistry;
     private readonly ILogger<BotConnectionPageViewModel> _logger;
     private readonly List<IDisposable> _subs = [];
+    private readonly Dictionary<StreamingPlatform, string> _joinedChannels = [];
 
     private OnboardingContext? _context;
     private bool _setupSaved;
-    private string _joinedChannel = string.Empty;
     private string _lastStatusMessage = string.Empty;
 
     [ObservableProperty]
     private BotLifecyclePhase _phase = BotLifecyclePhase.Idle;
 
     [ObservableProperty]
-    private string _statusText = "Готовимся к подключению...";
+    private string _statusText = "Готовимся к подключению…";
 
     [ObservableProperty]
     private string _detailsText = string.Empty;
@@ -65,16 +67,21 @@ public sealed partial class BotConnectionPageViewModel : OnboardingPageViewModel
         _logger = logger;
 
         _subs.Add(eventBus.SubscribeOnUi<BotLifecyclePhaseChanged>(OnPhaseChanged));
+        _subs.Add(eventBus.SubscribeOnUi<PlatformConnectionChanged>(OnPlatformConnectionChanged));
         _subs.Add(eventBus.SubscribeOnUi<BotConnectionStatusUpdated>(OnStatusUpdated));
-        _subs.Add(eventBus.SubscribePlatformOnUi<BotJoinedChannel>(StreamingPlatform.Twitch, OnJoinedChannel));
+        _subs.Add(eventBus.SubscribeOnUi<BotJoinedChannel>(OnJoinedChannel));
     }
 
     public override string PageTitle => "Подключение бота";
+
+    public ObservableCollection<PlatformConnectionRow> PlatformStatuses { get; } = [];
 
     public override void OnEnter(OnboardingContext context)
     {
         _context = context;
         _setupSaved = false;
+        _joinedChannels.Clear();
+        PopulatePlatformRows(context);
         Phase = _botConnectionManager.CurrentPhase;
         CanAdvance = false;
 
@@ -105,10 +112,11 @@ public sealed partial class BotConnectionPageViewModel : OnboardingPageViewModel
             context.TwitchContextId(PlatformAuthRole.Bot)));
         _ = _eventBus.PublishAsync(new PlatformAuthorizationRefreshed(StreamingPlatform.Twitch, PlatformAuthRole.Broadcaster,
             context.TwitchContextId(PlatformAuthRole.Broadcaster)));
-        _ = _eventBus.PublishAsync(new PlatformAuthorizationRefreshed(StreamingPlatform.YouTube, Core.Platforms.Auth.PlatformAuthRole.Bot));
-        _ = _eventBus.PublishAsync(new PlatformAuthorizationRefreshed(StreamingPlatform.YouTube, Core.Platforms.Auth.PlatformAuthRole.Broadcaster));
+        _ = _eventBus.PublishAsync(new PlatformAuthorizationRefreshed(StreamingPlatform.YouTube, PlatformAuthRole.Bot));
+        _ = _eventBus.PublishAsync(new PlatformAuthorizationRefreshed(StreamingPlatform.YouTube, PlatformAuthRole.Broadcaster));
 
-        ApplyPhase(Phase);
+        SyncRowsFromController();
+        RefreshAggregateFromRows();
 
         if (_platformRegistry is not null)
         {
@@ -169,6 +177,12 @@ public sealed partial class BotConnectionPageViewModel : OnboardingPageViewModel
             return;
         }
 
+        if (_platformRegistry is not null)
+        {
+            StartMissingEnabledPlatforms();
+            return;
+        }
+
         TryStartConnection();
     }
 
@@ -188,7 +202,39 @@ public sealed partial class BotConnectionPageViewModel : OnboardingPageViewModel
             _lastStatusMessage = SafeFailureMessage(@event.Exception);
         }
 
-        ApplyPhase(@event.Phase);
+        if (PlatformStatuses.Count <= 1)
+        {
+            foreach (var row in PlatformStatuses)
+            {
+                UpdateRow(row, @event.Phase, @event.Exception is not null ? SafeFailureMessage(@event.Exception) : null);
+            }
+        }
+
+        RefreshAggregateFromRows(@event.Phase);
+    }
+
+    private void OnPlatformConnectionChanged(PlatformConnectionChanged @event)
+    {
+        if (!_setupSaved)
+        {
+            return;
+        }
+
+        var errorDetails = @event.Phase == BotLifecyclePhase.Failed && @event.Exception is not null
+            ? SafeFailureMessage(@event.Exception)
+            : null;
+        if (errorDetails is not null)
+        {
+            _lastStatusMessage = errorDetails;
+        }
+
+        var row = PlatformStatuses.FirstOrDefault(r => r.Platform == @event.Platform);
+        if (row is not null)
+        {
+            UpdateRow(row, @event.Phase, errorDetails);
+        }
+
+        RefreshAggregateFromRows(@event.Phase);
     }
 
     private void OnStatusUpdated(BotConnectionStatusUpdated @event)
@@ -202,11 +248,124 @@ public sealed partial class BotConnectionPageViewModel : OnboardingPageViewModel
 
     private void OnJoinedChannel(BotJoinedChannel @event)
     {
-        _joinedChannel = @event.Channel;
-        if (_setupSaved)
+        _joinedChannels[@event.Platform] = @event.Channel;
+        if (!_setupSaved)
         {
-            ApplyPhase(Phase);
+            return;
         }
+
+        var row = PlatformStatuses.FirstOrDefault(r => r.Platform == @event.Platform);
+        if (row is not null)
+        {
+            UpdateRow(row, BotLifecyclePhase.Connected, null);
+        }
+
+        RefreshAggregateFromRows();
+    }
+
+    private void PopulatePlatformRows(OnboardingContext context)
+    {
+        PlatformStatuses.Clear();
+
+        if (context.Settings.Twitch.Enabled)
+        {
+            PlatformStatuses.Add(new PlatformConnectionRow(StreamingPlatform.Twitch, PlatformVisuals.GetDisplayName(StreamingPlatform.Twitch)));
+        }
+
+        if (context.YouTubeSettings.Enabled)
+        {
+            PlatformStatuses.Add(new PlatformConnectionRow(StreamingPlatform.YouTube, PlatformVisuals.GetDisplayName(StreamingPlatform.YouTube)));
+        }
+    }
+
+    private void SyncRowsFromController()
+    {
+        foreach (var row in PlatformStatuses)
+        {
+            var phase = _platformRegistry is not null
+                ? _botConnectionManager.GetPhase(row.Platform)
+                : _botConnectionManager.CurrentPhase;
+            UpdateRow(row, phase, null);
+        }
+    }
+
+    private void UpdateRow(PlatformConnectionRow row, BotLifecyclePhase phase, string? errorDetails)
+    {
+        row.Phase = phase;
+        row.StatusText = phase switch
+        {
+            BotLifecyclePhase.Connecting => "Подключение…",
+            BotLifecyclePhase.Connected => FormatConnectedPlatformStatus(row.Platform),
+            BotLifecyclePhase.Disconnecting => "Отключение…",
+            BotLifecyclePhase.Disconnected => "Отключён",
+            BotLifecyclePhase.Cancelled => "Отменено",
+            BotLifecyclePhase.Failed => "Ошибка подключения",
+            _ => "Ожидание…",
+        };
+        row.DetailsText = phase == BotLifecyclePhase.Failed
+            ? (errorDetails ?? string.Empty)
+            : string.Empty;
+    }
+
+    private string FormatConnectedPlatformStatus(StreamingPlatform platform)
+    {
+        var channel = _joinedChannels.TryGetValue(platform, out var joined) && !string.IsNullOrWhiteSpace(joined)
+            ? joined
+            : platform switch
+            {
+                StreamingPlatform.Twitch => _context?.Settings.Twitch.Channel ?? string.Empty,
+                StreamingPlatform.YouTube => _context?.YouTubeSettings.Channel ?? string.Empty,
+                _ => string.Empty,
+            };
+        return string.IsNullOrWhiteSpace(channel) ? "Подключён" : $"Подключён ({channel})";
+    }
+
+    private void RefreshAggregateFromRows(BotLifecyclePhase? fallbackPhase = null)
+    {
+        if (PlatformStatuses.Count == 0)
+        {
+            ApplyPhase(fallbackPhase ?? _botConnectionManager.CurrentPhase);
+            return;
+        }
+
+        if (PlatformStatuses.All(r => r.Phase == BotLifecyclePhase.Connected))
+        {
+            ApplyPhase(BotLifecyclePhase.Connected);
+            return;
+        }
+
+        if (PlatformStatuses.Any(r => r.Phase == BotLifecyclePhase.Connecting))
+        {
+            ApplyPhase(BotLifecyclePhase.Connecting);
+            return;
+        }
+
+        if (PlatformStatuses.Any(r => r.Phase == BotLifecyclePhase.Disconnecting))
+        {
+            ApplyPhase(BotLifecyclePhase.Disconnecting);
+            return;
+        }
+
+        if (PlatformStatuses.FirstOrDefault(r => r.Phase == BotLifecyclePhase.Failed) is { } failedRow)
+        {
+            var details = !string.IsNullOrWhiteSpace(failedRow.DetailsText) ? failedRow.DetailsText : _lastStatusMessage;
+            ApplyPhase(BotLifecyclePhase.Failed, details);
+            return;
+        }
+
+        if (PlatformStatuses.Any(r => r.Phase == BotLifecyclePhase.Cancelled))
+        {
+            ApplyPhase(BotLifecyclePhase.Cancelled);
+            return;
+        }
+
+        if (PlatformStatuses.Any(r => r.Phase == BotLifecyclePhase.Disconnected))
+        {
+            ApplyPhase(BotLifecyclePhase.Disconnected);
+            return;
+        }
+
+        ApplyPhase(BotLifecyclePhase.Idle);
     }
 
     private void ApplyPhase(BotLifecyclePhase phase, string? overrideDetails = null)
@@ -224,25 +383,23 @@ public sealed partial class BotConnectionPageViewModel : OnboardingPageViewModel
         switch (phase)
         {
             case BotLifecyclePhase.Connecting:
-                StatusText = "Подключение...";
+                StatusText = "Подключение…";
                 DetailsText = overrideDetails ?? _lastStatusMessage;
                 ShowRetry = false;
                 CanAdvance = false;
                 break;
 
             case BotLifecyclePhase.Connected:
-                var channel = string.IsNullOrWhiteSpace(_joinedChannel)
-                    ? _context?.Settings.Twitch.Channel ?? string.Empty
-                    : _joinedChannel;
-                var suffix = string.IsNullOrWhiteSpace(channel) ? string.Empty : $" к чату @{channel}";
-                StatusText = $"Бот подключён{suffix}";
+                StatusText = PlatformStatuses.Count == 1
+                    ? $"{PlatformStatuses[0].PlatformName}: {PlatformStatuses[0].StatusText.ToLowerInvariant()}"
+                    : "Бот подключён ко всем выбранным площадкам";
                 DetailsText = "Можно идти дальше.";
                 ShowRetry = false;
                 CanAdvance = true;
                 break;
 
             case BotLifecyclePhase.Disconnecting:
-                StatusText = "Отключение...";
+                StatusText = "Отключение…";
                 DetailsText = overrideDetails ?? _lastStatusMessage;
                 ShowRetry = false;
                 CanAdvance = false;
@@ -270,7 +427,7 @@ public sealed partial class BotConnectionPageViewModel : OnboardingPageViewModel
                 break;
 
             default:
-                StatusText = "Готовимся к подключению...";
+                StatusText = "Готовимся к подключению…";
                 DetailsText = overrideDetails ?? _lastStatusMessage;
                 ShowRetry = false;
                 CanAdvance = false;
@@ -295,7 +452,7 @@ public sealed partial class BotConnectionPageViewModel : OnboardingPageViewModel
         return exception switch
         {
             OperationCanceledException => "Подключение отменено",
-            HttpRequestException => "Ошибка сети при подключении к Twitch",
+            HttpRequestException => "Ошибка сети при подключении",
             InvalidOperationException invalid => invalid.Message,
             _ => "Неизвестная ошибка подключения",
         };
@@ -307,5 +464,21 @@ public sealed partial class BotConnectionPageViewModel : OnboardingPageViewModel
         {
             sub.Dispose();
         }
+    }
+
+    public sealed partial class PlatformConnectionRow(StreamingPlatform platform, string platformName) : ObservableObject
+    {
+        public StreamingPlatform Platform { get; } = platform;
+
+        public string PlatformName { get; } = platformName;
+
+        [ObservableProperty]
+        private BotLifecyclePhase _phase = BotLifecyclePhase.Idle;
+
+        [ObservableProperty]
+        private string _statusText = "Ожидание…";
+
+        [ObservableProperty]
+        private string _detailsText = string.Empty;
     }
 }

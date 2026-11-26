@@ -2,73 +2,53 @@
 using PoproshaykaBot.Core.Settings.Migrations.LegacyImport;
 using PoproshaykaBot.Wpf.Bootstrap;
 using PoproshaykaBot.Wpf.ViewModels.Migration;
-using PoproshaykaBot.Wpf.Views.Migration;
 using Serilog;
 using Serilog.Extensions.Logging;
-using System.Diagnostics;
-using System.IO;
 
 namespace PoproshaykaBot.Wpf;
 
 public partial class App
 {
-    private static async Task<(ISettingsStore Settings, TimeSpan ModalWait, LegacyImportResult? Result, bool ConfigureRequested)> OfferLegacyDataImportAsync(
-        ISettingsStore uiSettings,
-        string uiSettingsPath,
-        ThemePackLoader themePackLoader)
+    internal static async Task<(bool OfferImport, IReadOnlyList<LegacyDataSummary> Candidates, LegacyDataSummary? Target)> ScanLegacyImportCandidatesAsync(
+        ISettingsStore uiSettings)
     {
         if (uiSettings.GetBool(SettingsKeys.LegacyImportDismissed))
         {
-            return (uiSettings, TimeSpan.Zero, null, false);
+            return (false, [], null);
         }
 
-        var modalWait = TimeSpan.Zero;
-        LegacyImportResult? result = null;
-        var configureRequested = false;
         using var loggerFactory = new SerilogLoggerFactory(Log.Logger);
         var logger = loggerFactory.CreateLogger(nameof(LegacyDataImporter));
 
         try
         {
             var (candidates, target) = await LegacyImportViewModel.ScanAsync(logger);
+            var offerImport = candidates.Count > 0 || target is null;
 
-            if (candidates.Count == 0 && target is not null)
+            if (offerImport)
             {
-                return (uiSettings, modalWait, result, configureRequested);
+                HostLog.Information("Доступен перенос данных предыдущей версии: источников – {Count}", candidates.Count);
             }
 
-            var viewModel = new LegacyImportViewModel(candidates, target, isSettingsEntry: false, new FilePicker(), logger);
-            var window = new LegacyImportWindow(viewModel);
-
-            HostLog.Information("Предложен перенос данных предыдущей версии: источников – {Count}", candidates.Count);
-
-            var modalStart = Stopwatch.GetTimestamp();
-            window.ShowDialog();
-            modalWait = Stopwatch.GetElapsedTime(modalStart);
-            result = viewModel.Result;
-            configureRequested = viewModel.ConfigureRequested;
-
-            if (result is null)
-            {
-                HostLog.Information("Пользователь отказался от переноса данных предыдущей версии");
-            }
-
-            if (viewModel.NeverAskAgain)
-            {
-                uiSettings.SetBool(SettingsKeys.LegacyImportDismissed, true);
-                HostLog.Information("Предложение переноса данных отключено пользователем");
-            }
-
-            return (ReloadUiSettingsIfImported(uiSettings, uiSettingsPath, result, themePackLoader), modalWait, result, configureRequested);
+            return (offerImport, candidates, target);
         }
         catch (Exception exception)
         {
-            HostLog.Error(exception, "Диалог переноса данных предыдущей версии не открылся");
-            return (uiSettings, modalWait, result, configureRequested);
+            HostLog.Error(exception, "Не удалось выполнить поиск данных предыдущей версии");
+            return (false, [], null);
         }
     }
 
-    private static ISettingsStore ReloadUiSettingsIfImported(
+    internal static void PersistLegacyImportDismissed(ISettingsStore uiSettings)
+    {
+        if (!uiSettings.GetBool(SettingsKeys.LegacyImportDismissed))
+        {
+            uiSettings.SetBool(SettingsKeys.LegacyImportDismissed, true);
+            HostLog.Information("Предложение переноса данных отключено пользователем");
+        }
+    }
+
+    internal static ISettingsStore ReloadUiSettingsIfImported(
         ISettingsStore uiSettings,
         string uiSettingsPath,
         LegacyImportResult? result,

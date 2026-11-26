@@ -9,27 +9,24 @@
              d:DesignHeight="376"
              d:DesignWidth="688">
 
-    <StackPanel Margin="20,18">
-        <TextBlock Text="{Binding IntroText}"
-                   FontWeight="Bold"
-                   FontSize="{DynamicResource Font.Size.L}"
-                   TextWrapping="Wrap"
-                   Margin="0,0,0,12" />
+    <ScrollViewer AutomationProperties.Name="Добро пожаловать"
+                  VerticalScrollBarVisibility="Auto"
+                  HorizontalScrollBarVisibility="Disabled">
+        <StackPanel Margin="20,18">
+            <TextBlock Text="{Binding IntroText}"
+                       FontWeight="Bold"
+                       FontSize="{DynamicResource Font.Size.L}"
+                       TextWrapping="Wrap"
+                       Margin="0,0,0,12" />
 
-        <TextBlock Text="{Binding BodyText}"
-                   Foreground="{DynamicResource Fg.Primary}"
-                   TextWrapping="Wrap"
-                   Margin="0,0,0,12" />
+            <TextBlock Text="{Binding BodyText}"
+                       Foreground="{DynamicResource Fg.Primary}"
+                       TextWrapping="Wrap"
+                       Margin="0,0,0,16" />
 
-        <TextBlock Margin="0,0,0,16">
-            <Hyperlink Command="{Binding OpenDevConsoleCommand}"
-                       Foreground="{DynamicResource Fg.Link}">
-                Открыть Twitch Developer Console
-            </Hyperlink>
-        </TextBlock>
-
-        <TextBlock Text="{Binding HintText}"
-                   Foreground="{DynamicResource Fg.Secondary}"
-                   TextWrapping="Wrap" />
-    </StackPanel>
+            <TextBlock Text="{Binding HintText}"
+                       Foreground="{DynamicResource Fg.Secondary}"
+                       TextWrapping="Wrap" />
+        </StackPanel>
+    </ScrollViewer>
 </UserControl>

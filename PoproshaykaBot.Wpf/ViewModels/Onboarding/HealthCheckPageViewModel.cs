@@ -7,10 +7,9 @@ using PoproshaykaBot.Core.Infrastructure.Events.Chat;
 using PoproshaykaBot.Core.Platforms;
 using PoproshaykaBot.Core.Twitch.Chat;
 using PoproshaykaBot.Core.Users;
+using PoproshaykaBot.Wpf.Bootstrap;
 using PoproshaykaBot.Wpf.Infrastructure;
 using PoproshaykaBot.Wpf.Infrastructure.Platforms;
-using PoproshaykaBot.Wpf.Bootstrap;
-using System.Diagnostics;
 
 namespace PoproshaykaBot.Wpf.ViewModels.Onboarding;
 
@@ -26,13 +25,19 @@ public sealed partial class HealthCheckPageViewModel : OnboardingPageViewModelBa
     private string _overlayUrl = string.Empty;
 
     [ObservableProperty]
-    private string _botStatusText = "Бот в чате как: ожидание сообщения...";
+    private string _botStatusText = "Бот в чате: ожидание сообщения…";
 
     [ObservableProperty]
     private bool _botStatusKnown;
 
     [ObservableProperty]
+    private bool _hasTwitchEnabled = true;
+
+    [ObservableProperty]
     private bool _hasYouTubeEnabled;
+
+    [ObservableProperty]
+    private bool _showPlatformSelector;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsTwitchSelected))]
@@ -66,6 +71,8 @@ public sealed partial class HealthCheckPageViewModel : OnboardingPageViewModelBa
 
     public override string PageTitle => "Диагностика (опционально)";
 
+    public IReadOnlyList<StreamingPlatform> EnabledPlatforms { get; private set; } = [StreamingPlatform.Twitch];
+
     public bool IsTwitchSelected
     {
         get => SelectedPlatform == StreamingPlatform.Twitch;
@@ -96,12 +103,26 @@ public sealed partial class HealthCheckPageViewModel : OnboardingPageViewModelBa
 
     public override void OnEnter(OnboardingContext context)
     {
+        ArgumentNullException.ThrowIfNull(context);
+
         OverlayUrl = $"http://localhost:{context.Settings.Twitch.HttpServerPort}/chat";
+        HasTwitchEnabled = context.Settings.Twitch.Enabled;
         HasYouTubeEnabled = context.YouTubeSettings.Enabled;
-        if (!HasYouTubeEnabled)
+
+        var enabled = new List<StreamingPlatform>(2);
+        if (HasTwitchEnabled)
         {
-            SelectedPlatform = StreamingPlatform.Twitch;
+            enabled.Add(StreamingPlatform.Twitch);
         }
+
+        if (HasYouTubeEnabled)
+        {
+            enabled.Add(StreamingPlatform.YouTube);
+        }
+
+        EnabledPlatforms = enabled;
+        ShowPlatformSelector = enabled.Count > 1;
+        SelectedPlatform = enabled.Count > 0 ? enabled[0] : StreamingPlatform.Twitch;
 
         ResetChatTestStatus();
         CanAdvance = true;
@@ -176,9 +197,7 @@ public sealed partial class HealthCheckPageViewModel : OnboardingPageViewModelBa
         }
 
         BotStatusKnown = true;
-        BotStatusText = _botStatusByPlatform.Count == 1 && @event.Platform == StreamingPlatform.Twitch
-            ? $"Бот в чате как: {status}"
-            : "Бот в чате: " + string.Join(", ", _botStatusByPlatform.Select(static pair => $"{PlatformVisuals.GetDisplayName(pair.Key)} – {pair.Value}"));
+        BotStatusText = "Бот в чате: " + string.Join(", ", _botStatusByPlatform.Select(static pair => $"{PlatformVisuals.GetDisplayName(pair.Key)} – {pair.Value}"));
     }
 
     private void ResetChatTestStatus()

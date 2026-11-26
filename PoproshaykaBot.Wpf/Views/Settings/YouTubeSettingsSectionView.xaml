@@ -17,16 +17,18 @@
     </UserControl.Resources>
 
     <StackPanel>
-        <CheckBox Content="Включить YouTube"
-                  Style="{StaticResource CheckBox.Default}"
-                  FontWeight="{DynamicResource Font.Weight.SemiBold}"
-                  AutomationProperties.AutomationId="MultistreamEnableYouTube"
-                  IsChecked="{Binding Enabled, Mode=TwoWay}" />
-        <TextBlock Text="Управляет запуском и мониторингом YouTube. Применяется после сохранения."
-                   Style="{StaticResource Form.CheckHint}" />
-        <Border BorderThickness="0,0,0,1"
-                BorderBrush="{DynamicResource Border.Subtle}"
-                Margin="0,10,0,12" />
+        <StackPanel Visibility="{Binding ShowEnableToggle, Mode=OneTime, Converter={StaticResource BoolToVisibility}}">
+            <CheckBox Content="Включить YouTube"
+                      Style="{StaticResource CheckBox.Default}"
+                      FontWeight="{DynamicResource Font.Weight.SemiBold}"
+                      AutomationProperties.AutomationId="MultistreamEnableYouTube"
+                      IsChecked="{Binding Enabled, Mode=TwoWay}" />
+            <TextBlock Text="Управляет запуском и мониторингом YouTube. Применяется после сохранения."
+                       Style="{StaticResource Form.CheckHint}" />
+            <Border BorderThickness="0,0,0,1"
+                    BorderBrush="{DynamicResource Border.Subtle}"
+                    Margin="0,10,0,12" />
+        </StackPanel>
 
         <keepshell:SettingRowPanel Margin="0,0,0,8">
             <TextBlock Text="Project ID"

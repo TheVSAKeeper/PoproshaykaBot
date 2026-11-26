@@ -32,7 +32,7 @@ namespace PoproshaykaBot.Wpf.Tests.Multiplatform;
 public sealed class Stage8Layer4Tests
 {
     [Test]
-    public async Task YouTubeOnboardingPage_DisabledAdvancesImmediatelyAndValidatesWhenEnabled()
+    public async Task YouTubeOnboardingPage_IsApplicableOnlyWhenEnabledAndRequiresBotAuth()
     {
         using var editor = new YouTubeSettingsSectionViewModel(
             new StubYouTubeOAuthService(),
@@ -43,31 +43,48 @@ public sealed class Stage8Layer4Tests
             NullLoggerFactory.Instance);
         using var page = new YouTubeOnboardingPageViewModel(editor);
 
-        var context = new OnboardingContext(new AppSettings(), new(), new());
-        page.OnEnter(context);
-
+        var disabledContext = new OnboardingContext(new AppSettings(), new(), new());
         Assert.Multiple(() =>
         {
             Assert.That(editor.ShowQuotaDiagnostics, Is.False);
-            Assert.That(page.CanAdvance, Is.True);
+            Assert.That(editor.ShowEnableToggle, Is.False);
+            Assert.That(page.IsApplicable(disabledContext), Is.False);
         });
 
-        editor.Enabled = true;
+        var enabledContext = new OnboardingContext(
+            new AppSettings(),
+            new(),
+            new(),
+            new YouTubeSettings { Enabled = true });
+        Assert.That(page.IsApplicable(enabledContext), Is.True);
+
+        page.OnEnter(enabledContext);
         Assert.That(page.CanAdvance, Is.False);
 
         editor.ClientId = "yt-client";
         editor.ClientSecret = "yt-secret";
         editor.Channel = "@ytchan";
+        Assert.That(page.CanAdvance, Is.False, "Без авторизации бота YouTube мастер не должен пускать дальше.");
+
+        editor.Bot.Load(new YouTubeAccountSettings
+        {
+            ChannelId = "UC_BOT",
+            ChannelTitle = "Bot Channel",
+            AccessToken = "yt-bot-token",
+            RefreshToken = "yt-bot-refresh",
+            Scopes = [.. YouTubeScopes.BotRequired],
+        });
         Assert.That(page.CanAdvance, Is.True);
 
-        var left = await page.OnLeavingAsync(context);
+        var left = await page.OnLeavingAsync(enabledContext);
         Assert.Multiple(() =>
         {
             Assert.That(left, Is.True);
-            Assert.That(context.YouTubeSettings.Enabled, Is.True);
-            Assert.That(context.YouTubeSettings.ClientId, Is.EqualTo("yt-client"));
-            Assert.That(context.YouTubeSettings.Channel, Is.EqualTo("@ytchan"));
-            Assert.That(context.YouTubeClientSecret, Is.EqualTo("yt-secret"));
+            Assert.That(enabledContext.YouTubeSettings.Enabled, Is.True);
+            Assert.That(enabledContext.YouTubeSettings.ClientId, Is.EqualTo("yt-client"));
+            Assert.That(enabledContext.YouTubeSettings.Channel, Is.EqualTo("@ytchan"));
+            Assert.That(enabledContext.YouTubeClientSecret, Is.EqualTo("yt-secret"));
+            Assert.That(enabledContext.YouTubeBotAccount.ChannelId, Is.EqualTo("UC_BOT"));
         });
     }
 

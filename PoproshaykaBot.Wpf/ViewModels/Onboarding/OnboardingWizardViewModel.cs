@@ -1,5 +1,6 @@
 ﻿using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using PoproshaykaBot.Core.Infrastructure.Events;
 using PoproshaykaBot.Core.Infrastructure.Events.Lifecycle;
@@ -8,6 +9,7 @@ using PoproshaykaBot.Core.Platforms;
 using PoproshaykaBot.Core.Platforms.Auth;
 using PoproshaykaBot.Core.Server;
 using PoproshaykaBot.Core.Settings;
+using PoproshaykaBot.Core.Settings.Migrations.LegacyImport;
 using PoproshaykaBot.Core.Settings.Onboarding;
 using PoproshaykaBot.Core.Settings.Stores;
 using PoproshaykaBot.Core.Twitch.Auth;
@@ -17,33 +19,42 @@ using System.Text.Json;
 
 namespace PoproshaykaBot.Wpf.ViewModels.Onboarding;
 
-public sealed partial class OnboardingWizardViewModel : ObservableObject
+public sealed partial class OnboardingWizardViewModel : ObservableObject, IDisposable
 {
-    private readonly SettingsManager _settingsManager;
-    private readonly KestrelHttpServer _kestrelHttpServer;
-    private readonly BotConnectionManager _botConnectionManager;
-    private readonly IEventBus _eventBus;
+    private SettingsManager _settingsManager;
+    private AccountsStore _accountsStore;
+    private KestrelHttpServer _kestrelHttpServer;
+    private BotConnectionManager _botConnectionManager;
+    private IEventBus _eventBus;
     private readonly ILogger<OnboardingWizardViewModel> _logger;
-    private readonly OnboardingContext _context;
-    private readonly List<IOnboardingPageViewModel> _pages;
-    private readonly TwitchSettings _originalTwitch;
-    private readonly IDialogService? _dialogService;
+    private YouTubeSettingsStore? _youtubeSettingsStore;
+    private YouTubeAccountsStore? _youtubeAccountsStore;
+    private ChannelCatalogStore? _twitchCatalog;
+    private OnboardingChecklist? _checklist;
+    private IDialogService? _dialogService;
 
-    private int _currentPageIndex = -1;
+    private OnboardingContext _context;
+    private readonly List<IOnboardingPageViewModel> _pages;
+    private TwitchSettings _originalTwitch;
+
     private bool _completed;
     private bool _rollbackPerformed;
+    private bool _disposed;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HeaderTitle))]
     [NotifyPropertyChangedFor(nameof(StepIndicator))]
     [NotifyPropertyChangedFor(nameof(IsLastPage))]
     [NotifyPropertyChangedFor(nameof(NextButtonText))]
+    [NotifyPropertyChangedFor(nameof(IsOperationBusy))]
     [NotifyCanExecuteChangedFor(nameof(NextCommand))]
     [NotifyCanExecuteChangedFor(nameof(BackCommand))]
+    [NotifyCanExecuteChangedFor(nameof(CancelCommand))]
     private IOnboardingPageViewModel? _currentPage;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(NextButtonText))]
+    [NotifyPropertyChangedFor(nameof(IsOperationBusy))]
     [NotifyCanExecuteChangedFor(nameof(NextCommand))]
     [NotifyCanExecuteChangedFor(nameof(BackCommand))]
     [NotifyCanExecuteChangedFor(nameof(CancelCommand))]
@@ -60,61 +71,216 @@ public sealed partial class OnboardingWizardViewModel : ObservableObject
         YouTubeSettingsStore? youtubeSettingsStore = null,
         YouTubeAccountsStore? youtubeAccountsStore = null,
         ChannelCatalogStore? twitchCatalog = null,
-        IDialogService? dialogService = null)
+        IDialogService? dialogService = null,
+        OnboardingChecklist? checklist = null)
     {
         _settingsManager = settingsManager;
+        _accountsStore = accountsStore;
         _dialogService = dialogService;
         _kestrelHttpServer = kestrelHttpServer;
         _botConnectionManager = botConnectionManager;
         _eventBus = eventBus;
         _logger = logger;
+        _youtubeSettingsStore = youtubeSettingsStore;
+        _youtubeAccountsStore = youtubeAccountsStore;
+        _twitchCatalog = twitchCatalog;
+        _checklist = checklist;
 
         _pages = [.. pages];
-
-        _originalTwitch = DeepClone(settingsManager.Current.Twitch);
-        var twitchChannel = twitchCatalog?.GetActiveChannel(StreamingPlatform.Twitch);
-        accountsStore.TryLoadContext(PlatformAuthRole.Bot, twitchChannel?.BotContextId, out var originalBot);
-        accountsStore.TryLoadContext(PlatformAuthRole.Broadcaster, twitchChannel?.BroadcasterContextId, out var originalBroadcaster);
-        _context = new(
-            DeepClone(settingsManager.Current),
-            originalBot is null ? new() : DeepClone(originalBot),
-            originalBroadcaster is null ? new() : DeepClone(originalBroadcaster),
-            youtubeSettingsStore?.Load(),
-            youtubeAccountsStore?.LoadClientSecret() ?? string.Empty,
-            youtubeAccountsStore?.LoadBot(),
-            youtubeAccountsStore?.LoadBroadcaster())
+        foreach (var importPage in _pages.OfType<LegacyImportPageViewModel>())
         {
-            TwitchCatalog = twitchCatalog,
-            TwitchChannel = twitchChannel,
-            AutoDetectChannel = twitchChannel is null,
-        };
-        _context.CaptureTwitchAccounts(originalBot, originalBroadcaster);
-        if (twitchChannel is not null && !string.IsNullOrWhiteSpace(twitchChannel.Handle))
-        {
-            _context.Settings.Twitch.Channel = twitchChannel.Handle.TrimStart('@');
+            importPage.FinishRequested += OnImportFinishRequested;
         }
 
-        if (_pages.Count > 0)
+        (_originalTwitch, _context) = BuildContext(
+            _settingsManager,
+            _accountsStore,
+            _youtubeSettingsStore,
+            _youtubeAccountsStore,
+            _twitchCatalog,
+            _checklist,
+            includeLegacyImport: false,
+            importResult: null);
+        _context.PlatformsChanged += OnContextPlatformsChanged;
+
+        var active = ActivePages;
+        if (active.Count > 0)
         {
-            NavigateTo(0);
+            NavigateTo(active[0]);
         }
     }
 
     public event Action? CloseRequested;
 
-    public int PageCount => _pages.Count;
+    public int PageCount => ActivePages.Count;
 
     public bool IsPageInteractive => !_context.CancellationStarted;
 
+    public bool IsOperationBusy => IsBusy || CurrentPage?.IsBusy == true;
+
     public string HeaderTitle => IsPageInteractive ? CurrentPage?.PageTitle ?? string.Empty : "Отмена настройки";
 
-    public string StepIndicator => _pages.Count == 0
-        ? string.Empty
-        : $"Шаг {_currentPageIndex + 1} из {_pages.Count}";
+    public string StepIndicator
+    {
+        get
+        {
+            var active = ActivePages;
+            if (active.Count == 0 || CurrentPage is null)
+            {
+                return string.Empty;
+            }
 
-    public bool IsLastPage => _currentPageIndex >= 0 && _currentPageIndex == _pages.Count - 1;
+            var index = IndexOfPage(active, CurrentPage);
+            return index < 0 ? string.Empty : $"Шаг {index + 1} из {active.Count}";
+        }
+    }
+
+    public bool IsLastPage
+    {
+        get
+        {
+            var active = ActivePages;
+            if (active.Count == 0 || CurrentPage is null)
+            {
+                return false;
+            }
+
+            return IndexOfPage(active, CurrentPage) == active.Count - 1;
+        }
+    }
 
     public string NextButtonText => IsLastPage ? "Готово" : "Далее →";
+
+    private IReadOnlyList<IOnboardingPageViewModel> ActivePages =>
+        [.. _pages.Where(page => page.IsApplicable(_context))];
+
+    internal void AttachStartupSession(StartupOnboardingSession session)
+    {
+        ArgumentNullException.ThrowIfNull(session);
+
+        _context.IncludeLegacyImport = session.IncludeLegacyImport;
+
+        foreach (var importPage in _pages.OfType<LegacyImportPageViewModel>())
+        {
+            importPage.ConfigureStartupSession(
+                session.Candidates,
+                session.Target,
+                async (result, neverAskAgain) =>
+                {
+                    if (_context.HasProvisionalWrites || _context.TwitchSettingsWritten)
+                    {
+                        throw new InvalidOperationException("Перенос недоступен после сохранения пробных настроек.");
+                    }
+
+                    if (session.OnImportCompletedAsync is not null)
+                    {
+                        var nextServices = await session.OnImportCompletedAsync(result, neverAskAgain);
+                        if (nextServices is not null)
+                        {
+                            CompleteContainerReload(nextServices, result);
+                        }
+                    }
+                },
+                session.OnLegacyImportSkipped);
+        }
+
+        if (CurrentPage is { } current)
+        {
+            current.OnEnter(_context);
+        }
+
+        NotifyNavigationStateChanged();
+    }
+
+    internal void DiscardAppearanceRollback()
+    {
+        foreach (var page in _pages.OfType<AppearancePageViewModel>())
+        {
+            page.DiscardRollback();
+        }
+    }
+
+    internal void PrepareForContainerReload()
+    {
+        for (var i = _pages.Count - 1; i >= 0; i--)
+        {
+            var page = _pages[i];
+            if (page is WelcomePageViewModel or LegacyImportPageViewModel)
+            {
+                continue;
+            }
+
+            if (page is IDisposable disposable)
+            {
+                disposable.Dispose();
+            }
+
+            _pages.RemoveAt(i);
+        }
+    }
+
+    internal void CompleteContainerReload(IServiceProvider newServices, LegacyImportResult result)
+    {
+        ArgumentNullException.ThrowIfNull(newServices);
+
+        if (_context.HasProvisionalWrites || _context.TwitchSettingsWritten)
+        {
+            throw new InvalidOperationException("Перенос недоступен после сохранения пробных настроек.");
+        }
+
+        if (result.CopiedUiPreferences)
+        {
+            DiscardAppearanceRollback();
+        }
+
+        _settingsManager = newServices.GetRequiredService<SettingsManager>();
+        _accountsStore = newServices.GetRequiredService<AccountsStore>();
+        _kestrelHttpServer = newServices.GetRequiredService<KestrelHttpServer>();
+        _botConnectionManager = newServices.GetRequiredService<BotConnectionManager>();
+        _eventBus = newServices.GetRequiredService<IEventBus>();
+        _youtubeSettingsStore = newServices.GetService<YouTubeSettingsStore>();
+        _youtubeAccountsStore = newServices.GetService<YouTubeAccountsStore>();
+        _twitchCatalog = newServices.GetService<ChannelCatalogStore>();
+        _dialogService = newServices.GetService<IDialogService>();
+        _checklist = newServices.GetService<OnboardingChecklist>();
+
+        PrepareForContainerReload();
+
+        foreach (var page in newServices.GetServices<IOnboardingPageViewModel>())
+        {
+            if (page is WelcomePageViewModel or LegacyImportPageViewModel)
+            {
+                if (page is IDisposable disposable)
+                {
+                    disposable.Dispose();
+                }
+
+                continue;
+            }
+
+            _pages.Add(page);
+        }
+
+        _context.PlatformsChanged -= OnContextPlatformsChanged;
+        var includeLegacyImport = _context.IncludeLegacyImport;
+        (_originalTwitch, _context) = BuildContext(
+            _settingsManager,
+            _accountsStore,
+            _youtubeSettingsStore,
+            _youtubeAccountsStore,
+            _twitchCatalog,
+            _checklist,
+            includeLegacyImport,
+            result);
+        _context.PlatformsChanged += OnContextPlatformsChanged;
+
+        foreach (var importPage in _pages.OfType<LegacyImportPageViewModel>())
+        {
+            importPage.RefreshContext(_context);
+        }
+
+        NotifyNavigationStateChanged();
+    }
 
     internal void StartAt(OnboardingStep step)
     {
@@ -124,15 +290,22 @@ public sealed partial class OnboardingWizardViewModel : ObservableObject
         }
 
         _context.AutoDetectChannel = !_context.HasConfiguredTwitchChannel;
-        var index = _pages.FindIndex(page => step switch
+        var active = ActivePages;
+        var target = active.FirstOrDefault(page => step switch
         {
+            OnboardingStep.LegacyImport => page is LegacyImportPageViewModel,
             OnboardingStep.Appearance => page is AppearancePageViewModel,
+            OnboardingStep.Platforms => page is PlatformsPageViewModel,
             OnboardingStep.Credentials => page is CredentialsPageViewModel,
             OnboardingStep.BotAuthorization => page is BotAuthorizationPageViewModel,
             OnboardingStep.YouTube => page is YouTubeOnboardingPageViewModel,
             _ => false,
         });
-        NavigateTo(index);
+
+        if (target is not null)
+        {
+            NavigateTo(target);
+        }
     }
 
     public async Task<bool> RequestCloseAsync()
@@ -159,6 +332,7 @@ public sealed partial class OnboardingWizardViewModel : ObservableObject
         {
             await RollbackHttpServerPortAsync(currentPort);
         }
+
         var accountsRestored = await RollbackAccountsAsync();
         _rollbackPerformed = (settingsRestored && accountsRestored)
             || _dialogService?.ConfirmWarning(
@@ -168,10 +342,31 @@ public sealed partial class OnboardingWizardViewModel : ObservableObject
         return _rollbackPerformed;
     }
 
-    private static T DeepClone<T>(T source) where T : class, new()
+    public void Dispose()
     {
-        var json = JsonSerializer.Serialize(source);
-        return JsonSerializer.Deserialize<T>(json) ?? new();
+        if (_disposed)
+        {
+            return;
+        }
+
+        _disposed = true;
+        _context.PlatformsChanged -= OnContextPlatformsChanged;
+
+        if (CurrentPage is { } previous)
+        {
+            previous.CanAdvanceChanged -= OnCurrentPageCanAdvanceChanged;
+            previous.IsBusyChanged -= OnCurrentPageIsBusyChanged;
+        }
+
+        foreach (var importPage in _pages.OfType<LegacyImportPageViewModel>())
+        {
+            importPage.FinishRequested -= OnImportFinishRequested;
+        }
+
+        foreach (var disposable in _pages.OfType<IDisposable>())
+        {
+            disposable.Dispose();
+        }
     }
 
     [RelayCommand(CanExecute = nameof(CanGoNext))]
@@ -195,77 +390,189 @@ public sealed partial class OnboardingWizardViewModel : ObservableObject
             IsBusy = false;
         }
 
-        if (IsLastPage)
+        var active = ActivePages;
+        var currentIndex = IndexOfPage(active, current);
+        if (currentIndex < 0 || currentIndex == active.Count - 1)
         {
-            foreach (var page in _pages.OfType<AppearancePageViewModel>())
-            {
-                page.Commit();
-            }
-
-            _completed = true;
-            CloseRequested?.Invoke();
+            CompleteWizard();
             return;
         }
 
-        NavigateTo(_currentPageIndex + 1);
+        NavigateTo(active[currentIndex + 1]);
     }
 
     private bool CanGoNext()
     {
-        return IsPageInteractive && !IsBusy && CurrentPage?.CanAdvance == true;
+        return IsPageInteractive && !IsOperationBusy && CurrentPage?.CanAdvance == true;
     }
 
     [RelayCommand(CanExecute = nameof(CanGoBack))]
     private void Back()
     {
-        if (!CanGoBack())
+        if (!CanGoBack() || CurrentPage is null)
         {
             return;
         }
 
-        NavigateTo(_currentPageIndex - 1);
+        var active = ActivePages;
+        var currentIndex = IndexOfPage(active, CurrentPage);
+        if (currentIndex > 0)
+        {
+            NavigateTo(active[currentIndex - 1]);
+        }
     }
 
     private bool CanGoBack()
     {
-        return IsPageInteractive && !IsBusy && _currentPageIndex > 0;
+        if (!IsPageInteractive || IsOperationBusy || CurrentPage is null)
+        {
+            return false;
+        }
+
+        return IndexOfPage(ActivePages, CurrentPage) > 0;
     }
 
     [RelayCommand(CanExecute = nameof(CanCancel))]
     private void Cancel()
     {
+        if (!CanCancel())
+        {
+            return;
+        }
+
         CloseRequested?.Invoke();
     }
 
     private bool CanCancel()
     {
-        return !IsBusy;
+        return !IsOperationBusy;
     }
 
-    private void NavigateTo(int index)
+    private void CompleteWizard()
     {
-        if (index < 0 || index >= _pages.Count)
+        foreach (var page in _pages.OfType<AppearancePageViewModel>())
+        {
+            page.Commit();
+        }
+
+        _completed = true;
+        CloseRequested?.Invoke();
+    }
+
+    private void OnImportFinishRequested()
+    {
+        if (_context.CancellationStarted || IsOperationBusy)
         {
             return;
         }
 
+        CompleteWizard();
+    }
+
+    private void OnContextPlatformsChanged(object? sender, EventArgs e)
+    {
+        NotifyNavigationStateChanged();
+    }
+
+    private void NotifyNavigationStateChanged()
+    {
+        OnPropertyChanged(nameof(PageCount));
+        OnPropertyChanged(nameof(StepIndicator));
+        OnPropertyChanged(nameof(IsLastPage));
+        OnPropertyChanged(nameof(NextButtonText));
+        OnPropertyChanged(nameof(IsOperationBusy));
+        NextCommand.NotifyCanExecuteChanged();
+        BackCommand.NotifyCanExecuteChanged();
+        CancelCommand.NotifyCanExecuteChanged();
+    }
+
+    private void NavigateTo(IOnboardingPageViewModel page)
+    {
         if (CurrentPage is { } previous)
         {
             previous.CanAdvanceChanged -= OnCurrentPageCanAdvanceChanged;
+            previous.IsBusyChanged -= OnCurrentPageIsBusyChanged;
         }
-
-        var page = _pages[index];
-        _currentPageIndex = index;
 
         page.OnEnter(_context);
         page.CanAdvanceChanged += OnCurrentPageCanAdvanceChanged;
+        page.IsBusyChanged += OnCurrentPageIsBusyChanged;
 
         CurrentPage = page;
+        NotifyNavigationStateChanged();
     }
 
     private void OnCurrentPageCanAdvanceChanged(object? sender, EventArgs e)
     {
         NextCommand.NotifyCanExecuteChanged();
+    }
+
+    private void OnCurrentPageIsBusyChanged(object? sender, EventArgs e)
+    {
+        OnPropertyChanged(nameof(IsOperationBusy));
+        NextCommand.NotifyCanExecuteChanged();
+        BackCommand.NotifyCanExecuteChanged();
+        CancelCommand.NotifyCanExecuteChanged();
+    }
+
+    private static int IndexOfPage(IReadOnlyList<IOnboardingPageViewModel> pages, IOnboardingPageViewModel target)
+    {
+        for (var i = 0; i < pages.Count; i++)
+        {
+            if (ReferenceEquals(pages[i], target))
+            {
+                return i;
+            }
+        }
+
+        return -1;
+    }
+
+    private static (TwitchSettings OriginalTwitch, OnboardingContext Context) BuildContext(
+        SettingsManager settingsManager,
+        AccountsStore accountsStore,
+        YouTubeSettingsStore? youtubeSettingsStore,
+        YouTubeAccountsStore? youtubeAccountsStore,
+        ChannelCatalogStore? twitchCatalog,
+        OnboardingChecklist? checklist,
+        bool includeLegacyImport,
+        LegacyImportResult? importResult)
+    {
+        var originalTwitch = DeepClone(settingsManager.Current.Twitch);
+        var twitchChannel = twitchCatalog?.GetActiveChannel(StreamingPlatform.Twitch);
+        var youtubeChannel = twitchCatalog?.GetActiveChannel(StreamingPlatform.YouTube);
+        accountsStore.TryLoadContext(PlatformAuthRole.Bot, twitchChannel?.BotContextId, out var originalBot);
+        accountsStore.TryLoadContext(PlatformAuthRole.Broadcaster, twitchChannel?.BroadcasterContextId, out var originalBroadcaster);
+        var context = new OnboardingContext(
+            DeepClone(settingsManager.Current),
+            originalBot is null ? new() : DeepClone(originalBot),
+            originalBroadcaster is null ? new() : DeepClone(originalBroadcaster),
+            youtubeSettingsStore?.Load(),
+            youtubeAccountsStore?.LoadClientSecret() ?? string.Empty,
+            youtubeAccountsStore?.LoadBot(),
+            youtubeAccountsStore?.LoadBroadcaster())
+        {
+            TwitchCatalog = twitchCatalog,
+            TwitchChannel = twitchChannel,
+            YouTubeChannel = youtubeChannel,
+            AutoDetectChannel = twitchChannel is null,
+            IncludeLegacyImport = includeLegacyImport,
+            ImportResult = importResult,
+            Checklist = checklist,
+        };
+        context.CaptureTwitchAccounts(originalBot, originalBroadcaster);
+        if (twitchChannel is not null && !string.IsNullOrWhiteSpace(twitchChannel.Handle))
+        {
+            context.Settings.Twitch.Channel = twitchChannel.Handle.TrimStart('@');
+        }
+
+        return (originalTwitch, context);
+    }
+
+    private static T DeepClone<T>(T source) where T : class, new()
+    {
+        var json = JsonSerializer.Serialize(source);
+        return JsonSerializer.Deserialize<T>(json) ?? new();
     }
 
     private async Task StopBotIfRunningAsync()
@@ -330,6 +637,7 @@ public sealed partial class OnboardingWizardViewModel : ObservableObject
         {
             var written = _settingsManager.MutateIfWritable(settings =>
             {
+                settings.Twitch.Enabled = _originalTwitch.Enabled;
                 settings.Twitch.ClientId = _originalTwitch.ClientId;
                 settings.Twitch.ClientSecret = _originalTwitch.ClientSecret;
                 settings.Twitch.Channel = _originalTwitch.Channel;

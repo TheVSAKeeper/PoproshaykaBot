@@ -1,8 +1,5 @@
 ﻿using CommunityToolkit.Mvvm.ComponentModel;
-using PoproshaykaBot.Core.Platforms;
-using PoproshaykaBot.Core.Settings;
-using PoproshaykaBot.Core.YouTube;
-using PoproshaykaBot.Core.YouTube.Auth;
+using PoproshaykaBot.Core.Platforms.Auth;
 using PoproshaykaBot.Wpf.ViewModels.Settings;
 using System.ComponentModel;
 
@@ -21,15 +18,19 @@ public sealed partial class YouTubeOnboardingPageViewModel : OnboardingPageViewM
 
         Editor = editor;
         Editor.ShowQuotaDiagnostics = false;
+        Editor.ShowEnableToggle = false;
         Editor.PropertyChanged += OnEditorPropertyChanged;
         Editor.SettingChanged += OnEditorSettingChanged;
+        Editor.Bot.PropertyChanged += OnEditorPropertyChanged;
     }
 
-    public override string PageTitle => "YouTube (опционально)";
+    public override string PageTitle => "Настройка YouTube";
 
     public YouTubeSettingsSectionViewModel Editor { get; }
 
     public bool HasValidationHint => ValidationHint.Length > 0;
+
+    public override bool IsApplicable(OnboardingContext context) => context.YouTubeSettings.Enabled;
 
     public override void OnEnter(OnboardingContext context)
     {
@@ -67,6 +68,7 @@ public sealed partial class YouTubeOnboardingPageViewModel : OnboardingPageViewM
     {
         Editor.PropertyChanged -= OnEditorPropertyChanged;
         Editor.SettingChanged -= OnEditorSettingChanged;
+        Editor.Bot.PropertyChanged -= OnEditorPropertyChanged;
     }
 
     private void OnEditorPropertyChanged(object? sender, PropertyChangedEventArgs e)
@@ -105,12 +107,17 @@ public sealed partial class YouTubeOnboardingPageViewModel : OnboardingPageViewM
         }
         else if (string.IsNullOrWhiteSpace(Editor.Channel))
         {
-            ValidationHint = "Укажите @handle или ID канала YouTube.";
+            ValidationHint = "Укажите @handle, ID (UC…) или ссылку на канал YouTube.";
             CanAdvance = false;
         }
         else if (Editor.HasQuotaBudgetError)
         {
             ValidationHint = Editor.QuotaBudgetError;
+            CanAdvance = false;
+        }
+        else if (!PlatformAuthRoles.HasCredentials(Editor.Bot.AccessTokenValue, Editor.Bot.RefreshTokenValue))
+        {
+            ValidationHint = "Авторизуйте аккаунт бота YouTube для работы в чате.";
             CanAdvance = false;
         }
         else

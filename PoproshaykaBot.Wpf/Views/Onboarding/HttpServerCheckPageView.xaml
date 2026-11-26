@@ -10,43 +10,68 @@
              d:DesignHeight="376"
              d:DesignWidth="688">
 
-    <StackPanel Margin="20,18">
+    <ScrollViewer AutomationProperties.Name="Локальный HTTP-сервер"
+                  VerticalScrollBarVisibility="Auto"
+                  HorizontalScrollBarVisibility="Disabled">
+        <StackPanel Margin="20,18">
+            <TextBlock Text="Локальный HTTP-сервер нужен для оверлея чата в OBS и обратных вызовов локальных сервисов."
+                       Foreground="{DynamicResource Fg.Secondary}"
+                       TextWrapping="Wrap"
+                       Margin="0,0,0,14" />
 
-        <Border Background="{DynamicResource Bg.SurfaceAlt}"
-                BorderBrush="{DynamicResource Border.Subtle}"
-                BorderThickness="1"
-                CornerRadius="{DynamicResource Radius.S}"
-                Padding="14,12"
-                Margin="0,0,0,16">
-            <StackPanel>
-                <StackPanel Orientation="Horizontal"
-                            Margin="0,0,0,6">
-                    <TextBlock Text="Статус:"
-                               Foreground="{DynamicResource Fg.Muted}"
-                               FontSize="{DynamicResource Font.Size.S}"
-                               Width="120"
-                               VerticalAlignment="Center" />
-                    <TextBlock Text="{Binding StatusText}"
-                               keepshell:SeverityBrushBehavior.Foreground="{Binding StatusSeverity}"
-                               FontWeight="SemiBold"
+            <StackPanel Visibility="{Binding IsPortEditable, Converter={StaticResource BoolToVisibility}}"
+                        Margin="0,0,0,14">
+                <TextBlock Text="Порт HTTP-сервера"
+                           Foreground="{DynamicResource Fg.Muted}"
+                           FontSize="{DynamicResource Font.Size.S}"
+                           Margin="0,0,0,4" />
+                <WrapPanel>
+                    <TextBox Style="{StaticResource TextBox.Form}"
+                             Width="120"
+                             Text="{Binding PortText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                             keepshell:PlaceholderBehavior.Placeholder="8080"
+                             Margin="0,0,8,0" />
+                    <Button Content="Применить и проверить"
+                            Style="{StaticResource Button.Secondary}"
+                            Command="{Binding RetryCommand}" />
+                </WrapPanel>
+            </StackPanel>
+
+            <Border Background="{DynamicResource Bg.SurfaceAlt}"
+                    BorderBrush="{DynamicResource Border.Subtle}"
+                    BorderThickness="1"
+                    CornerRadius="{DynamicResource Radius.S}"
+                    Padding="14,12"
+                    Margin="0,0,0,16">
+                <StackPanel>
+                    <StackPanel Orientation="Horizontal"
+                                Margin="0,0,0,6">
+                        <TextBlock Text="Статус:"
+                                   Foreground="{DynamicResource Fg.Muted}"
+                                   FontSize="{DynamicResource Font.Size.S}"
+                                   Width="120"
+                                   VerticalAlignment="Center" />
+                        <TextBlock Text="{Binding StatusText}"
+                                   keepshell:SeverityBrushBehavior.Foreground="{Binding StatusSeverity}"
+                                   FontWeight="SemiBold"
+                                   FontSize="{DynamicResource Font.Size.S}"
+                                   TextWrapping="Wrap"
+                                   VerticalAlignment="Center" />
+                    </StackPanel>
+
+                    <TextBlock Text="{Binding DetailsText}"
+                               Foreground="{DynamicResource Fg.Secondary}"
                                FontSize="{DynamicResource Font.Size.S}"
                                TextWrapping="Wrap"
-                               VerticalAlignment="Center" />
+                               Visibility="{Binding DetailsText, Converter={StaticResource NullToVisibility}}" />
                 </StackPanel>
+            </Border>
 
-                <TextBlock Text="{Binding DetailsText}"
-                           Foreground="{DynamicResource Fg.Secondary}"
-                           FontSize="{DynamicResource Font.Size.S}"
-                           TextWrapping="Wrap"
-                           Visibility="{Binding DetailsText, Converter={StaticResource NullToVisibility}}" />
-            </StackPanel>
-        </Border>
-
-        <Button Content="Повторить проверку"
-                Style="{StaticResource Button.Secondary}"
-                Command="{Binding RetryCommand}"
-                Visibility="{Binding IsRetryVisible, Converter={StaticResource BoolToVisibility}}"
-                HorizontalAlignment="Left" />
-
-    </StackPanel>
+            <Button Content="Повторить проверку"
+                    Style="{StaticResource Button.Secondary}"
+                    Command="{Binding RetryCommand}"
+                    Visibility="{Binding IsRetryVisible, Converter={StaticResource BoolToVisibility}}"
+                    HorizontalAlignment="Left" />
+        </StackPanel>
+    </ScrollViewer>
 </UserControl>

@@ -3,14 +3,17 @@ using CommunityToolkit.Mvvm.Input;
 using Microsoft.Extensions.Logging;
 using PoproshaykaBot.Core.Server;
 using PoproshaykaBot.Core.Settings;
-using System.Net;
 using PoproshaykaBot.Wpf.Bootstrap;
+using System.Globalization;
+using System.Net;
 using System.Net.Sockets;
 
 namespace PoproshaykaBot.Wpf.ViewModels.Onboarding;
 
 public sealed partial class HttpServerCheckPageViewModel : OnboardingPageViewModelBase
 {
+    private const int DefaultPort = 8080;
+
     private readonly SettingsManager _settingsManager;
     private readonly KestrelHttpServer _kestrelHttpServer;
     private readonly ILogger<HttpServerCheckPageViewModel> _logger;
@@ -23,6 +26,13 @@ public sealed partial class HttpServerCheckPageViewModel : OnboardingPageViewMod
 
     [ObservableProperty]
     private string _detailsText = string.Empty;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsPortEditable))]
+    private bool _isTwitchEnabled = true;
+
+    [ObservableProperty]
+    private string _portText = DefaultPort.ToString(CultureInfo.InvariantCulture);
 
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(RetryCommand))]
@@ -43,11 +53,25 @@ public sealed partial class HttpServerCheckPageViewModel : OnboardingPageViewMod
         _logger = logger;
     }
 
-    public override string PageTitle => "Проверка HTTP сервера";
+    public override string PageTitle => "Локальный HTTP-сервер";
+
+    public bool IsPortEditable => !IsTwitchEnabled;
 
     public override void OnEnter(OnboardingContext context)
     {
+        ArgumentNullException.ThrowIfNull(context);
+
         _context = context;
+        IsTwitchEnabled = context.Settings.Twitch.Enabled;
+
+        if (!IsTwitchEnabled)
+        {
+            var initialPort = context.Settings.Twitch.HttpServerPort > 0
+                ? context.Settings.Twitch.HttpServerPort
+                : DefaultPort;
+            PortText = initialPort.ToString(CultureInfo.InvariantCulture);
+        }
+
         CanAdvance = false;
         _ = RunCheckAsync();
     }
@@ -73,11 +97,21 @@ public sealed partial class HttpServerCheckPageViewModel : OnboardingPageViewMod
 
         try
         {
-            ShowStatus("Проверка...", "Info", string.Empty);
+            ShowStatus("Проверка…", "Info", string.Empty);
 
-            if (!RedirectUriPortResolver.TryResolve(_context.Settings.Twitch.RedirectUri, out var port))
+            int port;
+            if (IsTwitchEnabled)
             {
-                ShowStatus("Некорректный Redirect URI", "Error", "Вернитесь на предыдущий шаг и исправьте URI.");
+                if (!RedirectUriPortResolver.TryResolve(_context.Settings.Twitch.RedirectUri, out port))
+                {
+                    ShowStatus("Некорректный Redirect URI", "Error", "Вернитесь на шаг «Настройка Twitch» и исправьте URI.");
+                    IsRetryVisible = true;
+                    return;
+                }
+            }
+            else if (!TryParsePort(PortText, out port))
+            {
+                ShowStatus("Некорректный номер порта", "Error", "Укажите целое число от 1 до 65535.");
                 IsRetryVisible = true;
                 return;
             }
@@ -88,14 +122,14 @@ public sealed partial class HttpServerCheckPageViewModel : OnboardingPageViewMod
 
             if (_kestrelHttpServer.IsRunning && livePort == port)
             {
-                ShowStatus($"HTTP сервер уже слушает порт {port}", "Success", "Можно переходить к авторизации.");
+                ShowStatus($"HTTP-сервер уже слушает порт {port}", "Success", "Можно переходить дальше.");
                 CanAdvance = true;
                 return;
             }
 
             var restartingMessage = _kestrelHttpServer.IsRunning
-                ? $"Перезапуск HTTP сервера на порту {port}..."
-                : $"Запуск HTTP сервера на порту {port}...";
+                ? $"Перезапуск HTTP-сервера на порту {port}…"
+                : $"Запуск HTTP-сервера на порту {port}…";
 
             ShowStatus(restartingMessage, "Info", string.Empty);
 
@@ -105,7 +139,9 @@ public sealed partial class HttpServerCheckPageViewModel : OnboardingPageViewMod
                 ShowStatus(
                     $"Порт {port} занят другим приложением",
                     "Error",
-                    "Закройте конфликтующее приложение или измените Redirect URI на предыдущем шаге.");
+                    IsTwitchEnabled
+                        ? "Закройте конфликтующее приложение или измените Redirect URI на предыдущем шаге."
+                        : "Закройте конфликтующее приложение или укажите другой порт.");
                 IsRetryVisible = true;
                 return;
             }
@@ -115,14 +151,16 @@ public sealed partial class HttpServerCheckPageViewModel : OnboardingPageViewMod
             if (!started)
             {
                 ShowStatus(
-                    $"Не удалось запустить HTTP сервер на порту {port}",
+                    $"Не удалось запустить HTTP-сервер на порту {port}",
                     "Error",
-                    "Закройте конфликтующее приложение или измените Redirect URI на предыдущем шаге.");
+                    IsTwitchEnabled
+                        ? "Закройте конфликтующее приложение или измените Redirect URI на предыдущем шаге."
+                        : "Закройте конфликтующее приложение или укажите другой порт.");
                 IsRetryVisible = true;
                 return;
             }
 
-            ShowStatus($"HTTP сервер слушает порт {port}", "Success", "Можно переходить к авторизации.");
+            ShowStatus($"HTTP-сервер слушает порт {port}", "Success", "Можно переходить дальше.");
             CanAdvance = true;
         }
         finally
@@ -176,6 +214,18 @@ public sealed partial class HttpServerCheckPageViewModel : OnboardingPageViewMod
         StatusText = status;
         StatusSeverity = severity;
         DetailsText = details;
+    }
+
+    private static bool TryParsePort(string? raw, out int port)
+    {
+        if (int.TryParse(raw?.Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out port)
+            && port is >= 1 and <= 65535)
+        {
+            return true;
+        }
+
+        port = 0;
+        return false;
     }
 
     private static bool TryBindPort(int port)

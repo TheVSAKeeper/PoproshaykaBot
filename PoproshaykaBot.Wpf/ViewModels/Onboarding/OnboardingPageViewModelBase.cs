@@ -9,7 +9,13 @@ public abstract partial class OnboardingPageViewModelBase : ObservableObject, IO
 
     public event EventHandler? CanAdvanceChanged;
 
+    public event EventHandler? IsBusyChanged;
+
     public abstract string PageTitle { get; }
+
+    public virtual bool IsBusy => false;
+
+    public virtual bool IsApplicable(OnboardingContext context) => true;
 
     public virtual void OnEnter(OnboardingContext context)
     {
@@ -18,6 +24,11 @@ public abstract partial class OnboardingPageViewModelBase : ObservableObject, IO
     public virtual Task<bool> OnLeavingAsync(OnboardingContext context)
     {
         return Task.FromResult(CanAdvance);
+    }
+
+    protected void OnIsBusyChanged()
+    {
+        IsBusyChanged?.Invoke(this, EventArgs.Empty);
     }
 
     partial void OnCanAdvanceChanged(bool value)
