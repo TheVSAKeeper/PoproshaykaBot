@@ -22,6 +22,7 @@ public sealed partial class PlatformOAuthAccountViewModel : ObservableObject, ID
     private bool _disposed;
 
     [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(ResetScopesCommand))]
     private string _scopesText = string.Empty;
 
     [ObservableProperty]
@@ -147,6 +148,10 @@ public sealed partial class PlatformOAuthAccountViewModel : ObservableObject, ID
 
     public string OpenBrowserButtonText => _adapter.OpenBrowserButtonText(HasToken);
 
+    public string ResetScopesButtonText => _adapter.Role == PlatformAuthRole.Broadcaster
+        ? "Восстановить стандартные права стримера"
+        : "Восстановить стандартные права бота";
+
     public bool HasAccessToken => !string.IsNullOrWhiteSpace(AccessTokenValue);
 
     public bool HasToken => HasAccessToken;
@@ -182,6 +187,8 @@ public sealed partial class PlatformOAuthAccountViewModel : ObservableObject, ID
         {
             _suppressUpdates = false;
         }
+
+        ResetScopesCommand.NotifyCanExecuteChanged();
     }
 
     public void SaveTo(IRoleAccountSettings target)
@@ -560,7 +567,7 @@ public sealed partial class PlatformOAuthAccountViewModel : ObservableObject, ID
         RaiseSettingChanged();
     }
 
-    private bool CanResetScopes() => !IsAuthorizing;
+    private bool CanResetScopes() => !IsAuthorizing && _adapter.HasCustomScopes();
 
     [RelayCommand(CanExecute = nameof(CanResetScopes))]
     private void ResetScopes()
@@ -575,6 +582,8 @@ public sealed partial class PlatformOAuthAccountViewModel : ObservableObject, ID
         {
             _suppressUpdates = false;
         }
+
+        ResetScopesCommand.NotifyCanExecuteChanged();
 
         if (Capabilities.ShowsScopeSummaries)
         {
@@ -602,6 +611,8 @@ public sealed partial class PlatformOAuthAccountViewModel : ObservableObject, ID
         {
             _suppressUpdates = false;
         }
+
+        ResetScopesCommand.NotifyCanExecuteChanged();
 
         var severity = outcome.Succeeded
             ? StatusSeverity.Success

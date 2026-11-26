@@ -568,8 +568,101 @@ public sealed class MultistreamOnboardingWizardTests
 
         page.PortText = "99999";
         await page.RetryCommand.ExecuteAsync(null);
-        Assert.That(page.StatusText, Is.EqualTo("Некорректный номер порта"));
-        Assert.That(page.CanAdvance, Is.False);
+        Assert.Multiple(() =>
+        {
+            Assert.That(page.StatusText, Is.EqualTo("Некорректный номер порта"));
+            Assert.That(page.CanAdvance, Is.False);
+            Assert.That(page.HasPortError, Is.True);
+            Assert.That(page.IsRetryVisible, Is.False);
+        });
+    }
+
+    [Test]
+    public async Task HttpServerCheckPage_EditingPortResetsVerifiedStateAndShowsRetryOnlyOnServerFailure()
+    {
+        await using var provider = BuildProvider();
+        var freePort = ReserveFreeLoopbackPort();
+        var settingsManager = new SettingsManager(NullLogger<SettingsManager>.Instance, Path.Combine(_tempDir, "settings.json"));
+        settingsManager.UpdateCurrent(s => s.Twitch.HttpServerPort = freePort);
+        var server = provider.GetRequiredService<KestrelHttpServer>();
+        var page = new HttpServerCheckPageViewModel(settingsManager, server, NullLogger<HttpServerCheckPageViewModel>.Instance);
+
+        var context = new OnboardingContext(
+            new AppSettings { Twitch = new TwitchSettings { Enabled = false, HttpServerPort = freePort } },
+            new(),
+            new(),
+            new YouTubeSettings { Enabled = true });
+
+        page.OnEnter(context);
+        await WaitUntilCheckCompletesAsync(page);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(page.CanAdvance, Is.True);
+            Assert.That(page.StatusSeverity, Is.EqualTo("Success"));
+            Assert.That(page.HasPortError, Is.False);
+        });
+
+        page.PortText = "99999";
+        Assert.Multiple(() =>
+        {
+            Assert.That(page.CanAdvance, Is.False);
+            Assert.That(page.StatusSeverity, Is.EqualTo("Error"));
+            Assert.That(page.HasPortError, Is.True);
+            Assert.That(page.IsRetryVisible, Is.False);
+        });
+        Assert.That(await page.OnLeavingAsync(context), Is.False);
+
+        var secondFreePort = ReserveFreeLoopbackPort();
+        page.PortText = secondFreePort.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        Assert.Multiple(() =>
+        {
+            Assert.That(page.CanAdvance, Is.False);
+            Assert.That(page.StatusSeverity, Is.Not.EqualTo("Success"));
+            Assert.That(page.HasPortError, Is.False);
+            Assert.That(page.IsRetryVisible, Is.False);
+        });
+        Assert.That(await page.OnLeavingAsync(context), Is.False);
+
+        await page.RetryCommand.ExecuteAsync(null);
+        Assert.Multiple(() =>
+        {
+            Assert.That(page.CanAdvance, Is.True);
+            Assert.That(page.StatusSeverity, Is.EqualTo("Success"));
+            Assert.That(context.Settings.Twitch.HttpServerPort, Is.EqualTo(secondFreePort));
+        });
+        Assert.That(await page.OnLeavingAsync(context), Is.True);
+
+        await server.StopAsync();
+
+        using var occupiedListener = new System.Net.Sockets.TcpListener(System.Net.IPAddress.Loopback, 0);
+        occupiedListener.Start();
+        var occupiedPort = ((System.Net.IPEndPoint)occupiedListener.LocalEndpoint).Port;
+
+        page.PortText = occupiedPort.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        await page.RetryCommand.ExecuteAsync(null);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(page.CanAdvance, Is.False);
+            Assert.That(page.HasPortError, Is.False);
+            Assert.That(page.IsRetryVisible, Is.True);
+        });
+    }
+
+    private static int ReserveFreeLoopbackPort()
+    {
+        using var listener = new System.Net.Sockets.TcpListener(System.Net.IPAddress.Loopback, 0);
+        listener.Start();
+        return ((System.Net.IPEndPoint)listener.LocalEndpoint).Port;
+    }
+
+    private static async Task WaitUntilCheckCompletesAsync(HttpServerCheckPageViewModel page)
+    {
+        for (var attempt = 0; attempt < 50 && page.IsChecking; attempt++)
+        {
+            await Task.Delay(20);
+        }
     }
 
     [Test]

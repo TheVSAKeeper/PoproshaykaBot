@@ -28,13 +28,20 @@
                 <WrapPanel>
                     <TextBox Style="{StaticResource TextBox.Form}"
                              Width="120"
+                             AutomationProperties.Name="Порт HTTP-сервера"
                              Text="{Binding PortText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                              keepshell:PlaceholderBehavior.Placeholder="8080"
                              Margin="0,0,8,0" />
-                    <Button Content="Применить и проверить"
+                    <Button Content="Проверить порт"
                             Style="{StaticResource Button.Secondary}"
                             Command="{Binding RetryCommand}" />
                 </WrapPanel>
+                <TextBlock Text="{Binding PortErrorText}"
+                           Foreground="{DynamicResource State.ErrorText}"
+                           FontSize="{DynamicResource Font.Size.S}"
+                           TextWrapping="Wrap"
+                           Margin="0,6,0,0"
+                           Visibility="{Binding HasPortError, Converter={StaticResource BoolToVisibility}}" />
             </StackPanel>
 
             <Border Background="{DynamicResource Bg.SurfaceAlt}"

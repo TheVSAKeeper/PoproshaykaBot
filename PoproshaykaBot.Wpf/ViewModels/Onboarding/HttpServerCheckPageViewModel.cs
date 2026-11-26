@@ -41,7 +41,13 @@ public sealed partial class HttpServerCheckPageViewModel : OnboardingPageViewMod
     [ObservableProperty]
     private bool _isRetryVisible;
 
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasPortError))]
+    private string _portErrorText = string.Empty;
+
     private OnboardingContext? _context;
+    private bool _suppressPortTextChanged;
+    private int? _verifiedPort;
 
     public HttpServerCheckPageViewModel(
         SettingsManager settingsManager,
@@ -57,11 +63,15 @@ public sealed partial class HttpServerCheckPageViewModel : OnboardingPageViewMod
 
     public bool IsPortEditable => !IsTwitchEnabled;
 
+    public bool HasPortError => !string.IsNullOrEmpty(PortErrorText);
+
     public override void OnEnter(OnboardingContext context)
     {
         ArgumentNullException.ThrowIfNull(context);
 
         _context = context;
+        _verifiedPort = null;
+        PortErrorText = string.Empty;
         IsTwitchEnabled = context.Settings.Twitch.Enabled;
 
         if (!IsTwitchEnabled)
@@ -69,11 +79,73 @@ public sealed partial class HttpServerCheckPageViewModel : OnboardingPageViewMod
             var initialPort = context.Settings.Twitch.HttpServerPort > 0
                 ? context.Settings.Twitch.HttpServerPort
                 : DefaultPort;
-            PortText = initialPort.ToString(CultureInfo.InvariantCulture);
+            _suppressPortTextChanged = true;
+            try
+            {
+                PortText = initialPort.ToString(CultureInfo.InvariantCulture);
+            }
+            finally
+            {
+                _suppressPortTextChanged = false;
+            }
         }
 
         CanAdvance = false;
         _ = RunCheckAsync();
+    }
+
+    public override Task<bool> OnLeavingAsync(OnboardingContext context)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+
+        if (IsTwitchEnabled)
+        {
+            var twitchValid = CanAdvance
+                && RedirectUriPortResolver.TryResolve(context.Settings.Twitch.RedirectUri, out var twitchPort)
+                && _verifiedPort == twitchPort;
+            return Task.FromResult(twitchValid);
+        }
+
+        if (!TryParsePort(PortText, out var currentPort))
+        {
+            PortErrorText = "Укажите целое число от 1 до 65535.";
+            ShowStatus("Некорректный номер порта", "Error", "Исправьте значение выше и нажмите «Проверить порт».");
+            IsRetryVisible = false;
+            CanAdvance = false;
+            return Task.FromResult(false);
+        }
+
+        if (!CanAdvance || _verifiedPort != currentPort)
+        {
+            ShowStatus("Порт изменён – требуется проверка", "Info", "Нажмите «Проверить порт», чтобы проверить и запустить HTTP-сервер.");
+            CanAdvance = false;
+            return Task.FromResult(false);
+        }
+
+        context.Settings.Twitch.HttpServerPort = currentPort;
+        return Task.FromResult(true);
+    }
+
+    partial void OnPortTextChanged(string value)
+    {
+        if (_suppressPortTextChanged || _context is null || !IsPortEditable)
+        {
+            return;
+        }
+
+        _verifiedPort = null;
+        CanAdvance = false;
+        IsRetryVisible = false;
+
+        if (!TryParsePort(value, out _))
+        {
+            PortErrorText = "Укажите целое число от 1 до 65535.";
+            ShowStatus("Некорректный номер порта", "Error", "Исправьте значение выше и нажмите «Проверить порт».");
+            return;
+        }
+
+        PortErrorText = string.Empty;
+        ShowStatus("Порт изменён – требуется проверка", "Info", "Нажмите «Проверить порт», чтобы проверить и запустить HTTP-сервер.");
     }
 
     [RelayCommand(CanExecute = nameof(CanRetry))]
@@ -94,6 +166,7 @@ public sealed partial class HttpServerCheckPageViewModel : OnboardingPageViewMod
         IsChecking = true;
         IsRetryVisible = false;
         CanAdvance = false;
+        PortErrorText = string.Empty;
 
         try
         {
@@ -111,8 +184,9 @@ public sealed partial class HttpServerCheckPageViewModel : OnboardingPageViewMod
             }
             else if (!TryParsePort(PortText, out port))
             {
-                ShowStatus("Некорректный номер порта", "Error", "Укажите целое число от 1 до 65535.");
-                IsRetryVisible = true;
+                PortErrorText = "Укажите целое число от 1 до 65535.";
+                ShowStatus("Некорректный номер порта", "Error", "Исправьте значение выше и нажмите «Проверить порт».");
+                IsRetryVisible = false;
                 return;
             }
 
@@ -122,6 +196,7 @@ public sealed partial class HttpServerCheckPageViewModel : OnboardingPageViewMod
 
             if (_kestrelHttpServer.IsRunning && livePort == port)
             {
+                _verifiedPort = port;
                 ShowStatus($"HTTP-сервер уже слушает порт {port}", "Success", "Можно переходить дальше.");
                 CanAdvance = true;
                 return;
@@ -160,6 +235,7 @@ public sealed partial class HttpServerCheckPageViewModel : OnboardingPageViewMod
                 return;
             }
 
+            _verifiedPort = port;
             ShowStatus($"HTTP-сервер слушает порт {port}", "Success", "Можно переходить дальше.");
             CanAdvance = true;
         }

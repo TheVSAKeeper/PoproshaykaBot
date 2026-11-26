@@ -5,6 +5,7 @@ using Microsoft.Extensions.Logging;
 using PoproshaykaBot.Core.Platforms.Auth;
 using PoproshaykaBot.Core.Settings.Stores;
 using PoproshaykaBot.Core.Twitch.Auth;
+using PoproshaykaBot.Core.Twitch.Chat;
 using PoproshaykaBot.Core.YouTube.Auth;
 using PoproshaykaBot.Wpf.Infrastructure;
 using PoproshaykaBot.Wpf.Tests.Support;
@@ -282,17 +283,57 @@ public sealed class PlatformOAuthAccountViewModelTests
         });
     }
 
+    [Test]
+    public void ResetScopes_exposes_role_specific_label_and_is_enabled_only_when_scopes_differ_from_defaults()
+    {
+        using var ytBot = CreateYouTubeVm(role: PlatformAuthRole.Bot);
+        using var ytBroadcaster = CreateYouTubeVm(role: PlatformAuthRole.Broadcaster);
+        using var twitchBot = CreateTwitchVm(role: PlatformAuthRole.Bot);
+        using var twitchBroadcaster = CreateTwitchVm(role: PlatformAuthRole.Broadcaster);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(ytBot.ResetScopesButtonText, Is.EqualTo("Восстановить стандартные права бота"));
+            Assert.That(ytBroadcaster.ResetScopesButtonText, Is.EqualTo("Восстановить стандартные права стримера"));
+            Assert.That(twitchBot.ResetScopesButtonText, Is.EqualTo("Восстановить стандартные права бота"));
+            Assert.That(twitchBroadcaster.ResetScopesButtonText, Is.EqualTo("Восстановить стандартные права стримера"));
+        });
+
+        ytBot.Load(new YouTubeAccountSettings { Scopes = [YouTubeScopes.ForceSsl] });
+        Assert.That(ytBot.ResetScopesCommand.CanExecute(null), Is.False);
+
+        ytBot.Load(new YouTubeAccountSettings { Scopes = [YouTubeScopes.ReadOnly] });
+        Assert.That(ytBot.ResetScopesCommand.CanExecute(null), Is.True);
+
+        ytBot.ResetScopesCommand.Execute(null);
+        Assert.Multiple(() =>
+        {
+            Assert.That(ytBot.ResetScopesCommand.CanExecute(null), Is.False);
+            Assert.That(ytBot.ScopesText, Is.EqualTo(YouTubeScopes.ForceSsl));
+        });
+
+        twitchBot.Load(new TwitchAccountSettings { Scopes = [..TwitchScopes.BotRequired, ..TwitchScopes.BotOptional] });
+        Assert.That(twitchBot.ResetScopesCommand.CanExecute(null), Is.False);
+
+        twitchBot.ScopesText = "chat:read";
+        Assert.That(twitchBot.ResetScopesCommand.CanExecute(null), Is.True);
+
+        twitchBot.ResetScopesCommand.Execute(null);
+        Assert.That(twitchBot.ResetScopesCommand.CanExecute(null), Is.False);
+    }
+
     private PlatformOAuthAccountViewModel CreateTwitchVm(
         bool confirmResult = true,
         RecordingDialogService? dialogs = null,
         FakeTwitchService? twitchService = null,
         RecordingLogger? logger = null,
-        TimeProvider? timeProvider = null)
+        TimeProvider? timeProvider = null,
+        PlatformAuthRole role = PlatformAuthRole.Bot)
     {
         var accountsStore = new AccountsStore(filePath: Path.Combine(_directory, "accounts.json"));
         var credentials = new OAuthCredentialsSnapshot("tw-client", "tw-secret", "http://localhost:8080/callback", "channel");
         var adapter = new TwitchAccountAuthAdapter(
-            PlatformAuthRole.Bot,
+            role,
             twitchService ?? new FakeTwitchService(),
             accountsStore,
             () => credentials,
@@ -313,10 +354,11 @@ public sealed class PlatformOAuthAccountViewModelTests
         FakeYouTubeService? ytService = null,
         IUiDispatcher? dispatcher = null,
         TimeProvider? timeProvider = null,
-        RecordingLogger? logger = null)
+        RecordingLogger? logger = null,
+        PlatformAuthRole role = PlatformAuthRole.Bot)
     {
         var adapter = new YouTubeAccountAuthAdapter(
-            PlatformAuthRole.Bot,
+            role,
             ytService ?? new FakeYouTubeService(),
             () => "yt-client",
             () => "yt-secret");

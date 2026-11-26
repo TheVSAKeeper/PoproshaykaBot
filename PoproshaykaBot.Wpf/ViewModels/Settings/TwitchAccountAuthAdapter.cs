@@ -140,6 +140,11 @@ public sealed class TwitchAccountAuthAdapter :
         return string.Join(" ", defaults);
     }
 
+    public bool HasCustomScopes()
+    {
+        return !new HashSet<string>(_draft.Scopes, StringComparer.Ordinal).SetEquals(GetDefaultScopes());
+    }
+
     public bool HasAdditionalStateToClear() => false;
 
     public void OnManualTokenEdited(string accessToken, string refreshToken)

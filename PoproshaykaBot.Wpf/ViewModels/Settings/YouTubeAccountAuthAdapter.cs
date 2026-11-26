@@ -134,6 +134,12 @@ public sealed class YouTubeAccountAuthAdapter : IPlatformAccountAuthAdapter, IEm
         return string.Join(" ", required);
     }
 
+    public bool HasCustomScopes()
+    {
+        return _draft.Scopes.Length > 0
+            && !YouTubeScopes.SetEquals(_draft.Scopes, YouTubeScopes.RequiredFor(_role));
+    }
+
     public bool HasAdditionalStateToClear()
     {
         return !string.IsNullOrWhiteSpace(_draft.ChannelId) || !string.IsNullOrWhiteSpace(_draft.ChannelTitle);

@@ -39,6 +39,15 @@ public sealed partial class YouTubeSettingsSectionViewModel : ObservableObject, 
     [ObservableProperty]
     private bool _showQuotaDiagnostics = true;
 
+    [ObservableProperty]
+    private bool _showEnableToggle = true;
+
+    [ObservableProperty]
+    private bool _isAdvancedExpanded = true;
+
+    [ObservableProperty]
+    private bool _isGuideExpanded;
+
     public YouTubeSettingsSectionViewModel(
         IYouTubeOAuthService oauthService,
         IShellLauncher shellLauncher,
@@ -82,8 +91,6 @@ public sealed partial class YouTubeSettingsSectionViewModel : ObservableObject, 
     public PlatformOAuthAccountViewModel Broadcaster { get; }
 
     public bool ShowLegacyChannelField { get; set; } = true;
-
-    public bool ShowEnableToggle { get; set; } = true;
 
     public YouTubeQuotaStatusViewModel QuotaStatus { get; }
 
@@ -184,6 +191,15 @@ public sealed partial class YouTubeSettingsSectionViewModel : ObservableObject, 
     partial void OnChannelChanged(string value) => RaiseIfNotSuppressed();
 
     partial void OnDailyQuotaBudgetTextChanged(string value) => RaiseIfNotSuppressed();
+
+    partial void OnShowQuotaDiagnosticsChanged(bool value) => UpdateDefaultAdvancedExpanded();
+
+    partial void OnShowEnableToggleChanged(bool value) => UpdateDefaultAdvancedExpanded();
+
+    private void UpdateDefaultAdvancedExpanded()
+    {
+        IsAdvancedExpanded = ShowQuotaDiagnostics || ShowEnableToggle;
+    }
 
     private static bool TryParsePositiveQuotaBudget(string? raw, out int budget)
     {

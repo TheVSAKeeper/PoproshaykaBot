@@ -2,6 +2,7 @@
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:keepshell="https://schemas.keepshell.dev/wpf"
+             xmlns:infra="clr-namespace:PoproshaykaBot.Wpf.Infrastructure"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:vm="clr-namespace:PoproshaykaBot.Wpf.ViewModels.Settings"
@@ -30,72 +31,131 @@
                     Margin="0,10,0,12" />
         </StackPanel>
 
-        <keepshell:SettingRowPanel Margin="0,0,0,8">
-            <TextBlock Text="Project ID"
-                       Style="{StaticResource Form.Label}"
-                       TextWrapping="Wrap"
-                       Margin="0,0,12,0" />
-            <TextBox Style="{StaticResource TextBox.Form}"
-                     Width="460"
-                     Text="{Binding ProjectId, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                     keepshell:PlaceholderBehavior.Placeholder="например, my-stream-bot-123456" />
-        </keepshell:SettingRowPanel>
+        <Grid>
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="188" />
+                <ColumnDefinition Width="*"
+                                  MaxWidth="460" />
+            </Grid.ColumnDefinitions>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
 
-        <keepshell:SettingRowPanel Margin="0,0,0,8">
-            <TextBlock Text="Client ID"
+            <TextBlock Grid.Row="0"
+                       Grid.Column="0"
+                       Text="Client ID"
                        Style="{StaticResource Form.Label}"
                        TextWrapping="Wrap"
-                       Margin="0,0,12,0" />
-            <keepshell:RevealableTextBox Password="{Binding ClientId, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                                         Width="460"
-                                         keepshell:McpPrivacy.IsSensitive="True" />
-        </keepshell:SettingRowPanel>
+                       VerticalAlignment="Center"
+                       Margin="0,0,12,8" />
+            <keepshell:RevealableTextBox Grid.Row="0"
+                                         Grid.Column="1"
+                                         HorizontalAlignment="Stretch"
+                                         AutomationProperties.Name="Client ID"
+                                         infra:RevealableInputAutomation.PropagateName="True"
+                                         Password="{Binding ClientId, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                         keepshell:McpPrivacy.IsSensitive="True"
+                                         Margin="0,0,0,8" />
 
-        <keepshell:SettingRowPanel Margin="0,0,0,8">
-            <TextBlock Text="Client Secret"
+            <TextBlock Grid.Row="1"
+                       Grid.Column="0"
+                       Text="Client Secret"
                        Style="{StaticResource Form.Label}"
                        TextWrapping="Wrap"
-                       Margin="0,0,12,0" />
-            <keepshell:RevealableTextBox Password="{Binding ClientSecret, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                                         Width="460"
-                                         keepshell:McpPrivacy.IsSensitive="True" />
-        </keepshell:SettingRowPanel>
+                       VerticalAlignment="Center"
+                       Margin="0,0,12,8" />
+            <keepshell:RevealableTextBox Grid.Row="1"
+                                         Grid.Column="1"
+                                         HorizontalAlignment="Stretch"
+                                         AutomationProperties.Name="Client Secret"
+                                         infra:RevealableInputAutomation.PropagateName="True"
+                                         Password="{Binding ClientSecret, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                         keepshell:McpPrivacy.IsSensitive="True"
+                                         Margin="0,0,0,8" />
 
-        <keepshell:SettingRowPanel Margin="0,0,0,8"
-                                   Visibility="{Binding ShowLegacyChannelField, Mode=OneTime, Converter={StaticResource BoolToVisibility}}">
-            <TextBlock Text="Канал стрима"
+            <TextBlock Grid.Row="2"
+                       Grid.Column="0"
+                       Text="Канал YouTube"
                        Style="{StaticResource Form.Label}"
                        TextWrapping="Wrap"
-                       Margin="0,0,12,0" />
-            <TextBox Style="{StaticResource TextBox.Form}"
-                     Width="{DynamicResource Setting.ShortFieldWidth}"
+                       VerticalAlignment="Center"
+                       Margin="0,0,12,8"
+                       Visibility="{Binding ShowLegacyChannelField, Mode=OneTime, Converter={StaticResource BoolToVisibility}}" />
+            <TextBox Grid.Row="2"
+                     Grid.Column="1"
+                     Style="{StaticResource TextBox.Form}"
+                     HorizontalAlignment="Stretch"
+                     AutomationProperties.Name="Канал YouTube"
                      Text="{Binding Channel, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                     keepshell:PlaceholderBehavior.Placeholder="@handle или UC..." />
-        </keepshell:SettingRowPanel>
+                     keepshell:PlaceholderBehavior.Placeholder="@handle, UC… или ссылка"
+                     Margin="0,0,0,8"
+                     Visibility="{Binding ShowLegacyChannelField, Mode=OneTime, Converter={StaticResource BoolToVisibility}}" />
+        </Grid>
 
-        <keepshell:SettingRowPanel Margin="0,0,0,12">
-            <StackPanel Margin="0,0,12,0">
-                <TextBlock Text="Бюджет квоты в сутки"
+        <Expander Style="{StaticResource Expander.Section}"
+                  Header="Дополнительные параметры"
+                  IsExpanded="{Binding IsAdvancedExpanded, Mode=TwoWay}"
+                  Margin="0,2,0,4">
+            <Grid Margin="0,6,0,0">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="168" />
+                    <ColumnDefinition Width="*"
+                                      MaxWidth="460" />
+                </Grid.ColumnDefinitions>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+
+                <TextBlock Grid.Row="0"
+                           Grid.Column="0"
+                           Text="Project ID"
                            Style="{StaticResource Form.Label}"
-                           TextWrapping="Wrap" />
-                <TextBlock Text="{Binding QuotaBudgetError}"
-                           Foreground="{DynamicResource State.ErrorText}"
-                           FontSize="{DynamicResource Font.Size.S}"
                            TextWrapping="Wrap"
-                           Visibility="{Binding HasQuotaBudgetError, Converter={StaticResource BoolToVisibility}}"
-                           Margin="0,4,0,0" />
-            </StackPanel>
-            <TextBox Style="{StaticResource TextBox.Form}"
-                     Width="{DynamicResource Setting.ShortFieldWidth}"
-                     VerticalAlignment="Top"
-                     Text="{Binding DailyQuotaBudgetText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                     keepshell:PlaceholderBehavior.Placeholder="10000" />
-        </keepshell:SettingRowPanel>
+                           VerticalAlignment="Center"
+                           Margin="0,0,12,8" />
+                <TextBox Grid.Row="0"
+                         Grid.Column="1"
+                         Style="{StaticResource TextBox.Form}"
+                         HorizontalAlignment="Stretch"
+                         AutomationProperties.Name="Project ID"
+                         Text="{Binding ProjectId, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                         keepshell:PlaceholderBehavior.Placeholder="например, my-stream-bot-123456"
+                         Margin="0,0,0,8" />
+
+                <StackPanel Grid.Row="1"
+                            Grid.Column="0"
+                            Margin="0,0,12,0"
+                            VerticalAlignment="Top">
+                    <TextBlock Text="Бюджет квоты в сутки"
+                               Style="{StaticResource Form.Label}"
+                               TextWrapping="Wrap" />
+                    <TextBlock Text="{Binding QuotaBudgetError}"
+                               Foreground="{DynamicResource State.ErrorText}"
+                               FontSize="{DynamicResource Font.Size.S}"
+                               TextWrapping="Wrap"
+                               Visibility="{Binding HasQuotaBudgetError, Converter={StaticResource BoolToVisibility}}"
+                               Margin="0,4,0,0" />
+                </StackPanel>
+                <TextBox Grid.Row="1"
+                         Grid.Column="1"
+                         Style="{StaticResource TextBox.Form}"
+                         HorizontalAlignment="Left"
+                         MinWidth="120"
+                         Width="{DynamicResource Setting.ShortFieldWidth}"
+                         VerticalAlignment="Top"
+                         AutomationProperties.Name="Бюджет квоты в сутки"
+                         Text="{Binding DailyQuotaBudgetText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                         keepshell:PlaceholderBehavior.Placeholder="10000" />
+            </Grid>
+        </Expander>
 
         <Border BorderBrush="{DynamicResource Border.Subtle}"
                 BorderThickness="0,1,0,0"
                 Padding="0,12,0,0"
-                Margin="0,4,0,12"
+                Margin="0,8,0,12"
                 Visibility="{Binding ShowQuotaDiagnostics, Converter={StaticResource BoolToVisibility}}">
             <StackPanel>
                 <DockPanel Margin="0,0,0,8">
@@ -265,17 +325,11 @@
             </StackPanel>
         </Border>
 
-        <Border BorderBrush="{DynamicResource Border.Subtle}"
-                BorderThickness="0,1,0,0"
-                Padding="0,12,0,0"
-                Margin="0,4,0,0">
-            <StackPanel>
-                <TextBlock Text="Памятка по проекту Google Cloud"
-                           Foreground="{DynamicResource Fg.Primary}"
-                           FontWeight="{DynamicResource Font.Weight.SemiBold}"
-                           FontSize="{DynamicResource Font.Size.S}"
-                           TextWrapping="Wrap"
-                           Margin="0,0,0,6" />
+        <Expander Style="{StaticResource Expander.Section}"
+                  Header="Памятка по проекту Google Cloud"
+                  IsExpanded="{Binding IsGuideExpanded, Mode=TwoWay}"
+                  Margin="0,2,0,0">
+            <StackPanel Margin="0,6,0,0">
                 <TextBlock Text="1. Включите YouTube Data API v3 и создайте OAuth-клиент строго типа «Desktop app» (клиент «Web application» не примет локальный возврат 127.0.0.1)."
                            Foreground="{DynamicResource Fg.Muted}"
                            FontSize="{DynamicResource Font.Size.S}"
@@ -291,6 +345,6 @@
                            FontSize="{DynamicResource Font.Size.S}"
                            TextWrapping="Wrap" />
             </StackPanel>
-        </Border>
+        </Expander>
     </StackPanel>
 </UserControl>

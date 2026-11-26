@@ -126,6 +126,8 @@ public interface IPlatformAccountAuthAdapter
 
     string ResetScopes();
 
+    bool HasCustomScopes();
+
     bool HasAdditionalStateToClear();
 
     void OnManualTokenEdited(string accessToken, string refreshToken);
