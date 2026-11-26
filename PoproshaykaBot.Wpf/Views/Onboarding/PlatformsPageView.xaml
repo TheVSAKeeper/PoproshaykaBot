@@ -107,6 +107,7 @@
                        Margin="0,0,0,16" />
 
             <CheckBox Style="{StaticResource WizardPlatform.CardCheckBox}"
+                      Foreground="{DynamicResource Fg.Primary}"
                       IsChecked="{Binding TwitchEnabled, Mode=TwoWay}"
                       AutomationProperties.Name="Включить Twitch"
                       AutomationProperties.HelpText="Чат, команды и начисления, опросы, управление трансляцией и локальный оверлей.">
@@ -127,6 +128,7 @@
                                   VerticalAlignment="Center"
                                   Margin="0,0,8,0" />
                             <TextBlock Text="Twitch"
+                                       Foreground="{DynamicResource Fg.Primary}"
                                        FontWeight="SemiBold"
                                        FontSize="{DynamicResource Font.Size.M}"
                                        VerticalAlignment="Center" />
@@ -152,6 +154,7 @@
             </CheckBox>
 
             <CheckBox Style="{StaticResource WizardPlatform.CardCheckBox}"
+                      Foreground="{DynamicResource Fg.Primary}"
                       IsChecked="{Binding YouTubeEnabled, Mode=TwoWay}"
                       AutomationProperties.Name="Включить YouTube"
                       AutomationProperties.HelpText="Чат прямых трансляций через InnerTube и Data API, мониторинг эфира и единый оверлей чата.">
@@ -172,6 +175,7 @@
                                   VerticalAlignment="Center"
                                   Margin="0,0,8,0" />
                             <TextBlock Text="YouTube"
+                                       Foreground="{DynamicResource Fg.Primary}"
                                        FontWeight="SemiBold"
                                        FontSize="{DynamicResource Font.Size.M}"
                                        VerticalAlignment="Center" />

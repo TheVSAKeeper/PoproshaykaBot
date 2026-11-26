@@ -221,6 +221,7 @@ public sealed class Stage2ShellOnboardingTests
             var nextPos = nextButton.TranslatePoint(new Point(0, 0), window);
             Assert.That(nextPos.X - (deferPos.X + deferButton.ActualWidth), Is.GreaterThan(40),
                 "Кнопка выхода должна быть отделена от кнопки основного перехода");
+            Assert.That(nextButton.Style, Is.SameAs(Application.Current!.FindResource("Button.Primary")));
 
             await wizardVm.NextCommand.ExecuteAsync(null);
             await PumpDispatcherAsync();
@@ -241,6 +242,76 @@ public sealed class Stage2ShellOnboardingTests
         finally
         {
             SynchronizationContext.SetSynchronizationContext(previousSyncContext);
+        }
+    }
+
+    [Test]
+    public async Task V2_WizardWindowSwitchesNextButtonStyleToSecondaryWhenPageRequestsIt()
+    {
+        var previousSyncContext = SynchronizationContext.Current;
+        SynchronizationContext.SetSynchronizationContext(new DispatcherSynchronizationContext(Dispatcher.CurrentDispatcher));
+        try
+        {
+            await using var provider = BuildProvider();
+            var settings = new SettingsManager(NullLogger<SettingsManager>.Instance, Path.Combine(_tempDir, "settings.json"));
+            var accounts = new AccountsStore(filePath: Path.Combine(_tempDir, "accounts.json"));
+            var bus = provider.GetRequiredService<IEventBus>();
+            var controller = provider.GetRequiredService<BotConnectionManager>();
+            var page = new SecondaryTogglePage();
+            using var wizardVm = new OnboardingWizardViewModel(
+                [page, new PlatformsPageViewModel()],
+                settings,
+                accounts,
+                provider.GetRequiredService<KestrelHttpServer>(),
+                controller,
+                bus,
+                NullLogger<OnboardingWizardViewModel>.Instance);
+
+            var window = new OnboardingWizardWindow(wizardVm);
+            OffScreenWindow.Prepare(window, 640, 480);
+            window.Show();
+            try
+            {
+                await PumpDispatcherAsync();
+                var nextButton = FindVisualChildren<Button>(window).First(b => Equals(b.Content, "Далее"));
+                var primary = (Style)Application.Current!.FindResource("Button.Primary");
+                var secondary = (Style)Application.Current.FindResource("Button.Secondary");
+
+                Assert.That(nextButton.Style, Is.SameAs(primary));
+
+                page.SetSecondary(true);
+                await PumpDispatcherAsync();
+                Assert.That(nextButton.Style, Is.SameAs(secondary));
+
+                page.SetSecondary(false);
+                await PumpDispatcherAsync();
+                Assert.That(nextButton.Style, Is.SameAs(primary));
+            }
+            finally
+            {
+                window.Close();
+                await PumpDispatcherAsync();
+            }
+        }
+        finally
+        {
+            SynchronizationContext.SetSynchronizationContext(previousSyncContext);
+        }
+    }
+
+    private sealed class SecondaryTogglePage : OnboardingPageViewModelBase
+    {
+        private bool _isSecondary;
+        public override string PageTitle => "Проверка стиля";
+        public override bool IsNextActionSecondary => _isSecondary;
+
+        public void SetSecondary(bool value)
+        {
+            if (_isSecondary != value)
+            {
+                _isSecondary = value;
+                OnPropertyChanged(nameof(IsNextActionSecondary));
+            }
         }
     }
 

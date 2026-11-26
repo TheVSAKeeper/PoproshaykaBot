@@ -14,7 +14,7 @@ namespace PoproshaykaBot.Wpf.ViewModels.Onboarding;
 public sealed partial class CredentialsPageViewModel : OnboardingPageViewModelBase, IDisposable
 {
     private const string TwitchDevConsoleUrl = "https://dev.twitch.tv/console/apps";
-    internal const string DefaultRedirectUri = "http://localhost:8080";
+    public const string DefaultRedirectUri = "http://localhost:8080";
 
     private readonly IClientCredentialsValidator _clientCredentialsValidator;
     private readonly IOnboardingChannelValidator _channelValidator;
@@ -368,6 +368,7 @@ public sealed partial class CredentialsPageViewModel : OnboardingPageViewModelBa
             && string.Equals(clientSecret, _lastValidatedClientSecret, StringComparison.Ordinal)
             && _lastClientValidationResult is ClientCredentialsValidationResult.Valid or ClientCredentialsValidationResult.Invalid)
         {
+            ApplyClientValidationResult(_lastClientValidationResult.Value);
             return;
         }
 
@@ -441,8 +442,11 @@ public sealed partial class CredentialsPageViewModel : OnboardingPageViewModelBa
         }
 
         if (string.Equals(clientId, _lastValidatedClientId, StringComparison.Ordinal)
-            && string.Equals(clientSecret, _lastValidatedClientSecret, StringComparison.Ordinal))
+            && string.Equals(clientSecret, _lastValidatedClientSecret, StringComparison.Ordinal)
+            && _lastClientValidationResult is ClientCredentialsValidationResult.Valid or ClientCredentialsValidationResult.Invalid)
         {
+            ApplyClientValidationResult(_lastClientValidationResult.Value);
+            ValidateInputs();
             return;
         }
 
@@ -507,6 +511,13 @@ public sealed partial class CredentialsPageViewModel : OnboardingPageViewModelBa
         _lastValidatedClientSecret = clientSecret;
         _lastClientValidationResult = result;
 
+        ApplyClientValidationResult(result);
+
+        ValidateInputs();
+    }
+
+    private void ApplyClientValidationResult(ClientCredentialsValidationResult result)
+    {
         switch (result)
         {
             case ClientCredentialsValidationResult.Valid:
@@ -533,8 +544,6 @@ public sealed partial class CredentialsPageViewModel : OnboardingPageViewModelBa
                 CanRetryClientCheck = false;
                 break;
         }
-
-        ValidateInputs();
     }
 
     private async Task RunChannelCheckAsync()

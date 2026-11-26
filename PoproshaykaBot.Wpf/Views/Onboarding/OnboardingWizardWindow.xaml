@@ -131,13 +131,31 @@
                             Padding="14,6" />
                 </StackPanel>
 
-                <Button Grid.Column="2"
-                        Content="{Binding NextButtonText}"
-                        Style="{StaticResource Button.Primary}"
-                        Command="{Binding NextCommand}"
-                        IsDefault="True"
-                        VerticalAlignment="Center"
-                        MinWidth="120" />
+                <ContentControl Grid.Column="2"
+                                Content="{Binding}"
+                                IsTabStop="False"
+                                Focusable="False"
+                                VerticalAlignment="Center">
+                    <ContentControl.ContentTemplate>
+                        <DataTemplate>
+                            <Button x:Name="NextActionButton"
+                                    Content="{Binding NextButtonText}"
+                                    Style="{StaticResource Button.Primary}"
+                                    Command="{Binding NextCommand}"
+                                    IsDefault="True"
+                                    VerticalAlignment="Center"
+                                    MinWidth="120" />
+                            <DataTemplate.Triggers>
+                                <DataTrigger Binding="{Binding IsNextActionSecondary}"
+                                             Value="True">
+                                    <Setter TargetName="NextActionButton"
+                                            Property="Style"
+                                            Value="{StaticResource Button.Secondary}" />
+                                </DataTrigger>
+                            </DataTemplate.Triggers>
+                        </DataTemplate>
+                    </ContentControl.ContentTemplate>
+                </ContentControl>
             </Grid>
         </Border>
     </Grid>

@@ -525,8 +525,11 @@ public sealed class OnboardingStage6Tests
             Assert.That(page.ShowSingleTwitchChatDisplayNotice, Is.True);
             Assert.That(page.SingleTwitchChatDisplayText, Is.EqualTo("Чат работает от имени бота (@twbot)"));
             Assert.That(page.ChatDisplayAccount, Is.EqualTo(PlatformAuthRole.Bot));
-            Assert.That(botOnlyContext.Settings.Twitch.ChatDisplayAccount, Is.EqualTo(PlatformAuthRole.Bot));
+            Assert.That(botOnlyContext.Settings.Twitch.ChatDisplayAccount, Is.EqualTo(PlatformAuthRole.Broadcaster));
         });
+
+        Assert.That(await page.OnLeavingAsync(botOnlyContext), Is.True);
+        Assert.That(botOnlyContext.Settings.Twitch.ChatDisplayAccount, Is.EqualTo(PlatformAuthRole.Bot));
 
         var bothRolesContext = new OnboardingContext(
             new AppSettings
@@ -563,6 +566,140 @@ public sealed class OnboardingStage6Tests
             Assert.That(page.TwitchBotChatDisplayLabel, Is.EqualTo("Аккаунт бота (@twbot)"));
             Assert.That(page.TwitchBroadcasterChatDisplayLabel, Is.EqualTo("Аккаунт стримера (@streamer)"));
             Assert.That(page.ChatDisplayAccount, Is.EqualTo(PlatformAuthRole.Broadcaster));
+        });
+    }
+
+    [Test]
+    public void BotConnectionPage_ImmediateInvalidOperationOnStartConnection_MarksRowFailedAndAllowsAdvance()
+    {
+        var settingsManager = new SettingsManager(NullLogger<SettingsManager>.Instance, Path.Combine(_tempDir, "settings.json"));
+        var accountsStore = new AccountsStore(filePath: Path.Combine(_tempDir, "accounts.json"));
+        var bus = new InMemoryEventBus(NullLogger<InMemoryEventBus>.Instance);
+        var controller = new StubConnectionController
+        {
+            StartException = new InvalidOperationException("Connection is already in progress"),
+        };
+        var registry = new StubRegistry(
+            new StubPlatform(StreamingPlatform.Twitch, "Twitch", true, false, "twchan"));
+
+        using var page = new BotConnectionPageViewModel(
+            controller,
+            bus,
+            settingsManager,
+            accountsStore,
+            NullLogger<BotConnectionPageViewModel>.Instance,
+            platformRegistry: registry);
+
+        var context = new OnboardingContext(
+            new AppSettings { Twitch = new TwitchSettings { Enabled = true, ClientId = "cid", ClientSecret = "sec", Channel = "twchan" } },
+            new(),
+            new());
+
+        page.OnEnter(context);
+
+        var row = page.PlatformStatuses.Single();
+        Assert.Multiple(() =>
+        {
+            Assert.That(row.Phase, Is.EqualTo(BotLifecyclePhase.Failed));
+            Assert.That(row.DetailsText, Is.EqualTo("Не удалось запустить подключение. Повторите попытку."));
+            Assert.That(page.Phase, Is.EqualTo(BotLifecyclePhase.Failed));
+            Assert.That(page.CanAdvance, Is.True);
+        });
+    }
+
+    [Test]
+    public async Task CompletionPage_StopBotFailureWhenUnchecked_ShowsWarningAndReturnsFalseToAllowRetry()
+    {
+        await using var provider = BuildProvider();
+        var settingsManager = new SettingsManager(NullLogger<SettingsManager>.Instance, Path.Combine(_tempDir, "settings.json"));
+        var accountsStore = new AccountsStore(filePath: Path.Combine(_tempDir, "accounts.json"));
+        var bus = provider.GetRequiredService<IEventBus>();
+        var controller = new StubConnectionController
+        {
+            CurrentPhase = BotLifecyclePhase.Connected,
+            StopException = new InvalidOperationException("stop failed"),
+        };
+        controller.SetPlatformPhase(StreamingPlatform.Twitch, BotLifecyclePhase.Connected);
+        var dialogs = new StubDialogService();
+
+        using var page = new CompletionPageViewModel(
+            settingsManager,
+            accountsStore,
+            bus,
+            provider.GetRequiredService<KestrelHttpServer>(),
+            new StubChannelValidator(),
+            controller,
+            NullLogger<CompletionPageViewModel>.Instance,
+            dialogs);
+
+        var context = CreateValidTwitchContext();
+        accountsStore.SaveAll(context.BotAccount, context.BroadcasterAccount);
+        page.OnEnter(context);
+        await WaitForValidationAsync(page);
+
+        page.AutoConnect = false;
+        Assert.That(await page.OnLeavingAsync(context), Is.False);
+        Assert.That(dialogs.LastWarningMessage, Is.EqualTo("Не удалось отключить бота. Повторите попытку."));
+
+        controller.StopException = null;
+        Assert.That(await page.OnLeavingAsync(context), Is.True);
+        Assert.That(controller.StopCount, Is.EqualTo(1));
+    }
+
+    [Test]
+    public async Task CompletionPage_PreservesBroadcasterChatDisplayPreferenceAcrossReauth()
+    {
+        await using var provider = BuildProvider();
+        var settingsManager = new SettingsManager(NullLogger<SettingsManager>.Instance, Path.Combine(_tempDir, "settings.json"));
+        var accountsStore = new AccountsStore(filePath: Path.Combine(_tempDir, "accounts.json"));
+        var bus = provider.GetRequiredService<IEventBus>();
+
+        using var page = new CompletionPageViewModel(
+            settingsManager,
+            accountsStore,
+            bus,
+            provider.GetRequiredService<KestrelHttpServer>(),
+            new StubChannelValidator(),
+            provider.GetRequiredService<BotConnectionManager>(),
+            NullLogger<CompletionPageViewModel>.Instance,
+            new StubDialogService());
+
+        var context = new OnboardingContext(
+            new AppSettings
+            {
+                Twitch = new TwitchSettings
+                {
+                    Enabled = true,
+                    ClientId = "tw-cid",
+                    ClientSecret = "tw-sec",
+                    Channel = "streamer",
+                    ChatDisplayAccount = PlatformAuthRole.Broadcaster,
+                },
+            },
+            CreateValidBotAccount(),
+            new());
+        accountsStore.SaveAll(context.BotAccount, context.BroadcasterAccount);
+
+        page.OnEnter(context);
+        await WaitForValidationAsync(page);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(page.ChatDisplayAccount, Is.EqualTo(PlatformAuthRole.Bot));
+            Assert.That(context.Settings.Twitch.ChatDisplayAccount, Is.EqualTo(PlatformAuthRole.Broadcaster));
+        });
+
+        Assert.That(context.AcceptTwitchLogin(PlatformAuthRole.Broadcaster, context.BroadcasterAccount,
+            new OAuthFlowResult("str-token", "str-refresh", [.. TwitchScopes.BroadcasterRequired], "streamer", "42", 3600)), Is.True);
+
+        page.OnEnter(context);
+        await WaitForValidationAsync(page);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(page.CanSelectTwitchChatDisplayAccount, Is.True);
+            Assert.That(page.ChatDisplayAccount, Is.EqualTo(PlatformAuthRole.Broadcaster));
+            Assert.That(context.Settings.Twitch.ChatDisplayAccount, Is.EqualTo(PlatformAuthRole.Broadcaster));
         });
     }
 
@@ -720,18 +857,41 @@ public sealed class OnboardingStage6Tests
         public int StopCount { get; private set; }
         public bool IsBusy => false;
         public BotLifecyclePhase CurrentPhase { get; set; } = BotLifecyclePhase.Idle;
+        public Exception? StartException { get; set; }
+        public Exception? StopException { get; set; }
 
         public void SetPlatformPhase(StreamingPlatform platform, BotLifecyclePhase phase) => _phases[platform] = phase;
         public BotLifecyclePhase GetPhase(StreamingPlatform platform) => _phases.GetValueOrDefault(platform, BotLifecyclePhase.Idle);
         public bool IsPlatformBusy(StreamingPlatform platform) => false;
-        public void StartConnection() => StartAllCount++;
-        public void StartConnection(StreamingPlatform platform) => StartedPlatforms.Add(platform);
+        public void StartConnection()
+        {
+            if (StartException is not null)
+            {
+                throw StartException;
+            }
+
+            StartAllCount++;
+        }
+        public void StartConnection(StreamingPlatform platform)
+        {
+            if (StartException is not null)
+            {
+                throw StartException;
+            }
+
+            StartedPlatforms.Add(platform);
+        }
         public void CancelConnection() { }
         public void CancelConnection(StreamingPlatform platform) { }
         public Task WaitForConnectionAsync() => Task.CompletedTask;
         public Task WaitForConnectionAsync(StreamingPlatform platform) => Task.CompletedTask;
         public Task StopAsync(BotStopMode mode = BotStopMode.Graceful)
         {
+            if (StopException is not null)
+            {
+                return Task.FromException(StopException);
+            }
+
             StopCount++;
             return Task.CompletedTask;
         }
@@ -846,12 +1006,13 @@ public sealed class OnboardingStage6Tests
 
     private sealed class StubDialogService : IDialogService
     {
+        public string? LastWarningMessage { get; private set; }
         public Task<bool> ShowAsync(IDialogViewModel viewModel) => Task.FromResult(false);
         public Task<bool> ReplaceAsync(IDialogViewModel viewModel) => Task.FromResult(false);
         public bool Confirm(string title, string message, bool defaultYes = false) => true;
         public bool ConfirmWarning(string title, string message, bool defaultYes = false) => true;
         public void Info(string title, string message) { }
-        public void Warning(string title, string message) { }
+        public void Warning(string title, string message) => LastWarningMessage = message;
         public void Error(string title, string message) { }
     }
 

@@ -26,6 +26,7 @@ public sealed partial class LegacyImportPageViewModel : OnboardingPageViewModelB
     [NotifyPropertyChangedFor(nameof(HasReadinessSummary))]
     [NotifyPropertyChangedFor(nameof(HasMissingStep))]
     [NotifyPropertyChangedFor(nameof(NextButtonText))]
+    [NotifyPropertyChangedFor(nameof(IsNextActionSecondary))]
     [NotifyPropertyChangedFor(nameof(CanFinishImmediately))]
     [NotifyPropertyChangedFor(nameof(CanGoToMissingStep))]
     [NotifyPropertyChangedFor(nameof(CanReviewSettings))]
@@ -39,6 +40,7 @@ public sealed partial class LegacyImportPageViewModel : OnboardingPageViewModelB
     [NotifyPropertyChangedFor(nameof(HasReadinessSummary))]
     [NotifyPropertyChangedFor(nameof(HasMissingStep))]
     [NotifyPropertyChangedFor(nameof(NextButtonText))]
+    [NotifyPropertyChangedFor(nameof(IsNextActionSecondary))]
     [NotifyPropertyChangedFor(nameof(CanFinishImmediately))]
     [NotifyPropertyChangedFor(nameof(CanGoToMissingStep))]
     [NotifyPropertyChangedFor(nameof(CanReviewSettings))]
@@ -51,6 +53,7 @@ public sealed partial class LegacyImportPageViewModel : OnboardingPageViewModelB
     [NotifyPropertyChangedFor(nameof(HasReadinessSummary))]
     [NotifyPropertyChangedFor(nameof(HasMissingStep))]
     [NotifyPropertyChangedFor(nameof(NextButtonText))]
+    [NotifyPropertyChangedFor(nameof(IsNextActionSecondary))]
     [NotifyPropertyChangedFor(nameof(CanFinishImmediately))]
     [NotifyPropertyChangedFor(nameof(CanGoToMissingStep))]
     [NotifyPropertyChangedFor(nameof(CanReviewSettings))]
@@ -63,6 +66,7 @@ public sealed partial class LegacyImportPageViewModel : OnboardingPageViewModelB
     [NotifyPropertyChangedFor(nameof(HasReadinessSummary))]
     [NotifyPropertyChangedFor(nameof(HasMissingStep))]
     [NotifyPropertyChangedFor(nameof(NextButtonText))]
+    [NotifyPropertyChangedFor(nameof(IsNextActionSecondary))]
     [NotifyPropertyChangedFor(nameof(CanFinishImmediately))]
     [NotifyPropertyChangedFor(nameof(CanGoToMissingStep))]
     [NotifyPropertyChangedFor(nameof(CanReviewSettings))]
@@ -123,6 +127,11 @@ public sealed partial class LegacyImportPageViewModel : OnboardingPageViewModelB
                 : "Далее";
         }
     }
+
+    public override bool IsNextActionSecondary =>
+        !HasCompletedImport
+        && !IsImportBlockedByProvisionalWrites
+        && Import is { SelectedSource: not null };
 
     public override bool IsBusy => IsReloading || Import?.IsBusy == true;
 
@@ -308,6 +317,11 @@ public sealed partial class LegacyImportPageViewModel : OnboardingPageViewModelB
         SyncBusyState();
     }
 
+    partial void OnIsImportBlockedByProvisionalWritesChanged(bool value)
+    {
+        OnPropertyChanged(nameof(IsNextActionSecondary));
+    }
+
     partial void OnIsProfileCompleteChanged(bool value)
     {
         OnPropertyChanged(nameof(ReviewSettingsButtonText));
@@ -315,6 +329,13 @@ public sealed partial class LegacyImportPageViewModel : OnboardingPageViewModelB
 
     private void OnImportPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
+        if (e.PropertyName is nameof(LegacyImportViewModel.SelectedSource)
+            or nameof(LegacyImportViewModel.BlockedNotice))
+        {
+            OnPropertyChanged(nameof(IsNextActionSecondary));
+            return;
+        }
+
         if (e.PropertyName is nameof(LegacyImportViewModel.IsBusy)
             or nameof(LegacyImportViewModel.IsCompleted)
             or nameof(LegacyImportViewModel.IsInterrupted)
@@ -331,6 +352,7 @@ public sealed partial class LegacyImportPageViewModel : OnboardingPageViewModelB
             OnPropertyChanged(nameof(HasReadinessSummary));
             OnPropertyChanged(nameof(HasMissingStep));
             OnPropertyChanged(nameof(NextButtonText));
+            OnPropertyChanged(nameof(IsNextActionSecondary));
             OnPropertyChanged(nameof(CanFinishImmediately));
             OnPropertyChanged(nameof(CanGoToMissingStep));
             OnPropertyChanged(nameof(CanReviewSettings));
@@ -407,11 +429,11 @@ public sealed partial class LegacyImportPageViewModel : OnboardingPageViewModelB
             var twitchEnabled = _context.Settings.Twitch.Enabled;
             var youtubeEnabled = _context.YouTubeSettings.Enabled;
             var twitchBotRequired = checklist is not null
-                ? twitchEnabled && missing.Contains("авторизация бота", StringComparer.OrdinalIgnoreCase)
+                ? twitchEnabled && checklist.HasMissingTwitchBotAuthorization
                 : twitchEnabled && result.BotAuthorizationRequired;
             var youtubeBotRequired = checklist is not null
                 && youtubeEnabled
-                && missing.Contains("авторизация бота YouTube", StringComparer.OrdinalIgnoreCase);
+                && checklist.HasMissingYouTubeBotAuthorization;
 
             Import.ResultAuthorizationNotice = LegacyImportText.BuildAuthorizationNotice(
                 result,

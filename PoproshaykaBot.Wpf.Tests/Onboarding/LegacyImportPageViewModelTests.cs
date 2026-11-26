@@ -231,6 +231,72 @@ public sealed class LegacyImportPageViewModelTests
     }
 
     [Test]
+    public async Task V2_And_A5_SecondaryNextActionAndStructuredChecklistAuthNotice()
+    {
+        var settings = new SettingsManager(NullLogger<SettingsManager>.Instance, Path.Combine(_tempDir, "settings.json"));
+        settings.SaveSettings(new AppSettings { Twitch = new TwitchSettings { Enabled = false } });
+        var accounts = new AccountsStore(filePath: Path.Combine(_tempDir, "accounts.json"));
+        var ytSettings = new YouTubeSettingsStore(filePath: Path.Combine(_tempDir, "youtube.json"));
+        ytSettings.Save(new YouTubeSettings
+        {
+            Enabled = true,
+            ClientId = "yt-cid",
+            Channel = "UC1234567890123456789012",
+        });
+        var ytAccounts = new YouTubeAccountsStore(filePath: Path.Combine(_tempDir, "youtube-accounts.json"));
+
+        var checklist = new OnboardingChecklist(settings, accounts, youtubeSettings: ytSettings, youtubeAccounts: ytAccounts);
+        var context = new OnboardingContext(
+            settings.Current,
+            new(),
+            new(),
+            ytSettings.Load(),
+            string.Empty,
+            ytAccounts.LoadBot(),
+            ytAccounts.LoadBroadcaster())
+        {
+            IncludeLegacyImport = true,
+            Checklist = checklist,
+        };
+
+        using var page = new LegacyImportPageViewModel(new StubFilePicker(_tempDir), NullLogger<LegacyImportPageViewModel>.Instance);
+        var source = CreateSource(_tempDir);
+        page.ConfigureStartupSession(
+            [source],
+            null,
+            (_, _) => Task.CompletedTask,
+            null,
+            (src, _, _) => new LegacyImportResult
+            {
+                SourcePath = src,
+                TargetPath = _tempDir,
+                CopiedFiles = ["settings/youtube.json"],
+                SkippedFiles = [],
+                Failures = [],
+            });
+
+        page.OnEnter(context);
+        Assert.That(page.IsNextActionSecondary, Is.False);
+
+        page.Import!.SelectedSource = page.Import.Sources[0];
+        Assert.That(page.IsNextActionSecondary, Is.True);
+
+        context.TwitchSettingsWritten = true;
+        page.RefreshContext(context);
+        Assert.That(page.IsNextActionSecondary, Is.False);
+        context.TwitchSettingsWritten = false;
+        page.RefreshContext(context);
+        Assert.That(page.IsNextActionSecondary, Is.True);
+
+        await page.Import.ImportCommand.ExecuteAsync(null);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(page.IsNextActionSecondary, Is.False);
+            Assert.That(page.Import.ResultAuthorizationNotice, Does.Contain("YouTube"));
+        }
+    }
+
+    [Test]
     public async Task R14_And_R15_WizardRoutesToFinishOrMissingStepOrAppearance()
     {
         await using var provider = BuildProvider();

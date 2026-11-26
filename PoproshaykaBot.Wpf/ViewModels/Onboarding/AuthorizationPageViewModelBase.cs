@@ -36,6 +36,7 @@ public abstract partial class AuthorizationPageViewModelBase : OnboardingPageVie
     [NotifyPropertyChangedFor(nameof(CopyLinkButtonText))]
     [NotifyPropertyChangedFor(nameof(EmbeddedAuthButtonText))]
     [NotifyPropertyChangedFor(nameof(NextButtonTextOverride))]
+    [NotifyPropertyChangedFor(nameof(IsNextActionSecondary))]
     private bool _hasToken;
 
     [ObservableProperty]
@@ -98,6 +99,9 @@ public abstract partial class AuthorizationPageViewModelBase : OnboardingPageVie
         _role == PlatformAuthRole.Broadcaster && !HasToken && CanAdvance
             ? "Продолжить только с ботом"
             : null;
+
+    public override bool IsNextActionSecondary =>
+        _role == PlatformAuthRole.Broadcaster && !HasToken && CanAdvance;
 
     public override bool IsApplicable(OnboardingContext context) => context.Settings.Twitch.Enabled;
 
@@ -527,6 +531,7 @@ public abstract partial class AuthorizationPageViewModelBase : OnboardingPageVie
         }
 
         OnPropertyChanged(nameof(NextButtonTextOverride));
+        OnPropertyChanged(nameof(IsNextActionSecondary));
     }
 
     private void OnCredentialsChanged(object? sender, EventArgs e)

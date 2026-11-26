@@ -40,6 +40,8 @@ public sealed partial class CompletionPageViewModel : OnboardingPageViewModelBas
     private CancellationTokenSource? _validationCts;
     private bool _hasCriticalIssue;
     private ChannelValidationResult _lastChannelCheckResult = ChannelValidationResult.Skipped;
+    private PlatformAuthRole? _preferredChatDisplayAccount;
+    private bool _suppressChatDisplaySync;
 
     [ObservableProperty]
     private string _summaryText = string.Empty;
@@ -127,6 +129,11 @@ public sealed partial class CompletionPageViewModel : OnboardingPageViewModelBas
     {
         ArgumentNullException.ThrowIfNull(context);
 
+        if (!ReferenceEquals(_context, context))
+        {
+            _preferredChatDisplayAccount = context.Settings.Twitch.ChatDisplayAccount;
+        }
+
         _context = context;
         RefreshContextSummary(context);
         UpdateConnectionAfterFinishText();
@@ -161,6 +168,12 @@ public sealed partial class CompletionPageViewModel : OnboardingPageViewModelBas
             && !PlatformAuthRoles.HasCredentials(context.YouTubeBotAccount.AccessToken, context.YouTubeBotAccount.RefreshToken))
         {
             return ReportNotWritten("Вход бота в YouTube больше недоступен. Вернитесь к настройке YouTube и войдите снова.");
+        }
+
+        if (context.Settings.Twitch.Enabled)
+        {
+            var (hasBot, hasBroadcaster) = GetAuthorizedTwitchRoles(context);
+            context.Settings.Twitch.ChatDisplayAccount = ResolveEffectiveChatDisplayAccount(context, hasBot, hasBroadcaster);
         }
 
         var oldPort = _settingsManager.Current.Twitch.HttpServerPort;
@@ -222,6 +235,8 @@ public sealed partial class CompletionPageViewModel : OnboardingPageViewModelBas
                 catch (Exception exception)
                 {
                     _logger.OnboardingBotStopFailed(exception);
+                    _dialogService.Warning("Бот не отключён", "Не удалось отключить бота. Повторите попытку.");
+                    return false;
                 }
             }
         }
@@ -268,8 +283,9 @@ public sealed partial class CompletionPageViewModel : OnboardingPageViewModelBas
 
     partial void OnChatDisplayAccountChanged(PlatformAuthRole value)
     {
-        if (_context is not null)
+        if (_context is not null && !_suppressChatDisplaySync)
         {
+            _preferredChatDisplayAccount = value;
             _context.Settings.Twitch.ChatDisplayAccount = value;
         }
     }
@@ -328,14 +344,7 @@ public sealed partial class CompletionPageViewModel : OnboardingPageViewModelBas
             return;
         }
 
-        var bot = context.CurrentTwitchAccount(_accountsStore, PlatformAuthRole.Bot);
-        var broadcaster = context.CurrentTwitchAccount(_accountsStore, PlatformAuthRole.Broadcaster);
-        var hasBot = TwitchScopes.HasUsableAuthorization(PlatformAuthRole.Bot, bot)
-            && context.CanUseTwitchRole(PlatformAuthRole.Bot, bot)
-            && !string.IsNullOrWhiteSpace(bot.Login);
-        var hasBroadcaster = TwitchScopes.HasUsableAuthorization(PlatformAuthRole.Broadcaster, broadcaster)
-            && context.CanUseTwitchRole(PlatformAuthRole.Broadcaster, broadcaster)
-            && !string.IsNullOrWhiteSpace(broadcaster.Login);
+        var (hasBot, hasBroadcaster, bot, broadcaster) = InspectTwitchRoles(context);
 
         if (hasBot && hasBroadcaster)
         {
@@ -345,7 +354,7 @@ public sealed partial class CompletionPageViewModel : OnboardingPageViewModelBas
             TwitchBotChatDisplayLabel = $"Аккаунт бота (@{bot.Login.Trim()})";
             TwitchBroadcasterChatDisplayLabel = $"Аккаунт стримера (@{broadcaster.Login.Trim()})";
             SingleTwitchChatDisplayText = string.Empty;
-            ChatDisplayAccount = context.Settings.Twitch.ChatDisplayAccount;
+            SetDisplayedChatDisplayAccount(_preferredChatDisplayAccount ?? context.Settings.Twitch.ChatDisplayAccount);
             return;
         }
 
@@ -357,8 +366,7 @@ public sealed partial class CompletionPageViewModel : OnboardingPageViewModelBas
             TwitchBotChatDisplayLabel = string.Empty;
             TwitchBroadcasterChatDisplayLabel = string.Empty;
             SingleTwitchChatDisplayText = $"Чат работает от имени бота (@{bot.Login.Trim()})";
-            context.Settings.Twitch.ChatDisplayAccount = PlatformAuthRole.Bot;
-            ChatDisplayAccount = PlatformAuthRole.Bot;
+            SetDisplayedChatDisplayAccount(PlatformAuthRole.Bot);
             return;
         }
 
@@ -370,8 +378,7 @@ public sealed partial class CompletionPageViewModel : OnboardingPageViewModelBas
             TwitchBotChatDisplayLabel = string.Empty;
             TwitchBroadcasterChatDisplayLabel = string.Empty;
             SingleTwitchChatDisplayText = $"Чат работает от имени стримера (@{broadcaster.Login.Trim()})";
-            context.Settings.Twitch.ChatDisplayAccount = PlatformAuthRole.Broadcaster;
-            ChatDisplayAccount = PlatformAuthRole.Broadcaster;
+            SetDisplayedChatDisplayAccount(PlatformAuthRole.Broadcaster);
             return;
         }
 
@@ -381,8 +388,49 @@ public sealed partial class CompletionPageViewModel : OnboardingPageViewModelBas
         TwitchBotChatDisplayLabel = string.Empty;
         TwitchBroadcasterChatDisplayLabel = string.Empty;
         SingleTwitchChatDisplayText = string.Empty;
-        context.Settings.Twitch.ChatDisplayAccount = PlatformAuthRole.Bot;
-        ChatDisplayAccount = PlatformAuthRole.Bot;
+        SetDisplayedChatDisplayAccount(PlatformAuthRole.Bot);
+    }
+
+    private (bool HasBot, bool HasBroadcaster) GetAuthorizedTwitchRoles(OnboardingContext context)
+    {
+        var (hasBot, hasBroadcaster, _, _) = InspectTwitchRoles(context);
+        return (hasBot, hasBroadcaster);
+    }
+
+    private (bool HasBot, bool HasBroadcaster, TwitchAccountSettings Bot, TwitchAccountSettings Broadcaster) InspectTwitchRoles(OnboardingContext context)
+    {
+        var bot = context.CurrentTwitchAccount(_accountsStore, PlatformAuthRole.Bot);
+        var broadcaster = context.CurrentTwitchAccount(_accountsStore, PlatformAuthRole.Broadcaster);
+        var hasBot = TwitchScopes.HasUsableAuthorization(PlatformAuthRole.Bot, bot)
+            && context.CanUseTwitchRole(PlatformAuthRole.Bot, bot)
+            && !string.IsNullOrWhiteSpace(bot.Login);
+        var hasBroadcaster = TwitchScopes.HasUsableAuthorization(PlatformAuthRole.Broadcaster, broadcaster)
+            && context.CanUseTwitchRole(PlatformAuthRole.Broadcaster, broadcaster)
+            && !string.IsNullOrWhiteSpace(broadcaster.Login);
+        return (hasBot, hasBroadcaster, bot, broadcaster);
+    }
+
+    private PlatformAuthRole ResolveEffectiveChatDisplayAccount(OnboardingContext context, bool hasBot, bool hasBroadcaster)
+    {
+        if (hasBot && hasBroadcaster)
+        {
+            return _preferredChatDisplayAccount ?? context.Settings.Twitch.ChatDisplayAccount;
+        }
+
+        return hasBroadcaster ? PlatformAuthRole.Broadcaster : PlatformAuthRole.Bot;
+    }
+
+    private void SetDisplayedChatDisplayAccount(PlatformAuthRole role)
+    {
+        _suppressChatDisplaySync = true;
+        try
+        {
+            ChatDisplayAccount = role;
+        }
+        finally
+        {
+            _suppressChatDisplaySync = false;
+        }
     }
 
     private void UpdateConnectionAfterFinishText()

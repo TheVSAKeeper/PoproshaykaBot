@@ -531,7 +531,9 @@ public sealed class TwitchOnboardingStage4Tests
         {
             Assert.That(broadcaster.CanAdvance, Is.True);
             Assert.That(broadcaster.NextButtonTextOverride, Is.EqualTo("Продолжить только с ботом"));
+            Assert.That(broadcaster.IsNextActionSecondary, Is.True);
             Assert.That(wizard.NextButtonText, Is.EqualTo("Продолжить только с ботом"));
+            Assert.That(wizard.IsNextActionSecondary, Is.True);
             Assert.That(broadcaster.BroadcasterCapabilitiesHint, Does.Contain("опросы").And.Contain("управление трансляцией"));
         });
 
@@ -606,6 +608,122 @@ public sealed class TwitchOnboardingStage4Tests
             Assert.That(settingsVm.HasToken, Is.True);
             Assert.That(settingsVm.LoginText, Is.EqualTo("botlogin"));
         });
+    }
+
+    [Test]
+    public async Task BroadcasterAuthorization_AfterAuthClearsSecondaryNextAction()
+    {
+        await using var provider = BuildProvider();
+        var settings = new SettingsManager(NullLogger<SettingsManager>.Instance, Path.Combine(_tempDir, "settings.json"));
+        settings.SaveSettings(new AppSettings
+        {
+            Twitch = new TwitchSettings { ClientId = "cid", ClientSecret = "sec", Channel = "mychan" },
+        });
+        var accounts = new AccountsStore(filePath: Path.Combine(_tempDir, "accounts.json"));
+        var oauth = new ScriptedTwitchOAuthService(new OAuthFlowResult("at", "rt", [.. TwitchScopes.BroadcasterRequired], "mychan", "42", 3600));
+
+        using var broadcaster = new BroadcasterAuthorizationPageViewModel(
+            oauth,
+            accounts,
+            NullLogger<BroadcasterAuthorizationPageViewModel>.Instance,
+            new StubLauncher(),
+            new RecordingClipboard(),
+            new StubEmbeddedTwitchAuthDialog(EmbeddedTwitchAuthResult.Canceled("cancel")),
+            new ManualUiDispatcher());
+        using var wizard = CreateWizard(provider, settings, accounts, [broadcaster]);
+
+        Assert.That(wizard.IsNextActionSecondary, Is.True);
+        await broadcaster.OpenBrowserCommand.ExecuteAsync(null);
+        Assert.Multiple(() =>
+        {
+            Assert.That(broadcaster.HasToken, Is.True);
+            Assert.That(broadcaster.IsNextActionSecondary, Is.False);
+            Assert.That(wizard.IsNextActionSecondary, Is.False);
+        });
+    }
+
+    [Test]
+    public async Task CredentialsPage_RevertingToPreviouslyValidatedCredentialsBeforeTimerTick_RestoresCachedStatus()
+    {
+        var dispatcher = new ManualUiDispatcher();
+        var validator = new ScriptedCredentialsValidator();
+        using var vm = new CredentialsPageViewModel(
+            validator,
+            new StubChannelValidator(),
+            NullLogger<CredentialsPageViewModel>.Instance,
+            dispatcher);
+
+        vm.OnEnter(new OnboardingContext(new AppSettings(), new(), new()));
+        vm.ClientId = "valid-id";
+        vm.ClientSecret = "valid-sec";
+        dispatcher.Timers[0].Tick();
+        await validator.WaitCompletedAsync();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(vm.ClientStatusSeverity, Is.EqualTo(StatusSeverity.Success));
+            Assert.That(vm.ClientStatusText, Is.EqualTo("Client ID и Secret действительны"));
+        });
+
+        vm.ClientId = "edited-id";
+        Assert.Multiple(() =>
+        {
+            Assert.That(vm.ClientStatusText, Is.EqualTo("Ожидание ввода..."));
+            Assert.That(vm.ClientStatusSeverity, Is.EqualTo(StatusSeverity.None));
+        });
+
+        vm.ClientId = "valid-id";
+        Assert.Multiple(() =>
+        {
+            Assert.That(vm.ClientStatusText, Is.EqualTo("Client ID и Secret действительны"));
+            Assert.That(vm.ClientStatusSeverity, Is.EqualTo(StatusSeverity.Success));
+        });
+    }
+
+    [Test]
+    public async Task Wizard_OpeningCredentialsWithEmptySavedRedirectUri_DoesNotTriggerUnsavedPromptOnClose()
+    {
+        await using var provider = BuildProvider();
+        var settings = new SettingsManager(NullLogger<SettingsManager>.Instance, Path.Combine(_tempDir, "settings.json"));
+        settings.SaveSettings(new AppSettings
+        {
+            Twitch = new TwitchSettings
+            {
+                Enabled = true,
+                ClientId = "cid",
+                ClientSecret = "sec",
+                Channel = "mychan",
+                RedirectUri = string.Empty,
+            },
+        });
+        var accounts = new AccountsStore(filePath: Path.Combine(_tempDir, "accounts.json"));
+        var dialogs = new CountingDialogService();
+        var platforms = new PlatformsPageViewModel();
+        using var credentials = new CredentialsPageViewModel(
+            new StubCredentialsValidator(),
+            new StubChannelValidator(),
+            NullLogger<CredentialsPageViewModel>.Instance,
+            new ManualUiDispatcher());
+
+        using var wizard = new OnboardingWizardViewModel(
+            [platforms, credentials],
+            settings,
+            accounts,
+            provider.GetRequiredService<KestrelHttpServer>(),
+            provider.GetRequiredService<BotConnectionManager>(),
+            provider.GetRequiredService<IEventBus>(),
+            NullLogger<OnboardingWizardViewModel>.Instance,
+            dialogService: dialogs);
+
+        await wizard.NextCommand.ExecuteAsync(null);
+        Assert.Multiple(() =>
+        {
+            Assert.That(wizard.CurrentPage, Is.SameAs(credentials));
+            Assert.That(credentials.RedirectUri, Is.EqualTo(CredentialsPageViewModel.DefaultRedirectUri));
+        });
+
+        Assert.That(await wizard.RequestCloseAsync(confirmIfModified: true), Is.True);
+        Assert.That(dialogs.ConfirmWarningCalls, Is.Zero);
     }
 
     private static OnboardingWizardViewModel CreateWizard(
@@ -685,6 +803,22 @@ public sealed class TwitchOnboardingStage4Tests
         public Task<bool> ReplaceAsync(IDialogViewModel viewModel) => Task.FromResult(false);
         public bool Confirm(string title, string message, bool defaultYes = false) => true;
         public bool ConfirmWarning(string title, string message, bool defaultYes = false) => true;
+        public void Info(string title, string message) { }
+        public void Warning(string title, string message) { }
+        public void Error(string title, string message) { }
+    }
+
+    private sealed class CountingDialogService : IDialogService
+    {
+        public int ConfirmWarningCalls { get; private set; }
+        public Task<bool> ShowAsync(IDialogViewModel viewModel) => Task.FromResult(false);
+        public Task<bool> ReplaceAsync(IDialogViewModel viewModel) => Task.FromResult(false);
+        public bool Confirm(string title, string message, bool defaultYes = false) => true;
+        public bool ConfirmWarning(string title, string message, bool defaultYes = false)
+        {
+            ConfirmWarningCalls++;
+            return true;
+        }
         public void Info(string title, string message) { }
         public void Warning(string title, string message) { }
         public void Error(string title, string message) { }

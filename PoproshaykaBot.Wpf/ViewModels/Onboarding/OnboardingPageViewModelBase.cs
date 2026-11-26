@@ -17,6 +17,8 @@ public abstract partial class OnboardingPageViewModelBase : ObservableObject, IO
 
     public virtual string? NextButtonTextOverride => NextButtonText;
 
+    public virtual bool IsNextActionSecondary => false;
+
     public virtual bool IsBusy => false;
 
     public virtual bool IsApplicable(OnboardingContext context) => true;

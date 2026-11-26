@@ -199,6 +199,35 @@ public sealed class OnboardingChecklistTests
             Assert.That(checklist.IsComplete, Is.False);
             Assert.That(checklist.FirstMissingStep, Is.EqualTo(OnboardingStep.YouTube));
             Assert.That(checklist.GetMissingItems(), Is.EqualTo(new[] { "авторизация бота YouTube" }));
+            Assert.That(checklist.GetMissingReasons(), Is.EqualTo(new[] { OnboardingMissingItem.YouTubeBotAuthorization }));
+            Assert.That(checklist.HasMissingYouTubeBotAuthorization, Is.True);
+            Assert.That(checklist.HasMissingTwitchBotAuthorization, Is.False);
+        }
+    }
+
+    [Test]
+    public void TwitchPartial_MissingBotAuth_ExposesStructuredReasonWithoutStringMatching()
+    {
+        var settingsManager = CreateSettingsManager();
+        settingsManager.SaveSettings(new AppSettings
+        {
+            Twitch = new TwitchSettings
+            {
+                Enabled = true,
+                ClientId = "tw-id",
+                ClientSecret = "tw-secret",
+                Channel = "streamer",
+            },
+        });
+        var accountsStore = new AccountsStore(filePath: Path.Combine(_directory.FullName, "accounts-tw-missing.json"));
+
+        var checklist = new OnboardingChecklist(settingsManager, accountsStore);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(checklist.GetMissingReasons(), Is.EqualTo(new[] { OnboardingMissingItem.TwitchBotAuthorization }));
+            Assert.That(checklist.HasMissingTwitchBotAuthorization, Is.True);
+            Assert.That(checklist.HasMissingYouTubeBotAuthorization, Is.False);
         }
     }
 

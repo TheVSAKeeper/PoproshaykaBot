@@ -50,6 +50,7 @@ public sealed partial class OnboardingWizardViewModel : ObservableObject, IDispo
     [NotifyPropertyChangedFor(nameof(IsLastPage))]
     [NotifyPropertyChangedFor(nameof(ShowBackButton))]
     [NotifyPropertyChangedFor(nameof(NextButtonText))]
+    [NotifyPropertyChangedFor(nameof(IsNextActionSecondary))]
     [NotifyPropertyChangedFor(nameof(IsOperationBusy))]
     [NotifyCanExecuteChangedFor(nameof(NextCommand))]
     [NotifyCanExecuteChangedFor(nameof(BackCommand))]
@@ -59,6 +60,7 @@ public sealed partial class OnboardingWizardViewModel : ObservableObject, IDispo
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(NextButtonText))]
+    [NotifyPropertyChangedFor(nameof(IsNextActionSecondary))]
     [NotifyPropertyChangedFor(nameof(IsOperationBusy))]
     [NotifyCanExecuteChangedFor(nameof(NextCommand))]
     [NotifyCanExecuteChangedFor(nameof(BackCommand))]
@@ -166,6 +168,8 @@ public sealed partial class OnboardingWizardViewModel : ObservableObject, IDispo
     public string NextButtonText => IsLastPage
         ? CurrentPage?.NextButtonTextOverride ?? "Готово"
         : CurrentPage?.NextButtonTextOverride ?? "Далее";
+
+    public bool IsNextActionSecondary => CurrentPage?.IsNextActionSecondary == true;
 
     private IReadOnlyList<IOnboardingPageViewModel> ActivePages =>
         [.. _pages.Where(page => page.IsApplicable(_context))];
@@ -572,6 +576,7 @@ public sealed partial class OnboardingWizardViewModel : ObservableObject, IDispo
         OnPropertyChanged(nameof(IsLastPage));
         OnPropertyChanged(nameof(ShowBackButton));
         OnPropertyChanged(nameof(NextButtonText));
+        OnPropertyChanged(nameof(IsNextActionSecondary));
         OnPropertyChanged(nameof(IsOperationBusy));
         NextCommand.NotifyCanExecuteChanged();
         BackCommand.NotifyCanExecuteChanged();
@@ -606,6 +611,7 @@ public sealed partial class OnboardingWizardViewModel : ObservableObject, IDispo
     private void OnCurrentPageCanAdvanceChanged(object? sender, EventArgs e)
     {
         OnPropertyChanged(nameof(NextButtonText));
+        OnPropertyChanged(nameof(IsNextActionSecondary));
         NextCommand.NotifyCanExecuteChanged();
     }
 
@@ -616,6 +622,11 @@ public sealed partial class OnboardingWizardViewModel : ObservableObject, IDispo
             or null)
         {
             OnPropertyChanged(nameof(NextButtonText));
+        }
+
+        if (e.PropertyName is nameof(IOnboardingPageViewModel.IsNextActionSecondary) or null)
+        {
+            OnPropertyChanged(nameof(IsNextActionSecondary));
         }
 
         if (e.PropertyName is nameof(IOnboardingPageViewModel.PageTitle) or null)
@@ -763,7 +774,7 @@ public sealed partial class OnboardingWizardViewModel : ObservableObject, IDispo
             CredentialsPageViewModel credentials => !string.Equals(credentials.ClientId.Trim(), _originalTwitch.ClientId?.Trim() ?? string.Empty, StringComparison.Ordinal)
                 || !string.Equals(credentials.ClientSecret.Trim(), _originalTwitch.ClientSecret?.Trim() ?? string.Empty, StringComparison.Ordinal)
                 || !string.Equals(credentials.Channel.Trim().TrimStart('@'), (_originalTwitch.Channel ?? string.Empty).Trim().TrimStart('@'), StringComparison.Ordinal)
-                || !string.Equals(credentials.RedirectUri.Trim(), _originalTwitch.RedirectUri?.Trim() ?? string.Empty, StringComparison.Ordinal),
+                || !string.Equals(credentials.RedirectUri.Trim(), NormalizeRedirectUri(_originalTwitch.RedirectUri), StringComparison.Ordinal),
             YouTubeOnboardingPageViewModel youtube => !string.Equals(youtube.Editor.ClientId.Trim(), _originalYouTube.ClientId?.Trim() ?? string.Empty, StringComparison.Ordinal)
                 || !string.Equals(youtube.Editor.ClientSecret.Trim(), _originalYouTubeClientSecret.Trim(), StringComparison.Ordinal)
                 || !string.Equals(youtube.Editor.ProjectId.Trim(), _originalYouTube.ProjectId?.Trim() ?? string.Empty, StringComparison.Ordinal)
@@ -782,10 +793,15 @@ public sealed partial class OnboardingWizardViewModel : ObservableObject, IDispo
             || !string.Equals(current.ClientId ?? string.Empty, original.ClientId ?? string.Empty, StringComparison.Ordinal)
             || !string.Equals(current.ClientSecret ?? string.Empty, original.ClientSecret ?? string.Empty, StringComparison.Ordinal)
             || !string.Equals(current.Channel ?? string.Empty, baselineChannel, StringComparison.Ordinal)
-            || !string.Equals(current.RedirectUri ?? string.Empty, original.RedirectUri ?? string.Empty, StringComparison.Ordinal)
+            || !string.Equals(NormalizeRedirectUri(current.RedirectUri), NormalizeRedirectUri(original.RedirectUri), StringComparison.Ordinal)
             || current.HttpServerPort != original.HttpServerPort
             || current.ChatDisplayAccount != original.ChatDisplayAccount;
     }
+
+    private static string NormalizeRedirectUri(string? redirectUri) =>
+        string.IsNullOrWhiteSpace(redirectUri)
+            ? CredentialsPageViewModel.DefaultRedirectUri
+            : redirectUri.Trim();
 
     private static T DeepClone<T>(T source) where T : class, new()
     {

@@ -166,6 +166,10 @@ public sealed partial class BotConnectionPageViewModel : OnboardingPageViewModel
             catch (InvalidOperationException exception)
             {
                 _logger.BotConnectionStartRejected(exception);
+                if (PlatformStatuses.FirstOrDefault(r => r.Platform == platform.Id) is { } row)
+                {
+                    UpdateRow(row, BotLifecyclePhase.Failed, "Не удалось запустить подключение. Повторите попытку.");
+                }
             }
         }
 
@@ -198,6 +202,12 @@ public sealed partial class BotConnectionPageViewModel : OnboardingPageViewModel
         catch (InvalidOperationException exception)
         {
             _logger.BotConnectionStartRejected(exception);
+            if (PlatformStatuses.FirstOrDefault(r => r.Platform == platform) is { } failedRow)
+            {
+                UpdateRow(failedRow, BotLifecyclePhase.Failed, "Не удалось запустить подключение. Повторите попытку.");
+                RefreshAggregateFromRows();
+            }
+
             return;
         }
 
@@ -550,6 +560,14 @@ public sealed partial class BotConnectionPageViewModel : OnboardingPageViewModel
         catch (InvalidOperationException exception)
         {
             _logger.BotConnectionStartRejected(exception);
+            const string message = "Не удалось запустить подключение. Повторите попытку.";
+            _lastStatusMessage = message;
+            foreach (var row in PlatformStatuses)
+            {
+                UpdateRow(row, BotLifecyclePhase.Failed, message);
+            }
+
+            RefreshAggregateFromRows(BotLifecyclePhase.Failed);
         }
     }
 

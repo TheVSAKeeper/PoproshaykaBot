@@ -10,6 +10,8 @@ public interface IOnboardingPageViewModel
 
     string? NextButtonTextOverride { get; }
 
+    bool IsNextActionSecondary { get; }
+
     bool CanAdvance { get; }
 
     bool IsBusy { get; }
