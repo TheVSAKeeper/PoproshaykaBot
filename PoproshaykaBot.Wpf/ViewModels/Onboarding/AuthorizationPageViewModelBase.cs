@@ -5,7 +5,6 @@ using PoproshaykaBot.Core.Platforms.Auth;
 using PoproshaykaBot.Core.Settings.Stores;
 using PoproshaykaBot.Core.Twitch.Auth;
 using PoproshaykaBot.Core.Twitch.Chat;
-using System.Diagnostics;
 using System.Net.Http;
 using PoproshaykaBot.Wpf.Bootstrap;
 using PoproshaykaBot.Wpf.Infrastructure;
@@ -36,7 +35,23 @@ public abstract partial class AuthorizationPageViewModelBase : OnboardingPageVie
     [NotifyPropertyChangedFor(nameof(OpenBrowserButtonText))]
     [NotifyPropertyChangedFor(nameof(CopyLinkButtonText))]
     [NotifyPropertyChangedFor(nameof(EmbeddedAuthButtonText))]
+    [NotifyPropertyChangedFor(nameof(NextButtonTextOverride))]
     private bool _hasToken;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(OpenBrowserButtonText))]
+    [NotifyPropertyChangedFor(nameof(CopyLinkButtonText))]
+    [NotifyPropertyChangedFor(nameof(EmbeddedAuthButtonText))]
+    private bool _isAccountFixed;
+
+    [ObservableProperty]
+    private string? _expectedAccountLabel;
+
+    [ObservableProperty]
+    private string _expectedAccountHint = string.Empty;
+
+    [ObservableProperty]
+    private string _broadcasterCapabilitiesHint = string.Empty;
 
     [ObservableProperty]
     private string _resultText = string.Empty;
@@ -52,6 +67,7 @@ public abstract partial class AuthorizationPageViewModelBase : OnboardingPageVie
 
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(AuthorizeInAppCommand))]
+    [NotifyCanExecuteChangedFor(nameof(CancelAuthCommand))]
     private bool _isAuthInProgress;
 
     protected AuthorizationPageViewModelBase(
@@ -78,22 +94,27 @@ public abstract partial class AuthorizationPageViewModelBase : OnboardingPageVie
         ? "Авторизация стримера Twitch"
         : "Авторизация бота Twitch";
 
+    public override string? NextButtonTextOverride =>
+        _role == PlatformAuthRole.Broadcaster && !HasToken && CanAdvance
+            ? "Продолжить только с ботом"
+            : null;
+
     public override bool IsApplicable(OnboardingContext context) => context.Settings.Twitch.Enabled;
 
     public string IntroText => _role == PlatformAuthRole.Broadcaster
-        ? "Для режима «только бот» укажите канал вручную на шаге «Настройка Twitch» и пропустите этот шаг. Авторизация стримера нужна для опросов и управления эфиром."
+        ? "Авторизация стримера Twitch даёт права на опросы и управление трансляцией. Для режима «только бот» этот шаг можно пропустить."
         : "Авторизуйте аккаунт бота Twitch. От его имени бот будет писать в чат и слушать сообщения.";
 
     public string OpenBrowserButtonText => HasToken
-        ? "Сменить через браузер"
+        ? (IsAccountFixed ? "Обновить через браузер" : "Сменить через браузер")
         : "Открыть в браузере";
 
     public string CopyLinkButtonText => HasToken
-        ? "Ссылка для смены"
+        ? (IsAccountFixed ? "Ссылка для входа" : "Ссылка для смены")
         : "Скопировать ссылку";
 
     public string EmbeddedAuthButtonText => HasToken
-        ? "Сменить в приложении"
+        ? (IsAccountFixed ? "Обновить вход в приложении" : "Сменить в приложении")
         : "Войти в приложении";
 
     public override void OnEnter(OnboardingContext context)
@@ -112,6 +133,35 @@ public abstract partial class AuthorizationPageViewModelBase : OnboardingPageVie
         }
 
         RefreshFromContext();
+    }
+
+    public override void OnNavigatingBack(OnboardingContext context)
+    {
+        CancelPendingAuthOnLeave();
+    }
+
+    public override Task<bool> OnLeavingAsync(OnboardingContext context)
+    {
+        CancelPendingAuthOnLeave();
+        return base.OnLeavingAsync(context);
+    }
+
+    public override bool TryHandleEscape()
+    {
+        if (!IsAuthInProgress || _authCts is not { } pending)
+        {
+            return false;
+        }
+
+        try
+        {
+            pending.Cancel();
+        }
+        catch (ObjectDisposedException)
+        {
+        }
+
+        return true;
     }
 
     public void Dispose()
@@ -210,6 +260,7 @@ public abstract partial class AuthorizationPageViewModelBase : OnboardingPageVie
         _logger.OAuthEmbeddedFlowStarted(_role, OAuthAuthorizationSurface.OnboardingWizard);
 
         var completed = false;
+        var switchToBrowser = false;
 
         try
         {
@@ -218,6 +269,10 @@ public abstract partial class AuthorizationPageViewModelBase : OnboardingPageVie
             if (result is { Outcome: EmbeddedTwitchAuthOutcome.Completed, Flow: { } flow })
             {
                 completed = ApplyAuthResult(flow);
+            }
+            else if (result.Outcome == EmbeddedTwitchAuthOutcome.SwitchToBrowser)
+            {
+                switchToBrowser = true;
             }
             else if (result.Outcome is EmbeddedTwitchAuthOutcome.Canceled or EmbeddedTwitchAuthOutcome.Unavailable)
             {
@@ -237,6 +292,12 @@ public abstract partial class AuthorizationPageViewModelBase : OnboardingPageVie
             IsAuthInProgress = false;
         }
 
+        if (switchToBrowser)
+        {
+            await OpenBrowserAsync();
+            return;
+        }
+
         if (completed)
         {
             RefreshFromContext();
@@ -248,7 +309,12 @@ public abstract partial class AuthorizationPageViewModelBase : OnboardingPageVie
         return !IsAuthInProgress;
     }
 
-    [RelayCommand]
+    private bool CanCancelAuth()
+    {
+        return IsAuthInProgress && _authCts is { IsCancellationRequested: false };
+    }
+
+    [RelayCommand(CanExecute = nameof(CanCancelAuth))]
     private async Task CancelAuthAsync()
     {
         if (_authCts is not { } pending)
@@ -259,6 +325,27 @@ public abstract partial class AuthorizationPageViewModelBase : OnboardingPageVie
         try
         {
             await pending.CancelAsync();
+        }
+        catch (ObjectDisposedException)
+        {
+        }
+    }
+
+    private void CancelPendingAuthOnLeave()
+    {
+        if (_authCts is not { } pending)
+        {
+            return;
+        }
+
+        _authCts = null;
+        _currentAuthUrl = null;
+        IsAuthInProgress = false;
+        UnsubscribeStatus();
+
+        try
+        {
+            pending.Cancel();
         }
         catch (ObjectDisposedException)
         {
@@ -318,9 +405,12 @@ public abstract partial class AuthorizationPageViewModelBase : OnboardingPageVie
         catch (OperationCanceledException) when (cts.IsCancellationRequested)
         {
             hadError = true;
-            StatusMessage = "Авторизация отменена";
-            StatusMessageSeverity = StatusSeverity.Warning;
-            ResultText = string.Empty;
+            if (ReferenceEquals(_authCts, cts))
+            {
+                StatusMessage = "Авторизация отменена";
+                StatusMessageSeverity = StatusSeverity.Warning;
+                ResultText = string.Empty;
+            }
         }
         catch (Exception exception) when (ReferenceEquals(_authCts, cts))
         {
@@ -361,7 +451,13 @@ public abstract partial class AuthorizationPageViewModelBase : OnboardingPageVie
         var account = GetAccount();
         if (!_context.AcceptTwitchLogin(_role, account, result))
         {
-            StatusMessage = "Войдите с аккаунтом Twitch, назначенным этому каналу.";
+            var expected = _context.GetExpectedTwitchAccountLabel(_role, _accountsStore, account);
+            var actual = string.IsNullOrWhiteSpace(result.Login)
+                ? "другой аккаунт"
+                : $"@{result.Login.TrimStart('@')}";
+            StatusMessage = expected is not null
+                ? $"Вход выполнен в {actual}, но этому каналу назначен {expected}. Войдите в {expected} или измените назначение в разделе «Настройки -> Площадки и каналы»."
+                : "Войдите с аккаунтом Twitch, назначенным этому каналу. Изменить назначение можно в разделе «Настройки -> Площадки и каналы».";
             StatusMessageSeverity = StatusSeverity.Error;
             return false;
         }
@@ -380,6 +476,13 @@ public abstract partial class AuthorizationPageViewModelBase : OnboardingPageVie
     private void RefreshFromContext()
     {
         var account = _context?.CurrentTwitchAccount(_accountsStore, _role) ?? GetAccount();
+        var expectedLabel = _context?.GetExpectedTwitchAccountLabel(_role, _accountsStore, account);
+        ExpectedAccountLabel = expectedLabel;
+        IsAccountFixed = expectedLabel is not null;
+        ExpectedAccountHint = expectedLabel is not null
+            ? $"Для этого канала назначен аккаунт {expectedLabel}. Изменить назначение можно в разделе «Настройки -> Площадки и каналы»."
+            : string.Empty;
+
         HasToken = TwitchScopes.HasUsableAuthorization(_role, account) && _context?.CanUseTwitchRole(_role, account) == true;
 
         if (HasToken)
@@ -387,10 +490,13 @@ public abstract partial class AuthorizationPageViewModelBase : OnboardingPageVie
             var login = string.IsNullOrWhiteSpace(account.Login) ? "–" : account.Login;
             ResultText = $"Авторизован: @{login}";
             ResultSeverity = StatusSeverity.Success;
+            BroadcasterCapabilitiesHint = string.Empty;
 
             if (_authCts is null)
             {
-                StatusMessage = "Можно идти дальше или сменить аккаунт.";
+                StatusMessage = IsAccountFixed
+                    ? $"Можно идти дальше или обновить вход для {ExpectedAccountLabel}."
+                    : "Можно идти дальше или сменить аккаунт.";
                 StatusMessageSeverity = StatusSeverity.None;
             }
 
@@ -399,18 +505,28 @@ public abstract partial class AuthorizationPageViewModelBase : OnboardingPageVie
         else
         {
             var canSkip = _role == PlatformAuthRole.Broadcaster && _context?.HasConfiguredTwitchChannel == true;
+            BroadcasterCapabilitiesHint = _role == PlatformAuthRole.Broadcaster
+                ? (canSkip
+                    ? "Без входа стримера можно нажать «Продолжить только с ботом» – тогда останутся недоступны опросы и управление трансляцией."
+                    : "Вход стримера нужен для автоопределения канала, опросов и управления трансляцией.")
+                : string.Empty;
+
             if (_authCts is null)
             {
                 ResultText = PlatformAuthRoles.HasCredentials(account.AccessToken, account.RefreshToken)
                     ? "Нужно выдать разрешения заново"
                     : "Не авторизован";
                 ResultSeverity = canSkip ? StatusSeverity.None : StatusSeverity.Error;
-                StatusMessage = canSkip ? "Можно продолжить с аккаунтом бота." : "Откройте ссылку в браузере и подтвердите доступ.";
+                StatusMessage = canSkip
+                    ? "Можно продолжить только с ботом или войти аккаунтом стримера."
+                    : "Откройте ссылку в браузере или войдите во встроенном окне.";
                 StatusMessageSeverity = StatusSeverity.None;
             }
 
             CanAdvance = canSkip;
         }
+
+        OnPropertyChanged(nameof(NextButtonTextOverride));
     }
 
     private void OnCredentialsChanged(object? sender, EventArgs e)

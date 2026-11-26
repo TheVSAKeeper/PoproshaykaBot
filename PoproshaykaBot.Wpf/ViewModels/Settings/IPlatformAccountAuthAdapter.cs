@@ -41,7 +41,8 @@ public sealed record PlatformAuthFlowOutcome(
     bool IsWarning,
     string StatusMessage,
     string? UpdatedScopesText = null,
-    bool RaiseSettingChanged = false);
+    bool RaiseSettingChanged = false,
+    bool SwitchToBrowser = false);
 
 public sealed record PlatformTokenCheckOutcome(
     string StatusText,

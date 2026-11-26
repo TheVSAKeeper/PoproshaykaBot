@@ -360,6 +360,8 @@ public sealed partial class PlatformOAuthAccountViewModel : ObservableObject, ID
         SetStatus("Авторизация во встроенном окне...", StatusSeverity.Info);
         _logger.OAuthEmbeddedFlowStarted(_adapter.Role, OAuthAuthorizationSurface.Settings);
 
+        var switchToBrowser = false;
+
         try
         {
             var outcome = await embedded.StartEmbeddedAuthorizationAsync(
@@ -372,7 +374,14 @@ public sealed partial class PlatformOAuthAccountViewModel : ObservableObject, ID
                 return;
             }
 
-            ApplyFlowOutcome(outcome);
+            if (outcome.SwitchToBrowser)
+            {
+                switchToBrowser = true;
+            }
+            else
+            {
+                ApplyFlowOutcome(outcome);
+            }
         }
         catch (Exception exception)
         {
@@ -388,6 +397,11 @@ public sealed partial class PlatformOAuthAccountViewModel : ObservableObject, ID
             {
                 IsAuthorizing = false;
             }
+        }
+
+        if (switchToBrowser && !_disposed)
+        {
+            await OpenBrowserAsync();
         }
     }
 

@@ -15,6 +15,8 @@ public abstract partial class OnboardingPageViewModelBase : ObservableObject, IO
 
     public virtual string? NextButtonText => null;
 
+    public virtual string? NextButtonTextOverride => NextButtonText;
+
     public virtual bool IsBusy => false;
 
     public virtual bool IsApplicable(OnboardingContext context) => true;
@@ -23,10 +25,16 @@ public abstract partial class OnboardingPageViewModelBase : ObservableObject, IO
     {
     }
 
+    public virtual void OnNavigatingBack(OnboardingContext context)
+    {
+    }
+
     public virtual Task<bool> OnLeavingAsync(OnboardingContext context)
     {
         return Task.FromResult(CanAdvance);
     }
+
+    public virtual bool TryHandleEscape() => false;
 
     protected void OnIsBusyChanged()
     {

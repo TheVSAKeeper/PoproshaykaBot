@@ -10,44 +10,66 @@
              d:DesignHeight="376"
              d:DesignWidth="688">
 
-    <StackPanel Margin="20,18">
-        <TextBlock Text="{Binding IntroText}"
-                   Foreground="{DynamicResource Fg.Primary}"
-                   TextWrapping="Wrap"
-                   Margin="0,0,0,16" />
+    <ScrollViewer VerticalScrollBarVisibility="Auto"
+                  HorizontalScrollBarVisibility="Disabled">
+        <StackPanel Margin="20,18">
+            <TextBlock Text="{Binding IntroText}"
+                       Foreground="{DynamicResource Fg.Primary}"
+                       TextWrapping="Wrap"
+                       Margin="0,0,0,10" />
 
-        <StackPanel Orientation="Horizontal"
-                    Margin="0,0,0,8">
-            <Button Style="{StaticResource Button.Primary}"
-                    Content="{Binding EmbeddedAuthButtonText}"
-                    Command="{Binding AuthorizeInAppCommand}"
-                    ToolTip="Страница авторизации Twitch откроется во встроенном окне приложения."
-                    Margin="0,0,8,0" />
-            <Button Style="{StaticResource Button.Secondary}"
-                    Content="{Binding OpenBrowserButtonText}"
-                    Command="{Binding OpenBrowserCommand}"
-                    ToolTip="Откроется системный браузер на странице авторизации Twitch."
-                    Margin="0,0,8,0" />
-            <Button Style="{StaticResource Button.Secondary}"
-                    Content="{Binding CopyLinkButtonText}"
-                    Command="{Binding CopyLinkCommand}"
-                    ToolTip="Скопировать ссылку авторизации в буфер обмена."
-                    Margin="0,0,8,0" />
-            <Button Style="{StaticResource Button.Destructive}"
-                    Content="Отменить"
-                    Command="{Binding CancelAuthCommand}"
-                    Visibility="{Binding IsAuthInProgress, Converter={StaticResource BoolToVisibility}}" />
+            <TextBlock Text="{Binding ExpectedAccountHint}"
+                       Foreground="{DynamicResource Fg.Secondary}"
+                       FontSize="{DynamicResource Font.Size.S}"
+                       TextWrapping="Wrap"
+                       Visibility="{Binding ExpectedAccountHint, Converter={StaticResource NullToVisibility}}"
+                       Margin="0,0,0,10" />
+
+            <TextBlock Text="{Binding BroadcasterCapabilitiesHint}"
+                       Foreground="{DynamicResource Fg.Muted}"
+                       FontSize="{DynamicResource Font.Size.S}"
+                       TextWrapping="Wrap"
+                       Visibility="{Binding BroadcasterCapabilitiesHint, Converter={StaticResource NullToVisibility}}"
+                       Margin="0,0,0,12" />
+
+            <WrapPanel Margin="0,0,0,6">
+                <Button Style="{StaticResource Button.Primary}"
+                        Content="{Binding EmbeddedAuthButtonText}"
+                        Command="{Binding AuthorizeInAppCommand}"
+                        ToolTip="Страница авторизации Twitch откроется во встроенном окне приложения."
+                        Margin="0,0,8,6" />
+                <Button Style="{StaticResource Button.Secondary}"
+                        Content="{Binding OpenBrowserButtonText}"
+                        Command="{Binding OpenBrowserCommand}"
+                        ToolTip="Откроется системный браузер на странице авторизации Twitch."
+                        Margin="0,0,8,6" />
+                <Button Style="{StaticResource Button.Secondary}"
+                        Content="{Binding CopyLinkButtonText}"
+                        Command="{Binding CopyLinkCommand}"
+                        ToolTip="Скопировать ссылку авторизации в буфер обмена."
+                        Margin="0,0,8,6" />
+            </WrapPanel>
+
+            <WrapPanel Margin="0,0,0,8"
+                       VerticalAlignment="Center">
+                <TextBlock Text="{Binding StatusMessage}"
+                           TextWrapping="Wrap"
+                           VerticalAlignment="Center"
+                           FontSize="{DynamicResource Font.Size.S}"
+                           keepshell:SeverityBrushBehavior.Foreground="{Binding StatusMessageSeverity}"
+                           Margin="0,0,10,4" />
+                <Button Style="{StaticResource Button.Destructive}"
+                        Content="Отменить вход"
+                        Command="{Binding CancelAuthCommand}"
+                        Visibility="{Binding IsAuthInProgress, Converter={StaticResource BoolToVisibility}}"
+                        AutomationProperties.Name="Отменить вход"
+                        Margin="0,0,0,4" />
+            </WrapPanel>
+
+            <TextBlock Text="{Binding ResultText}"
+                       TextWrapping="Wrap"
+                       FontWeight="Bold"
+                       keepshell:SeverityBrushBehavior.Foreground="{Binding ResultSeverity}" />
         </StackPanel>
-
-        <TextBlock Text="{Binding StatusMessage}"
-                   TextWrapping="Wrap"
-                   FontSize="{DynamicResource Font.Size.S}"
-                   keepshell:SeverityBrushBehavior.Foreground="{Binding StatusMessageSeverity}"
-                   Margin="0,0,0,8" />
-
-        <TextBlock Text="{Binding ResultText}"
-                   TextWrapping="Wrap"
-                   FontWeight="Bold"
-                   keepshell:SeverityBrushBehavior.Foreground="{Binding ResultSeverity}" />
-    </StackPanel>
+    </ScrollViewer>
 </UserControl>

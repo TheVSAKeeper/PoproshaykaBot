@@ -99,18 +99,21 @@ public sealed class YouTubeAccountLogin(
             var embedded = await embeddedYouTubeAuth.AuthorizeAsync(
                 new(primaryRole, settings.ClientId, secret, scopes, combined),
                 cancellationToken);
-            if (embedded.Outcome != EmbeddedYouTubeAuthOutcome.Completed || embedded.Flow is null)
+            if (embedded.Outcome != EmbeddedYouTubeAuthOutcome.SwitchToBrowser)
             {
-                var severity = embedded.Outcome switch
+                if (embedded.Outcome != EmbeddedYouTubeAuthOutcome.Completed || embedded.Flow is null)
                 {
-                    EmbeddedYouTubeAuthOutcome.Failed => StatusSeverity.Error,
-                    EmbeddedYouTubeAuthOutcome.Unavailable => StatusSeverity.Warning,
-                    _ => StatusSeverity.Info,
-                };
-                return new(embedded.Message, severity, []);
-            }
+                    var severity = embedded.Outcome switch
+                    {
+                        EmbeddedYouTubeAuthOutcome.Failed => StatusSeverity.Error,
+                        EmbeddedYouTubeAuthOutcome.Unavailable => StatusSeverity.Warning,
+                        _ => StatusSeverity.Info,
+                    };
+                    return new(embedded.Message, severity, []);
+                }
 
-            flow = embedded.Flow;
+                flow = embedded.Flow;
+            }
         }
 
         flow ??= await youtubeOAuth.StartOAuthFlowToDraftAsync(

@@ -15,6 +15,7 @@ using PoproshaykaBot.Core.Settings.Stores;
 using PoproshaykaBot.Core.Twitch.Auth;
 using PoproshaykaBot.Core.YouTube;
 using PoproshaykaBot.Wpf.Bootstrap;
+using System.ComponentModel;
 using System.Text.Json;
 
 namespace PoproshaykaBot.Wpf.ViewModels.Onboarding;
@@ -50,6 +51,7 @@ public sealed partial class OnboardingWizardViewModel : ObservableObject, IDispo
     [NotifyCanExecuteChangedFor(nameof(NextCommand))]
     [NotifyCanExecuteChangedFor(nameof(BackCommand))]
     [NotifyCanExecuteChangedFor(nameof(CancelCommand))]
+    [NotifyCanExecuteChangedFor(nameof(HandleEscapeCommand))]
     private IOnboardingPageViewModel? _currentPage;
 
     [ObservableProperty]
@@ -58,6 +60,7 @@ public sealed partial class OnboardingWizardViewModel : ObservableObject, IDispo
     [NotifyCanExecuteChangedFor(nameof(NextCommand))]
     [NotifyCanExecuteChangedFor(nameof(BackCommand))]
     [NotifyCanExecuteChangedFor(nameof(CancelCommand))]
+    [NotifyCanExecuteChangedFor(nameof(HandleEscapeCommand))]
     private bool _isBusy;
 
     public OnboardingWizardViewModel(
@@ -150,8 +153,9 @@ public sealed partial class OnboardingWizardViewModel : ObservableObject, IDispo
         }
     }
 
-    public string NextButtonText => (CurrentPage as OnboardingPageViewModelBase)?.NextButtonText
-        ?? (IsLastPage ? "Готово" : "Далее →");
+    public string NextButtonText => IsLastPage
+        ? CurrentPage?.NextButtonTextOverride ?? "Готово"
+        : CurrentPage?.NextButtonTextOverride ?? "Далее →";
 
     private IReadOnlyList<IOnboardingPageViewModel> ActivePages =>
         [.. _pages.Where(page => page.IsApplicable(_context))];
@@ -358,9 +362,9 @@ public sealed partial class OnboardingWizardViewModel : ObservableObject, IDispo
         {
             previous.CanAdvanceChanged -= OnCurrentPageCanAdvanceChanged;
             previous.IsBusyChanged -= OnCurrentPageIsBusyChanged;
-            if (previous is System.ComponentModel.INotifyPropertyChanged previousNotify)
+            if (previous is INotifyPropertyChanged notifyPrevious)
             {
-                previousNotify.PropertyChanged -= OnCurrentPagePropertyChanged;
+                notifyPrevious.PropertyChanged -= OnCurrentPagePropertyChanged;
             }
         }
 
@@ -440,6 +444,7 @@ public sealed partial class OnboardingWizardViewModel : ObservableObject, IDispo
         var currentIndex = IndexOfPage(active, CurrentPage);
         if (currentIndex > 0)
         {
+            CurrentPage.OnNavigatingBack(_context);
             NavigateTo(active[currentIndex - 1]);
         }
     }
@@ -458,6 +463,22 @@ public sealed partial class OnboardingWizardViewModel : ObservableObject, IDispo
     private void Cancel()
     {
         if (!CanCancel())
+        {
+            return;
+        }
+
+        CloseRequested?.Invoke();
+    }
+
+    [RelayCommand(CanExecute = nameof(CanCancel))]
+    private void HandleEscape()
+    {
+        if (!CanCancel())
+        {
+            return;
+        }
+
+        if (CurrentPage?.TryHandleEscape() == true)
         {
             return;
         }
@@ -516,6 +537,7 @@ public sealed partial class OnboardingWizardViewModel : ObservableObject, IDispo
         NextCommand.NotifyCanExecuteChanged();
         BackCommand.NotifyCanExecuteChanged();
         CancelCommand.NotifyCanExecuteChanged();
+        HandleEscapeCommand.NotifyCanExecuteChanged();
     }
 
     private void NavigateTo(IOnboardingPageViewModel page)
@@ -524,35 +546,38 @@ public sealed partial class OnboardingWizardViewModel : ObservableObject, IDispo
         {
             previous.CanAdvanceChanged -= OnCurrentPageCanAdvanceChanged;
             previous.IsBusyChanged -= OnCurrentPageIsBusyChanged;
-            if (previous is System.ComponentModel.INotifyPropertyChanged previousNotify)
+            if (previous is INotifyPropertyChanged notifyPrevious)
             {
-                previousNotify.PropertyChanged -= OnCurrentPagePropertyChanged;
+                notifyPrevious.PropertyChanged -= OnCurrentPagePropertyChanged;
             }
         }
 
         page.OnEnter(_context);
         page.CanAdvanceChanged += OnCurrentPageCanAdvanceChanged;
         page.IsBusyChanged += OnCurrentPageIsBusyChanged;
-        if (page is System.ComponentModel.INotifyPropertyChanged notify)
+        if (page is INotifyPropertyChanged notifyPage)
         {
-            notify.PropertyChanged += OnCurrentPagePropertyChanged;
+            notifyPage.PropertyChanged += OnCurrentPagePropertyChanged;
         }
 
         CurrentPage = page;
         NotifyNavigationStateChanged();
     }
 
-    private void OnCurrentPagePropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    private void OnCurrentPageCanAdvanceChanged(object? sender, EventArgs e)
     {
-        if (e.PropertyName == nameof(OnboardingPageViewModelBase.NextButtonText))
+        OnPropertyChanged(nameof(NextButtonText));
+        NextCommand.NotifyCanExecuteChanged();
+    }
+
+    private void OnCurrentPagePropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName is nameof(IOnboardingPageViewModel.NextButtonTextOverride)
+            or nameof(OnboardingPageViewModelBase.NextButtonText)
+            or null)
         {
             OnPropertyChanged(nameof(NextButtonText));
         }
-    }
-
-    private void OnCurrentPageCanAdvanceChanged(object? sender, EventArgs e)
-    {
-        NextCommand.NotifyCanExecuteChanged();
     }
 
     private void OnCurrentPageIsBusyChanged(object? sender, EventArgs e)
@@ -561,6 +586,7 @@ public sealed partial class OnboardingWizardViewModel : ObservableObject, IDispo
         NextCommand.NotifyCanExecuteChanged();
         BackCommand.NotifyCanExecuteChanged();
         CancelCommand.NotifyCanExecuteChanged();
+        HandleEscapeCommand.NotifyCanExecuteChanged();
     }
 
     private static int IndexOfPage(IReadOnlyList<IOnboardingPageViewModel> pages, IOnboardingPageViewModel target)

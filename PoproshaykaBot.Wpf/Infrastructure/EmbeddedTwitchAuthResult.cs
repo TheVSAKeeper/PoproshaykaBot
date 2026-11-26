@@ -9,6 +9,7 @@ public enum EmbeddedTwitchAuthOutcome
     Canceled = 2,
     Unavailable = 3,
     Failed = 4,
+    SwitchToBrowser = 5,
 }
 
 public sealed record EmbeddedTwitchAuthResult(
@@ -34,5 +35,10 @@ public sealed record EmbeddedTwitchAuthResult(
     public static EmbeddedTwitchAuthResult Failed(string message)
     {
         return new(EmbeddedTwitchAuthOutcome.Failed, null, message);
+    }
+
+    public static EmbeddedTwitchAuthResult SwitchToBrowser(string message)
+    {
+        return new(EmbeddedTwitchAuthOutcome.SwitchToBrowser, null, message);
     }
 }

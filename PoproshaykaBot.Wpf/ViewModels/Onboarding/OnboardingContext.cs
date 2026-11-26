@@ -140,6 +140,102 @@ public sealed class OnboardingContext(
         return AutoDetectChannel || string.IsNullOrEmpty(handle) || string.Equals(handle, login, StringComparison.OrdinalIgnoreCase);
     }
 
+    internal string? GetExpectedTwitchAccountLabel(
+        PlatformAuthRole role,
+        AccountsStore? accounts = null,
+        TwitchAccountSettings? currentAccount = null)
+    {
+        var currentSubject = TwitchChannel?.GetAccountAssignment(role)?.Account.AccountId;
+        var contextId = TwitchContextId(role);
+        var sharedContext = TwitchCatalog?.GetConfiguredChannels(StreamingPlatform.Twitch)
+            .Any(channel => channel.Key != TwitchChannel?.Key
+                && AuthContextIds.Normalize(role == PlatformAuthRole.Bot ? channel.BotContextId : channel.BroadcasterContextId) == contextId) == true;
+        if (string.IsNullOrWhiteSpace(currentSubject) && (!AuthContextIds.IsDefault(contextId) || sharedContext))
+        {
+            currentSubject = (currentAccount ?? _expectedTwitchAccounts.GetValueOrDefault(role))?.UserId;
+        }
+
+        if (!string.IsNullOrWhiteSpace(currentSubject))
+        {
+            return ResolveTwitchAccountDisplay(role, currentSubject, accounts, currentAccount);
+        }
+
+        if (role == PlatformAuthRole.Broadcaster)
+        {
+            if (TwitchChannel is { } channel)
+            {
+                return FormatChannelLabel(channel.Handle, channel.DisplayName, channel.ChannelId);
+            }
+
+            var handle = Settings.Twitch.Channel?.Trim().TrimStart('@');
+            if (!AutoDetectChannel && !string.IsNullOrWhiteSpace(handle))
+            {
+                return $"@{handle}";
+            }
+        }
+
+        return null;
+    }
+
+    internal bool IsTwitchAccountFixed(
+        PlatformAuthRole role,
+        AccountsStore? accounts = null,
+        TwitchAccountSettings? currentAccount = null) =>
+        GetExpectedTwitchAccountLabel(role, accounts, currentAccount) is not null;
+
+    private string ResolveTwitchAccountDisplay(
+        PlatformAuthRole role,
+        string userId,
+        AccountsStore? accounts,
+        TwitchAccountSettings? currentAccount)
+    {
+        var captured = _expectedTwitchAccounts.GetValueOrDefault(role);
+        if (captured is not null
+            && string.Equals(captured.UserId, userId, StringComparison.Ordinal)
+            && !string.IsNullOrWhiteSpace(captured.Login))
+        {
+            return $"@{captured.Login.TrimStart('@')}";
+        }
+
+        if (currentAccount is not null
+            && string.Equals(currentAccount.UserId, userId, StringComparison.Ordinal)
+            && !string.IsNullOrWhiteSpace(currentAccount.Login))
+        {
+            return $"@{currentAccount.Login.TrimStart('@')}";
+        }
+
+        var fromStore = accounts?.ListAccounts()
+            .FirstOrDefault(a => string.Equals(a.Key.AccountId, userId, StringComparison.Ordinal));
+        if (fromStore is not null && !string.IsNullOrWhiteSpace(fromStore.DisplayName))
+        {
+            return $"@{fromStore.DisplayName.TrimStart('@')}";
+        }
+
+        if (role == PlatformAuthRole.Broadcaster
+            && TwitchChannel is { } channel
+            && string.Equals(channel.ChannelId, userId, StringComparison.Ordinal))
+        {
+            return FormatChannelLabel(channel.Handle, channel.DisplayName, userId);
+        }
+
+        return $"ID {userId}";
+    }
+
+    private static string FormatChannelLabel(string? handle, string? displayName, string channelId)
+    {
+        if (!string.IsNullOrWhiteSpace(handle))
+        {
+            return $"@{handle.Trim().TrimStart('@')}";
+        }
+
+        if (!string.IsNullOrWhiteSpace(displayName))
+        {
+            return displayName.Trim();
+        }
+
+        return $"ID {channelId}";
+    }
+
     internal bool AcceptTwitchLogin(PlatformAuthRole role, TwitchAccountSettings account, OAuthFlowResult login)
     {
         var currentSubject = TwitchChannel?.GetAccountAssignment(role)?.Account.AccountId;

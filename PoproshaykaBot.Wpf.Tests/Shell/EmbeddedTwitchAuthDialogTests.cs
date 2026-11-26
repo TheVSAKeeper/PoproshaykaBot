@@ -110,7 +110,30 @@ public class EmbeddedTwitchAuthDialogTests
             Assert.That(viewModel.Result.Outcome, Is.EqualTo(EmbeddedTwitchAuthOutcome.Unavailable));
             Assert.That(viewModel.HasError, Is.True);
             Assert.That(viewModel.CanDownloadRuntime, Is.True, "пользователю предлагается ссылка на установку");
+            Assert.That(viewModel.CanSwitchToBrowser, Is.True);
+            Assert.That(viewModel.StatusMessage, Is.Empty);
             Assert.That(viewModel.Result.Message, Does.Contain("браузере"));
+        }
+    }
+
+    [Test]
+    public void Кнопка_Открыть_в_браузере_закрывает_диалог_с_исходом_SwitchToBrowser()
+    {
+        var oauth = new FakeOAuthService();
+        using var viewModel = Create(oauth);
+        viewModel.Configure(Request);
+
+        var closeRequests = 0;
+        viewModel.CloseRequested += (_, _) => closeRequests++;
+
+        viewModel.ShowRuntimeMissing();
+        viewModel.SwitchToBrowserCommand.Execute(null);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(viewModel.Result.Outcome, Is.EqualTo(EmbeddedTwitchAuthOutcome.SwitchToBrowser));
+            Assert.That(viewModel.Result.Flow, Is.Null);
+            Assert.That(closeRequests, Is.EqualTo(1));
         }
     }
 

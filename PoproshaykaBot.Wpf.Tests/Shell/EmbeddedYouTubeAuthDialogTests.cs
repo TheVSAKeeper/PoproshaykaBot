@@ -115,7 +115,30 @@ public class EmbeddedYouTubeAuthDialogTests
             Assert.That(viewModel.Result.Outcome, Is.EqualTo(EmbeddedYouTubeAuthOutcome.Unavailable));
             Assert.That(viewModel.HasError, Is.True);
             Assert.That(viewModel.CanDownloadRuntime, Is.True);
+            Assert.That(viewModel.CanSwitchToBrowser, Is.True);
+            Assert.That(viewModel.StatusMessage, Is.Empty);
             Assert.That(viewModel.Result.Message, Does.Contain("системный браузер"));
+        }
+    }
+
+    [Test]
+    public void SwitchToBrowser_closes_dialog_with_SwitchToBrowser_outcome()
+    {
+        var oauth = new FakeYouTubeOAuthService();
+        using var viewModel = Create(oauth);
+        viewModel.Configure(Request);
+
+        var closeRequests = 0;
+        viewModel.CloseRequested += (_, _) => closeRequests++;
+
+        viewModel.ShowRuntimeMissing();
+        viewModel.SwitchToBrowserCommand.Execute(null);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(viewModel.Result.Outcome, Is.EqualTo(EmbeddedYouTubeAuthOutcome.SwitchToBrowser));
+            Assert.That(viewModel.Result.Flow, Is.Null);
+            Assert.That(closeRequests, Is.EqualTo(1));
         }
     }
 

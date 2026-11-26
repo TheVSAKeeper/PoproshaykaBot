@@ -237,6 +237,15 @@ public sealed class TwitchAccountAuthAdapter :
                 RaiseSettingChanged: true);
         }
 
+        if (result.Outcome == EmbeddedTwitchAuthOutcome.SwitchToBrowser)
+        {
+            return new(
+                Succeeded: false,
+                IsWarning: false,
+                StatusMessage: result.Message,
+                SwitchToBrowser: true);
+        }
+
         return new(
             Succeeded: false,
             IsWarning: result.Outcome != EmbeddedTwitchAuthOutcome.Failed,

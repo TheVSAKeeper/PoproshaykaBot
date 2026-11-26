@@ -9,6 +9,7 @@ public enum EmbeddedYouTubeAuthOutcome
     Canceled = 2,
     Unavailable = 3,
     Failed = 4,
+    SwitchToBrowser = 5,
 }
 
 public sealed record EmbeddedYouTubeAuthResult(
@@ -27,4 +28,7 @@ public sealed record EmbeddedYouTubeAuthResult(
 
     public static EmbeddedYouTubeAuthResult Failed(string message) =>
         new(EmbeddedYouTubeAuthOutcome.Failed, null, message);
+
+    public static EmbeddedYouTubeAuthResult SwitchToBrowser(string message) =>
+        new(EmbeddedYouTubeAuthOutcome.SwitchToBrowser, null, message);
 }

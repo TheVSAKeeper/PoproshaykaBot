@@ -8,6 +8,8 @@ public interface IOnboardingPageViewModel
 
     string PageTitle { get; }
 
+    string? NextButtonTextOverride { get; }
+
     bool CanAdvance { get; }
 
     bool IsBusy { get; }
@@ -16,5 +18,9 @@ public interface IOnboardingPageViewModel
 
     void OnEnter(OnboardingContext context);
 
+    void OnNavigatingBack(OnboardingContext context);
+
     Task<bool> OnLeavingAsync(OnboardingContext context);
+
+    bool TryHandleEscape();
 }

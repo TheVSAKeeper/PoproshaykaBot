@@ -108,10 +108,16 @@
                            VerticalAlignment="Center"
                            FontSize="{DynamicResource Font.Size.S}"
                            keepshell:SeverityBrushBehavior.Foreground="{Binding StatusSeverity}"
+                           Visibility="{Binding StatusMessage, Converter={StaticResource NullToVisibility}}"
                            Margin="0,0,12,0" />
 
-                <StackPanel Grid.Column="1"
-                            Orientation="Horizontal">
+                <WrapPanel Grid.Column="1"
+                           VerticalAlignment="Center">
+                    <Button Style="{StaticResource Button.Primary}"
+                            Content="Открыть в браузере"
+                            Command="{Binding SwitchToBrowserCommand}"
+                            Visibility="{Binding CanSwitchToBrowser, Converter={StaticResource BoolToVisibility}}"
+                            Margin="0,0,8,0" />
                     <Button Style="{StaticResource Button.Secondary}"
                             Content="Скачать WebView2 Runtime"
                             Command="{Binding DownloadRuntimeCommand}"
@@ -121,7 +127,7 @@
                             Content="{Binding CloseButtonText}"
                             Command="{Binding CloseDialogCommand}"
                             MinWidth="96" />
-                </StackPanel>
+                </WrapPanel>
             </Grid>
         </Border>
     </Grid>

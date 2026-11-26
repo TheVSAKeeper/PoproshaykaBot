@@ -46,6 +46,9 @@ public sealed partial class EmbeddedTwitchAuthDialogViewModel : ObservableObject
     private bool _canDownloadRuntime;
 
     [ObservableProperty]
+    private bool _canSwitchToBrowser;
+
+    [ObservableProperty]
     private string _closeButtonText = "Отмена";
 
     public EmbeddedTwitchAuthDialogViewModel(
@@ -145,8 +148,9 @@ public sealed partial class EmbeddedTwitchAuthDialogViewModel : ObservableObject
             "Требуется Microsoft Edge WebView2 Runtime – используйте «Открыть в браузере».");
 
         ShowError("Требуется Microsoft Edge WebView2 Runtime",
-            "Без него встроенный вход недоступен. Установите его или авторизуйтесь через системный браузер.",
-            true);
+            "Без него встроенный вход недоступен. Установите его или откройте вход в системном браузере.",
+            offerRuntimeDownload: true,
+            offerSwitchToBrowser: true);
     }
 
     public void ShowInitializationFailure()
@@ -155,8 +159,9 @@ public sealed partial class EmbeddedTwitchAuthDialogViewModel : ObservableObject
             "Встроенный браузер не запустился – используйте «Открыть в браузере».");
 
         ShowError("Не удалось открыть встроенный браузер",
-            "Авторизуйтесь через системный браузер. Подробности – в логах.",
-            false);
+            "Откройте вход в системном браузере. Подробности – в логах.",
+            offerRuntimeDownload: false,
+            offerSwitchToBrowser: true);
     }
 
     public void Cancel()
@@ -206,6 +211,13 @@ public sealed partial class EmbeddedTwitchAuthDialogViewModel : ObservableObject
     }
 
     [RelayCommand]
+    private void SwitchToBrowser()
+    {
+        Finish(EmbeddedTwitchAuthResult.SwitchToBrowser(
+            "Открываем вход в Twitch через системный браузер..."));
+    }
+
+    [RelayCommand]
     private void DownloadRuntime()
     {
         if (_shellLauncher.Open(WebView2RuntimeDownloadUrl))
@@ -241,15 +253,16 @@ public sealed partial class EmbeddedTwitchAuthDialogViewModel : ObservableObject
         CloseRequested?.Invoke(this, EventArgs.Empty);
     }
 
-    private void ShowError(string heading, string description, bool offerRuntimeDownload)
+    private void ShowError(string heading, string description, bool offerRuntimeDownload, bool offerSwitchToBrowser = false)
     {
         HasError = true;
         ErrorHeading = heading;
         ErrorDescription = description;
         CanDownloadRuntime = offerRuntimeDownload;
+        CanSwitchToBrowser = offerSwitchToBrowser;
         CloseButtonText = "Закрыть";
 
-        SetStatus(description, StatusSeverity.Error);
+        SetStatus(string.Empty, StatusSeverity.None);
     }
 
     private void SetStatus(string message, StatusSeverity severity)

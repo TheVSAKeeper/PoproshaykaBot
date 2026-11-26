@@ -249,6 +249,15 @@ public sealed class YouTubeAccountAuthAdapter : IPlatformAccountAuthAdapter, IEm
                 RaiseSettingChanged: true);
         }
 
+        if (result.Outcome == EmbeddedYouTubeAuthOutcome.SwitchToBrowser)
+        {
+            return new(
+                Succeeded: false,
+                IsWarning: false,
+                StatusMessage: result.Message,
+                SwitchToBrowser: true);
+        }
+
         return new(
             Succeeded: false,
             IsWarning: result.Outcome != EmbeddedYouTubeAuthOutcome.Failed,

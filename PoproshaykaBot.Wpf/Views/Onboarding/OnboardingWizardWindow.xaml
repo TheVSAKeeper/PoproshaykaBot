@@ -25,7 +25,7 @@
 
     <Window.InputBindings>
         <KeyBinding Key="Escape"
-                    Command="{Binding CancelCommand}" />
+                    Command="{Binding HandleEscapeCommand}" />
     </Window.InputBindings>
 
     <shell:WindowChrome.WindowChrome>

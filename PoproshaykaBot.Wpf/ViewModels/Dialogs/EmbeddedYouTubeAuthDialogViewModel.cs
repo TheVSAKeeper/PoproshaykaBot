@@ -47,6 +47,9 @@ public sealed partial class EmbeddedYouTubeAuthDialogViewModel : ObservableObjec
     private bool _canDownloadRuntime;
 
     [ObservableProperty]
+    private bool _canSwitchToBrowser;
+
+    [ObservableProperty]
     private string _closeButtonText = "Отмена";
 
     public EmbeddedYouTubeAuthDialogViewModel(
@@ -146,8 +149,9 @@ public sealed partial class EmbeddedYouTubeAuthDialogViewModel : ObservableObjec
             "Требуется Microsoft Edge WebView2 Runtime – включите вход через системный браузер.");
 
         ShowError("Требуется Microsoft Edge WebView2 Runtime",
-            "Без него встроенный вход недоступен. Установите его или авторизуйтесь через системный браузер.",
-            true);
+            "Без него встроенный вход недоступен. Установите его или откройте вход в системном браузере.",
+            offerRuntimeDownload: true,
+            offerSwitchToBrowser: true);
     }
 
     public void ShowInitializationFailure()
@@ -156,8 +160,9 @@ public sealed partial class EmbeddedYouTubeAuthDialogViewModel : ObservableObjec
             "Встроенный браузер не запустился – включите вход через системный браузер.");
 
         ShowError("Не удалось открыть встроенный браузер",
-            "Авторизуйтесь через системный браузер. Подробности – в логах.",
-            false);
+            "Откройте вход в системном браузере. Подробности – в логах.",
+            offerRuntimeDownload: false,
+            offerSwitchToBrowser: true);
     }
 
     public void Cancel()
@@ -207,6 +212,13 @@ public sealed partial class EmbeddedYouTubeAuthDialogViewModel : ObservableObjec
     }
 
     [RelayCommand]
+    private void SwitchToBrowser()
+    {
+        Finish(EmbeddedYouTubeAuthResult.SwitchToBrowser(
+            "Открываем вход в Google через системный браузер..."));
+    }
+
+    [RelayCommand]
     private void DownloadRuntime()
     {
         if (_shellLauncher.Open(WebView2RuntimeDownloadUrl))
@@ -242,15 +254,16 @@ public sealed partial class EmbeddedYouTubeAuthDialogViewModel : ObservableObjec
         CloseRequested?.Invoke(this, EventArgs.Empty);
     }
 
-    private void ShowError(string heading, string description, bool offerRuntimeDownload)
+    private void ShowError(string heading, string description, bool offerRuntimeDownload, bool offerSwitchToBrowser = false)
     {
         HasError = true;
         ErrorHeading = heading;
         ErrorDescription = description;
         CanDownloadRuntime = offerRuntimeDownload;
+        CanSwitchToBrowser = offerSwitchToBrowser;
         CloseButtonText = "Закрыть";
 
-        SetStatus(description, StatusSeverity.Error);
+        SetStatus(string.Empty, StatusSeverity.None);
     }
 
     private void SetStatus(string message, StatusSeverity severity)

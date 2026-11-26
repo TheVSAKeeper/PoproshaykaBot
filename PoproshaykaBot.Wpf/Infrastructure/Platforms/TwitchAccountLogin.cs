@@ -99,19 +99,22 @@ public sealed class TwitchAccountLogin(
                 redirectUri,
                 CheckBroadcasterChannel: false),
                 cancellationToken);
-            if (embedded.Outcome != EmbeddedTwitchAuthOutcome.Completed || embedded.Flow is null)
+            if (embedded.Outcome != EmbeddedTwitchAuthOutcome.SwitchToBrowser)
             {
-                var severity = embedded.Outcome switch
+                if (embedded.Outcome != EmbeddedTwitchAuthOutcome.Completed || embedded.Flow is null)
                 {
-                    EmbeddedTwitchAuthOutcome.Failed => StatusSeverity.Error,
-                    EmbeddedTwitchAuthOutcome.Unavailable => StatusSeverity.Warning,
-                    _ => StatusSeverity.Info,
-                };
-                return new(embedded.Message, severity, []);
-            }
+                    var severity = embedded.Outcome switch
+                    {
+                        EmbeddedTwitchAuthOutcome.Failed => StatusSeverity.Error,
+                        EmbeddedTwitchAuthOutcome.Unavailable => StatusSeverity.Warning,
+                        _ => StatusSeverity.Info,
+                    };
+                    return new(embedded.Message, severity, []);
+                }
 
-            flow = embedded.Flow;
-            usedEmbeddedBrowser = true;
+                flow = embedded.Flow;
+                usedEmbeddedBrowser = true;
+            }
         }
 
         flow ??= await twitchOAuth.StartOAuthFlowToDraftAsync(
