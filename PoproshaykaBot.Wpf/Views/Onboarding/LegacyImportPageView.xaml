@@ -291,12 +291,6 @@
                                     </DataTemplate>
                                 </ItemsControl.ItemTemplate>
                             </ItemsControl>
-
-                            <Button Content="{Binding ReviewSettingsButtonText}"
-                                    Style="{StaticResource Button.Secondary}"
-                                    Command="{Binding ReviewSettingsCommand}"
-                                    HorizontalAlignment="Left"
-                                    Margin="0,12,0,0" />
                         </StackPanel>
                     </Border>
                 </StackPanel>
@@ -309,20 +303,8 @@
                 BorderThickness="0,1,0,0"
                 Padding="20,12"
                 Visibility="{Binding HasCompletedImport, Converter={StaticResource InverseBoolToVisibility}}">
-            <Grid>
-                <Grid.RowDefinitions>
-                    <RowDefinition Height="Auto" />
-                    <RowDefinition Height="Auto" />
-                    <RowDefinition Height="Auto" />
-                </Grid.RowDefinitions>
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="Auto" />
-                </Grid.ColumnDefinitions>
-
-                <StackPanel Grid.Row="0"
-                            Grid.ColumnSpan="2"
-                            Visibility="{Binding Import.BusyMessage, Converter={StaticResource NullToVisibility}}"
+            <StackPanel>
+                <StackPanel Visibility="{Binding Import.BusyMessage, Converter={StaticResource NullToVisibility}}"
                             Margin="0,0,0,10">
                     <TextBlock Text="{Binding Import.BusyMessage}"
                                AutomationProperties.LiveSetting="Polite"
@@ -332,10 +314,8 @@
                                  Margin="0,6,0,0" />
                 </StackPanel>
 
-                <StackPanel Grid.Row="1"
-                            Grid.Column="0"
-                            VerticalAlignment="Center"
-                            Margin="0,0,12,0">
+                <StackPanel Visibility="{Binding Import.HasSources, Converter={StaticResource BoolToVisibility}}"
+                            Margin="0,0,0,10">
                     <TextBlock Text="{Binding Import.SelectionSummaryTitle}"
                                FontWeight="SemiBold"
                                TextWrapping="Wrap" />
@@ -346,21 +326,10 @@
                                Margin="0,2,0,0" />
                 </StackPanel>
 
-                <Button Grid.Row="1"
-                        Grid.Column="1"
-                        Content="Перенести"
-                        Style="{StaticResource Button.Primary}"
-                        Command="{Binding Import.ImportCommand}"
-                        VerticalAlignment="Center"
-                        MinWidth="120" />
-
-                <CheckBox Grid.Row="2"
-                          Grid.ColumnSpan="2"
-                          Content="Больше не предлагать перенос при запуске"
+                <CheckBox Content="Больше не предлагать перенос при запуске"
                           IsChecked="{Binding Import.NeverAskAgain, Mode=TwoWay}"
-                          Visibility="{Binding Import.CanDismiss, Converter={StaticResource BoolToVisibility}}"
-                          Margin="0,10,0,0" />
-            </Grid>
+                          Visibility="{Binding Import.CanDismiss, Converter={StaticResource BoolToVisibility}}" />
+            </StackPanel>
         </Border>
     </Grid>
 </UserControl>

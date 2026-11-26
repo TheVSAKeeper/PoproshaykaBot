@@ -87,9 +87,17 @@ public sealed class LegacyImportPageViewModelTests
             (_, _, _) => throw new IOException("copy interrupted"));
 
         page.OnEnter(context);
-        Assert.That(page.NextButtonText, Is.EqualTo("Продолжить без переноса"));
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(page.NextButtonText, Is.EqualTo("Перенести"));
+            Assert.That(page.SecondaryActionText, Is.EqualTo("Продолжить без переноса"));
+            Assert.That(page.CanAdvance, Is.False);
+            Assert.That(page.CanExecuteSecondaryAction, Is.True);
+            Assert.That(page.AllowBackNavigation, Is.True);
+        }
 
         page.Import!.SelectedSource = page.Import.Sources[0];
+        Assert.That(page.CanAdvance, Is.True);
         await page.Import.ImportCommand.ExecuteAsync(null);
 
         using (Assert.EnterMultipleScope())
@@ -100,6 +108,7 @@ public sealed class LegacyImportPageViewModelTests
             Assert.That(page.HasReadinessSummary, Is.False);
             Assert.That(page.Import.ResultHeadline, Is.EqualTo("Перенос прервался"));
             Assert.That(page.CanAdvance, Is.False, "«Далее» не должно оставаться доступным после обрыва копирования");
+            Assert.That(page.AllowBackNavigation, Is.False);
             Assert.That(page.Import.ResetAfterInterruptionCommand.CanExecute(null), Is.True);
         }
 
@@ -109,6 +118,7 @@ public sealed class LegacyImportPageViewModelTests
         {
             Assert.That(page.HasCompletedImport, Is.False);
             Assert.That(page.IsImportInterrupted, Is.False);
+            Assert.That(page.AllowBackNavigation, Is.True);
             Assert.That(page.CanAdvance, Is.True);
             Assert.That(page.Import.PickFolderCommand.CanExecute(null), Is.True);
             Assert.That(page.Import.ImportCommand.CanExecute(null), Is.True);
@@ -275,23 +285,60 @@ public sealed class LegacyImportPageViewModelTests
                 Failures = [],
             });
 
+        using var emptyPage = new LegacyImportPageViewModel(new StubFilePicker(_tempDir), NullLogger<LegacyImportPageViewModel>.Instance);
+        emptyPage.ConfigureStartupSession([], null, (_, _) => Task.CompletedTask, null);
+        emptyPage.OnEnter(context);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(emptyPage.NextButtonText, Is.EqualTo("Продолжить без переноса"));
+            Assert.That(emptyPage.SecondaryActionText, Is.Null);
+            Assert.That(emptyPage.IsNextActionSecondary, Is.False);
+            Assert.That(emptyPage.CanAdvance, Is.True);
+        }
+
         page.OnEnter(context);
-        Assert.That(page.IsNextActionSecondary, Is.False);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(page.NextButtonText, Is.EqualTo("Перенести"));
+            Assert.That(page.SecondaryActionText, Is.EqualTo("Продолжить без переноса"));
+            Assert.That(page.IsNextActionSecondary, Is.False);
+            Assert.That(page.CanAdvance, Is.False);
+            Assert.That(page.CanExecuteSecondaryAction, Is.True);
+        }
 
         page.Import!.SelectedSource = page.Import.Sources[0];
-        Assert.That(page.IsNextActionSecondary, Is.True);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(page.NextButtonText, Is.EqualTo("Перенести"));
+            Assert.That(page.SecondaryActionText, Is.EqualTo("Продолжить без переноса"));
+            Assert.That(page.IsNextActionSecondary, Is.False);
+            Assert.That(page.CanAdvance, Is.True);
+        }
 
         context.TwitchSettingsWritten = true;
         page.RefreshContext(context);
-        Assert.That(page.IsNextActionSecondary, Is.False);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(page.NextButtonText, Is.EqualTo("Продолжить без переноса"));
+            Assert.That(page.SecondaryActionText, Is.Null);
+            Assert.That(page.CanAdvance, Is.True);
+        }
+
         context.TwitchSettingsWritten = false;
         page.RefreshContext(context);
-        Assert.That(page.IsNextActionSecondary, Is.True);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(page.NextButtonText, Is.EqualTo("Перенести"));
+            Assert.That(page.SecondaryActionText, Is.EqualTo("Продолжить без переноса"));
+            Assert.That(page.CanAdvance, Is.True);
+        }
 
         await page.Import.ImportCommand.ExecuteAsync(null);
         using (Assert.EnterMultipleScope())
         {
             Assert.That(page.IsNextActionSecondary, Is.False);
+            Assert.That(page.AllowBackNavigation, Is.False);
+            Assert.That(page.SecondaryActionText, Is.EqualTo("Проверить всё с оформления"));
             Assert.That(page.Import.ResultAuthorizationNotice, Does.Contain("YouTube"));
         }
     }
@@ -370,27 +417,155 @@ public sealed class LegacyImportPageViewModelTests
             });
 
         await wizard.NextCommand.ExecuteAsync(null);
-        Assert.That(wizard.CurrentPage, Is.SameAs(importPage));
-        Assert.That(wizard.NextButtonText, Is.EqualTo("Продолжить без переноса"));
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(wizard.CurrentPage, Is.SameAs(importPage));
+            Assert.That(wizard.ShowBackButton, Is.True);
+            Assert.That(wizard.NextButtonText, Is.EqualTo("Перенести"));
+            Assert.That(wizard.SecondaryActionText, Is.EqualTo("Продолжить без переноса"));
+            Assert.That(wizard.NextCommand.CanExecute(null), Is.False);
+            Assert.That(wizard.SecondaryActionCommand.CanExecute(null), Is.True);
+        }
 
         importPage.Import!.SelectedSource = importPage.Import.Sources[0];
-        await importPage.Import.ImportCommand.ExecuteAsync(null);
+        Assert.That(wizard.NextCommand.CanExecute(null), Is.True);
+        await wizard.NextCommand.ExecuteAsync(null);
 
         using (Assert.EnterMultipleScope())
         {
+            Assert.That(wizard.CurrentPage, Is.SameAs(importPage), "«Перенести» должно оставлять пользователя на итоге переноса");
+            Assert.That(wizard.ShowBackButton, Is.False, "После успешного переноса «Назад» не должно возвращать на приветствие");
             Assert.That(importPage.IsProfileComplete, Is.False);
             Assert.That(importPage.FirstMissingStep, Is.EqualTo(OnboardingStep.BotAuthorization));
             Assert.That(importPage.HasMissingStep, Is.True);
             Assert.That(wizard.NextButtonText, Is.EqualTo("Перейти ко входу бота"));
-            Assert.That(importPage.ReviewSettingsButtonText, Is.EqualTo("Проверить всё с оформления"));
+            Assert.That(wizard.SecondaryActionText, Is.EqualTo("Проверить всё с оформления"));
+        }
+
+        await wizard.SecondaryActionCommand.ExecuteAsync(null);
+        Assert.That(wizard.CurrentPage, Is.SameAs(appearance), "Вторичный переход должен открывать проверку с шага оформления");
+
+        wizard.BackCommand.Execute(null);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(wizard.CurrentPage, Is.SameAs(importPage));
+            Assert.That(wizard.ShowBackButton, Is.False);
+            Assert.That(wizard.NextButtonText, Is.EqualTo("Далее"));
+            Assert.That(wizard.SecondaryActionText, Is.EqualTo("Перейти ко входу бота"));
         }
 
         await wizard.NextCommand.ExecuteAsync(null);
-        Assert.That(wizard.CurrentPage, Is.SameAs(botAuth), "Основной переход после частичного переноса должен вести к первому недостающему шагу");
+        Assert.That(wizard.CurrentPage, Is.SameAs(appearance), "После возврата со 3-го шага «Далее» должно продолжать настройку");
 
-        wizard.StartAt(OnboardingStep.LegacyImport);
-        importPage.ReviewSettingsCommand.Execute(null);
-        Assert.That(wizard.CurrentPage, Is.SameAs(appearance), "Вторичный переход должен открывать проверку с шага оформления");
+        wizard.BackCommand.Execute(null);
+        await wizard.SecondaryActionCommand.ExecuteAsync(null);
+        Assert.That(wizard.CurrentPage, Is.SameAs(botAuth), "Повторный быстрый переход должен вести к первому недостающему шагу");
+    }
+
+    [Test]
+    public async Task PostImportCompleteProfile_HidesBackToWelcomeAndSwitchesToContinueAfterReview()
+    {
+        await using var provider = BuildProvider();
+        var settings = new SettingsManager(NullLogger<SettingsManager>.Instance, Path.Combine(_tempDir, "settings.json"));
+        settings.SaveSettings(new AppSettings
+        {
+            Twitch = new TwitchSettings
+            {
+                Enabled = true,
+                ClientId = "cid",
+                ClientSecret = "sec",
+                Channel = "streamer",
+            },
+        });
+        var accounts = new AccountsStore(filePath: Path.Combine(_tempDir, "accounts.json"));
+        accounts.SaveAll(new TwitchAccountSettings
+        {
+            AccessToken = "bot",
+            RefreshToken = "ref",
+            StoredScopes = [.. TwitchScopes.BotRequired],
+        }, new());
+        var checklist = new OnboardingChecklist(settings, accounts);
+        var bus = provider.GetRequiredService<IEventBus>();
+        var controller = provider.GetRequiredService<BotConnectionManager>();
+
+        var welcome = new WelcomePageViewModel();
+        using var importPage = new LegacyImportPageViewModel(new StubFilePicker(_tempDir), NullLogger<LegacyImportPageViewModel>.Instance);
+        var uiStore = new MemorySettings();
+        using var theme = new ThemeSelectionViewModel(uiStore);
+        using var appearance = new AppearancePageViewModel(theme, new ShellPreferences(uiStore), uiStore);
+        var platforms = new PlatformsPageViewModel();
+
+        using var wizard = new OnboardingWizardViewModel(
+            [welcome, importPage, appearance, platforms],
+            settings,
+            accounts,
+            provider.GetRequiredService<KestrelHttpServer>(),
+            controller,
+            bus,
+            NullLogger<OnboardingWizardViewModel>.Instance,
+            checklist: checklist);
+
+        var closed = false;
+        wizard.CloseRequested += () => closed = true;
+
+        var source = CreateSource(_tempDir);
+        wizard.AttachStartupSession(new StartupOnboardingSession
+        {
+            IncludeLegacyImport = true,
+            Candidates = [source],
+            Target = null,
+        });
+
+        importPage.ConfigureStartupSession(
+            [source],
+            null,
+            (_, _) => Task.CompletedTask,
+            null,
+            (src, _, _) => new LegacyImportResult
+            {
+                SourcePath = src,
+                TargetPath = _tempDir,
+                CopiedFiles = ["settings/settings.json", "settings/accounts.json"],
+                SkippedFiles = [],
+                Failures = [],
+            });
+
+        await wizard.NextCommand.ExecuteAsync(null);
+        importPage.Import!.SelectedSource = importPage.Import.Sources[0];
+        await wizard.NextCommand.ExecuteAsync(null);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(wizard.CurrentPage, Is.SameAs(importPage));
+            Assert.That(wizard.ShowBackButton, Is.False);
+            Assert.That(wizard.BackCommand.CanExecute(null), Is.False);
+            Assert.That(wizard.NextButtonText, Is.EqualTo("Открыть панель"));
+            Assert.That(wizard.SecondaryActionText, Is.EqualTo("Проверить настройки"));
+        }
+
+        await wizard.SecondaryActionCommand.ExecuteAsync(null);
+        Assert.That(wizard.CurrentPage, Is.SameAs(appearance));
+        Assert.That(wizard.ShowBackButton, Is.True);
+
+        wizard.BackCommand.Execute(null);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(wizard.CurrentPage, Is.SameAs(importPage));
+            Assert.That(wizard.ShowBackButton, Is.False, "Назад со 3-го шага возвращает к итогу переноса, но не на приветствие");
+            Assert.That(wizard.NextButtonText, Is.EqualTo("Далее"));
+            Assert.That(wizard.SecondaryActionText, Is.EqualTo("Открыть панель"));
+        }
+
+        await wizard.NextCommand.ExecuteAsync(null);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(closed, Is.False);
+            Assert.That(wizard.CurrentPage, Is.SameAs(appearance));
+        }
+
+        wizard.BackCommand.Execute(null);
+        await wizard.SecondaryActionCommand.ExecuteAsync(null);
+        Assert.That(closed, Is.True, "«Открыть панель» остаётся доступным рядом с «Далее»");
     }
 
     [Test]
@@ -445,82 +620,6 @@ public sealed class LegacyImportPageViewModelTests
         }
     }
 
-    [Test]
-    [Apartment(ApartmentState.STA)]
-    public void R36_And_R14_ViewKeepsPinnedFooterAndInterceptsEnterOnSourceList()
-    {
-        using var page = new LegacyImportPageViewModel(new StubFilePicker(_tempDir), NullLogger<LegacyImportPageViewModel>.Instance);
-        var source = CreateSource(_tempDir);
-        var importCalls = 0;
-
-        page.ConfigureStartupSession(
-            [source],
-            null,
-            (_, _) => Task.CompletedTask,
-            null,
-            (src, _, _) =>
-            {
-                importCalls++;
-                return new LegacyImportResult
-                {
-                    SourcePath = src,
-                    TargetPath = _tempDir,
-                    CopiedFiles = [],
-                    SkippedFiles = [],
-                    Failures = [],
-                };
-            });
-
-        page.OnEnter(CreateContext());
-        page.Import!.SelectedSource = page.Import.Sources[0];
-
-        var view = new LegacyImportPageView { DataContext = page };
-        view.Measure(new Size(688, 420));
-        view.Arrange(new Rect(0, 0, 688, 420));
-        view.UpdateLayout();
-
-        var listBox = FindVisualChild<ListBox>(view);
-        var buttons = FindVisualChildren<Button>(view).ToList();
-        var checkBoxes = FindVisualChildren<CheckBox>(view).ToList();
-        var pickButton = buttons.First(b => Equals(b.Content, "Выбрать папку…"));
-        var importButton = buttons.First(b => Equals(b.Content, "Перенести"));
-        var neverAskCheckBox = checkBoxes.First(c => Equals(c.Content, "Больше не предлагать перенос при запуске"));
-
-        Assert.That(listBox, Is.Not.Null);
-
-        var pickPos = pickButton.TranslatePoint(new Point(0, 0), view);
-        var listPos = listBox!.TranslatePoint(new Point(0, 0), view);
-        var importPos = importButton.TranslatePoint(new Point(0, 0), view);
-        var neverAskPos = neverAskCheckBox.TranslatePoint(new Point(0, 0), view);
-
-        using (Assert.EnterMultipleScope())
-        {
-            Assert.That(listPos.Y, Is.GreaterThan(pickPos.Y));
-            Assert.That(importPos.Y, Is.GreaterThan(listPos.Y), "Кнопка «Перенести» должна быть закреплена под списком источников");
-            Assert.That(neverAskPos.Y, Is.GreaterThan(importPos.Y), "Флажок «Больше не предлагать» не должен идти перед «Перенести» в порядке Tab");
-        }
-
-        var presentationSource = new System.Windows.Interop.HwndSource(new System.Windows.Interop.HwndSourceParameters("test"));
-        try
-        {
-            var args = new KeyEventArgs(Keyboard.PrimaryDevice, presentationSource, 0, Key.Enter)
-            {
-                RoutedEvent = UIElement.PreviewKeyDownEvent,
-            };
-            listBox.RaiseEvent(args);
-
-            using (Assert.EnterMultipleScope())
-            {
-                Assert.That(args.Handled, Is.True);
-                Assert.That(importCalls, Is.EqualTo(1));
-            }
-        }
-        finally
-        {
-            presentationSource.Dispose();
-        }
-    }
-
     private OnboardingContext CreateContext() =>
         new(new AppSettings(), new(), new()) { IncludeLegacyImport = true };
 
@@ -533,27 +632,6 @@ public sealed class LegacyImportPageViewModelTests
         HasOAuthTokens = false,
         Files = [new("settings.json", Path.Combine(path, "settings.json"), "settings/settings.json", 10, DateTime.UtcNow)],
     };
-
-    private static T? FindVisualChild<T>(DependencyObject root) where T : DependencyObject =>
-        FindVisualChildren<T>(root).FirstOrDefault();
-
-    private static IEnumerable<T> FindVisualChildren<T>(DependencyObject root) where T : DependencyObject
-    {
-        var count = VisualTreeHelper.GetChildrenCount(root);
-        for (var i = 0; i < count; i++)
-        {
-            var child = VisualTreeHelper.GetChild(root, i);
-            if (child is T match)
-            {
-                yield return match;
-            }
-
-            foreach (var descendant in FindVisualChildren<T>(child))
-            {
-                yield return descendant;
-            }
-        }
-    }
 
     private static ServiceProvider BuildProvider()
     {

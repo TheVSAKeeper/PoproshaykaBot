@@ -12,6 +12,12 @@ public interface IOnboardingPageViewModel
 
     bool IsNextActionSecondary { get; }
 
+    bool AllowBackNavigation { get; }
+
+    string? SecondaryActionText { get; }
+
+    bool CanExecuteSecondaryAction { get; }
+
     bool CanAdvance { get; }
 
     bool IsBusy { get; }
@@ -23,6 +29,8 @@ public interface IOnboardingPageViewModel
     void OnNavigatingBack(OnboardingContext context);
 
     Task<bool> OnLeavingAsync(OnboardingContext context);
+
+    Task OnSecondaryActionAsync(OnboardingContext context);
 
     bool TryHandleEscape();
 }

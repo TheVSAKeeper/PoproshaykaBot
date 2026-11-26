@@ -20,12 +20,16 @@ public sealed partial class LegacyImportPageViewModel : OnboardingPageViewModelB
     private OnboardingContext? _context;
     private Action<bool>? _onSkipped;
     private bool _wasBusy;
+    private bool _hasStartedSettingsReview;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasCompletedImport))]
     [NotifyPropertyChangedFor(nameof(HasReadinessSummary))]
     [NotifyPropertyChangedFor(nameof(HasMissingStep))]
+    [NotifyPropertyChangedFor(nameof(AllowBackNavigation))]
     [NotifyPropertyChangedFor(nameof(NextButtonText))]
+    [NotifyPropertyChangedFor(nameof(SecondaryActionText))]
+    [NotifyPropertyChangedFor(nameof(CanExecuteSecondaryAction))]
     [NotifyPropertyChangedFor(nameof(IsNextActionSecondary))]
     [NotifyPropertyChangedFor(nameof(CanFinishImmediately))]
     [NotifyPropertyChangedFor(nameof(CanGoToMissingStep))]
@@ -39,7 +43,10 @@ public sealed partial class LegacyImportPageViewModel : OnboardingPageViewModelB
     [NotifyPropertyChangedFor(nameof(HasCompletedImport))]
     [NotifyPropertyChangedFor(nameof(HasReadinessSummary))]
     [NotifyPropertyChangedFor(nameof(HasMissingStep))]
+    [NotifyPropertyChangedFor(nameof(AllowBackNavigation))]
     [NotifyPropertyChangedFor(nameof(NextButtonText))]
+    [NotifyPropertyChangedFor(nameof(SecondaryActionText))]
+    [NotifyPropertyChangedFor(nameof(CanExecuteSecondaryAction))]
     [NotifyPropertyChangedFor(nameof(IsNextActionSecondary))]
     [NotifyPropertyChangedFor(nameof(CanFinishImmediately))]
     [NotifyPropertyChangedFor(nameof(CanGoToMissingStep))]
@@ -52,7 +59,10 @@ public sealed partial class LegacyImportPageViewModel : OnboardingPageViewModelB
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasReadinessSummary))]
     [NotifyPropertyChangedFor(nameof(HasMissingStep))]
+    [NotifyPropertyChangedFor(nameof(AllowBackNavigation))]
     [NotifyPropertyChangedFor(nameof(NextButtonText))]
+    [NotifyPropertyChangedFor(nameof(SecondaryActionText))]
+    [NotifyPropertyChangedFor(nameof(CanExecuteSecondaryAction))]
     [NotifyPropertyChangedFor(nameof(IsNextActionSecondary))]
     [NotifyPropertyChangedFor(nameof(CanFinishImmediately))]
     [NotifyPropertyChangedFor(nameof(CanGoToMissingStep))]
@@ -65,7 +75,10 @@ public sealed partial class LegacyImportPageViewModel : OnboardingPageViewModelB
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasReadinessSummary))]
     [NotifyPropertyChangedFor(nameof(HasMissingStep))]
+    [NotifyPropertyChangedFor(nameof(AllowBackNavigation))]
     [NotifyPropertyChangedFor(nameof(NextButtonText))]
+    [NotifyPropertyChangedFor(nameof(SecondaryActionText))]
+    [NotifyPropertyChangedFor(nameof(CanExecuteSecondaryAction))]
     [NotifyPropertyChangedFor(nameof(IsNextActionSecondary))]
     [NotifyPropertyChangedFor(nameof(CanFinishImmediately))]
     [NotifyPropertyChangedFor(nameof(CanGoToMissingStep))]
@@ -78,6 +91,8 @@ public sealed partial class LegacyImportPageViewModel : OnboardingPageViewModelB
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasMissingStep))]
     [NotifyPropertyChangedFor(nameof(NextButtonText))]
+    [NotifyPropertyChangedFor(nameof(SecondaryActionText))]
+    [NotifyPropertyChangedFor(nameof(CanExecuteSecondaryAction))]
     [NotifyPropertyChangedFor(nameof(CanGoToMissingStep))]
     [NotifyCanExecuteChangedFor(nameof(GoToMissingStepCommand))]
     private OnboardingStep _firstMissingStep;
@@ -99,9 +114,20 @@ public sealed partial class LegacyImportPageViewModel : OnboardingPageViewModelB
 
     public event Action? FinishRequested;
 
+    public event Action? SkipRequested;
+
     public event Action<OnboardingStep>? NavigateToStepRequested;
 
     public override string PageTitle => "Перенос данных";
+
+    internal bool HasStartedSettingsReview => _hasStartedSettingsReview;
+
+    private bool IsImportPrimaryActionActive =>
+        !HasCompletedImport
+        && !IsImportBlockedByProvisionalWrites
+        && Import is { HasSources: true } or { SelectedSource: not null };
+
+    public override bool AllowBackNavigation => !HasCompletedImport;
 
     public override string? NextButtonText
     {
@@ -109,7 +135,7 @@ public sealed partial class LegacyImportPageViewModel : OnboardingPageViewModelB
         {
             if (!HasCompletedImport)
             {
-                return "Продолжить без переноса";
+                return IsImportPrimaryActionActive ? "Перенести" : "Продолжить без переноса";
             }
 
             if (IsImportInterrupted || IsImportReloadFailed)
@@ -119,19 +145,51 @@ public sealed partial class LegacyImportPageViewModel : OnboardingPageViewModelB
 
             if (IsProfileComplete)
             {
-                return "Открыть панель";
+                return _hasStartedSettingsReview ? "Далее" : "Открыть панель";
             }
 
-            return HasMissingStep
-                ? DescribeMissingStepAction(FirstMissingStep)
-                : "Далее";
+            if (HasMissingStep)
+            {
+                return _hasStartedSettingsReview ? "Далее" : DescribeMissingStepAction(FirstMissingStep);
+            }
+
+            return "Далее";
         }
     }
 
-    public override bool IsNextActionSecondary =>
-        !HasCompletedImport
-        && !IsImportBlockedByProvisionalWrites
-        && Import is { SelectedSource: not null };
+    public override string? SecondaryActionText
+    {
+        get
+        {
+            if (IsImportPrimaryActionActive)
+            {
+                return "Продолжить без переноса";
+            }
+
+            if (!HasReadinessSummary)
+            {
+                return null;
+            }
+
+            if (IsProfileComplete)
+            {
+                return _hasStartedSettingsReview ? "Открыть панель" : "Проверить настройки";
+            }
+
+            if (HasMissingStep)
+            {
+                return _hasStartedSettingsReview
+                    ? DescribeMissingStepAction(FirstMissingStep)
+                    : "Проверить всё с оформления";
+            }
+
+            return null;
+        }
+    }
+
+    public override bool CanExecuteSecondaryAction => !IsBusy && !string.IsNullOrEmpty(SecondaryActionText);
+
+    public override bool IsNextActionSecondary => false;
 
     public override bool IsBusy => IsReloading || Import?.IsBusy == true;
 
@@ -174,6 +232,7 @@ public sealed partial class LegacyImportPageViewModel : OnboardingPageViewModelB
         }
 
         _onSkipped = onSkipped;
+        _hasStartedSettingsReview = false;
         IsReloadFailed = false;
         var viewModel = new LegacyImportViewModel(
             candidates,
@@ -252,10 +311,72 @@ public sealed partial class LegacyImportPageViewModel : OnboardingPageViewModelB
         SyncBusyState();
     }
 
-    public override Task<bool> OnLeavingAsync(OnboardingContext context)
+    public override async Task<bool> OnLeavingAsync(OnboardingContext context)
     {
+        if (IsImportPrimaryActionActive)
+        {
+            if (Import is { } import && import.ImportCommand.CanExecute(null))
+            {
+                await import.ImportCommand.ExecuteAsync(null);
+            }
+
+            UpdateCanAdvance();
+            return false;
+        }
+
         UpdateCanAdvance();
-        return Task.FromResult(CanAdvance);
+        return CanAdvance;
+    }
+
+    public override Task OnSecondaryActionAsync(OnboardingContext context)
+    {
+        if (!CanExecuteSecondaryAction)
+        {
+            return Task.CompletedTask;
+        }
+
+        if (IsImportPrimaryActionActive)
+        {
+            SkipRequested?.Invoke();
+            return Task.CompletedTask;
+        }
+
+        if (HasReadinessSummary)
+        {
+            if (IsProfileComplete)
+            {
+                if (_hasStartedSettingsReview)
+                {
+                    FinishImmediately();
+                }
+                else
+                {
+                    ReviewSettings();
+                }
+            }
+            else if (HasMissingStep)
+            {
+                if (_hasStartedSettingsReview)
+                {
+                    GoToMissingStep();
+                }
+                else
+                {
+                    ReviewSettings();
+                }
+            }
+        }
+
+        return Task.CompletedTask;
+    }
+
+    internal void MarkSettingsReviewStarted()
+    {
+        if (!_hasStartedSettingsReview)
+        {
+            _hasStartedSettingsReview = true;
+            NotifyFooterPropertiesChanged();
+        }
     }
 
     internal void CommitSkipDismissal()
@@ -285,6 +406,7 @@ public sealed partial class LegacyImportPageViewModel : OnboardingPageViewModelB
             return;
         }
 
+        MarkSettingsReviewStarted();
         NavigateToStepRequested?.Invoke(FirstMissingStep);
     }
 
@@ -296,6 +418,7 @@ public sealed partial class LegacyImportPageViewModel : OnboardingPageViewModelB
             return;
         }
 
+        MarkSettingsReviewStarted();
         NavigateToStepRequested?.Invoke(OnboardingStep.Appearance);
     }
 
@@ -319,7 +442,8 @@ public sealed partial class LegacyImportPageViewModel : OnboardingPageViewModelB
 
     partial void OnIsImportBlockedByProvisionalWritesChanged(bool value)
     {
-        OnPropertyChanged(nameof(IsNextActionSecondary));
+        NotifyFooterPropertiesChanged();
+        UpdateCanAdvance();
     }
 
     partial void OnIsProfileCompleteChanged(bool value)
@@ -330,9 +454,11 @@ public sealed partial class LegacyImportPageViewModel : OnboardingPageViewModelB
     private void OnImportPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
         if (e.PropertyName is nameof(LegacyImportViewModel.SelectedSource)
+            or nameof(LegacyImportViewModel.HasSources)
             or nameof(LegacyImportViewModel.BlockedNotice))
         {
-            OnPropertyChanged(nameof(IsNextActionSecondary));
+            NotifyFooterPropertiesChanged();
+            UpdateCanAdvance();
             return;
         }
 
@@ -344,6 +470,7 @@ public sealed partial class LegacyImportPageViewModel : OnboardingPageViewModelB
             if (Import is { IsCompleted: false, IsInterrupted: false })
             {
                 IsReloadFailed = false;
+                _hasStartedSettingsReview = false;
             }
 
             OnPropertyChanged(nameof(HasCompletedImport));
@@ -351,8 +478,7 @@ public sealed partial class LegacyImportPageViewModel : OnboardingPageViewModelB
             OnPropertyChanged(nameof(IsImportReloadFailed));
             OnPropertyChanged(nameof(HasReadinessSummary));
             OnPropertyChanged(nameof(HasMissingStep));
-            OnPropertyChanged(nameof(NextButtonText));
-            OnPropertyChanged(nameof(IsNextActionSecondary));
+            NotifyFooterPropertiesChanged();
             OnPropertyChanged(nameof(CanFinishImmediately));
             OnPropertyChanged(nameof(CanGoToMissingStep));
             OnPropertyChanged(nameof(CanReviewSettings));
@@ -363,6 +489,15 @@ public sealed partial class LegacyImportPageViewModel : OnboardingPageViewModelB
             GoToMissingStepCommand.NotifyCanExecuteChanged();
             ReviewSettingsCommand.NotifyCanExecuteChanged();
         }
+    }
+
+    private void NotifyFooterPropertiesChanged()
+    {
+        OnPropertyChanged(nameof(AllowBackNavigation));
+        OnPropertyChanged(nameof(NextButtonText));
+        OnPropertyChanged(nameof(SecondaryActionText));
+        OnPropertyChanged(nameof(CanExecuteSecondaryAction));
+        OnPropertyChanged(nameof(IsNextActionSecondary));
     }
 
     private void SyncProvisionalWriteLock()
@@ -382,13 +517,26 @@ public sealed partial class LegacyImportPageViewModel : OnboardingPageViewModelB
         {
             _wasBusy = busy;
             OnPropertyChanged(nameof(IsBusy));
+            OnPropertyChanged(nameof(CanExecuteSecondaryAction));
             OnIsBusyChanged();
         }
     }
 
     private void UpdateCanAdvance()
     {
-        CanAdvance = !IsBusy && !IsImportInterrupted && !IsImportReloadFailed;
+        if (IsBusy || IsImportInterrupted || IsImportReloadFailed)
+        {
+            CanAdvance = false;
+            return;
+        }
+
+        if (IsImportPrimaryActionActive)
+        {
+            CanAdvance = Import?.ImportCommand.CanExecute(null) == true;
+            return;
+        }
+
+        CanAdvance = true;
     }
 
     private void RefreshReadiness()
@@ -409,7 +557,7 @@ public sealed partial class LegacyImportPageViewModel : OnboardingPageViewModelB
             OnPropertyChanged(nameof(HasMissingItems));
             OnPropertyChanged(nameof(HasReadinessSummary));
             OnPropertyChanged(nameof(HasMissingStep));
-            OnPropertyChanged(nameof(NextButtonText));
+            NotifyFooterPropertiesChanged();
             OnPropertyChanged(nameof(ReviewSettingsButtonText));
             return;
         }
@@ -470,7 +618,7 @@ public sealed partial class LegacyImportPageViewModel : OnboardingPageViewModelB
 
         OnPropertyChanged(nameof(HasReadinessSummary));
         OnPropertyChanged(nameof(HasMissingStep));
-        OnPropertyChanged(nameof(NextButtonText));
+        NotifyFooterPropertiesChanged();
         OnPropertyChanged(nameof(ReviewSettingsButtonText));
     }
 

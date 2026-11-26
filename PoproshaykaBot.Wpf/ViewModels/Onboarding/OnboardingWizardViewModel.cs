@@ -43,6 +43,7 @@ public sealed partial class OnboardingWizardViewModel : ObservableObject, IDispo
     private bool _completed;
     private bool _rollbackPerformed;
     private bool _disposed;
+    private bool _isExecutingSecondaryAction;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HeaderTitle))]
@@ -50,9 +51,12 @@ public sealed partial class OnboardingWizardViewModel : ObservableObject, IDispo
     [NotifyPropertyChangedFor(nameof(IsLastPage))]
     [NotifyPropertyChangedFor(nameof(ShowBackButton))]
     [NotifyPropertyChangedFor(nameof(NextButtonText))]
+    [NotifyPropertyChangedFor(nameof(SecondaryActionText))]
+    [NotifyPropertyChangedFor(nameof(HasSecondaryAction))]
     [NotifyPropertyChangedFor(nameof(IsNextActionSecondary))]
     [NotifyPropertyChangedFor(nameof(IsOperationBusy))]
     [NotifyCanExecuteChangedFor(nameof(NextCommand))]
+    [NotifyCanExecuteChangedFor(nameof(SecondaryActionCommand))]
     [NotifyCanExecuteChangedFor(nameof(BackCommand))]
     [NotifyCanExecuteChangedFor(nameof(CancelCommand))]
     [NotifyCanExecuteChangedFor(nameof(HandleEscapeCommand))]
@@ -60,9 +64,12 @@ public sealed partial class OnboardingWizardViewModel : ObservableObject, IDispo
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(NextButtonText))]
+    [NotifyPropertyChangedFor(nameof(SecondaryActionText))]
+    [NotifyPropertyChangedFor(nameof(HasSecondaryAction))]
     [NotifyPropertyChangedFor(nameof(IsNextActionSecondary))]
     [NotifyPropertyChangedFor(nameof(IsOperationBusy))]
     [NotifyCanExecuteChangedFor(nameof(NextCommand))]
+    [NotifyCanExecuteChangedFor(nameof(SecondaryActionCommand))]
     [NotifyCanExecuteChangedFor(nameof(BackCommand))]
     [NotifyCanExecuteChangedFor(nameof(CancelCommand))]
     [NotifyCanExecuteChangedFor(nameof(HandleEscapeCommand))]
@@ -98,6 +105,7 @@ public sealed partial class OnboardingWizardViewModel : ObservableObject, IDispo
         foreach (var importPage in _pages.OfType<LegacyImportPageViewModel>())
         {
             importPage.FinishRequested += OnImportFinishRequested;
+            importPage.SkipRequested += OnImportSkipRequested;
             importPage.NavigateToStepRequested += OnNavigateToStepRequested;
         }
 
@@ -163,11 +171,15 @@ public sealed partial class OnboardingWizardViewModel : ObservableObject, IDispo
         }
     }
 
-    public bool ShowBackButton => CurrentPage is not null && IndexOfPage(ActivePages, CurrentPage) > 0;
+    public bool ShowBackButton => CurrentPage is { AllowBackNavigation: true } && IndexOfPage(ActivePages, CurrentPage) > 0;
 
     public string NextButtonText => IsLastPage
         ? CurrentPage?.NextButtonTextOverride ?? "Готово"
         : CurrentPage?.NextButtonTextOverride ?? "Далее";
+
+    public string? SecondaryActionText => CurrentPage?.SecondaryActionText;
+
+    public bool HasSecondaryAction => !string.IsNullOrEmpty(SecondaryActionText);
 
     public bool IsNextActionSecondary => CurrentPage?.IsNextActionSecondary == true;
 
@@ -403,6 +415,7 @@ public sealed partial class OnboardingWizardViewModel : ObservableObject, IDispo
         foreach (var importPage in _pages.OfType<LegacyImportPageViewModel>())
         {
             importPage.FinishRequested -= OnImportFinishRequested;
+            importPage.SkipRequested -= OnImportSkipRequested;
             importPage.NavigateToStepRequested -= OnNavigateToStepRequested;
         }
 
@@ -440,19 +453,25 @@ public sealed partial class OnboardingWizardViewModel : ObservableObject, IDispo
 
         if (current is LegacyImportPageViewModel importPage)
         {
-            if (importPage.IsProfileComplete)
+            if (importPage.IsProfileComplete && !importPage.HasStartedSettingsReview)
             {
                 CompleteWizard();
                 return;
             }
 
-            if (importPage.HasMissingStep)
+            if (importPage.HasMissingStep && !importPage.HasStartedSettingsReview)
             {
+                importPage.MarkSettingsReviewStarted();
                 StartAt(importPage.FirstMissingStep);
                 return;
             }
         }
 
+        AdvanceFromPage(current);
+    }
+
+    private void AdvanceFromPage(IOnboardingPageViewModel current)
+    {
         var active = ActivePages;
         var currentIndex = IndexOfPage(active, current);
         if (currentIndex < 0 || currentIndex == active.Count - 1)
@@ -467,6 +486,32 @@ public sealed partial class OnboardingWizardViewModel : ObservableObject, IDispo
     private bool CanGoNext()
     {
         return IsPageInteractive && !IsOperationBusy && CurrentPage?.CanAdvance == true;
+    }
+
+    [RelayCommand(CanExecute = nameof(CanExecuteSecondaryAction))]
+    private async Task SecondaryActionAsync()
+    {
+        if (!CanExecuteSecondaryAction() || CurrentPage is not { } current)
+        {
+            return;
+        }
+
+        _isExecutingSecondaryAction = true;
+        IsBusy = true;
+        try
+        {
+            await current.OnSecondaryActionAsync(_context);
+        }
+        finally
+        {
+            _isExecutingSecondaryAction = false;
+            IsBusy = false;
+        }
+    }
+
+    private bool CanExecuteSecondaryAction()
+    {
+        return IsPageInteractive && !IsOperationBusy && HasSecondaryAction && CurrentPage?.CanExecuteSecondaryAction == true;
     }
 
     [RelayCommand(CanExecute = nameof(CanGoBack))]
@@ -488,7 +533,7 @@ public sealed partial class OnboardingWizardViewModel : ObservableObject, IDispo
 
     private bool CanGoBack()
     {
-        if (!IsPageInteractive || IsOperationBusy || CurrentPage is null)
+        if (!IsPageInteractive || IsOperationBusy || CurrentPage is not { AllowBackNavigation: true })
         {
             return false;
         }
@@ -546,7 +591,7 @@ public sealed partial class OnboardingWizardViewModel : ObservableObject, IDispo
 
     private void OnImportFinishRequested()
     {
-        if (_context.CancellationStarted || IsOperationBusy)
+        if (_context.CancellationStarted || (IsOperationBusy && !_isExecutingSecondaryAction))
         {
             return;
         }
@@ -554,9 +599,19 @@ public sealed partial class OnboardingWizardViewModel : ObservableObject, IDispo
         CompleteWizard();
     }
 
+    private void OnImportSkipRequested()
+    {
+        if (_context.CancellationStarted || (IsOperationBusy && !_isExecutingSecondaryAction) || CurrentPage is not { } current)
+        {
+            return;
+        }
+
+        AdvanceFromPage(current);
+    }
+
     private void OnNavigateToStepRequested(OnboardingStep step)
     {
-        if (_context.CancellationStarted || IsOperationBusy)
+        if (_context.CancellationStarted || (IsOperationBusy && !_isExecutingSecondaryAction))
         {
             return;
         }
@@ -576,9 +631,12 @@ public sealed partial class OnboardingWizardViewModel : ObservableObject, IDispo
         OnPropertyChanged(nameof(IsLastPage));
         OnPropertyChanged(nameof(ShowBackButton));
         OnPropertyChanged(nameof(NextButtonText));
+        OnPropertyChanged(nameof(SecondaryActionText));
+        OnPropertyChanged(nameof(HasSecondaryAction));
         OnPropertyChanged(nameof(IsNextActionSecondary));
         OnPropertyChanged(nameof(IsOperationBusy));
         NextCommand.NotifyCanExecuteChanged();
+        SecondaryActionCommand.NotifyCanExecuteChanged();
         BackCommand.NotifyCanExecuteChanged();
         CancelCommand.NotifyCanExecuteChanged();
         HandleEscapeCommand.NotifyCanExecuteChanged();
@@ -611,8 +669,11 @@ public sealed partial class OnboardingWizardViewModel : ObservableObject, IDispo
     private void OnCurrentPageCanAdvanceChanged(object? sender, EventArgs e)
     {
         OnPropertyChanged(nameof(NextButtonText));
+        OnPropertyChanged(nameof(SecondaryActionText));
+        OnPropertyChanged(nameof(HasSecondaryAction));
         OnPropertyChanged(nameof(IsNextActionSecondary));
         NextCommand.NotifyCanExecuteChanged();
+        SecondaryActionCommand.NotifyCanExecuteChanged();
     }
 
     private void OnCurrentPagePropertyChanged(object? sender, PropertyChangedEventArgs e)
@@ -622,6 +683,24 @@ public sealed partial class OnboardingWizardViewModel : ObservableObject, IDispo
             or null)
         {
             OnPropertyChanged(nameof(NextButtonText));
+        }
+
+        if (e.PropertyName is nameof(IOnboardingPageViewModel.SecondaryActionText) or null)
+        {
+            OnPropertyChanged(nameof(SecondaryActionText));
+            OnPropertyChanged(nameof(HasSecondaryAction));
+            SecondaryActionCommand.NotifyCanExecuteChanged();
+        }
+
+        if (e.PropertyName is nameof(IOnboardingPageViewModel.CanExecuteSecondaryAction) or null)
+        {
+            SecondaryActionCommand.NotifyCanExecuteChanged();
+        }
+
+        if (e.PropertyName is nameof(IOnboardingPageViewModel.AllowBackNavigation) or null)
+        {
+            OnPropertyChanged(nameof(ShowBackButton));
+            BackCommand.NotifyCanExecuteChanged();
         }
 
         if (e.PropertyName is nameof(IOnboardingPageViewModel.IsNextActionSecondary) or null)
@@ -639,6 +718,7 @@ public sealed partial class OnboardingWizardViewModel : ObservableObject, IDispo
     {
         OnPropertyChanged(nameof(IsOperationBusy));
         NextCommand.NotifyCanExecuteChanged();
+        SecondaryActionCommand.NotifyCanExecuteChanged();
         BackCommand.NotifyCanExecuteChanged();
         CancelCommand.NotifyCanExecuteChanged();
         HandleEscapeCommand.NotifyCanExecuteChanged();

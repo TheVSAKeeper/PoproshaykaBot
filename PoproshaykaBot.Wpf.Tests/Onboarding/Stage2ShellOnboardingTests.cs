@@ -75,7 +75,12 @@ public sealed class Stage2ShellOnboardingTests
     private string _tempDir = string.Empty;
 
     [OneTimeSetUp]
-    public void EnsureApplication() => TestResources.Ensure(Dictionaries);
+    public void EnsureApplication()
+    {
+        TestResources.Ensure(Dictionaries);
+        System.Runtime.CompilerServices.RuntimeHelpers.RunModuleConstructor(typeof(LegacyImportPageView).Module.ModuleHandle);
+        ViewLocator.InstallIntoApplication();
+    }
 
     [SetUp]
     public void SetUp()
@@ -246,6 +251,197 @@ public sealed class Stage2ShellOnboardingTests
     }
 
     [Test]
+    public async Task R36_And_R14_WizardFooterPlacesImportAsPrimaryBottomRightAndWrapsCleanlyAt160Percent()
+    {
+        var previousSyncContext = SynchronizationContext.Current;
+        SynchronizationContext.SetSynchronizationContext(new DispatcherSynchronizationContext(Dispatcher.CurrentDispatcher));
+        try
+        {
+            await using var provider = BuildProvider();
+            var settings = new SettingsManager(NullLogger<SettingsManager>.Instance, Path.Combine(_tempDir, "settings.json"));
+            settings.SaveSettings(new AppSettings
+            {
+                Twitch = new TwitchSettings { ClientId = "cid", ClientSecret = "sec", Channel = "thevsakeeper" },
+            });
+            var accounts = new AccountsStore(filePath: Path.Combine(_tempDir, "accounts.json"));
+            accounts.SaveAll(new TwitchAccountSettings
+            {
+                AccessToken = "bot",
+                RefreshToken = "ref",
+                StoredScopes = [.. TwitchScopes.BotRequired],
+            }, new());
+            var checklist = new OnboardingChecklist(settings, accounts);
+            var bus = provider.GetRequiredService<IEventBus>();
+            var controller = provider.GetRequiredService<BotConnectionManager>();
+
+            using var page = new LegacyImportPageViewModel(new StubFilePicker(_tempDir), NullLogger<LegacyImportPageViewModel>.Instance);
+            var source = CreateSource(_tempDir);
+            var importCalls = 0;
+
+            using var wizard = new OnboardingWizardViewModel(
+                [new WelcomePageViewModel(), page, new PlatformsPageViewModel()],
+                settings,
+                accounts,
+                provider.GetRequiredService<KestrelHttpServer>(),
+                controller,
+                bus,
+                NullLogger<OnboardingWizardViewModel>.Instance,
+                checklist: checklist);
+
+            wizard.AttachStartupSession(new StartupOnboardingSession
+            {
+                IncludeLegacyImport = true,
+                Candidates = [source],
+                Target = null,
+            });
+
+            page.ConfigureStartupSession(
+                [source],
+                null,
+                (_, _) => Task.CompletedTask,
+                null,
+                (src, _, _) =>
+                {
+                    importCalls++;
+                    return new LegacyImportResult
+                    {
+                        SourcePath = src,
+                        TargetPath = _tempDir,
+                        CopiedFiles = ["settings/settings.json", "settings/accounts.json"],
+                        SkippedFiles = [],
+                        Failures = [],
+                    };
+                });
+
+            await wizard.NextCommand.ExecuteAsync(null);
+            page.Import!.SelectedSource = page.Import.Sources[0];
+
+            var captureDir = Environment.GetEnvironmentVariable("CAPTURE_IMPORT_SHOTS_DIR");
+            var window = new OnboardingWizardWindow(wizard);
+            OffScreenWindow.Prepare(window, 760, 560);
+            window.Show();
+            try
+            {
+                await PumpDispatcherAsync();
+                SaveWindowShotIfRequested(window, captureDir, "01-before-import-760-100.png");
+
+                var listBox = FindVisualChild<ListBox>(window);
+                var buttons = FindVisualChildren<Button>(window).Where(b => b.IsVisible).ToList();
+                var pickButton = buttons.First(b => Equals(b.Content, "Выбрать папку…"));
+                var importButton = buttons.First(b => Equals(b.Content, "Перенести"));
+                var skipButton = buttons.First(b => Equals(b.Content, "Продолжить без переноса"));
+
+                Assert.That(listBox, Is.Not.Null);
+                Assert.That(buttons.Count(b => Equals(b.Content, "Перенести")), Is.EqualTo(1));
+
+                var pickPos = pickButton.TranslatePoint(new Point(0, 0), window);
+                var listPos = listBox!.TranslatePoint(new Point(0, 0), window);
+                var importPos = importButton.TranslatePoint(new Point(0, 0), window);
+                var skipPos = skipButton.TranslatePoint(new Point(0, 0), window);
+
+                using (Assert.EnterMultipleScope())
+                {
+                    Assert.That(listPos.Y, Is.GreaterThan(pickPos.Y));
+                    Assert.That(importPos.Y, Is.GreaterThan(listPos.Y));
+                    Assert.That(importPos.X, Is.GreaterThan(skipPos.X));
+                    Assert.That(importButton.IsDefault, Is.True);
+                    Assert.That(skipButton.IsDefault, Is.False);
+                    Assert.That(importButton.Style, Is.SameAs(Application.Current!.FindResource("Button.Primary")));
+                    Assert.That(skipButton.Style, Is.SameAs(Application.Current.FindResource("Button.Secondary")));
+                    Assert.That(importPos.X + importButton.ActualWidth, Is.LessThanOrEqualTo(window.ActualWidth + 1));
+                }
+
+                window.Width = 640;
+                window.Height = 480;
+                FontScaleManager.Apply(1.6);
+                await PumpDispatcherAsync();
+                SaveWindowShotIfRequested(window, captureDir, "02-before-import-640-160.png");
+
+                var compactFooterButtons = FindVisualChildren<Button>(window)
+                    .Where(b => b.IsVisible && b.Content is "Назад" or "Отложить настройку" or "Продолжить без переноса" or "Перенести")
+                    .ToList();
+                Assert.That(compactFooterButtons, Has.Count.EqualTo(4));
+                foreach (var button in compactFooterButtons)
+                {
+                    var pos = button.TranslatePoint(new Point(0, 0), window);
+                    using (Assert.EnterMultipleScope())
+                    {
+                        Assert.That(pos.X, Is.GreaterThanOrEqualTo(0));
+                        Assert.That(pos.X + button.ActualWidth, Is.LessThanOrEqualTo(window.ActualWidth + 1));
+                        Assert.That(pos.Y + button.ActualHeight, Is.LessThanOrEqualTo(window.ActualHeight + 1));
+                    }
+                }
+
+                FontScaleManager.Apply(FontScaleManager.DefaultScale);
+                window.Width = 760;
+                window.Height = 560;
+                await PumpDispatcherAsync();
+
+                var presentationSource = PresentationSource.FromVisual(listBox)!;
+                var args = new KeyEventArgs(Keyboard.PrimaryDevice, presentationSource, 0, Key.Enter)
+                {
+                    RoutedEvent = UIElement.PreviewKeyDownEvent,
+                };
+                listBox.RaiseEvent(args);
+                await PumpDispatcherAsync();
+
+                using (Assert.EnterMultipleScope())
+                {
+                    Assert.That(args.Handled, Is.True);
+                    Assert.That(importCalls, Is.EqualTo(1));
+                }
+
+                // Wait for async import completion and capture post-import screen
+                for (var attempt = 0; attempt < 50 && !page.HasCompletedImport; attempt++)
+                {
+                    await Task.Delay(20);
+                    await PumpDispatcherAsync();
+                }
+
+                await PumpDispatcherAsync();
+                SaveWindowShotIfRequested(window, captureDir, "03-after-import-760-100.png");
+
+                var postImportButtons = FindVisualChildren<Button>(window).Where(b => b.IsVisible).ToList();
+                using (Assert.EnterMultipleScope())
+                {
+                    Assert.That(postImportButtons.Any(b => Equals(b.Content, "Назад")), Is.False);
+                    Assert.That(postImportButtons.Any(b => Equals(b.Content, "Проверить настройки")), Is.True);
+                    Assert.That(postImportButtons.Any(b => Equals(b.Content, "Открыть панель")), Is.True);
+                }
+            }
+            finally
+            {
+                FontScaleManager.Apply(FontScaleManager.DefaultScale);
+                window.Close();
+                await PumpDispatcherAsync();
+            }
+        }
+        finally
+        {
+            SynchronizationContext.SetSynchronizationContext(previousSyncContext);
+        }
+    }
+
+    private static void SaveWindowShotIfRequested(Window window, string? captureDir, string fileName)
+    {
+        if (string.IsNullOrWhiteSpace(captureDir))
+        {
+            return;
+        }
+
+        Directory.CreateDirectory(captureDir);
+        window.UpdateLayout();
+        var width = Math.Max(1, (int)Math.Ceiling(window.ActualWidth));
+        var height = Math.Max(1, (int)Math.Ceiling(window.ActualHeight));
+        var bitmap = new System.Windows.Media.Imaging.RenderTargetBitmap(width, height, 96, 96, PixelFormats.Pbgra32);
+        bitmap.Render(window);
+        var encoder = new System.Windows.Media.Imaging.PngBitmapEncoder();
+        encoder.Frames.Add(System.Windows.Media.Imaging.BitmapFrame.Create(bitmap));
+        using var stream = File.Create(Path.Combine(captureDir, fileName));
+        encoder.Save(stream);
+    }
+
+    [Test]
     public async Task V2_WizardWindowSwitchesNextButtonStyleToSecondaryWhenPageRequestsIt()
     {
         var previousSyncContext = SynchronizationContext.Current;
@@ -389,7 +585,7 @@ public sealed class Stage2ShellOnboardingTests
 
         await wizard2.NextCommand.ExecuteAsync(null);
         importPage.Import!.NeverAskAgain = true;
-        await wizard2.NextCommand.ExecuteAsync(null);
+        await wizard2.SecondaryActionCommand.ExecuteAsync(null);
         appearance.Appearance.Theme.Select(ThemeManager.DefaultDark.Key);
         await wizard2.NextCommand.ExecuteAsync(null);
         platforms.YouTubeEnabled = true;

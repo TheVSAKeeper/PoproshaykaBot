@@ -616,70 +616,82 @@ public sealed class MultistreamOnboardingWizardTests
         var freePort = ReserveFreeLoopbackPort();
         var settingsManager = new SettingsManager(NullLogger<SettingsManager>.Instance, Path.Combine(_tempDir, "settings.json"));
         settingsManager.UpdateCurrent(s => s.Twitch.HttpServerPort = freePort);
-        var server = provider.GetRequiredService<KestrelHttpServer>();
-        var page = new HttpServerCheckPageViewModel(settingsManager, server, NullLogger<HttpServerCheckPageViewModel>.Instance);
-
-        var context = new OnboardingContext(
-            new AppSettings { Twitch = new TwitchSettings { Enabled = false, HttpServerPort = freePort } },
-            new(),
-            new(),
-            new YouTubeSettings { Enabled = true });
-
-        page.OnEnter(context);
-        await WaitUntilCheckCompletesAsync(page);
-
-        Assert.Multiple(() =>
+        var server = new KestrelHttpServer(
+            provider.GetRequiredService<SseService>(),
+            settingsManager,
+            [],
+            NullLogger<KestrelHttpServer>.Instance,
+            NullLoggerFactory.Instance);
+        try
         {
-            Assert.That(page.CanAdvance, Is.True);
-            Assert.That(page.StatusSeverity, Is.EqualTo("Success"));
-            Assert.That(page.HasPortError, Is.False);
-        });
+            var page = new HttpServerCheckPageViewModel(settingsManager, server, NullLogger<HttpServerCheckPageViewModel>.Instance);
 
-        page.PortText = "99999";
-        Assert.Multiple(() =>
+            var context = new OnboardingContext(
+                new AppSettings { Twitch = new TwitchSettings { Enabled = false, HttpServerPort = freePort } },
+                new(),
+                new(),
+                new YouTubeSettings { Enabled = true });
+
+            page.OnEnter(context);
+            await WaitUntilCheckCompletesAsync(page);
+
+            Assert.Multiple(() =>
+            {
+                Assert.That(page.CanAdvance, Is.True);
+                Assert.That(page.StatusSeverity, Is.EqualTo("Success"));
+                Assert.That(page.HasPortError, Is.False);
+            });
+
+            page.PortText = "99999";
+            Assert.Multiple(() =>
+            {
+                Assert.That(page.CanAdvance, Is.False);
+                Assert.That(page.StatusSeverity, Is.EqualTo("Error"));
+                Assert.That(page.HasPortError, Is.True);
+                Assert.That(page.IsRetryVisible, Is.False);
+            });
+            Assert.That(await page.OnLeavingAsync(context), Is.False);
+
+            var secondFreePort = ReserveFreeLoopbackPort();
+            page.PortText = secondFreePort.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            Assert.Multiple(() =>
+            {
+                Assert.That(page.CanAdvance, Is.False);
+                Assert.That(page.StatusSeverity, Is.Not.EqualTo("Success"));
+                Assert.That(page.HasPortError, Is.False);
+                Assert.That(page.IsRetryVisible, Is.False);
+            });
+            Assert.That(await page.OnLeavingAsync(context), Is.False);
+
+            await page.RetryCommand.ExecuteAsync(null);
+            Assert.Multiple(() =>
+            {
+                Assert.That(page.CanAdvance, Is.True);
+                Assert.That(page.StatusSeverity, Is.EqualTo("Success"));
+                Assert.That(context.Settings.Twitch.HttpServerPort, Is.EqualTo(secondFreePort));
+            });
+            Assert.That(await page.OnLeavingAsync(context), Is.True);
+
+            await server.StopAsync();
+
+            using var occupiedListener = new System.Net.Sockets.TcpListener(System.Net.IPAddress.Loopback, 0);
+            occupiedListener.Start();
+            var occupiedPort = ((System.Net.IPEndPoint)occupiedListener.LocalEndpoint).Port;
+
+            page.PortText = occupiedPort.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            await page.RetryCommand.ExecuteAsync(null);
+
+            Assert.Multiple(() =>
+            {
+                Assert.That(page.CanAdvance, Is.False);
+                Assert.That(page.HasPortError, Is.False);
+                Assert.That(page.IsRetryVisible, Is.True);
+            });
+        }
+        finally
         {
-            Assert.That(page.CanAdvance, Is.False);
-            Assert.That(page.StatusSeverity, Is.EqualTo("Error"));
-            Assert.That(page.HasPortError, Is.True);
-            Assert.That(page.IsRetryVisible, Is.False);
-        });
-        Assert.That(await page.OnLeavingAsync(context), Is.False);
-
-        var secondFreePort = ReserveFreeLoopbackPort();
-        page.PortText = secondFreePort.ToString(System.Globalization.CultureInfo.InvariantCulture);
-        Assert.Multiple(() =>
-        {
-            Assert.That(page.CanAdvance, Is.False);
-            Assert.That(page.StatusSeverity, Is.Not.EqualTo("Success"));
-            Assert.That(page.HasPortError, Is.False);
-            Assert.That(page.IsRetryVisible, Is.False);
-        });
-        Assert.That(await page.OnLeavingAsync(context), Is.False);
-
-        await page.RetryCommand.ExecuteAsync(null);
-        Assert.Multiple(() =>
-        {
-            Assert.That(page.CanAdvance, Is.True);
-            Assert.That(page.StatusSeverity, Is.EqualTo("Success"));
-            Assert.That(context.Settings.Twitch.HttpServerPort, Is.EqualTo(secondFreePort));
-        });
-        Assert.That(await page.OnLeavingAsync(context), Is.True);
-
-        await server.StopAsync();
-
-        using var occupiedListener = new System.Net.Sockets.TcpListener(System.Net.IPAddress.Loopback, 0);
-        occupiedListener.Start();
-        var occupiedPort = ((System.Net.IPEndPoint)occupiedListener.LocalEndpoint).Port;
-
-        page.PortText = occupiedPort.ToString(System.Globalization.CultureInfo.InvariantCulture);
-        await page.RetryCommand.ExecuteAsync(null);
-
-        Assert.Multiple(() =>
-        {
-            Assert.That(page.CanAdvance, Is.False);
-            Assert.That(page.HasPortError, Is.False);
-            Assert.That(page.IsRetryVisible, Is.True);
-        });
+            await server.StopAsync();
+        }
     }
 
     [Test]
@@ -866,7 +878,7 @@ public sealed class MultistreamOnboardingWizardTests
             Assert.That(importPage.IsBusy, Is.False);
             Assert.That(wizard.IsOperationBusy, Is.False);
             Assert.That(wizard.CancelCommand.CanExecute(null), Is.True);
-            Assert.That(wizard.BackCommand.CanExecute(null), Is.True);
+            Assert.That(wizard.BackCommand.CanExecute(null), Is.False, "После завершённого переноса «Назад» не должно вести на приветствие");
             Assert.That(wizard.NextCommand.CanExecute(null), Is.True);
         });
     }
@@ -977,7 +989,7 @@ public sealed class MultistreamOnboardingWizardTests
             Assert.That(importPage.Import.ImportCommand.CanExecute(null), Is.True);
         });
 
-        await wizard.NextCommand.ExecuteAsync(null);
+        await wizard.SecondaryActionCommand.ExecuteAsync(null);
         Assert.That(wizard.CurrentPage, Is.SameAs(provisionalPage));
 
         await wizard.NextCommand.ExecuteAsync(null);

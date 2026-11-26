@@ -3,6 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework"
         xmlns:keepshell="https://schemas.keepshell.dev/wpf"
+        xmlns:local="clr-namespace:PoproshaykaBot.Wpf.Views.Onboarding"
         xmlns:vm="clr-namespace:PoproshaykaBot.Wpf.ViewModels.Onboarding"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
@@ -107,56 +108,59 @@
 
         <Border Grid.Row="3"
                 Padding="20,0,20,16">
-            <Grid>
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="Auto" />
-                    <ColumnDefinition Width="*"
-                                      MinWidth="16" />
-                    <ColumnDefinition Width="Auto" />
-                </Grid.ColumnDefinitions>
-
-                <StackPanel Grid.Column="0"
-                            Orientation="Horizontal"
-                            VerticalAlignment="Center">
+            <local:WizardFooterPanel HorizontalGap="16"
+                                     VerticalGap="8">
+                <WrapPanel VerticalAlignment="Center">
                     <Button Content="Назад"
                             Visibility="{Binding ShowBackButton, Converter={StaticResource BoolToVisibility}}"
                             Style="{StaticResource Button.Ghost}"
                             Command="{Binding BackCommand}"
-                            MinWidth="96"
-                            Margin="0,0,12,0" />
+                            MinWidth="76"
+                            Margin="0,0,8,0" />
                     <Button Content="Отложить настройку"
                             Style="{StaticResource Button.Secondary}"
                             Command="{Binding CancelCommand}"
                             ToolTip="Закрыть мастер и настроить позже"
                             Padding="14,6" />
-                </StackPanel>
+                </WrapPanel>
 
-                <ContentControl Grid.Column="2"
-                                Content="{Binding}"
-                                IsTabStop="False"
-                                Focusable="False"
-                                VerticalAlignment="Center">
-                    <ContentControl.ContentTemplate>
-                        <DataTemplate>
-                            <Button x:Name="NextActionButton"
-                                    Content="{Binding NextButtonText}"
-                                    Style="{StaticResource Button.Primary}"
-                                    Command="{Binding NextCommand}"
-                                    IsDefault="True"
-                                    VerticalAlignment="Center"
-                                    MinWidth="120" />
-                            <DataTemplate.Triggers>
-                                <DataTrigger Binding="{Binding IsNextActionSecondary}"
-                                             Value="True">
-                                    <Setter TargetName="NextActionButton"
-                                            Property="Style"
-                                            Value="{StaticResource Button.Secondary}" />
-                                </DataTrigger>
-                            </DataTemplate.Triggers>
-                        </DataTemplate>
-                    </ContentControl.ContentTemplate>
-                </ContentControl>
-            </Grid>
+                <WrapPanel HorizontalAlignment="Right"
+                           VerticalAlignment="Center">
+                    <Button x:Name="SecondaryActionButton"
+                            Content="{Binding SecondaryActionText}"
+                            Visibility="{Binding HasSecondaryAction, Converter={StaticResource BoolToVisibility}}"
+                            Style="{StaticResource Button.Secondary}"
+                            Command="{Binding SecondaryActionCommand}"
+                            IsDefault="False"
+                            VerticalAlignment="Center"
+                            Padding="14,6"
+                            Margin="0,0,8,0" />
+                    <ContentControl Content="{Binding}"
+                                    IsTabStop="False"
+                                    Focusable="False"
+                                    VerticalAlignment="Center">
+                        <ContentControl.ContentTemplate>
+                            <DataTemplate>
+                                <Button x:Name="NextActionButton"
+                                        Content="{Binding NextButtonText}"
+                                        Style="{StaticResource Button.Primary}"
+                                        Command="{Binding NextCommand}"
+                                        IsDefault="True"
+                                        VerticalAlignment="Center"
+                                        MinWidth="120" />
+                                <DataTemplate.Triggers>
+                                    <DataTrigger Binding="{Binding IsNextActionSecondary}"
+                                                 Value="True">
+                                        <Setter TargetName="NextActionButton"
+                                                Property="Style"
+                                                Value="{StaticResource Button.Secondary}" />
+                                    </DataTrigger>
+                                </DataTemplate.Triggers>
+                            </DataTemplate>
+                        </ContentControl.ContentTemplate>
+                    </ContentControl>
+                </WrapPanel>
+            </local:WizardFooterPanel>
         </Border>
     </Grid>
 </Window>

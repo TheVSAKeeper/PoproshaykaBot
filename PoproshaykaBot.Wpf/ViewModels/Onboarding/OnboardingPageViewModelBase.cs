@@ -19,6 +19,12 @@ public abstract partial class OnboardingPageViewModelBase : ObservableObject, IO
 
     public virtual bool IsNextActionSecondary => false;
 
+    public virtual bool AllowBackNavigation => true;
+
+    public virtual string? SecondaryActionText => null;
+
+    public virtual bool CanExecuteSecondaryAction => false;
+
     public virtual bool IsBusy => false;
 
     public virtual bool IsApplicable(OnboardingContext context) => true;
@@ -34,6 +40,11 @@ public abstract partial class OnboardingPageViewModelBase : ObservableObject, IO
     public virtual Task<bool> OnLeavingAsync(OnboardingContext context)
     {
         return Task.FromResult(CanAdvance);
+    }
+
+    public virtual Task OnSecondaryActionAsync(OnboardingContext context)
+    {
+        return Task.CompletedTask;
     }
 
     public virtual bool TryHandleEscape() => false;
