@@ -82,8 +82,12 @@
 
         <StackPanel Grid.Row="1"
                     Margin="20,16,20,8">
-            <TextBlock Text="{Binding HeaderTitle}"
-                       Style="{StaticResource TextBlock.Heading}" />
+            <TextBlock x:Name="PageHeaderTitle"
+                       Text="{Binding HeaderTitle}"
+                       Style="{StaticResource TextBlock.Heading}"
+                       Focusable="True"
+                       FocusVisualStyle="{x:Null}"
+                       AutomationProperties.Name="{Binding HeaderTitle}" />
             <TextBlock Text="{Binding StepIndicator}"
                        Foreground="{DynamicResource Fg.Secondary}"
                        FontSize="{DynamicResource Font.Size.S}"
@@ -96,30 +100,45 @@
                 BorderBrush="{DynamicResource Border.Subtle}"
                 BorderThickness="1"
                 CornerRadius="{DynamicResource Radius.M}">
-            <ContentControl Content="{Binding CurrentPage}"
+            <ContentControl x:Name="PageContentHost"
+                            Content="{Binding CurrentPage}"
                             IsEnabled="{Binding IsPageInteractive}" />
         </Border>
 
         <Border Grid.Row="3"
                 Padding="20,0,20,16">
-            <StackPanel Orientation="Horizontal"
-                        HorizontalAlignment="Right">
-                <Button Content="← Назад"
-                        Style="{StaticResource Button.Ghost}"
-                        Command="{Binding BackCommand}"
-                        MinWidth="96"
-                        Margin="0,0,8,0" />
-                <Button Content="{Binding NextButtonText}"
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*"
+                                      MinWidth="16" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+
+                <StackPanel Grid.Column="0"
+                            Orientation="Horizontal"
+                            VerticalAlignment="Center">
+                    <Button Content="Назад"
+                            Visibility="{Binding ShowBackButton, Converter={StaticResource BoolToVisibility}}"
+                            Style="{StaticResource Button.Ghost}"
+                            Command="{Binding BackCommand}"
+                            MinWidth="96"
+                            Margin="0,0,12,0" />
+                    <Button Content="Отложить настройку"
+                            Style="{StaticResource Button.Secondary}"
+                            Command="{Binding CancelCommand}"
+                            ToolTip="Закрыть мастер и настроить позже"
+                            Padding="14,6" />
+                </StackPanel>
+
+                <Button Grid.Column="2"
+                        Content="{Binding NextButtonText}"
                         Style="{StaticResource Button.Primary}"
                         Command="{Binding NextCommand}"
                         IsDefault="True"
-                        MinWidth="120"
-                        Margin="0,0,8,0" />
-                <Button Content="Отмена"
-                        Style="{StaticResource Button.Secondary}"
-                        Command="{Binding CancelCommand}"
-                        MinWidth="96" />
-            </StackPanel>
+                        VerticalAlignment="Center"
+                        MinWidth="120" />
+            </Grid>
         </Border>
     </Grid>
 </Window>

@@ -43,19 +43,19 @@ public class OnboardingWizardSmokeTests
         Assert.That(wizard, Is.Not.Null, "Мастер должен быть найден перед проверкой кнопок навигации");
 
         var nextButton = wizard!.FindFirstDescendant(cf =>
-            cf.ByControlType(ControlType.Button).And(cf.ByName("Далее →")));
+            cf.ByControlType(ControlType.Button).And(cf.ByName("Далее")));
 
-        var cancelButton = wizard.FindFirstDescendant(cf =>
-            cf.ByControlType(ControlType.Button).And(cf.ByName("Отмена")));
+        var deferButton = wizard.FindFirstDescendant(cf =>
+            cf.ByControlType(ControlType.Button).And(cf.ByName("Отложить настройку")));
 
         var backButton = wizard.FindFirstDescendant(cf =>
-            cf.ByControlType(ControlType.Button).And(cf.ByName("← Назад")));
+            cf.ByControlType(ControlType.Button).And(cf.ByName("Назад")));
 
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(nextButton, Is.Not.Null, "Кнопка 'Далее →' должна быть в мастере");
-            Assert.That(cancelButton, Is.Not.Null, "Кнопка 'Отмена' должна быть в мастере");
-            Assert.That(backButton, Is.Not.Null, "Кнопка '← Назад' должна быть в мастере");
+            Assert.That(nextButton, Is.Not.Null, "Кнопка 'Далее' должна быть в мастере");
+            Assert.That(deferButton, Is.Not.Null, "Кнопка 'Отложить настройку' должна быть в мастере");
+            Assert.That(backButton, Is.Null, "Кнопка 'Назад' должна быть скрыта на первом шаге");
         }
     }
 

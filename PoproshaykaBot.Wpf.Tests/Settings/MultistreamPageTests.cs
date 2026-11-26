@@ -20,6 +20,7 @@ using PoproshaykaBot.Core.Settings.Stores;
 using PoproshaykaBot.Core.Statistics;
 using PoproshaykaBot.Core.Streaming;
 using PoproshaykaBot.Core.Twitch.Auth;
+using PoproshaykaBot.Core.Twitch.Chat;
 using PoproshaykaBot.Core.Twitch.GameArt;
 using PoproshaykaBot.Core.Update;
 using PoproshaykaBot.Core.YouTube.Auth;
@@ -311,6 +312,23 @@ public sealed class MultistreamPageTests
 
             var gate = new SettingsWriteGate();
             var manager = new SettingsManager(NullLogger<SettingsManager>.Instance, Path.Combine(data.FullName, "settings.json"), gate);
+            manager.SaveSettings(new AppSettings
+            {
+                Twitch = new TwitchSettings
+                {
+                    Enabled = true,
+                    ClientId = "cid",
+                    ClientSecret = "sec",
+                    Channel = "streamer",
+                },
+            });
+            var accounts = new AccountsStore(filePath: Path.Combine(data.FullName, "acc.json"));
+            accounts.SaveAll(new TwitchAccountSettings
+            {
+                AccessToken = "bot",
+                RefreshToken = "ref",
+                StoredScopes = [.. TwitchScopes.BotRequired],
+            }, new());
             var bus = new InMemoryEventBus(NullLogger<InMemoryEventBus>.Instance);
             var store = new MemorySettings();
             var dispatcher = new ManualUiDispatcher();
@@ -337,7 +355,7 @@ public sealed class MultistreamPageTests
                 dispatcher,
                 DispatchProxy.Create<IShellLauncher, InertProxy>(),
                 windows);
-            using var onboardingBanner = new OnboardingBannerViewModel(new OnboardingChecklist(manager, new AccountsStore(filePath: Path.Combine(data.FullName, "acc.json"))), DispatchProxy.Create<IOnboardingWizardLauncher, InertProxy>(), bus);
+            using var onboardingBanner = new OnboardingBannerViewModel(new OnboardingChecklist(manager, accounts), DispatchProxy.Create<IOnboardingWizardLauncher, InertProxy>(), bus);
             var debugBanner = new DebugBannerViewModel(new TargetChannelProvider(manager, new DebugChannelStore(filePath: Path.Combine(data.FullName, "dbg.json")), DebugChannelOverride.None));
             var preferences = new ShellPreferences(store) { LastPage = SectionKeys.Settings };
 

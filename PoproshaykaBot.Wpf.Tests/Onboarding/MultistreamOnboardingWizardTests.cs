@@ -210,17 +210,48 @@ public sealed class MultistreamOnboardingWizardTests
     }
 
     [Test]
-    public async Task LegacyImportPage_SkippingWithNeverAskAgainInvokesDismissCallback()
+    public async Task LegacyImportPage_SkippingWithNeverAskAgainCommitsDismissOnlyOnWizardCompletion()
     {
+        await using var provider = BuildProvider();
+        var settings = new SettingsManager(NullLogger<SettingsManager>.Instance, Path.Combine(_tempDir, "settings.json"));
+        var accounts = new AccountsStore(filePath: Path.Combine(_tempDir, "accounts.json"));
+        var bus = provider.GetRequiredService<IEventBus>();
+        var controller = provider.GetRequiredService<BotConnectionManager>();
         var dismissed = false;
-        using var page = new LegacyImportPageViewModel(new StubFilePicker(_tempDir), NullLogger<LegacyImportPageViewModel>.Instance);
-        var context = new OnboardingContext(new AppSettings(), new(), new()) { IncludeLegacyImport = true };
-        page.ConfigureStartupSession([], null, null, value => dismissed = value);
-        page.OnEnter(context);
-        page.Import!.NeverAskAgain = true;
 
-        Assert.That(await page.OnLeavingAsync(context), Is.True);
-        Assert.That(dismissed, Is.True);
+        var welcome = new WelcomePageViewModel();
+        using var importPage = new LegacyImportPageViewModel(new StubFilePicker(_tempDir), NullLogger<LegacyImportPageViewModel>.Instance);
+        var platforms = new PlatformsPageViewModel();
+        using var wizard = new OnboardingWizardViewModel(
+            [welcome, importPage, platforms],
+            settings,
+            accounts,
+            provider.GetRequiredService<KestrelHttpServer>(),
+            controller,
+            bus,
+            NullLogger<OnboardingWizardViewModel>.Instance);
+
+        wizard.AttachStartupSession(new StartupOnboardingSession
+        {
+            IncludeLegacyImport = true,
+            Candidates = [],
+            Target = null,
+            OnLegacyImportSkipped = value => dismissed = value,
+        });
+
+        await wizard.NextCommand.ExecuteAsync(null);
+        Assert.That(wizard.CurrentPage, Is.SameAs(importPage));
+        importPage.Import!.NeverAskAgain = true;
+
+        await wizard.NextCommand.ExecuteAsync(null);
+        Assert.Multiple(() =>
+        {
+            Assert.That(wizard.CurrentPage, Is.SameAs(platforms));
+            Assert.That(dismissed, Is.False, "Переход «Далее» не должен заранее сохранять «Больше не предлагать»");
+        });
+
+        await wizard.NextCommand.ExecuteAsync(null);
+        Assert.That(dismissed, Is.True, "При завершении мастера «Больше не предлагать» должно сохраниться");
     }
 
     [Test]

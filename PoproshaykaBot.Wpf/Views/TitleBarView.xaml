@@ -184,14 +184,34 @@
                     </StackPanel>
                 </Button>
 
-                <Button Style="{StaticResource Button.Primary}"
-                        Content="{Binding ConnectButtonText}"
+                <Button Content="{Binding ConnectButtonText}"
                         Command="{Binding ToggleConnectCommand}"
                         ToolTip="{Binding ConnectButtonTooltip}"
+                        ToolTipService.ShowOnDisabled="True"
+                        AutomationProperties.Name="{Binding ConnectButtonText}"
                         VerticalAlignment="Center"
                         Margin="0,0,10,0"
                         MinHeight="26"
-                        Padding="14,3" />
+                        Padding="14,3">
+                    <Button.Style>
+                        <Style TargetType="Button"
+                               BasedOn="{StaticResource Button.Primary}">
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding IsConnectBlockedBySetup}"
+                                             Value="True">
+                                    <Setter Property="Background"
+                                            Value="{DynamicResource Bg.Surface}" />
+                                    <Setter Property="Foreground"
+                                            Value="{DynamicResource Fg.Muted}" />
+                                    <Setter Property="BorderBrush"
+                                            Value="{DynamicResource Border.Default}" />
+                                    <Setter Property="BorderThickness"
+                                            Value="1" />
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </Button.Style>
+                </Button>
 
                 <Button x:Name="RestartButton"
                         Style="{StaticResource Theme.SegmentButton}"

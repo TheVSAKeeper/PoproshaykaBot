@@ -31,18 +31,21 @@
                                   Hint="Увеличивает размер текста по всему приложению. 100% – стандартный размер."
                                   Margin="0,20,0,0" />
 
-        <CheckBox Content="Показывать заголовок страницы"
-                  Style="{StaticResource CheckBox.ToggleSwitch}"
-                  IsChecked="{Binding Shell.ShowPageHeader, Mode=TwoWay}"
-                  Margin="0,20,0,0" />
-        <TextBlock Style="{StaticResource Form.CheckHint}"
-                   Text="Плашка с названием раздела и описанием над содержимым каждой страницы." />
+        <StackPanel x:Name="ChromeAndNotificationOptionsPanel"
+                    Visibility="{Binding ShowChromeAndNotificationOptions, Converter={StaticResource BoolToVisibility}}">
+            <CheckBox Content="Показывать заголовок страницы"
+                      Style="{StaticResource CheckBox.ToggleSwitch}"
+                      IsChecked="{Binding Shell.ShowPageHeader, Mode=TwoWay}"
+                      Margin="0,20,0,0" />
+            <TextBlock Style="{StaticResource Form.CheckHint}"
+                       Text="Плашка с названием раздела и описанием над содержимым каждой страницы." />
 
-        <CheckBox Content="Показывать всплывающие уведомления"
-                  Style="{StaticResource CheckBox.ToggleSwitch}"
-                  IsChecked="{Binding Shell.EnableToastNotifications, Mode=TwoWay}"
-                  Margin="0,16,0,0" />
-        <TextBlock Style="{StaticResource Form.CheckHint}"
-                   Text="Короткие уведомления в правом нижнем углу – о копировании строки подключения, статусе выходов OBS и неполной очистке истории." />
+            <CheckBox Content="Показывать всплывающие уведомления"
+                      Style="{StaticResource CheckBox.ToggleSwitch}"
+                      IsChecked="{Binding Shell.EnableToastNotifications, Mode=TwoWay}"
+                      Margin="0,16,0,0" />
+            <TextBlock Style="{StaticResource Form.CheckHint}"
+                       Text="Короткие уведомления в правом нижнем углу – о копировании строки подключения, статусе выходов OBS и неполной очистке истории." />
+        </StackPanel>
     </StackPanel>
 </UserControl>

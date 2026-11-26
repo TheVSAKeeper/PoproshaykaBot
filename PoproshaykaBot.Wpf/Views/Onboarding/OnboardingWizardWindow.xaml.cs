@@ -1,6 +1,8 @@
 ﻿using PoproshaykaBot.Wpf.ViewModels.Onboarding;
 using System.ComponentModel;
 using System.Windows;
+using System.Windows.Input;
+using System.Windows.Threading;
 using PoproshaykaBot.Core.Settings.Onboarding;
 
 namespace PoproshaykaBot.Wpf.Views.Onboarding;
@@ -20,8 +22,14 @@ public partial class OnboardingWizardWindow : Window
         WindowChromeTheming.Attach(this);
 
         _viewModel.CloseRequested += OnCloseRequested;
+        _viewModel.PropertyChanged += OnViewModelPropertyChanged;
+        Loaded += OnLoaded;
         Closing += OnClosing;
-        Closed += (_, _) => _viewModel.Dispose();
+        Closed += (_, _) =>
+        {
+            _viewModel.PropertyChanged -= OnViewModelPropertyChanged;
+            _viewModel.Dispose();
+        };
     }
 
     internal void StartAt(OnboardingStep step) => _viewModel.StartAt(step);
@@ -35,6 +43,37 @@ public partial class OnboardingWizardWindow : Window
         WindowStartupLocation = owner is null
             ? WindowStartupLocation.CenterScreen
             : WindowStartupLocation.CenterOwner;
+    }
+
+    private void OnLoaded(object sender, RoutedEventArgs e)
+    {
+        ScheduleFocusIntoCurrentStep();
+    }
+
+    private void OnViewModelPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName is nameof(OnboardingWizardViewModel.CurrentPage))
+        {
+            ScheduleFocusIntoCurrentStep();
+        }
+    }
+
+    private void ScheduleFocusIntoCurrentStep()
+    {
+        if (_closeConfirmed || !_viewModel.IsPageInteractive)
+        {
+            return;
+        }
+
+        _ = Dispatcher.BeginInvoke(DispatcherPriority.Loaded, () =>
+        {
+            if (_closeConfirmed || !_viewModel.IsPageInteractive || !IsLoaded)
+            {
+                return;
+            }
+
+            Keyboard.Focus(PageHeaderTitle);
+        });
     }
 
     private void OnCloseRequested()
@@ -52,6 +91,7 @@ public partial class OnboardingWizardWindow : Window
         if (_closeConfirmed)
         {
             _viewModel.CloseRequested -= OnCloseRequested;
+            _viewModel.PropertyChanged -= OnViewModelPropertyChanged;
             _viewModel.Dispose();
             return;
         }
@@ -64,7 +104,7 @@ public partial class OnboardingWizardWindow : Window
         }
 
         _closing = true;
-        if (await _viewModel.RequestCloseAsync())
+        if (await _viewModel.RequestCloseAsync(confirmIfModified: true))
         {
             _closeConfirmed = true;
             _ = Dispatcher.BeginInvoke(() => Close());

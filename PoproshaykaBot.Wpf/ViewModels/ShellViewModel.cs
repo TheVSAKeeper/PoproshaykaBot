@@ -104,6 +104,7 @@ public sealed partial class ShellViewModel : ShellViewModelBase, IDisposable
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(ConnectButtonText))]
+    [NotifyPropertyChangedFor(nameof(IsConnectBlockedBySetup))]
     [NotifyCanExecuteChangedFor(nameof(ToggleConnectCommand))]
     private BotLifecyclePhase _phase;
 
@@ -155,6 +156,7 @@ public sealed partial class ShellViewModel : ShellViewModelBase, IDisposable
         Theme = theme;
         UpdateBanner = updateBanner;
         OnboardingBanner = onboardingBanner;
+        OnboardingBanner.PropertyChanged += OnOnboardingBannerPropertyChanged;
         ChannelSwitchBanner = channelSwitchBanner;
         DebugBanner = debugBanner;
         StreamMonitoring = streamMonitoring;
@@ -273,23 +275,36 @@ public sealed partial class ShellViewModel : ShellViewModelBase, IDisposable
         _ => "Подключить бота",
     };
 
+    public bool IsConnectBlockedBySetup =>
+        Phase is not (BotLifecyclePhase.Connecting or BotLifecyclePhase.Connected or BotLifecyclePhase.Disconnecting)
+        && !OnboardingBanner.IsProfileReady;
+
     public string ConnectButtonTooltip
     {
         get
         {
+            if (IsConnectBlockedBySetup)
+            {
+                return $"Подключение недоступно. Не настроено: {string.Join(", ", OnboardingBanner.MissingItems)}.";
+            }
+
+            var enabled = _platformRegistry?.All
+                .Where(static platform => platform.IsEnabled)
+                .Select(static platform => platform.DisplayName)
+                .ToArray() ?? [];
+
+            if (_platformRegistry is not null && enabled.Length == 0)
+            {
+                return "Нет включённых площадок для подключения";
+            }
+
             if (_platformRegistry is null)
             {
                 return "Управление ботом на всех включённых площадках";
             }
 
-            var enabled = _platformRegistry.All
-                .Where(static platform => platform.IsEnabled)
-                .Select(static platform => platform.DisplayName)
-                .ToArray();
-
             return enabled.Length switch
             {
-                0 => "Нет включённых площадок для подключения",
                 1 => $"Управление ботом на площадке: {enabled[0]}",
                 _ => $"Управление ботом на всех включённых площадках: {string.Join(", ", enabled)}",
             };
@@ -372,6 +387,7 @@ public sealed partial class ShellViewModel : ShellViewModelBase, IDisposable
             _statisticsPage.StatusReported -= OnOverviewStatusReported;
         }
         _preferences.PropertyChanged -= OnPreferencesPropertyChanged;
+        OnboardingBanner.PropertyChanged -= OnOnboardingBannerPropertyChanged;
 
         if (ChannelSwitchBanner is not null)
         {
@@ -838,7 +854,17 @@ public sealed partial class ShellViewModel : ShellViewModelBase, IDisposable
 
     private bool CanToggleConnect()
     {
-        return Phase != BotLifecyclePhase.Disconnecting;
+        if (Phase == BotLifecyclePhase.Disconnecting)
+        {
+            return false;
+        }
+
+        if (Phase is BotLifecyclePhase.Connecting or BotLifecyclePhase.Connected)
+        {
+            return true;
+        }
+
+        return OnboardingBanner.IsProfileReady;
     }
 
     [RelayCommand]
@@ -960,12 +986,26 @@ public sealed partial class ShellViewModel : ShellViewModelBase, IDisposable
             () => SetStatus("Настройки оформления не сохранены на диск, правки применены только в этом сеансе", StatusSeverity.Error));
     }
 
+    private void OnOnboardingBannerPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName is nameof(OnboardingBannerViewModel.MissingItems)
+            or nameof(OnboardingBannerViewModel.IsProfileReady)
+            or null)
+        {
+            OnPropertyChanged(nameof(IsConnectBlockedBySetup));
+            OnPropertyChanged(nameof(ConnectButtonTooltip));
+            ToggleConnectCommand.NotifyCanExecuteChanged();
+        }
+    }
+
     private void OnSettingsSaved(object? sender, EventArgs e)
     {
         OnboardingBanner.Refresh();
         DebugBanner.Refresh();
         RefreshPartialFailureStatus();
+        OnPropertyChanged(nameof(IsConnectBlockedBySetup));
         OnPropertyChanged(nameof(ConnectButtonTooltip));
+        ToggleConnectCommand.NotifyCanExecuteChanged();
     }
 
     public void SuppressNextConnectErrorDialog()

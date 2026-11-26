@@ -17,15 +17,60 @@
                        FontWeight="Bold"
                        FontSize="{DynamicResource Font.Size.L}"
                        TextWrapping="Wrap"
-                       Margin="0,0,0,12" />
+                       Margin="0,0,0,8" />
 
-            <TextBlock Text="{Binding BodyText}"
-                       Foreground="{DynamicResource Fg.Primary}"
+            <TextBlock Text="{Binding SummaryText}"
+                       Foreground="{DynamicResource Fg.Secondary}"
                        TextWrapping="Wrap"
-                       Margin="0,0,0,16" />
+                       Margin="0,0,0,14" />
+
+            <TextBlock Text="{Binding PathsHeading}"
+                       FontWeight="SemiBold"
+                       FontSize="{DynamicResource Font.Size.M}"
+                       TextWrapping="Wrap"
+                       Margin="0,0,0,8" />
+
+            <Border Background="{DynamicResource Bg.Base}"
+                    BorderBrush="{DynamicResource Border.Subtle}"
+                    BorderThickness="1"
+                    CornerRadius="{DynamicResource Radius.S}"
+                    Padding="12,10"
+                    Margin="0,0,0,8">
+                <StackPanel>
+                    <TextBlock Text="{Binding LegacyPathTitle}"
+                               FontWeight="SemiBold"
+                               TextWrapping="Wrap"
+                               Margin="0,0,0,4" />
+                    <TextBlock Text="{Binding LegacyPathDescription}"
+                               Foreground="{DynamicResource Fg.Secondary}"
+                               TextWrapping="Wrap" />
+                </StackPanel>
+            </Border>
+
+            <Border Background="{DynamicResource Bg.Base}"
+                    BorderBrush="{DynamicResource Border.Subtle}"
+                    BorderThickness="1"
+                    CornerRadius="{DynamicResource Radius.S}"
+                    Padding="12,10"
+                    Margin="0,0,0,12">
+                <StackPanel>
+                    <TextBlock Text="{Binding ScratchPathTitle}"
+                               FontWeight="SemiBold"
+                               TextWrapping="Wrap"
+                               Margin="0,0,0,6" />
+                    <TextBlock Text="{Binding ScratchTwitchText}"
+                               Foreground="{DynamicResource Fg.Secondary}"
+                               TextWrapping="Wrap"
+                               Margin="0,0,0,4" />
+                    <TextBlock Text="{Binding ScratchYouTubeText}"
+                               Foreground="{DynamicResource Fg.Secondary}"
+                               TextWrapping="Wrap" />
+                </StackPanel>
+            </Border>
 
             <TextBlock Text="{Binding HintText}"
-                       Foreground="{DynamicResource Fg.Secondary}"
+                       Foreground="{DynamicResource Fg.Muted}"
+                       FontSize="{DynamicResource Font.Size.S}"
                        TextWrapping="Wrap" />
         </StackPanel>
     </ScrollViewer>

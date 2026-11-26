@@ -37,6 +37,8 @@ public sealed partial class OnboardingWizardViewModel : ObservableObject, IDispo
     private OnboardingContext _context;
     private readonly List<IOnboardingPageViewModel> _pages;
     private TwitchSettings _originalTwitch;
+    private YouTubeSettings _originalYouTube;
+    private string _originalYouTubeClientSecret = string.Empty;
 
     private bool _completed;
     private bool _rollbackPerformed;
@@ -46,6 +48,7 @@ public sealed partial class OnboardingWizardViewModel : ObservableObject, IDispo
     [NotifyPropertyChangedFor(nameof(HeaderTitle))]
     [NotifyPropertyChangedFor(nameof(StepIndicator))]
     [NotifyPropertyChangedFor(nameof(IsLastPage))]
+    [NotifyPropertyChangedFor(nameof(ShowBackButton))]
     [NotifyPropertyChangedFor(nameof(NextButtonText))]
     [NotifyPropertyChangedFor(nameof(IsOperationBusy))]
     [NotifyCanExecuteChangedFor(nameof(NextCommand))]
@@ -96,7 +99,7 @@ public sealed partial class OnboardingWizardViewModel : ObservableObject, IDispo
             importPage.NavigateToStepRequested += OnImportNavigateToStepRequested;
         }
 
-        (_originalTwitch, _context) = BuildContext(
+        (_originalTwitch, _originalYouTube, _originalYouTubeClientSecret, _context) = BuildContext(
             _settingsManager,
             _accountsStore,
             _youtubeSettingsStore,
@@ -153,9 +156,11 @@ public sealed partial class OnboardingWizardViewModel : ObservableObject, IDispo
         }
     }
 
+    public bool ShowBackButton => CurrentPage is not null && IndexOfPage(ActivePages, CurrentPage) > 0;
+
     public string NextButtonText => IsLastPage
         ? CurrentPage?.NextButtonTextOverride ?? "Готово"
-        : CurrentPage?.NextButtonTextOverride ?? "Далее →";
+        : CurrentPage?.NextButtonTextOverride ?? "Далее";
 
     private IReadOnlyList<IOnboardingPageViewModel> ActivePages =>
         [.. _pages.Where(page => page.IsApplicable(_context))];
@@ -269,7 +274,7 @@ public sealed partial class OnboardingWizardViewModel : ObservableObject, IDispo
 
         _context.PlatformsChanged -= OnContextPlatformsChanged;
         var includeLegacyImport = _context.IncludeLegacyImport;
-        (_originalTwitch, _context) = BuildContext(
+        (_originalTwitch, _originalYouTube, _originalYouTubeClientSecret, _context) = BuildContext(
             _settingsManager,
             _accountsStore,
             _youtubeSettingsStore,
@@ -314,11 +319,18 @@ public sealed partial class OnboardingWizardViewModel : ObservableObject, IDispo
         }
     }
 
-    public async Task<bool> RequestCloseAsync()
+    public Task<bool> RequestCloseAsync() => RequestCloseAsync(confirmIfModified: false);
+
+    public async Task<bool> RequestCloseAsync(bool confirmIfModified)
     {
         if (_completed || _rollbackPerformed)
         {
             return true;
+        }
+
+        if (confirmIfModified && !ConfirmCloseIfNeeded())
+        {
+            return false;
         }
 
         _context.CancellationStarted = true;
@@ -498,6 +510,11 @@ public sealed partial class OnboardingWizardViewModel : ObservableObject, IDispo
             page.Commit();
         }
 
+        foreach (var importPage in _pages.OfType<LegacyImportPageViewModel>())
+        {
+            importPage.CommitSkipDismissal();
+        }
+
         _completed = true;
         CloseRequested?.Invoke();
     }
@@ -532,6 +549,7 @@ public sealed partial class OnboardingWizardViewModel : ObservableObject, IDispo
         OnPropertyChanged(nameof(PageCount));
         OnPropertyChanged(nameof(StepIndicator));
         OnPropertyChanged(nameof(IsLastPage));
+        OnPropertyChanged(nameof(ShowBackButton));
         OnPropertyChanged(nameof(NextButtonText));
         OnPropertyChanged(nameof(IsOperationBusy));
         NextCommand.NotifyCanExecuteChanged();
@@ -602,7 +620,7 @@ public sealed partial class OnboardingWizardViewModel : ObservableObject, IDispo
         return -1;
     }
 
-    private static (TwitchSettings OriginalTwitch, OnboardingContext Context) BuildContext(
+    private static (TwitchSettings OriginalTwitch, YouTubeSettings OriginalYouTube, string OriginalYouTubeClientSecret, OnboardingContext Context) BuildContext(
         SettingsManager settingsManager,
         AccountsStore accountsStore,
         YouTubeSettingsStore? youtubeSettingsStore,
@@ -617,12 +635,14 @@ public sealed partial class OnboardingWizardViewModel : ObservableObject, IDispo
         var youtubeChannel = twitchCatalog?.GetActiveChannel(StreamingPlatform.YouTube);
         accountsStore.TryLoadContext(PlatformAuthRole.Bot, twitchChannel?.BotContextId, out var originalBot);
         accountsStore.TryLoadContext(PlatformAuthRole.Broadcaster, twitchChannel?.BroadcasterContextId, out var originalBroadcaster);
+        var loadedYouTube = youtubeSettingsStore?.Load();
+        var loadedYouTubeSecret = youtubeAccountsStore?.LoadClientSecret() ?? string.Empty;
         var context = new OnboardingContext(
             DeepClone(settingsManager.Current),
             originalBot is null ? new() : DeepClone(originalBot),
             originalBroadcaster is null ? new() : DeepClone(originalBroadcaster),
-            youtubeSettingsStore?.Load(),
-            youtubeAccountsStore?.LoadClientSecret() ?? string.Empty,
+            loadedYouTube,
+            loadedYouTubeSecret,
             youtubeAccountsStore?.Load(PlatformAuthRole.Bot, youtubeChannel?.BotContextId),
             youtubeAccountsStore?.Load(PlatformAuthRole.Broadcaster, youtubeChannel?.BroadcasterContextId))
         {
@@ -640,7 +660,105 @@ public sealed partial class OnboardingWizardViewModel : ObservableObject, IDispo
             context.Settings.Twitch.Channel = twitchChannel.Handle.TrimStart('@');
         }
 
-        return (originalTwitch, context);
+        var baselineYouTube = DeepClone(context.YouTubeSettings);
+        return (originalTwitch, baselineYouTube, loadedYouTubeSecret, context);
+    }
+
+    private bool ConfirmCloseIfNeeded()
+    {
+        if (_context.CancellationStarted || _dialogService is null || App.IsHeadless)
+        {
+            return true;
+        }
+
+        var hasImportedFiles = _pages.OfType<LegacyImportPageViewModel>()
+            .Any(page => page.Import?.Result is { HasChanges: true } || page.IsImportInterrupted || page.IsImportReloadFailed);
+        var hasNeverAskAgain = _pages.OfType<LegacyImportPageViewModel>()
+            .Any(page => page.Import is { IsCompleted: false, NeverAskAgain: true });
+        var hasAppearanceChanges = _pages.OfType<AppearancePageViewModel>()
+            .Any(page => page.HasPendingChanges);
+        var hasDataChanges = HasUnsavedOnboardingData();
+
+        if (!hasImportedFiles && !hasNeverAskAgain && !hasAppearanceChanges && !hasDataChanges)
+        {
+            return true;
+        }
+
+        var rollbackLines = new List<string>();
+        if (hasDataChanges)
+        {
+            rollbackLines.Add("– несохранённый ввод настроек и авторизации будет отменён;");
+        }
+
+        if (hasAppearanceChanges)
+        {
+            rollbackLines.Add("– изменения темы и размера текста вернутся к прежним значениям;");
+        }
+
+        if (hasNeverAskAgain)
+        {
+            rollbackLines.Add("– отметка «Больше не предлагать перенос при запуске» не сохранится;");
+        }
+
+        var parts = new List<string>();
+        if (rollbackLines.Count > 0)
+        {
+            parts.Add("Что откатится:\n" + string.Join("\n", rollbackLines));
+        }
+
+        if (hasImportedFiles)
+        {
+            parts.Add("Что останется:\n– перенесённые файлы из предыдущей версии останутся в рабочей папке.");
+        }
+
+        parts.Add("Закрыть мастер и отложить настройку?");
+
+        return _dialogService.ConfirmWarning(
+            "Отложить настройку?",
+            string.Join("\n\n", parts),
+            defaultYes: false);
+    }
+
+    private bool HasUnsavedOnboardingData()
+    {
+        if (_context.HasProvisionalWrites
+            || _context.TwitchSettingsWritten
+            || _context.HasPendingAccountDrafts
+            || !JsonStoreClone.SameValues(_context.YouTubeSettings, _originalYouTube)
+            || TwitchSettingsChanged(_context.Settings.Twitch, _originalTwitch))
+        {
+            return true;
+        }
+
+        return CurrentPage switch
+        {
+            PlatformsPageViewModel platforms => platforms.TwitchEnabled != _originalTwitch.Enabled
+                || platforms.YouTubeEnabled != _originalYouTube.Enabled,
+            CredentialsPageViewModel credentials => !string.Equals(credentials.ClientId.Trim(), _originalTwitch.ClientId?.Trim() ?? string.Empty, StringComparison.Ordinal)
+                || !string.Equals(credentials.ClientSecret.Trim(), _originalTwitch.ClientSecret?.Trim() ?? string.Empty, StringComparison.Ordinal)
+                || !string.Equals(credentials.Channel.Trim().TrimStart('@'), (_originalTwitch.Channel ?? string.Empty).Trim().TrimStart('@'), StringComparison.Ordinal)
+                || !string.Equals(credentials.RedirectUri.Trim(), _originalTwitch.RedirectUri?.Trim() ?? string.Empty, StringComparison.Ordinal),
+            YouTubeOnboardingPageViewModel youtube => !string.Equals(youtube.Editor.ClientId.Trim(), _originalYouTube.ClientId?.Trim() ?? string.Empty, StringComparison.Ordinal)
+                || !string.Equals(youtube.Editor.ClientSecret.Trim(), _originalYouTubeClientSecret.Trim(), StringComparison.Ordinal)
+                || !string.Equals(youtube.Editor.ProjectId.Trim(), _originalYouTube.ProjectId?.Trim() ?? string.Empty, StringComparison.Ordinal)
+                || !string.Equals(youtube.Editor.Channel.Trim(), _originalYouTube.Channel?.Trim() ?? string.Empty, StringComparison.Ordinal),
+            _ => false,
+        };
+    }
+
+    private bool TwitchSettingsChanged(TwitchSettings current, TwitchSettings original)
+    {
+        var baselineChannel = _context.TwitchChannel is { } channel && !string.IsNullOrWhiteSpace(channel.Handle)
+            ? channel.Handle.TrimStart('@')
+            : original.Channel ?? string.Empty;
+
+        return current.Enabled != original.Enabled
+            || !string.Equals(current.ClientId ?? string.Empty, original.ClientId ?? string.Empty, StringComparison.Ordinal)
+            || !string.Equals(current.ClientSecret ?? string.Empty, original.ClientSecret ?? string.Empty, StringComparison.Ordinal)
+            || !string.Equals(current.Channel ?? string.Empty, baselineChannel, StringComparison.Ordinal)
+            || !string.Equals(current.RedirectUri ?? string.Empty, original.RedirectUri ?? string.Empty, StringComparison.Ordinal)
+            || current.HttpServerPort != original.HttpServerPort
+            || current.ChatDisplayAccount != original.ChatDisplayAccount;
     }
 
     private static T DeepClone<T>(T source) where T : class, new()

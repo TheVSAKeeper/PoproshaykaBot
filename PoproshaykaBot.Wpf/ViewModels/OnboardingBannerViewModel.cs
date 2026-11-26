@@ -22,6 +22,12 @@ public sealed partial class OnboardingBannerViewModel : ObservableObject, IDispo
     [ObservableProperty]
     private string _text = string.Empty;
 
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsProfileReady))]
+    private IReadOnlyList<string> _missingItems = [];
+
+    public bool IsProfileReady => MissingItems.Count == 0;
+
     public OnboardingBannerViewModel(
         OnboardingChecklist checklist,
         IOnboardingWizardLauncher wizardLauncher,
@@ -45,13 +51,14 @@ public sealed partial class OnboardingBannerViewModel : ObservableObject, IDispo
 
     public void Refresh()
     {
+        var missing = _checklist.GetMissingItems();
+        MissingItems = missing;
+
         if (_suppressed)
         {
             IsVisible = false;
             return;
         }
-
-        var missing = _checklist.GetMissingItems();
 
         if (missing.Count == 0)
         {

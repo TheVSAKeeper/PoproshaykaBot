@@ -24,13 +24,15 @@ public sealed class AppearancePageViewModel : OnboardingPageViewModelBase, IDisp
         _initialPageHeader = shell.ShowPageHeader;
         _initialNotifications = shell.EnableToastNotifications;
         _draft = new(settings);
-        Appearance = new(new ThemeSelectionViewModel(_draft), new ShellPreferences(_draft));
+        Appearance = new(new ThemeSelectionViewModel(_draft), new ShellPreferences(_draft), showChromeAndNotificationOptions: false);
         _draft.Changed += OnDraftChanged;
     }
 
     public override string PageTitle => "Оформление";
 
     public AppearanceSettingsSectionViewModel Appearance { get; }
+
+    internal bool HasPendingChanges => _draft.HasAnyChanges;
 
     public override void OnEnter(OnboardingContext context)
     {
@@ -107,6 +109,8 @@ public sealed class AppearancePageViewModel : OnboardingPageViewModelBase, IDisp
         public event EventHandler<SettingsWriteFailedEventArgs>? WriteFailed { add { } remove { } }
 
         public string FilePath => saved.FilePath;
+
+        public bool HasAnyChanges => _values.Count > 0;
 
         public bool HasChanged(string key) => _values.ContainsKey(key);
 

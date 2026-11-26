@@ -110,7 +110,7 @@ public sealed partial class LegacyImportPageViewModel : OnboardingPageViewModelB
 
             if (IsImportInterrupted || IsImportReloadFailed)
             {
-                return "Далее →";
+                return "Далее";
             }
 
             if (IsProfileComplete)
@@ -120,7 +120,7 @@ public sealed partial class LegacyImportPageViewModel : OnboardingPageViewModelB
 
             return HasMissingStep
                 ? DescribeMissingStepAction(FirstMissingStep)
-                : "Далее →";
+                : "Далее";
         }
     }
 
@@ -245,13 +245,16 @@ public sealed partial class LegacyImportPageViewModel : OnboardingPageViewModelB
 
     public override Task<bool> OnLeavingAsync(OnboardingContext context)
     {
+        UpdateCanAdvance();
+        return Task.FromResult(CanAdvance);
+    }
+
+    internal void CommitSkipDismissal()
+    {
         if (Import is { IsCompleted: false, NeverAskAgain: true })
         {
             _onSkipped?.Invoke(true);
         }
-
-        UpdateCanAdvance();
-        return Task.FromResult(CanAdvance);
     }
 
     [RelayCommand(CanExecute = nameof(CanFinishImmediately))]

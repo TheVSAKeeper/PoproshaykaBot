@@ -82,6 +82,12 @@ public sealed class OnboardingContext(
     internal bool HasProvisionalWrites => _provisionalWrites.Count > 0;
     internal bool HasIncompleteRollback => _rollbackIncomplete;
     internal bool CancellationStarted { get; set; }
+    internal bool HasPendingAccountDrafts =>
+        _pendingTwitchRoles.Count > 0
+        || !JsonStoreClone.SameValues(YouTubeSettings, _savedYouTubeSettings)
+        || !string.Equals(YouTubeClientSecret, _savedYouTubeAccounts.Secret, StringComparison.Ordinal)
+        || !JsonStoreClone.SameValues(YouTubeBotAccount, _savedYouTubeAccounts.Bot)
+        || !JsonStoreClone.SameValues(YouTubeBroadcasterAccount, _savedYouTubeAccounts.Broadcaster);
 
     internal string TwitchContextId(PlatformAuthRole role) => AuthContextIds.Normalize(
         role == PlatformAuthRole.Bot ? TwitchChannel?.BotContextId : TwitchChannel?.BroadcasterContextId);
