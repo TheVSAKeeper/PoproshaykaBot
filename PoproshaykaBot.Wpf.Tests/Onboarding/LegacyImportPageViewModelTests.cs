@@ -183,6 +183,7 @@ public sealed class LegacyImportPageViewModelTests
                 AccessToken = "yt-bot",
                 RefreshToken = "yt-ref",
                 Scopes = [.. YouTubeScopes.BotRequired],
+                StoredScopes = [.. YouTubeScopes.BotRequired],
             },
             new());
 
