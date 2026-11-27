@@ -87,7 +87,6 @@ public sealed partial class SettingsPageViewModel : ObservableObject, IPageHeade
         var extracted = PlatformSettingsPages.Create(presentations, broadcastProfiles, platformRegistry);
         SectionPresentations = extracted.SettingsPresentations;
         PlatformPresentations = extracted.PlatformPresentations;
-        PlatformLinkTargets = extracted.LinkTargets;
         Sections = new([.. SectionPresentations.Select(p => p.Section).Distinct()]);
 
         _rememberedSection = uiSettings.GetStringValue(SettingsKeys.SettingsSection) ?? string.Empty;
@@ -98,7 +97,6 @@ public sealed partial class SettingsPageViewModel : ObservableObject, IPageHeade
     }
 
     public event EventHandler? SettingsSaved;
-    public event EventHandler<StreamingPlatform?>? MultistreamRequested;
 
     public string PageTitle => "Настройки";
 
@@ -110,17 +108,12 @@ public sealed partial class SettingsPageViewModel : ObservableObject, IPageHeade
 
     internal IReadOnlyList<SettingsSectionPresentation> PlatformPresentations { get; }
 
-    public IReadOnlyList<PlatformLinkTarget> PlatformLinkTargets { get; }
-
-    public string PlatformsCardTitle => PlatformSettingsPages.CardTitle;
-
     public bool HasChanges => Dirty || _contributors.Any(c => c.HasExternalChanges);
 
     public bool HasDraft => HasChanges
-        || (Sections.Selected?.Key != PlatformSettingsPages.SectionKey
-            && (Sections.Selected is not { } selected
-                || !_contributorsByKey.TryGetValue(selected.Key, out var contributor)
-                || !contributor.IsDraftless));
+        || Sections.Selected is not { } selected
+        || !_contributorsByKey.TryGetValue(selected.Key, out var contributor)
+        || !contributor.IsDraftless;
 
     public bool HasUnsavedChanges => HasChanges;
 
@@ -129,15 +122,63 @@ public sealed partial class SettingsPageViewModel : ObservableObject, IPageHeade
     internal (OAuthSettingsViewModel? Twitch, YouTubeSettingsSectionViewModel? YouTube) GetCredentialDrafts() =>
         (_twitchCredentials, _youtubeCredentials);
 
-    public T GetSectionContent<T>() where T : class
+    internal (bool Ready, string? Summary, string? MissingReason) EvaluateStep1Readiness(StreamingPlatform platform)
     {
-        return SectionPresentations
+        if (platform == StreamingPlatform.Twitch && _twitchCredentials is not null)
+        {
+            List<string> missing = [];
+            if (string.IsNullOrWhiteSpace(_twitchCredentials.ClientId))
+            {
+                missing.Add("Client ID");
+            }
+
+            if (string.IsNullOrWhiteSpace(_twitchCredentials.ClientSecret))
+            {
+                missing.Add("Client Secret");
+            }
+
+            if (OAuthSettingsViewModel.ValidateRedirectUri(_twitchCredentials.RedirectUri, new(_twitchCredentials))
+                != System.ComponentModel.DataAnnotations.ValidationResult.Success)
+            {
+                missing.Add("Redirect URI");
+            }
+
+            if (missing.Count > 0)
+            {
+                return (false, null, $"Заполните и сохраните Шаг 1 («Доступ площадки») выше: не хватает {string.Join(", ", missing)}.");
+            }
+
+            var saved = _settingsManager.Current.Twitch;
+            if (_twitchCredentials.ClientId.Trim() != saved.ClientId
+                || _twitchCredentials.ClientSecret.Trim() != saved.ClientSecret
+                || _twitchCredentials.RedirectUri.Trim() != saved.RedirectUri)
+            {
+                return (false, null, "Сохраните изменения в Шаге 1 («Доступ площадки») выше.");
+            }
+
+            return (true, "Ключи приложения и Redirect URI настроены", null);
+        }
+
+        if (platform == StreamingPlatform.YouTube
+            && _contributorsByKey.TryGetValue("youtube", out var contributor)
+            && contributor is Settings.Contributors.YouTubeConnectionSettingsContributor ytContributor)
+        {
+            return ytContributor.EvaluateStep1Readiness();
+        }
+
+        return (true, null, null);
+    }
+
+    public T GetSectionContent<T>() where T : class =>
+        FindSectionContent<T>() ?? throw new InvalidOperationException($"Раздел «{typeof(T).Name}» не найден.");
+
+    internal T? FindSectionContent<T>() where T : class =>
+        SectionPresentations
             .Concat(PlatformPresentations)
             .SelectMany(p => p.Blocks)
             .Select(b => b.Content)
             .OfType<T>()
-            .First();
-    }
+            .FirstOrDefault();
 
     public async Task<bool> TrySaveUnsavedChangesAsync()
     {
@@ -257,10 +298,6 @@ public sealed partial class SettingsPageViewModel : ObservableObject, IPageHeade
             RunSelectedSectionEntryChecks();
         }
     }
-
-    [RelayCommand]
-    private void NavigateToMultistream(PlatformLinkTarget? target) =>
-        MultistreamRequested?.Invoke(this, target?.Platform);
 
     private void RememberSelection()
     {

@@ -707,283 +707,267 @@
                                 </ContentControl.ContentTemplate>
                             </ContentControl>
 
-                            <Border x:Name="GuidedOverviewCard"
-                                    Style="{StaticResource Card.Inset}"
-                                    Padding="14,10"
-                                    Margin="0,0,0,12"
-                                    AutomationProperties.AutomationId="MultistreamGuidedOverviewCard">
-                                <StackPanel>
-                                    <keepshell:CardColumnsPanel MinColumnWidth="200" Spacing="8">
-                                        <DockPanel>
-                                            <Ellipse DockPanel.Dock="Left"
-                                                     Width="7"
-                                                     Height="7"
-                                                     VerticalAlignment="Center"
-                                                     Margin="0,0,6,0"
-                                                     keepshell:SeverityBrushBehavior.Fill="{Binding PlatformReadinessSeverity}" />
-                                            <TextBlock Text="{Binding PlatformReadinessText}"
-                                                       ToolTip="{Binding PlatformReadinessText}"
-                                                       TextTrimming="CharacterEllipsis"
-                                                       TextWrapping="NoWrap"
-                                                       FontSize="{DynamicResource Font.Size.S}"
-                                                       keepshell:SeverityBrushBehavior.Foreground="{Binding PlatformReadinessSeverity}"
-                                                       VerticalAlignment="Center" />
-                                        </DockPanel>
-
-                                        <DockPanel>
-                                            <Ellipse DockPanel.Dock="Left"
-                                                     Width="7"
-                                                     Height="7"
-                                                     VerticalAlignment="Center"
-                                                     Margin="0,0,6,0"
-                                                     keepshell:SeverityBrushBehavior.Fill="{Binding AccountReadinessSeverity}" />
-                                            <TextBlock Text="{Binding AccountReadinessText}"
-                                                       ToolTip="{Binding AccountReadinessText}"
-                                                       TextTrimming="CharacterEllipsis"
-                                                       TextWrapping="NoWrap"
-                                                       FontSize="{DynamicResource Font.Size.S}"
-                                                       keepshell:SeverityBrushBehavior.Foreground="{Binding AccountReadinessSeverity}"
-                                                       VerticalAlignment="Center" />
-                                        </DockPanel>
-
-                                        <DockPanel>
-                                            <Ellipse DockPanel.Dock="Left"
-                                                     Width="7"
-                                                     Height="7"
-                                                     VerticalAlignment="Center"
-                                                     Margin="0,0,6,0"
-                                                     keepshell:SeverityBrushBehavior.Fill="{Binding ChannelReadinessSeverity}" />
-                                            <TextBlock Text="{Binding ChannelReadinessText}"
-                                                       ToolTip="{Binding ChannelReadinessText}"
-                                                       TextTrimming="CharacterEllipsis"
-                                                       TextWrapping="NoWrap"
-                                                       FontSize="{DynamicResource Font.Size.S}"
-                                                       keepshell:SeverityBrushBehavior.Foreground="{Binding ChannelReadinessSeverity}"
-                                                       VerticalAlignment="Center" />
-                                        </DockPanel>
-                                    </keepshell:CardColumnsPanel>
-
-                                    <WrapPanel Orientation="Horizontal"
-                                               VerticalAlignment="Center"
-                                               Margin="0,10,0,-4">
-                                        <Button Content="{Binding GuidedPrimaryActionLabel}"
-                                                Style="{StaticResource Button.Primary}"
-                                                Command="{Binding ExecuteGuidedPrimaryActionCommand}"
-                                                AutomationProperties.AutomationId="MultistreamWizardPrimaryAction"
-                                                MinHeight="28"
-                                                Padding="10,3"
-                                                Margin="0,0,8,4"
-                                                Visibility="{Binding IsGuidedActionPrimary, Converter={StaticResource BoolToVisibility}}" />
-                                        <Button Content="{Binding GuidedPrimaryActionLabel}"
-                                                Style="{StaticResource Button.Secondary}"
-                                                Command="{Binding ExecuteGuidedPrimaryActionCommand}"
-                                                AutomationProperties.AutomationId="MultistreamWizardPrimaryActionSecondary"
-                                                MinHeight="28"
-                                                Padding="10,3"
-                                                Margin="0,0,8,4"
-                                                Visibility="{Binding IsGuidedActionPrimary, Converter={StaticResource InverseBoolToVisibility}}" />
-                                        <Button Style="{StaticResource Button.Secondary}"
-                                                Command="{Binding OpenAddChannelWizardCommand}"
-                                                AutomationProperties.AutomationId="MultistreamWizardAddChannel"
-                                                Visibility="{Binding ShowQuickAddChannelButton, Converter={StaticResource BoolToVisibility}}"
-                                                MinHeight="28"
-                                                Padding="10,3"
-                                                Margin="0,0,8,4">
-                                            <StackPanel Orientation="Horizontal">
-                                                <iconPacks:PackIconLucide Kind="{x:Static iconPacks:PackIconLucideKind.Plus}"
-                                                                          Width="13"
-                                                                          Height="13"
-                                                                          VerticalAlignment="Center"
-                                                                          Margin="0,0,5,0" />
-                                                <TextBlock Text="Добавить канал" VerticalAlignment="Center" />
+                            <ContentControl Content="{Binding SelectedCard}" Focusable="False" Margin="0,0,0,10">
+                                <ContentControl.Style>
+                                    <Style TargetType="ContentControl">
+                                        <Setter Property="Visibility" Value="Collapsed" />
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding IsCompactLayout, RelativeSource={RelativeSource AncestorType=UserControl}}" Value="True">
+                                                <Setter Property="Visibility" Value="Visible" />
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </ContentControl.Style>
+                                <ContentControl.ContentTemplate>
+                                    <DataTemplate DataType="{x:Type localVm:MultistreamPlatformCard}">
+                                        <WrapPanel VerticalAlignment="Center">
+                                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="0,4,12,4">
+                                                <Ellipse Width="6"
+                                                         Height="6"
+                                                         VerticalAlignment="Center"
+                                                         Margin="0,0,5,0"
+                                                         keepshell:SeverityBrushBehavior.Fill="{Binding Status.BroadcastSeverity}" />
+                                                <TextBlock Text="{Binding Status.BroadcastText}"
+                                                           FontSize="{DynamicResource Font.Size.S}"
+                                                           keepshell:SeverityBrushBehavior.Foreground="{Binding Status.BroadcastSeverity}"
+                                                           VerticalAlignment="Center" />
                                             </StackPanel>
-                                        </Button>
-                                        <Button Style="{StaticResource Button.Secondary}"
-                                                Command="{Binding OpenAssignAccountWizardCommand}"
-                                                AutomationProperties.AutomationId="MultistreamWizardAssignAccount"
-                                                Visibility="{Binding ShowQuickAssignAccountButton, Converter={StaticResource BoolToVisibility}}"
-                                                MinHeight="28"
-                                                Padding="10,3"
-                                                Margin="0,0,8,4">
-                                            <StackPanel Orientation="Horizontal">
-                                                <iconPacks:PackIconLucide Kind="{x:Static iconPacks:PackIconLucideKind.KeyRound}"
-                                                                          Width="13"
-                                                                          Height="13"
-                                                                          VerticalAlignment="Center"
-                                                                          Margin="0,0,5,0" />
-                                                <TextBlock Text="Назначить аккаунт" VerticalAlignment="Center" />
+                                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="0,4,12,4">
+                                                <Ellipse Width="6"
+                                                         Height="6"
+                                                         VerticalAlignment="Center"
+                                                         Margin="0,0,5,0"
+                                                         keepshell:SeverityBrushBehavior.Fill="{Binding Status.ChatSeverity}" />
+                                                <TextBlock Text="{Binding Status.ChatText}"
+                                                           FontSize="{DynamicResource Font.Size.S}"
+                                                           keepshell:SeverityBrushBehavior.Foreground="{Binding Status.ChatSeverity}"
+                                                           VerticalAlignment="Center" />
                                             </StackPanel>
-                                        </Button>
-                                        <Button Style="{StaticResource Button.Secondary}"
-                                                Command="{Binding OpenPlatformSetupWizardCommand}"
-                                                AutomationProperties.AutomationId="MultistreamWizardPlatformSetup"
-                                                Visibility="{Binding ShowQuickPlatformSetupButton, Converter={StaticResource BoolToVisibility}}"
-                                                MinHeight="28"
-                                                Padding="10,3"
-                                                Margin="0,0,0,4">
-                                            <StackPanel Orientation="Horizontal">
-                                                <iconPacks:PackIconLucide Kind="{x:Static iconPacks:PackIconLucideKind.Settings2}"
-                                                                          Width="13"
-                                                                          Height="13"
-                                                                          VerticalAlignment="Center"
-                                                                          Margin="0,0,5,0" />
-                                                <TextBlock Text="Мастер площадки" VerticalAlignment="Center" />
-                                            </StackPanel>
-                                        </Button>
-                                    </WrapPanel>
-                                </StackPanel>
-                            </Border>
+                                            <Button Content="{Binding DataContext.HeaderSetupActionLabel, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                    Style="{StaticResource Button.Primary}"
+                                                    MinHeight="30"
+                                                    Padding="10,4"
+                                                    Command="{Binding DataContext.OpenSelectedPlatformParametersCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                    Visibility="{Binding DataContext.ShowParametersButtonInHeader, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource BoolToVisibility}}" />
+                                            <Button Content="Войти как бот"
+                                                    Style="{StaticResource Button.Primary}"
+                                                    MinHeight="30"
+                                                    Padding="10,4"
+                                                    Command="{Binding DataContext.OpenSelectedPlatformBotAuthCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                    Visibility="{Binding DataContext.ShowBotAuthButtonInHeader, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource BoolToVisibility}}" />
+                                        </WrapPanel>
+                                    </DataTemplate>
+                                </ContentControl.ContentTemplate>
+                            </ContentControl>
 
-                            <WrapPanel Margin="0,0,0,14"
-                                       VerticalAlignment="Center">
-                                <Border Background="{DynamicResource Bg.SurfaceAlt}"
-                                        BorderBrush="{DynamicResource Border.Subtle}"
+                            <!-- Шаг 1. Доступ площадки -->
+                            <StackPanel Visibility="{Binding HasStep1, Converter={StaticResource BoolToVisibility}}">
+                                <Border Background="{DynamicResource State.SuccessSoft}"
+                                        BorderBrush="{DynamicResource State.Success}"
                                         BorderThickness="1"
-                                        CornerRadius="{DynamicResource Radius.M}"
-                                        Padding="2"
-                                        Margin="0,0,12,0"
-                                        Visibility="{Binding HasPlatformTabs, Converter={StaticResource BoolToVisibility}}">
-                                    <WrapPanel>
-                                        <RadioButton Style="{StaticResource RadioButton.Segment}"
-                                                     GroupName="MultistreamPlatformTabs"
-                                                     IsChecked="{Binding IsChannelsTabSelected, Mode=TwoWay}"
-                                                     Command="{Binding SelectPlatformTabCommand}"
-                                                     CommandParameter="{x:Static localVm:MultistreamPlatformTab.Channels}"
-                                                     AutomationProperties.AutomationId="MultistreamTabChannels"
-                                                     AutomationProperties.Name="Каналы">
-                                            <StackPanel Orientation="Horizontal">
-                                                <iconPacks:PackIconLucide Kind="{x:Static iconPacks:PackIconLucideKind.Tv}"
-                                                                          Width="14"
-                                                                          Height="14"
-                                                                          VerticalAlignment="Center"
-                                                                          Margin="0,0,6,0" />
-                                                <TextBlock Text="Каналы" VerticalAlignment="Center" />
-                                                <Border Style="{StaticResource Badge.Count}"
-                                                        Padding="6,0"
-                                                        Margin="6,0,0,0"
-                                                        VerticalAlignment="Center"
-                                                        Visibility="{Binding HasSelectedPlatformChannels, Converter={StaticResource BoolToVisibility}}">
-                                                    <TextBlock Text="{Binding SelectedPlatformChannelCount}"
-                                                               FontSize="{DynamicResource Font.Size.Caption}" />
-                                                </Border>
-                                            </StackPanel>
-                                        </RadioButton>
-                                        <RadioButton Style="{StaticResource RadioButton.Segment}"
-                                                     GroupName="MultistreamPlatformTabs"
-                                                     Margin="2,0,0,0"
-                                                     IsChecked="{Binding IsAccountsTabSelected, Mode=TwoWay}"
-                                                     Command="{Binding SelectPlatformTabCommand}"
-                                                     CommandParameter="{x:Static localVm:MultistreamPlatformTab.Accounts}"
-                                                     AutomationProperties.AutomationId="MultistreamTabAccounts"
-                                                     AutomationProperties.Name="Аккаунты"
-                                                     Visibility="{Binding HasPlatformAccounts, Converter={StaticResource BoolToVisibility}}">
-                                            <StackPanel Orientation="Horizontal">
-                                                <iconPacks:PackIconLucide Kind="{x:Static iconPacks:PackIconLucideKind.KeyRound}"
-                                                                          Width="14"
-                                                                          Height="14"
-                                                                          VerticalAlignment="Center"
-                                                                          Margin="0,0,6,0" />
-                                                <TextBlock Text="Аккаунты" VerticalAlignment="Center" />
-                                                <Border Style="{StaticResource Badge.Count}"
-                                                        Padding="6,0"
-                                                        Margin="6,0,0,0"
-                                                        VerticalAlignment="Center"
-                                                        Visibility="{Binding HasSelectedPlatformAccounts, Converter={StaticResource BoolToVisibility}}">
-                                                    <TextBlock Text="{Binding SelectedPlatformAccountCount}"
-                                                               FontSize="{DynamicResource Font.Size.Caption}" />
-                                                </Border>
-                                            </StackPanel>
-                                        </RadioButton>
-                                        <RadioButton Style="{StaticResource RadioButton.Segment}"
-                                                     GroupName="MultistreamPlatformTabs"
-                                                     Margin="2,0,0,0"
-                                                     IsChecked="{Binding IsParametersTabSelected, Mode=TwoWay}"
-                                                     Command="{Binding SelectPlatformTabCommand}"
-                                                     CommandParameter="{x:Static localVm:MultistreamPlatformTab.Parameters}"
-                                                     AutomationProperties.AutomationId="MultistreamTabParameters"
-                                                     AutomationProperties.Name="Параметры и доступ"
-                                                     Visibility="{Binding HasPlatformSettings, Converter={StaticResource BoolToVisibility}}">
-                                            <StackPanel Orientation="Horizontal">
-                                                <iconPacks:PackIconLucide Kind="{x:Static iconPacks:PackIconLucideKind.Settings2}"
-                                                                          Width="14"
-                                                                          Height="14"
-                                                                          VerticalAlignment="Center"
-                                                                          Margin="0,0,6,0" />
-                                                <TextBlock Text="Параметры и доступ" VerticalAlignment="Center" />
-                                            </StackPanel>
-                                        </RadioButton>
-                                    </WrapPanel>
+                                        CornerRadius="{DynamicResource Radius.L}"
+                                        Padding="14,10"
+                                        Margin="0,0,0,12"
+                                        AutomationProperties.AutomationId="MultistreamStep1Summary"
+                                        Visibility="{Binding IsStep1CollapsedSummaryVisible, Converter={StaticResource BoolToVisibility}}">
+                                    <DockPanel>
+                                        <Button DockPanel.Dock="Right"
+                                                Content="Изменить"
+                                                Style="{StaticResource Button.Secondary}"
+                                                Command="{Binding ToggleStep1Command}"
+                                                AutomationProperties.AutomationId="MultistreamStep1Edit"
+                                                MinHeight="28"
+                                                Padding="10,3"
+                                                FontSize="{DynamicResource Font.Size.S}"
+                                                Margin="12,0,0,0"
+                                                VerticalAlignment="Center" />
+                                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                            <iconPacks:PackIconLucide Kind="{x:Static iconPacks:PackIconLucideKind.CircleCheck}"
+                                                                      Width="16"
+                                                                      Height="16"
+                                                                      Foreground="{DynamicResource State.SuccessText}"
+                                                                      VerticalAlignment="Center"
+                                                                      Margin="0,0,8,0" />
+                                            <TextBlock Text="Шаг 1. Доступ площадки"
+                                                       Foreground="{DynamicResource Fg.Primary}"
+                                                       FontWeight="{DynamicResource Font.Weight.SemiBold}"
+                                                       VerticalAlignment="Center"
+                                                       Margin="0,0,6,0" />
+                                            <TextBlock Text="·"
+                                                       Foreground="{DynamicResource Fg.Muted}"
+                                                       VerticalAlignment="Center"
+                                                       Margin="0,0,6,0" />
+                                            <TextBlock Text="{Binding Step1SummaryText}"
+                                                       Foreground="{DynamicResource State.SuccessText}"
+                                                       FontSize="{DynamicResource Font.Size.S}"
+                                                       TextWrapping="Wrap"
+                                                       VerticalAlignment="Center" />
+                                        </StackPanel>
+                                    </DockPanel>
                                 </Border>
 
-                                <ContentControl Content="{Binding SelectedCard}" Focusable="False">
-                                    <ContentControl.Style>
-                                        <Style TargetType="ContentControl">
-                                            <Setter Property="Visibility" Value="Collapsed" />
-                                            <Style.Triggers>
-                                                <DataTrigger Binding="{Binding IsCompactLayout, RelativeSource={RelativeSource AncestorType=UserControl}}" Value="True">
-                                                    <Setter Property="Visibility" Value="Visible" />
-                                                </DataTrigger>
-                                            </Style.Triggers>
-                                        </Style>
-                                    </ContentControl.Style>
-                                    <ContentControl.ContentTemplate>
-                                        <DataTemplate DataType="{x:Type localVm:MultistreamPlatformCard}">
-                                            <WrapPanel VerticalAlignment="Center">
-                                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="0,4,12,4">
-                                                    <Ellipse Width="6"
-                                                             Height="6"
-                                                             VerticalAlignment="Center"
-                                                             Margin="0,0,5,0"
-                                                             keepshell:SeverityBrushBehavior.Fill="{Binding Status.BroadcastSeverity}" />
-                                                    <TextBlock Text="{Binding Status.BroadcastText}"
-                                                               FontSize="{DynamicResource Font.Size.S}"
-                                                               keepshell:SeverityBrushBehavior.Foreground="{Binding Status.BroadcastSeverity}"
-                                                               VerticalAlignment="Center" />
-                                                </StackPanel>
-                                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="0,4,12,4">
-                                                    <Ellipse Width="6"
-                                                             Height="6"
-                                                             VerticalAlignment="Center"
-                                                             Margin="0,0,5,0"
-                                                             keepshell:SeverityBrushBehavior.Fill="{Binding Status.ChatSeverity}" />
-                                                    <TextBlock Text="{Binding Status.ChatText}"
-                                                               FontSize="{DynamicResource Font.Size.S}"
-                                                               keepshell:SeverityBrushBehavior.Foreground="{Binding Status.ChatSeverity}"
-                                                               VerticalAlignment="Center" />
-                                                </StackPanel>
-                                                <Button Content="{Binding DataContext.HeaderSetupActionLabel, RelativeSource={RelativeSource AncestorType=UserControl}}"
-                                                        Style="{StaticResource Button.Primary}"
-                                                        MinHeight="30"
-                                                        Padding="10,4"
-                                                        Command="{Binding DataContext.OpenSelectedPlatformParametersCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
-                                                        Visibility="{Binding DataContext.ShowParametersButtonInHeader, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource BoolToVisibility}}" />
-                                                <Button Content="Войти как бот"
-                                                        Style="{StaticResource Button.Primary}"
-                                                        MinHeight="30"
-                                                        Padding="10,4"
-                                                        Command="{Binding DataContext.OpenSelectedPlatformBotAuthCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
-                                                        Visibility="{Binding DataContext.ShowBotAuthButtonInHeader, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource BoolToVisibility}}" />
-                                            </WrapPanel>
-                                        </DataTemplate>
-                                    </ContentControl.ContentTemplate>
-                                </ContentControl>
-                            </WrapPanel>
+                                <StackPanel Visibility="{Binding IsStep1BodyVisible, Converter={StaticResource BoolToVisibility}}"
+                                            AutomationProperties.AutomationId="MultistreamStep1Expanded">
+                                    <DockPanel Margin="0,2,0,8">
+                                        <WrapPanel DockPanel.Dock="Right" VerticalAlignment="Center" Margin="12,0,0,0">
+                                            <Button Content="Сохранить"
+                                                    Style="{StaticResource Button.Primary}"
+                                                    Command="{Binding Settings.SaveCommand}"
+                                                    Visibility="{Binding Settings.HasChanges, Converter={StaticResource BoolToVisibility}}"
+                                                    AutomationProperties.AutomationId="MultistreamStep1Save"
+                                                    MinHeight="28"
+                                                    Padding="10,3"
+                                                    FontSize="{DynamicResource Font.Size.S}"
+                                                    Margin="0,0,8,0" />
+                                            <Button Content="Свернуть"
+                                                    Style="{StaticResource Button.Secondary}"
+                                                    Command="{Binding ToggleStep1Command}"
+                                                    Visibility="{Binding IsStep1Complete, Converter={StaticResource BoolToVisibility}}"
+                                                    AutomationProperties.AutomationId="MultistreamStep1Collapse"
+                                                    MinHeight="28"
+                                                    Padding="10,3"
+                                                    FontSize="{DynamicResource Font.Size.S}" />
+                                        </WrapPanel>
+                                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                            <Border Style="{StaticResource Badge.Info}"
+                                                    Padding="7,1"
+                                                    Margin="0,0,8,0"
+                                                    VerticalAlignment="Center">
+                                                <TextBlock Text="1"
+                                                           FontWeight="{DynamicResource Font.Weight.SemiBold}"
+                                                           FontSize="{DynamicResource Font.Size.Caption}" />
+                                            </Border>
+                                            <TextBlock Text="Шаг 1. Доступ площадки"
+                                                       Foreground="{DynamicResource Fg.Primary}"
+                                                       FontSize="{DynamicResource Font.Size.M}"
+                                                       FontWeight="{DynamicResource Font.Weight.SemiBold}"
+                                                       VerticalAlignment="Center"
+                                                       AutomationProperties.HeadingLevel="Level3" />
+                                        </StackPanel>
+                                    </DockPanel>
 
-                            <ContentControl x:Name="ChannelEditor"
-                                            Content="{Binding Catalog}"
-                                            Focusable="False"
-                                            Visibility="{Binding IsChannelsTabSelected, Converter={StaticResource BoolToVisibility}}" />
+                                    <ItemsControl x:Name="PlatformSettingsHost"
+                                                  ItemsSource="{Binding PlatformSettings}"
+                                                  ItemTemplate="{StaticResource SettingsBlockTemplate}"
+                                                  Focusable="False" />
+                                </StackPanel>
+                            </StackPanel>
 
-                            <ContentControl x:Name="PlatformAccountsHost"
-                                            Content="{Binding Accounts}"
-                                            Focusable="False"
-                                            Visibility="{Binding IsAccountsTabSelected, Converter={StaticResource BoolToVisibility}}" />
+                            <!-- Шаг 2. Аккаунты и проверка прав -->
+                            <StackPanel Visibility="{Binding HasStep2, Converter={StaticResource BoolToVisibility}}">
+                                <Border Background="{DynamicResource State.SuccessSoft}"
+                                        BorderBrush="{DynamicResource State.Success}"
+                                        BorderThickness="1"
+                                        CornerRadius="{DynamicResource Radius.L}"
+                                        Padding="14,10"
+                                        Margin="0,0,0,12"
+                                        AutomationProperties.AutomationId="MultistreamStep2Summary"
+                                        Visibility="{Binding IsStep2CollapsedSummaryVisible, Converter={StaticResource BoolToVisibility}}">
+                                    <DockPanel>
+                                        <Button DockPanel.Dock="Right"
+                                                Content="Изменить"
+                                                Style="{StaticResource Button.Secondary}"
+                                                Command="{Binding ToggleStep2Command}"
+                                                AutomationProperties.AutomationId="MultistreamStep2Edit"
+                                                MinHeight="28"
+                                                Padding="10,3"
+                                                FontSize="{DynamicResource Font.Size.S}"
+                                                Margin="12,0,0,0"
+                                                VerticalAlignment="Center" />
+                                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                            <iconPacks:PackIconLucide Kind="{x:Static iconPacks:PackIconLucideKind.CircleCheck}"
+                                                                      Width="16"
+                                                                      Height="16"
+                                                                      Foreground="{DynamicResource State.SuccessText}"
+                                                                      VerticalAlignment="Center"
+                                                                      Margin="0,0,8,0" />
+                                            <TextBlock Text="Шаг 2. Аккаунты и проверка прав"
+                                                       Foreground="{DynamicResource Fg.Primary}"
+                                                       FontWeight="{DynamicResource Font.Weight.SemiBold}"
+                                                       VerticalAlignment="Center"
+                                                       Margin="0,0,6,0" />
+                                            <TextBlock Text="·"
+                                                       Foreground="{DynamicResource Fg.Muted}"
+                                                       VerticalAlignment="Center"
+                                                       Margin="0,0,6,0" />
+                                            <TextBlock Text="{Binding Step2SummaryText}"
+                                                       Foreground="{DynamicResource State.SuccessText}"
+                                                       FontSize="{DynamicResource Font.Size.S}"
+                                                       TextWrapping="Wrap"
+                                                       VerticalAlignment="Center" />
+                                        </StackPanel>
+                                    </DockPanel>
+                                </Border>
 
-                            <ItemsControl x:Name="PlatformSettingsHost"
-                                          ItemsSource="{Binding PlatformSettings}"
-                                          ItemTemplate="{StaticResource SettingsBlockTemplate}"
-                                          Focusable="False"
-                                          Visibility="{Binding IsParametersTabSelected, Converter={StaticResource BoolToVisibility}}" />
+                                <StackPanel Visibility="{Binding IsStep2BodyVisible, Converter={StaticResource BoolToVisibility}}"
+                                            AutomationProperties.AutomationId="MultistreamStep2Expanded">
+                                    <DockPanel Margin="0,2,0,8">
+                                        <Button DockPanel.Dock="Right"
+                                                Content="Свернуть"
+                                                Style="{StaticResource Button.Secondary}"
+                                                Command="{Binding ToggleStep2Command}"
+                                                Visibility="{Binding IsStep2Complete, Converter={StaticResource BoolToVisibility}}"
+                                                AutomationProperties.AutomationId="MultistreamStep2Collapse"
+                                                MinHeight="28"
+                                                Padding="10,3"
+                                                FontSize="{DynamicResource Font.Size.S}"
+                                                Margin="12,0,0,0"
+                                                VerticalAlignment="Center" />
+                                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                            <Border Style="{StaticResource Badge.Info}"
+                                                    Padding="7,1"
+                                                    Margin="0,0,8,0"
+                                                    VerticalAlignment="Center">
+                                                <TextBlock Text="2"
+                                                           FontWeight="{DynamicResource Font.Weight.SemiBold}"
+                                                           FontSize="{DynamicResource Font.Size.Caption}" />
+                                            </Border>
+                                            <TextBlock Text="Шаг 2. Аккаунты и проверка прав"
+                                                       Foreground="{DynamicResource Fg.Primary}"
+                                                       FontSize="{DynamicResource Font.Size.M}"
+                                                       FontWeight="{DynamicResource Font.Weight.SemiBold}"
+                                                       VerticalAlignment="Center"
+                                                       AutomationProperties.HeadingLevel="Level3" />
+                                        </StackPanel>
+                                    </DockPanel>
+
+                                    <ContentControl x:Name="PlatformAccountsHost"
+                                                    Content="{Binding Accounts}"
+                                                    Focusable="False" />
+                                </StackPanel>
+                            </StackPanel>
+
+                            <!-- Шаг 3. Каналы -->
+                            <StackPanel AutomationProperties.AutomationId="MultistreamStep3Section">
+                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="0,2,0,8">
+                                    <Border Style="{StaticResource Badge.Info}"
+                                            Padding="7,1"
+                                            Margin="0,0,8,0"
+                                            VerticalAlignment="Center">
+                                        <TextBlock Text="3"
+                                                   FontWeight="{DynamicResource Font.Weight.SemiBold}"
+                                                   FontSize="{DynamicResource Font.Size.Caption}" />
+                                    </Border>
+                                    <TextBlock Text="Шаг 3. Каналы"
+                                               Foreground="{DynamicResource Fg.Primary}"
+                                               FontSize="{DynamicResource Font.Size.M}"
+                                               FontWeight="{DynamicResource Font.Weight.SemiBold}"
+                                               VerticalAlignment="Center"
+                                               AutomationProperties.HeadingLevel="Level3" />
+                                    <Border Style="{StaticResource Badge.Count}"
+                                            Padding="6,0"
+                                            Margin="8,0,0,0"
+                                            VerticalAlignment="Center"
+                                            Visibility="{Binding HasSelectedPlatformChannels, Converter={StaticResource BoolToVisibility}}">
+                                        <TextBlock Text="{Binding SelectedPlatformChannelCount}"
+                                                   FontSize="{DynamicResource Font.Size.Caption}" />
+                                    </Border>
+                                </StackPanel>
+
+                                <ContentControl x:Name="ChannelEditor"
+                                                Content="{Binding Catalog}"
+                                                Focusable="False" />
+                            </StackPanel>
                         </StackPanel>
 
                         <GroupBox x:Name="AutomationSection"

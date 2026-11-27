@@ -197,7 +197,7 @@ public class CompactLayoutTests
         {
             IsVisible = true,
             Text = "Для работы бота подключите канал Twitch, настройте веб-сервер и авторизуйте аккаунты.",
-            OpenWizardCommand = (System.Windows.Input.ICommand?)null,
+            ConfigureCommand = (System.Windows.Input.ICommand?)null,
         };
         var banner = new OnboardingBannerView { DataContext = data };
         Arrange(banner, new(720, 220));
@@ -205,7 +205,7 @@ public class CompactLayoutTests
         var text = Descendants<TextBlock>(banner).First(t => t.Text == data.Text);
         var singleLine = new TextBlock { Text = "А", FontSize = text.FontSize, FontFamily = text.FontFamily };
         singleLine.Measure(new(double.PositiveInfinity, double.PositiveInfinity));
-        var button = Descendants<Button>(banner).First(b => Equals(b.Content, "Открыть мастер"));
+        var button = Descendants<Button>(banner).First(b => Equals(b.Content, "Настроить"));
 
         Assert.Multiple(() =>
         {

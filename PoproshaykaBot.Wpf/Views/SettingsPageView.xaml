@@ -95,47 +95,9 @@
                 </Grid>
             </DataTemplate>
 
-            <DataTemplate x:Key="PlatformLinkTemplate"
-                          DataType="{x:Type settingsVm:SettingsSectionPresentation}">
-                <Grid>
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*"
-                                          MaxWidth="{StaticResource Setting.ContentWidth}" />
-                    </Grid.ColumnDefinitions>
-
-                    <HeaderedContentControl Grid.Column="0"
-                                            Header="{Binding DataContext.PlatformsCardTitle, RelativeSource={RelativeSource AncestorType=UserControl}, Mode=OneTime}"
-                                            Style="{StaticResource Form.Panel}">
-                        <StackPanel>
-                            <TextBlock Text="Подключение площадок, каналы, ключи OAuth и Google, профили трансляции и автоматика настраиваются на вкладке «Мультистрим»."
-                                       Style="{StaticResource Setting.BlockHint}" />
-                            <ItemsControl ItemsSource="{Binding DataContext.PlatformLinkTargets, RelativeSource={RelativeSource AncestorType=UserControl}}"
-                                          Focusable="False">
-                                <ItemsControl.ItemsPanel>
-                                    <ItemsPanelTemplate>
-                                        <WrapPanel />
-                                    </ItemsPanelTemplate>
-                                </ItemsControl.ItemsPanel>
-                                <ItemsControl.ItemTemplate>
-                                    <DataTemplate DataType="{x:Type settingsVm:PlatformLinkTarget}">
-                                        <Button Content="{Binding Title}"
-                                                Style="{StaticResource Button.Secondary}"
-                                                Margin="0,0,8,8"
-                                                Command="{Binding DataContext.NavigateToMultistreamCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
-                                                CommandParameter="{Binding}"
-                                                AutomationProperties.AutomationId="{Binding Key, StringFormat='MultistreamSettingsLink-{0}'}" />
-                                    </DataTemplate>
-                                </ItemsControl.ItemTemplate>
-                            </ItemsControl>
-                        </StackPanel>
-                    </HeaderedContentControl>
-                </Grid>
-            </DataTemplate>
-
             <settings:SettingsSectionTemplateSelector x:Key="SectionTemplateSelector"
                                                       MultiBlockTemplate="{StaticResource MultiBlockSectionTemplate}"
-                                                      SingleBlockTemplate="{StaticResource SingleBlockSectionTemplate}"
-                                                      PlatformLinkTemplate="{StaticResource PlatformLinkTemplate}" />
+                                                      SingleBlockTemplate="{StaticResource SingleBlockSectionTemplate}" />
         </ResourceDictionary>
     </UserControl.Resources>
 

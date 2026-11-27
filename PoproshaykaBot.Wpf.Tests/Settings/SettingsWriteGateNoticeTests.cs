@@ -20,7 +20,6 @@ using PoproshaykaBot.Core.Twitch.Chat;
 using PoproshaykaBot.Core.Users;
 using PoproshaykaBot.Wpf.ViewModels;
 using PoproshaykaBot.Wpf.ViewModels.Dialogs;
-using PoproshaykaBot.Wpf.ViewModels.Onboarding;
 using PoproshaykaBot.Wpf.ViewModels.Settings;
 using PoproshaykaBot.Wpf.ViewModels.Tiles;
 using System.IO;
@@ -71,149 +70,6 @@ public class SettingsWriteGateNoticeTests
             Assert.That(dialogs.Warnings[0], Does.Contain("не записаны").And.Contain("Перезапустите"));
             Assert.That(dialogs.Infos, Is.Empty, "Незаписанный файл – это не сообщение об успехе");
         });
-    }
-
-    [Test]
-    public async Task Закрытый_гейт_записи_останавливает_шаг_подключения_мастера()
-    {
-        var settingsPath = Path.Combine(_root, "settings.json");
-        var settingsManager = await CreateBlockedSettingsManagerAsync(settingsPath);
-
-        var accountsStore = new AccountsStore(null, Path.Combine(_root, "accounts.json"));
-        var connection = new FakeBotConnectionController();
-
-        using var page = new BotConnectionPageViewModel(
-            connection,
-            new InMemoryEventBus(NullLogger<InMemoryEventBus>.Instance),
-            settingsManager,
-            accountsStore,
-            NullLogger<BotConnectionPageViewModel>.Instance);
-
-        page.OnEnter(new(new AppSettings(), new TwitchAccountSettings(), new TwitchAccountSettings()));
-
-        Assert.Multiple(() =>
-        {
-            Assert.That(File.Exists(settingsPath), Is.False, "Гейт не пустил запись на диск");
-            Assert.That(page.CanAdvance, Is.False, "Шаг остановлен, дальше мастер не пускает");
-            Assert.That(page.ShowRetry, Is.False, "Повтор здесь не помогает – помогает перезапуск");
-            Assert.That(page.DetailsText, Does.Contain("Не удалось сохранить настройки приложения").And.Contain("перезапустите"));
-            Assert.That(connection.StartCount, Is.Zero, "Подключение не начинается поверх незаписанных настроек");
-        });
-    }
-
-    [TestCase("settings.json", "Не удалось сохранить настройки приложения")]
-    [TestCase("accounts.json", "Не удалось сохранить вход в Twitch")]
-    public async Task Мастер_называет_незаписанный_файл_вместо_молчаливого_готово(string revokedFile, string expected)
-    {
-        var gate = await CreateClosedGateAsync(revokedFile);
-        var settingsManager = new SettingsManager(NullLogger<SettingsManager>.Instance, Path.Combine(_root, "settings.json"), gate);
-        var accountsStore = new AccountsStore(null, Path.Combine(_root, "accounts.json"), gate);
-        var dialogs = new FakeDialogService(_ => { });
-
-        var page = new CompletionPageViewModel(
-            settingsManager,
-            accountsStore,
-            new InMemoryEventBus(NullLogger<InMemoryEventBus>.Instance),
-            null!,
-            null!,
-            null!,
-            NullLogger<CompletionPageViewModel>.Instance,
-            dialogs)
-        {
-            AutoConnect = false,
-        };
-
-        var context = new OnboardingContext(new(), new(), new());
-        Assert.That(context.AcceptTwitchLogin(PlatformAuthRole.Bot, context.BotAccount,
-            new("token", "refresh", [.. TwitchScopes.BotRequired], "bot", "1", 3600)), Is.True);
-        var left = await page.OnLeavingAsync(context);
-
-        Assert.Multiple(() =>
-        {
-            Assert.That(left, Is.False, "При отказе записи мастер остаётся открытым");
-            Assert.That(File.Exists(Path.Combine(_root, revokedFile)), Is.False, "Гейт не пустил запись на диск");
-            Assert.That(accountsStore.LoadBot().AccessToken, Is.Empty, "Неоконченная настройка не оставляет токен в рабочем профиле");
-            Assert.That(dialogs.Warnings, Has.Count.EqualTo(1), "Незаписанный файл – не повод для молчаливого «готово»");
-            Assert.That(dialogs.Warnings[0], Does.Contain(expected).And.Contain("перезапустите"));
-        });
-    }
-
-    [Test]
-    public async Task Незаписанные_аккаунты_останавливают_шаг_подключения_мастера()
-    {
-        var gate = await CreateClosedGateAsync("accounts.json");
-        var settingsManager = new SettingsManager(NullLogger<SettingsManager>.Instance, Path.Combine(_root, "settings.json"), gate);
-        var accountsStore = new AccountsStore(null, Path.Combine(_root, "accounts.json"), gate);
-        var connection = new FakeBotConnectionController();
-
-        using var page = new BotConnectionPageViewModel(
-            connection,
-            new InMemoryEventBus(NullLogger<InMemoryEventBus>.Instance),
-            settingsManager,
-            accountsStore,
-            NullLogger<BotConnectionPageViewModel>.Instance);
-
-        page.OnEnter(new(new AppSettings(), new TwitchAccountSettings(), new TwitchAccountSettings()));
-
-        Assert.Multiple(() =>
-        {
-            Assert.That(File.Exists(Path.Combine(_root, "accounts.json")), Is.False);
-            Assert.That(page.CanAdvance, Is.False);
-            Assert.That(page.ShowRetry, Is.False);
-            Assert.That(page.DetailsText, Does.Contain("Не удалось сохранить вход в Twitch").And.Contain("перезапустите"));
-            Assert.That(connection.StartCount, Is.Zero);
-        });
-    }
-
-    [Test]
-    public async Task Повтор_подключения_сначала_сохраняет_вход_после_ошибки_записи()
-    {
-        var settingsManager = new SettingsManager(NullLogger<SettingsManager>.Instance, Path.Combine(_root, "settings.json"));
-        var accountPath = Path.Combine(_root, "accounts.json");
-        var accounts = new AccountsStore(filePath: accountPath);
-        accounts.SaveAll(new(), new());
-        var connection = new FakeBotConnectionController();
-        using var page = new BotConnectionPageViewModel(connection, new InMemoryEventBus(NullLogger<InMemoryEventBus>.Instance),
-            settingsManager, accounts, NullLogger<BotConnectionPageViewModel>.Instance);
-        var context = new OnboardingContext(new(), new(), new());
-        Assert.That(context.AcceptTwitchLogin(PlatformAuthRole.Bot, context.BotAccount,
-            new("token", "refresh", [.. TwitchScopes.BotRequired], "bot", "1", 3600)), Is.True);
-
-        await using (var handle = File.Open(accountPath, FileMode.Open, FileAccess.Read, FileShare.None))
-        {
-            page.OnEnter(context);
-            Assert.That(connection.StartCount, Is.Zero);
-            Assert.That(page.DetailsText, Is.EqualTo("Не удалось сохранить настройки. Повторите попытку."));
-            Assert.That(page.RetryCommand.CanExecute(null), Is.True);
-        }
-
-        page.RetryCommand.Execute(null);
-        Assert.That(accounts.LoadBot().AccessToken, Is.EqualTo("token"));
-        Assert.That(connection.StartCount, Is.EqualTo(1));
-    }
-
-    [Test]
-    public async Task Отмена_мастера_не_даёт_заново_подключить_бота()
-    {
-        var settingsManager = new SettingsManager(NullLogger<SettingsManager>.Instance, Path.Combine(_root, "settings.json"));
-        var accounts = new AccountsStore(filePath: Path.Combine(_root, "accounts.json"));
-        var connection = new FakeBotConnectionController();
-        var events = new InMemoryEventBus(NullLogger<InMemoryEventBus>.Instance);
-        using var page = new BotConnectionPageViewModel(connection, events, settingsManager, accounts,
-            NullLogger<BotConnectionPageViewModel>.Instance);
-        var context = new OnboardingContext(new(), new(), new());
-        page.OnEnter(context);
-        await events.PublishAsync(new BotLifecyclePhaseChanged(BotLifecyclePhase.Disconnected));
-        Assert.That(page.RetryCommand.CanExecute(null), Is.True);
-        Assert.That(connection.StartCount, Is.EqualTo(1));
-
-        context.CancellationStarted = true;
-        await events.PublishAsync(new BotLifecyclePhaseChanged(BotLifecyclePhase.Disconnected));
-        page.RetryCommand.Execute(null);
-
-        Assert.That(page.ShowRetry, Is.False);
-        Assert.That(page.RetryCommand.CanExecute(null), Is.False);
-        Assert.That(connection.StartCount, Is.EqualTo(1));
     }
 
     [Test]
@@ -344,39 +200,6 @@ public class SettingsWriteGateNoticeTests
     private sealed class FakeChannelProvider : IChannelProvider
     {
         public string? Channel => "test";
-    }
-
-    private sealed class FakeBotConnectionController : IBotConnectionController
-    {
-        public int StartCount { get; private set; }
-
-        public bool IsBusy => false;
-
-        public BotLifecyclePhase CurrentPhase => BotLifecyclePhase.Idle;
-
-        public bool IsPlatformBusy(PoproshaykaBot.Core.Platforms.StreamingPlatform platform) => false;
-
-        public BotLifecyclePhase GetPhase(PoproshaykaBot.Core.Platforms.StreamingPlatform platform) => BotLifecyclePhase.Idle;
-
-        public void StartConnection() => StartCount++;
-
-        public void StartConnection(PoproshaykaBot.Core.Platforms.StreamingPlatform platform) => StartCount++;
-
-        public void CancelConnection()
-        {
-        }
-
-        public void CancelConnection(PoproshaykaBot.Core.Platforms.StreamingPlatform platform)
-        {
-        }
-
-        public Task WaitForConnectionAsync() => Task.CompletedTask;
-
-        public Task WaitForConnectionAsync(PoproshaykaBot.Core.Platforms.StreamingPlatform platform) => Task.CompletedTask;
-
-        public Task StopAsync(BotStopMode mode = BotStopMode.Graceful) => Task.CompletedTask;
-
-        public Task StopAsync(PoproshaykaBot.Core.Platforms.StreamingPlatform platform, BotStopMode mode = BotStopMode.Graceful) => Task.CompletedTask;
     }
 
     private sealed class FakeDialogService(Action<IDialogViewModel> edit) : IDialogService

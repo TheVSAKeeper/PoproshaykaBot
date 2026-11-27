@@ -74,7 +74,7 @@ public sealed class TwitchAccountLogin(
         var redirectUri = settings?.RedirectUri ?? string.Empty;
         if (settingsManager is not null && (string.IsNullOrWhiteSpace(clientId) || string.IsNullOrWhiteSpace(clientSecret)))
         {
-            return new("Заполните и сохраните ключи во вкладке «Параметры и доступ».", StatusSeverity.Warning, []);
+            return new("Сначала заполните и сохраните Шаг 1 («Доступ площадки») выше.", StatusSeverity.Warning, []);
         }
 
         var roles = request.Roles.Count > 0 ? request.Roles : [PlatformAuthRole.Bot];

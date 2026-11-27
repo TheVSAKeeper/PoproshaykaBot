@@ -115,7 +115,9 @@ public sealed partial class ChatDisplayTileViewModel : DashboardTileViewModel, I
 
         Modes = modes;
         var savedMode = _uiSettings?.GetStringValue(SettingsKeys.ChatTileDisplayMode);
-        _selectedMode = modes.Find(mode => mode.SettingsValue == savedMode) ?? modes[0];
+        _selectedMode = modes.Find(mode => mode.SettingsValue == savedMode)
+            ?? modes.Find(static mode => mode.Layout == ChatDisplayLayout.Columns)
+            ?? modes[0];
 
         _subscriptions.Add(bus.SubscribeOnUi<ChatDisplaySettingsChanged>(OnChatDisplaySettingsChanged));
         _subscriptions.Add(bus.SubscribeOnUi<ActiveChannelChanged>(_ => RefreshChat()));
@@ -160,6 +162,8 @@ public sealed partial class ChatDisplayTileViewModel : DashboardTileViewModel, I
     public event Action<ChatDisplayPaneViewModel, string, string>? ResetPaneSessionRequested;
 
     public event Action? ClutterScriptChanged;
+
+    public event EventHandler<StreamingPlatform>? SetupPlatformRequested;
 
     public override PackIconLucideKind Icon => PackIconLucideKind.MessageSquare;
 
@@ -299,10 +303,24 @@ public sealed partial class ChatDisplayTileViewModel : DashboardTileViewModel, I
         var externalUri = ParseWebUri(platform?.BuildStreamUrl(stream)) ?? (platform is null ? chatUri : null);
         var supportsClutter = platform?.SupportsChatClutterBlocking ?? false;
         var appliesTheme = platform?.AppliesPreferredColorScheme ?? false;
-        var heading = platform?.NativeChatUnavailableHeading ?? "Чат эфира недоступен";
-        var description = platform?.NativeChatUnavailableDescription ?? "Чат появится, когда у выбранного канала начнётся эфир с доступным чатом.";
+        var isUnconfiguredPlatform = platform is not null
+            && platform.RequiresOnlineStreamForNativeChat
+            && (!platform.IsEnabled || (string.IsNullOrWhiteSpace(platform.ConfiguredChannel) && externalUri is null));
 
-        var changed = pane.SetTarget(platformId, chatUri, externalUri, shown, supportsClutter, appliesTheme, heading, description);
+        var heading = isUnconfiguredPlatform
+            ? $"{platform!.DisplayName} не подключён"
+            : platform?.NativeChatUnavailableHeading ?? "Чат эфира недоступен";
+        var description = isUnconfiguredPlatform
+            ? $"Подключите {platform!.DisplayName}, чтобы видеть второй встроенный чат рядом с Twitch в одном окне."
+            : platform?.NativeChatUnavailableDescription ?? "Чат появится, когда у выбранного канала начнётся эфир с доступным чатом.";
+        var setupCommand = isUnconfiguredPlatform
+            ? new RelayCommand(() => SetupPlatformRequested?.Invoke(this, platformId))
+            : null;
+        var setupActionText = isUnconfiguredPlatform ? $"Подключить {platform!.DisplayName}" : null;
+
+        var changed = pane.SetTarget(
+            platformId, chatUri, externalUri, shown, supportsClutter, appliesTheme, heading, description,
+            setupCommand, setupActionText);
         if (shown)
         {
             var directory = _accountDirectories.GetValueOrDefault(platformId);

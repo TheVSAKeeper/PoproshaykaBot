@@ -14,6 +14,8 @@ public sealed partial class ChatDisplayPaneViewModel(
 {
     private Func<string, string, Task>? _signInBrowserAsync;
     private Action<string, string>? _resetBrowserSession;
+    private ICommand? _setupCommand;
+    private string? _setupActionText;
     private bool _supportsWebChatLogin;
     private bool _updatingAccounts;
     private StreamingPlatform? _accountsPlatform;
@@ -176,10 +178,10 @@ public sealed partial class ChatDisplayPaneViewModel(
     }
 
     public ICommand? FallbackActionCommand => RuntimeMissing ? OpenRuntimeDownloadCommand
-        : ExternalUri is not null ? OpenInBrowserCommand : null;
+        : _setupCommand ?? (ExternalUri is not null ? OpenInBrowserCommand : null);
 
     public string? FallbackActionText => RuntimeMissing ? "Скачать WebView2 Runtime"
-        : ExternalUri is not null ? "Открыть в браузере" : null;
+        : _setupActionText ?? (ExternalUri is not null ? "Открыть в браузере" : null);
 
     internal bool SetTarget(
         StreamingPlatform platform,
@@ -189,24 +191,28 @@ public sealed partial class ChatDisplayPaneViewModel(
         bool supportsClutterBlocking = false,
         bool appliesPreferredColorScheme = false,
         string? unavailableHeading = null,
-        string? unavailableDescription = null)
+        string? unavailableDescription = null,
+        ICommand? setupCommand = null,
+        string? setupActionText = null)
     {
         ExternalUri = externalUri;
+        _setupCommand = setupCommand;
+        _setupActionText = setupActionText;
         SupportsClutterBlocking = supportsClutterBlocking;
         AppliesPreferredColorScheme = appliesPreferredColorScheme;
         var changed = IsShown != shown || Platform != platform || ChannelUri != channelUri;
         if (changed)
         {
             StatusNotice = null;
+            RuntimeMissing = false;
         }
 
         IsShown = shown;
         Platform = platform;
         ChannelUri = channelUri;
-        if (changed && shown)
+        if (shown && !RuntimeMissing)
         {
             HasFallback = channelUri is null;
-            RuntimeMissing = false;
             if (channelUri is null)
             {
                 FallbackHeading = unavailableHeading ?? "Чат эфира недоступен";
@@ -214,6 +220,8 @@ public sealed partial class ChatDisplayPaneViewModel(
             }
         }
 
+        OnPropertyChanged(nameof(FallbackActionCommand));
+        OnPropertyChanged(nameof(FallbackActionText));
         return changed;
     }
 

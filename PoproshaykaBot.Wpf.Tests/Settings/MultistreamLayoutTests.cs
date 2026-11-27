@@ -151,17 +151,11 @@ public sealed class MultistreamLayoutTests
                 harness.Page.SelectPlatformCommand.Execute(card);
                 ArrangeWithResponsivePass(host, view, new(width, height));
 
-                var guidedCard = (Border)view.FindName("GuidedOverviewCard")!;
-                var guidedBounds = guidedCard.TransformToAncestor(detailScroll).TransformBounds(new(guidedCard.RenderSize));
-                var guidedInnerRight = guidedCard.ActualWidth - guidedCard.Padding.Right - guidedCard.BorderThickness.Right;
-                Assert.That(guidedBounds.Right, Is.LessThanOrEqualTo(detailScroll.ViewportWidth + 0.5),
-                    $"Карточка готовности {card.Status.DisplayName} обрезана справа при {width}x{height} @ {scale}: Right={guidedBounds.Right:F1}, Viewport={detailScroll.ViewportWidth:F1}");
-                foreach (var wizardButton in Descendants<Button>(guidedCard).Where(IsEffectivelyVisible))
-                {
-                    var btnBounds = wizardButton.TransformToAncestor(guidedCard).TransformBounds(new(wizardButton.RenderSize));
-                    Assert.That(btnBounds.Right, Is.LessThanOrEqualTo(guidedInnerRight + 0.5),
-                        $"Кнопка мастера на {card.Status.DisplayName} обрезана справа при {width}x{height} @ {scale}: Right={btnBounds.Right:F1}, InnerRight={guidedInnerRight:F1}");
-                }
+                var step3Section = Descendants<FrameworkElement>(detailScroll)
+                    .First(el => System.Windows.Automation.AutomationProperties.GetAutomationId(el) == "MultistreamStep3Section");
+                var step3Bounds = step3Section.TransformToAncestor(detailScroll).TransformBounds(new(step3Section.RenderSize));
+                Assert.That(step3Bounds.Right, Is.LessThanOrEqualTo(detailScroll.ViewportWidth + 0.5),
+                    $"Шаг 3 на {card.Status.DisplayName} обрезан справа при {width}x{height} @ {scale}: Right={step3Bounds.Right:F1}, Viewport={detailScroll.ViewportWidth:F1}");
 
                 var catalogView = Descendants<ChannelCatalogSettingsSectionView>(view).Single();
                 var channelList = Descendants<ListBox>(catalogView).Single();
@@ -321,7 +315,10 @@ public sealed class MultistreamLayoutTests
     public async Task Multistream_accounts_show_compact_permission_summaries_until_expanded(string theme, int width, int height)
     {
         await using var harness = CreateHarness();
-        harness.Page.SelectPlatformTabCommand.Execute(MultistreamPlatformTab.Accounts);
+        if (!harness.Page.IsStep2Expanded)
+        {
+            harness.Page.ToggleStep2Command.Execute(null);
+        }
         var view = new MultistreamPageView { DataContext = harness.Page };
         var host = HostWithMainWindowFont(view);
         host.Resources.MergedDictionaries.Add(new ResourceDictionary
@@ -359,11 +356,11 @@ public sealed class MultistreamLayoutTests
         var channelEditor = (ContentControl)view.FindName("ChannelEditor")!;
         var platformSettingsHost = (ItemsControl)view.FindName("PlatformSettingsHost")!;
         var automationSection = (FrameworkElement)view.FindName("AutomationSection")!;
-        var channelsTab = Descendants<RadioButton>(view).First(rb => System.Windows.Automation.AutomationProperties.GetAutomationId(rb) == "MultistreamTabChannels");
+        var step3Section = Descendants<FrameworkElement>(detailScroll)
+            .First(el => System.Windows.Automation.AutomationProperties.GetAutomationId(el) == "MultistreamStep3Section");
 
         var baseDetailWidth = channelEditor.ActualWidth;
-        var baseTabsY = channelsTab.TransformToAncestor(view).Transform(default).Y;
-        var baseTabsHeight = channelsTab.ActualHeight;
+        var baseStep3Visible = IsEffectivelyVisible(step3Section);
 
         var catalogView = Descendants<ChannelCatalogSettingsSectionView>(view).Single();
         var channelList = Descendants<ListBox>(catalogView).Single();
@@ -388,24 +385,27 @@ public sealed class MultistreamLayoutTests
 
         harness.Page.SelectPlatformCommand.Execute(harness.Page.Cards[1]);
         ArrangeWithResponsivePass(host, view, viewport);
-        var ytTabsY = channelsTab.TransformToAncestor(view).Transform(default).Y;
         var ytDetailWidth = channelEditor.ActualWidth;
 
-        harness.Page.SelectPlatformTabCommand.Execute(MultistreamPlatformTab.Accounts);
-        ArrangeWithResponsivePass(host, view, viewport);
+        if (!harness.Page.IsStep2Expanded)
+        {
+            harness.Page.ToggleStep2Command.Execute(null);
+            ArrangeWithResponsivePass(host, view, viewport);
+        }
         var accountsHost = (ContentControl)view.FindName("PlatformAccountsHost")!;
         var ytAccountsWidth = accountsHost.ActualWidth;
-        var ytAccountsTabsY = channelsTab.TransformToAncestor(view).Transform(default).Y;
 
         harness.Page.Accounts!.ToggleTechnicalModeCommand.Execute(null);
         ArrangeWithResponsivePass(host, view, viewport);
         var ytAccountsTechWidth = accountsHost.ActualWidth;
         harness.Page.Accounts.ToggleTechnicalModeCommand.Execute(null);
 
-        harness.Page.SelectPlatformTabCommand.Execute(MultistreamPlatformTab.Parameters);
-        ArrangeWithResponsivePass(host, view, viewport);
+        if (!harness.Page.IsStep1Expanded)
+        {
+            harness.Page.ToggleStep1Command.Execute(null);
+            ArrangeWithResponsivePass(host, view, viewport);
+        }
         var ytParamsWidth = platformSettingsHost.ActualWidth;
-        var ytParamsTabsY = channelsTab.TransformToAncestor(view).Transform(default).Y;
 
         harness.Page.OpenAutomationCommand.Execute(null);
         ArrangeWithResponsivePass(host, view, viewport);
@@ -415,15 +415,12 @@ public sealed class MultistreamLayoutTests
 
         Assert.Multiple(() =>
         {
-            Assert.That(ytTabsY, Is.EqualTo(baseTabsY).Within(0.5), $"Вкладки прыгнули по Y при смене площадки ({width}x{height}): Twitch={baseTabsY:F1}, YouTube={ytTabsY:F1}");
-            Assert.That(ytAccountsTabsY, Is.EqualTo(baseTabsY).Within(0.5), $"Вкладки прыгнули по Y на «Аккаунты» ({width}x{height}): {ytAccountsTabsY:F1} vs {baseTabsY:F1}");
-            Assert.That(ytParamsTabsY, Is.EqualTo(baseTabsY).Within(0.5), $"Вкладки прыгнули по Y на «Параметры и доступ» ({width}x{height}): {ytParamsTabsY:F1} vs {baseTabsY:F1}");
+            Assert.That(baseStep3Visible, Is.True, "Шаг 3 («Каналы») должен оставаться видимым на экране");
             Assert.That(autoTabsY, Is.GreaterThanOrEqualTo(0), $"Вкладки в «Профили и автоматика» вышли за верх экрана ({width}x{height}): {autoTabsY:F1}");
-            Assert.That(profilesTab.ActualHeight, Is.EqualTo(baseTabsHeight).Within(0.5), $"Высота вкладок отличается в «Профили и автоматика» ({width}x{height}): {profilesTab.ActualHeight:F1} vs {baseTabsHeight:F1}");
             Assert.That(ytDetailWidth, Is.EqualTo(baseDetailWidth).Within(0.5), $"Ширина прыгнула при смене площадки ({width}x{height}): {ytDetailWidth:F1} vs {baseDetailWidth:F1}");
-            Assert.That(ytAccountsWidth, Is.EqualTo(baseDetailWidth).Within(0.5), $"Ширина прыгнула на вкладке аккаунтов ({width}x{height}): {ytAccountsWidth:F1} vs {baseDetailWidth:F1}");
+            Assert.That(ytAccountsWidth, Is.EqualTo(baseDetailWidth).Within(0.5), $"Ширина прыгнула на блоке аккаунтов ({width}x{height}): {ytAccountsWidth:F1} vs {baseDetailWidth:F1}");
             Assert.That(ytAccountsTechWidth, Is.EqualTo(baseDetailWidth).Within(0.5), $"Ширина прыгнула в техническом виде аккаунтов ({width}x{height}): {ytAccountsTechWidth:F1} vs {baseDetailWidth:F1}");
-            Assert.That(ytParamsWidth, Is.EqualTo(baseDetailWidth).Within(0.5), $"Ширина прыгнула на длинной вкладке параметров ({width}x{height}): {ytParamsWidth:F1} vs {baseDetailWidth:F1}");
+            Assert.That(ytParamsWidth, Is.EqualTo(baseDetailWidth).Within(0.5), $"Ширина прыгнула на длинном блоке параметров ({width}x{height}): {ytParamsWidth:F1} vs {baseDetailWidth:F1}");
             Assert.That(autoWidth, Is.EqualTo(baseDetailWidth).Within(0.5), $"Ширина прыгнула в «Профили и автоматика» ({width}x{height}): {autoWidth:F1} vs {baseDetailWidth:F1}");
             Assert.That(detailScroll.VerticalOffset, Is.EqualTo(0).Within(0.5), "Открытие «Профили и автоматика» не должно прокручивать заголовок за верх экрана");
         });

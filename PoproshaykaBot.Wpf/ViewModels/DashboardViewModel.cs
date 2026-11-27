@@ -61,6 +61,11 @@ public sealed partial class DashboardViewModel : ObservableObject, IDisposable
                 multistream.PlatformRequested += OnTilePlatformRequested;
                 multistream.StatusReported += OnTileStatusReported;
             }
+
+            if (tile is ChatDisplayTileViewModel chatDisplay)
+            {
+                chatDisplay.SetupPlatformRequested += OnTilePlatformRequested;
+            }
         }
 
         Reload();
@@ -261,6 +266,11 @@ public sealed partial class DashboardViewModel : ObservableObject, IDisposable
                 multistream.ConnectionToggleRequested -= OnTileConnectionToggleRequested;
                 multistream.PlatformRequested -= OnTilePlatformRequested;
                 multistream.StatusReported -= OnTileStatusReported;
+            }
+
+            if (tile is ChatDisplayTileViewModel chatDisplay)
+            {
+                chatDisplay.SetupPlatformRequested -= OnTilePlatformRequested;
             }
         }
 

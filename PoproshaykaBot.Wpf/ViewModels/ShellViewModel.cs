@@ -157,6 +157,7 @@ public sealed partial class ShellViewModel : ShellViewModelBase, IDisposable
         UpdateBanner = updateBanner;
         OnboardingBanner = onboardingBanner;
         OnboardingBanner.PropertyChanged += OnOnboardingBannerPropertyChanged;
+        OnboardingBanner.ConfigureRequested += OnOnboardingBannerConfigureRequested;
         ChannelSwitchBanner = channelSwitchBanner;
         DebugBanner = debugBanner;
         StreamMonitoring = streamMonitoring;
@@ -169,7 +170,6 @@ public sealed partial class ShellViewModel : ShellViewModelBase, IDisposable
 
         _settingsPage = settingsPage;
         _settingsPage.SettingsSaved += OnSettingsSaved;
-        _settingsPage.MultistreamRequested += OnMultistreamRequested;
         _chatHistory = chatHistory;
         _uiSettings = uiSettings;
         _uiDispatcher = uiDispatcher;
@@ -212,7 +212,7 @@ public sealed partial class ShellViewModel : ShellViewModelBase, IDisposable
         Sections.Add(_overviewSection);
         if (multistreamPage is not null)
         {
-            _multistreamSection = new("Мультистрим", PackIconLucideKind.Layers, multistreamPage, key: SectionKeys.Multistream);
+            _multistreamSection = new("Каналы и профили", PackIconLucideKind.Layers, multistreamPage, key: SectionKeys.Multistream);
             Sections.Add(_multistreamSection);
         }
 
@@ -369,7 +369,6 @@ public sealed partial class ShellViewModel : ShellViewModelBase, IDisposable
         _disposed = true;
         _uiSettings.WriteFailed -= OnUiSettingsWriteFailed;
         _settingsPage.SettingsSaved -= OnSettingsSaved;
-        _settingsPage.MultistreamRequested -= OnMultistreamRequested;
         if (_botMessagingNavigation is not null)
         {
             _botMessagingNavigation.RuleRequested -= OpenBotRule;
@@ -388,6 +387,7 @@ public sealed partial class ShellViewModel : ShellViewModelBase, IDisposable
         }
         _preferences.PropertyChanged -= OnPreferencesPropertyChanged;
         OnboardingBanner.PropertyChanged -= OnOnboardingBannerPropertyChanged;
+        OnboardingBanner.ConfigureRequested -= OnOnboardingBannerConfigureRequested;
 
         if (ChannelSwitchBanner is not null)
         {
@@ -420,11 +420,30 @@ public sealed partial class ShellViewModel : ShellViewModelBase, IDisposable
         }
     }
 
+    private void OnOnboardingBannerConfigureRequested(object? sender, EventArgs e)
+    {
+        if (_multistreamSection is not null && TryLeaveDirtyPage(_multistreamSection))
+        {
+            Selected = _multistreamSection;
+        }
+    }
+
+    public void OpenConnectYouTube()
+    {
+        OpenMultistream(StreamingPlatform.YouTube, fromOverview: true);
+    }
+
+    public void OpenOverview()
+    {
+        if (TryLeaveDirtyPage(_overviewSection))
+        {
+            Selected = _overviewSection;
+        }
+    }
+
     private void OnOverviewPlatformRequested(object? sender, StreamingPlatform platform) => OpenMultistream(platform, fromOverview: true);
 
     private void OnOverviewStatusReported(string message, StatusSeverity severity) => SetStatus(message, severity);
-
-    private void OnMultistreamRequested(object? sender, StreamingPlatform? platform) => OpenMultistream(platform);
 
     private void OnFarewellRuleRequested(object? sender, EventArgs args) => OpenBotRule("farewell");
 

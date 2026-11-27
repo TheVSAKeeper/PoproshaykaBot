@@ -282,7 +282,8 @@ public sealed class PlatformCleanupThirdPlatformWpfTests
         Assert.Multiple(() =>
         {
             Assert.That(tile.Rows.Single().IsPlatformEnabled, Is.False);
-            Assert.That(page.PlatformReadinessText, Is.EqualTo("Площадка: отключена"));
+            Assert.That(page.Cards.Single().Status.IsPlatformEnabled, Is.False);
+            Assert.That(page.Cards.Single().Status.StatusBadgeText, Is.EqualTo("Отключён"));
         });
 
         enabled = true;
@@ -290,7 +291,8 @@ public sealed class PlatformCleanupThirdPlatformWpfTests
         Assert.Multiple(() =>
         {
             Assert.That(tile.Rows.Single().IsPlatformEnabled, Is.True);
-            Assert.That(page.PlatformReadinessText, Is.EqualTo("Площадка: включена"));
+            Assert.That(page.Cards.Single().Status.IsPlatformEnabled, Is.True);
+            Assert.That(page.Cards.Single().Status.StatusBadgeText, Is.Not.EqualTo("Отключён"));
         });
 
         var adapterEnabled = false;

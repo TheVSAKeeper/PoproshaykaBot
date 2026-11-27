@@ -1,5 +1,6 @@
 ﻿using PoproshaykaBot.Core.Settings.Migrations.LegacyImport;
 using PoproshaykaBot.Wpf.ViewModels.Migration;
+using System.IO;
 
 namespace PoproshaykaBot.Wpf.Tests.Migration;
 
@@ -198,5 +199,108 @@ public class LegacyImportTextTests
             MigratedSettingsFiles = inPlace ? ["settings.json"] : [],
             UnmigratedLegacyFiles = unmigrated ?? [],
         };
+    }
+
+    [Test]
+    public void DiagnoseInvalidFolder_ExplainsWhatIsMissingWithoutTechnicalStackTraces()
+    {
+        var emptyDir = Path.Combine(Path.GetTempPath(), "pb-invalid-empty-" + Guid.NewGuid().ToString("N"));
+        var unrelatedDir = Path.Combine(Path.GetTempPath(), "pb-invalid-other-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(emptyDir);
+        Directory.CreateDirectory(unrelatedDir);
+        try
+        {
+            File.WriteAllText(Path.Combine(unrelatedDir, "readme.txt"), "hello");
+
+            var missingMessage = LegacyImportText.DiagnoseInvalidFolder(Path.Combine(emptyDir, "missing"));
+            var emptyMessage = LegacyImportText.DiagnoseInvalidFolder(emptyDir);
+            var unrelatedMessage = LegacyImportText.DiagnoseInvalidFolder(unrelatedDir);
+
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(missingMessage, Does.Contain("не найдена"));
+                Assert.That(emptyMessage, Does.Contain("пуста").And.Contain("settings.json"));
+                Assert.That(unrelatedMessage, Does.Contain("settings.json").And.Contain("users_statistics.json"));
+                Assert.That(unrelatedMessage, Does.Not.Contain("Exception").And.Not.Contain("StackTrace"));
+            }
+        }
+        finally
+        {
+            Directory.Delete(emptyDir, recursive: true);
+            Directory.Delete(unrelatedDir, recursive: true);
+        }
+    }
+
+    [Test]
+    public void BuildFirstRunSummary_ComputesSemanticBlocksFromImportedFiles_ForFullAndPartialImports()
+    {
+        var targetDir = Path.Combine(Path.GetTempPath(), "pb-summary-" + Guid.NewGuid().ToString("N"));
+        var settingsDir = Path.Combine(targetDir, "settings");
+        Directory.CreateDirectory(settingsDir);
+        try
+        {
+            File.WriteAllText(Path.Combine(settingsDir, "broadcast-profiles.json"), """{"profiles":[{"name":"A"},{"name":"B"}]}""");
+            File.WriteAllText(Path.Combine(settingsDir, "obs-chat.json"), """{"fontSize":16}""");
+            File.WriteAllText(Path.Combine(settingsDir, "obs-integration.json"), """{"enabled":true,"host":"127.0.0.1","port":4455,"dashboardMicrophoneName":"Mic USB","dashboardSourceNames":["Mic USB","Browser"]}""");
+            File.WriteAllText(Path.Combine(settingsDir, "settings.json"), """{"twitch":{"httpServerPort":8095,"chatDisplayAccount":"Bot","autoBroadcast":{"autoBroadcastEnabled":true,"broadcastIntervalMinutes":20}},"ranks":{"ranks":[{"name":"Новичок","minMessages":0}]}}""");
+            File.WriteAllText(Path.Combine(settingsDir, "commands.json"), """{"commands":{"!hi":{"enabled":true}}}""");
+            File.WriteAllText(Path.Combine(targetDir, "users_statistics.json"), """{"1":{"name":"u1"},"2":{"name":"u2"},"3":{"name":"u3"}}""");
+            File.WriteAllText(Path.Combine(targetDir, "stream_sessions.json"), """[{"channel":"ch"},{"channel":"ch"}]""");
+
+            var fullResult = new LegacyImportResult
+            {
+                SourcePath = @"C:\old",
+                TargetPath = targetDir,
+                CopiedFiles = ["settings/broadcast-profiles.json", "settings/obs-chat.json", "settings/obs-integration.json", "settings/settings.json", "settings/commands.json", "users_statistics.json", "stream_sessions.json"],
+                SkippedFiles = [],
+                Failures = [],
+            };
+
+            var fullSummary = LegacyImportText.BuildFirstRunSummary(fullResult, twitchEnabled: true, twitchBotRequired: false);
+
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(fullSummary.IsPartial, Is.False);
+                Assert.That(fullSummary.TransferredItems.Select(static i => i.Title), Is.EqualTo(new[]
+                {
+                    "Профили эфира",
+                    "Оверлей и локальный порт",
+                    "OBS и аудиоисточники",
+                    "Авто-рассылка",
+                    "Фразы и ранги",
+                    "Статистика зрителей и сессий",
+                }));
+                Assert.That(fullSummary.TransferredItems[0].Detail, Does.Contain("2 профиля"));
+                Assert.That(fullSummary.TransferredItems[1].Detail, Does.Contain("8095"));
+                Assert.That(fullSummary.TransferredItems[2].Detail, Does.Contain("Mic USB").And.Contain("2 аудиоисточника"));
+                Assert.That(fullSummary.TransferredItems[3].Detail, Does.Contain("20 мин"));
+                Assert.That(fullSummary.TransferredItems[5].Detail, Does.Contain("3 зрителя").And.Contain("2 эфира"));
+                Assert.That(fullSummary.AttentionItems, Is.Empty);
+            }
+
+            var partialResult = new LegacyImportResult
+            {
+                SourcePath = @"C:\old",
+                TargetPath = targetDir,
+                CopiedFiles = ["settings/settings.json"],
+                SkippedFiles = [],
+                Failures = [new("settings/obs-integration.json", "locked")],
+                BotAuthorizationRequired = true,
+            };
+
+            var partialSummary = LegacyImportText.BuildFirstRunSummary(partialResult, twitchEnabled: true, twitchBotRequired: true);
+
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(partialSummary.IsPartial, Is.True);
+                Assert.That(partialSummary.Headline, Does.Contain("частично"));
+                Assert.That(partialSummary.AttentionItems.Any(static i => i.Title == "OBS и аудиоисточники" && i.IsWarning), Is.True);
+                Assert.That(partialSummary.AttentionItems.Any(static i => i.Title == "Вход в Twitch" && i.IsWarning), Is.True);
+            }
+        }
+        finally
+        {
+            Directory.Delete(targetDir, recursive: true);
+        }
     }
 }

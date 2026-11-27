@@ -205,6 +205,52 @@ public sealed class WebViewTileModalHidingTests
         Assert.That(viewModel.PrimaryChat.FallbackActionCommand, Is.Not.Null);
     }
 
+    [Test]
+    public void Двухколоночный_режим_выбран_по_умолчанию_и_неподключённый_YouTube_показывает_кнопку_настройки()
+    {
+        var ytStatus = new FakeStreamStatus { CurrentStatus = StreamStatus.Offline };
+        var ytEnabled = false;
+        string? configuredChannel = null;
+        var registry = new ChatPlatformRegistry([
+            new FakeChatPlatform(StreamingPlatform.Twitch, "Twitch", new FakeStreamStatus(), requiresOnlineStream: false),
+            new FakeChatPlatform(StreamingPlatform.YouTube, "YouTube", ytStatus,
+                offlineUrl: () => configuredChannel is null ? null : $"https://www.youtube.com/{configuredChannel}",
+                isEnabled: () => ytEnabled,
+                configuredChannel: () => configuredChannel),
+        ]);
+
+        var tile = (ChatDisplayTileViewModel)CreateViewModel(Tile.Chat, registry);
+        StreamingPlatform? requestedPlatform = null;
+        tile.SetupPlatformRequested += (_, p) => requestedPlatform = p;
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(tile.SelectedMode.Layout, Is.EqualTo(ChatDisplayLayout.Columns),
+                "Без сохранённого предпочтения должна открываться двухколоночная раскладка (Twitch + YouTube).");
+            Assert.That(tile.SecondaryChat.IsShown, Is.True);
+            Assert.That(tile.SecondaryChat.HasFallback, Is.True);
+            Assert.That(tile.SecondaryChat.FallbackHeading, Is.EqualTo("YouTube не подключён"));
+            Assert.That(tile.SecondaryChat.FallbackDescription, Does.Contain("второй встроенный чат"));
+            Assert.That(tile.SecondaryChat.FallbackActionText, Is.EqualTo("Подключить YouTube"));
+            Assert.That(tile.SecondaryChat.FallbackActionCommand, Is.Not.Null);
+        }
+
+        tile.SecondaryChat.FallbackActionCommand!.Execute(null);
+        Assert.That(requestedPlatform, Is.EqualTo(StreamingPlatform.YouTube));
+
+        ytEnabled = true;
+        configuredChannel = "@stream";
+        SelectMode(tile, StreamingPlatform.Twitch);
+        SelectMode(tile, StreamingPlatform.YouTube, ChatDisplayLayout.Columns);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(tile.SecondaryChat.HasFallback, Is.True);
+            Assert.That(tile.SecondaryChat.FallbackHeading, Is.EqualTo("Чат эфира недоступен"));
+            Assert.That(tile.SecondaryChat.FallbackActionText, Is.EqualTo("Открыть в браузере"));
+        }
+    }
+
     [TestCase(ChatDisplayLayout.Columns)]
     [TestCase(ChatDisplayLayout.Rows)]
     public void Обе_площадки_размещены_в_одной_плитке_и_восстанавливают_режим(ChatDisplayLayout layout)
@@ -615,17 +661,26 @@ public sealed class WebViewTileModalHidingTests
         public Task RefreshLiveSnapshotAsync() => Task.CompletedTask;
     }
 
-    private sealed class FakeChatPlatform(StreamingPlatform id, string name, IStreamStatus status, Func<string?>? offlineUrl = null) : IChatPlatform
+    private sealed class FakeChatPlatform(
+        StreamingPlatform id,
+        string name,
+        IStreamStatus status,
+        Func<string?>? offlineUrl = null,
+        bool requiresOnlineStream = true,
+        Func<bool>? isEnabled = null,
+        Func<string?>? configuredChannel = null) : IChatPlatform
     {
         public StreamingPlatform Id => id;
         public string DisplayName => name;
         public PlatformCapabilities Capabilities => PlatformCapabilities.None;
-        public bool IsEnabled => true;
+        public bool IsEnabled => isEnabled?.Invoke() ?? true;
         public bool IsConnected => false;
+        public bool RequiresOnlineStreamForNativeChat => requiresOnlineStream;
+        public string? ConfiguredChannel => configuredChannel?.Invoke();
         public IStreamStatus StreamStatus => status;
         public IPlatformMessenger Messenger => throw new NotSupportedException();
         public string BuildNativeChatUrl(StreamInfo stream) => $"https://www.youtube.com/live_chat?v={stream.Id}";
-        public string BuildStreamUrl(StreamInfo? stream = null) => stream is { } info
+        public string? BuildStreamUrl(StreamInfo? stream = null) => stream is { } info
             ? $"https://www.youtube.com/watch?v={info.Id}" : offlineUrl is not null ? offlineUrl() : "https://www.youtube.com/@channel";
     }
 

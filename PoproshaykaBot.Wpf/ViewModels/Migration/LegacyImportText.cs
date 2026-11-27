@@ -1,12 +1,33 @@
-﻿using PoproshaykaBot.Core.Settings.Migrations.LegacyImport;
+﻿using PoproshaykaBot.Core.Broadcast.Profiles;
+using PoproshaykaBot.Core.Chat.Commands;
+using PoproshaykaBot.Core.Settings;
+using PoproshaykaBot.Core.Settings.Migrations.LegacyImport;
+using PoproshaykaBot.Core.Settings.Obs;
+using PoproshaykaBot.Core.Settings.Stores;
 using System.Globalization;
 using System.IO;
+using System.Text.Json;
+using System.Text.Json.Nodes;
 
 namespace PoproshaykaBot.Wpf.ViewModels.Migration;
+
+public sealed record FirstRunSummaryItem(string Title, string Detail, bool IsWarning = false);
+
+public sealed record FirstRunImportSummary(
+    string Headline,
+    IReadOnlyList<FirstRunSummaryItem> TransferredItems,
+    IReadOnlyList<FirstRunSummaryItem> AttentionItems,
+    bool IsPartial);
 
 public static class LegacyImportText
 {
     private static readonly CultureInfo Russian = CultureInfo.GetCultureInfo("ru-RU");
+    private static readonly JsonSerializerOptions ImportSummaryJsonOptions = new(JsonStoreOptions.Default)
+    {
+        PropertyNameCaseInsensitive = true,
+        ReadCommentHandling = JsonCommentHandling.Skip,
+        AllowTrailingCommas = true,
+    };
 
     private static readonly Dictionary<string, string> FileTitles = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -340,6 +361,508 @@ public static class LegacyImportText
     public static string Count(long value, string one, string few, string many)
     {
         return $"{value.ToString("N0", Russian)} {Plural(value, one, few, many)}";
+    }
+
+    public static string DiagnoseInvalidFolder(string path)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            return "Путь к папке не указан. Выберите папку с данными предыдущей версии.";
+        }
+
+        string fullPath;
+        try
+        {
+            fullPath = Path.GetFullPath(path);
+        }
+        catch (Exception exception) when (exception is ArgumentException or NotSupportedException or PathTooLongException or IOException)
+        {
+            return "Указан некорректный путь к папке. Выберите существующую папку с данными бота.";
+        }
+
+        if (!Directory.Exists(fullPath))
+        {
+            return "Выбранная папка не найдена. Проверьте расположение и выберите другую папку.";
+        }
+
+        try
+        {
+            if (!Directory.EnumerateFileSystemEntries(fullPath).Any())
+            {
+                return "Выбранная папка пуста: в ней нет файлов настроек (settings.json или папки settings) и базы статистики бота.";
+            }
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            return "Не удалось прочитать содержимое папки. Проверьте права доступа или выберите другую папку.";
+        }
+
+        var hasSettings = File.Exists(Path.Combine(fullPath, "settings.json"))
+            || Directory.Exists(Path.Combine(fullPath, "settings"));
+
+        return hasSettings
+            ? "В выбранной папке не найдены подходящие файлы настроек или статистики PoproshaykaBot."
+            : "В выбранной папке не найдены данные PoproshaykaBot: отсутствуют настройки (settings.json или папка settings) и файлы статистики (users_statistics.json, bot_statistics.json).";
+    }
+
+    public static string BuildInvalidImportReason(LegacyImportResult result)
+    {
+        ArgumentNullException.ThrowIfNull(result);
+
+        if (result.Failures.Count == 0)
+        {
+            return "Не удалось перенести данные из выбранной папки. Выберите другую папку или начните с нуля.";
+        }
+
+        var failedItems = result.Failures
+            .Select(static failure => DescribeFile(failure.RelativeTargetPath))
+            .Select(Decapitalize)
+            .Distinct(StringComparer.CurrentCulture)
+            .Take(4)
+            .ToArray();
+
+        return failedItems.Length == 0
+            ? "Не удалось прочитать файлы из выбранной папки. Выберите другую папку или начните с нуля."
+            : $"Не удалось перенести данные ({string.Join(", ", failedItems)}). Выберите другую папку или начните с нуля.";
+    }
+
+    public static FirstRunImportSummary BuildFirstRunSummary(
+        LegacyImportResult result,
+        bool twitchEnabled = true,
+        bool twitchBotRequired = false)
+    {
+        ArgumentNullException.ThrowIfNull(result);
+
+        var transferred = new List<FirstRunSummaryItem>();
+        var attention = new List<FirstRunSummaryItem>();
+        var failedTargets = result.Failures
+            .Where(static failure => !failure.DestinationWritten)
+            .Select(static failure => NormalizeRelativePath(failure.RelativeTargetPath))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        var targetPath = result.TargetPath;
+
+        AddBroadcastProfilesSummary(targetPath, failedTargets, transferred, attention);
+        AddOverlayAndPortSummary(targetPath, failedTargets, transferred, attention);
+        AddObsSummary(targetPath, failedTargets, transferred, attention);
+        AddAutoBroadcastSummary(targetPath, failedTargets, transferred, attention);
+        AddPhrasesAndRanksSummary(targetPath, failedTargets, transferred, attention);
+        AddStatisticsSummary(targetPath, failedTargets, transferred, attention);
+
+        foreach (var failure in result.Failures)
+        {
+            if (failure.DestinationWritten)
+            {
+                attention.Add(new(DescribeFile(failure.RelativeTargetPath), DescribeFailure(failure), IsWarning: true));
+            }
+        }
+
+        if (DescribeUnmigrated(result) is { } unmigrated)
+        {
+            attention.Add(new("Файлы с прежними именами", unmigrated, IsWarning: true));
+        }
+
+        if (BuildAuthorizationNotice(result, isSettingsEntry: false, twitchEnabled, twitchBotRequired, youtubeBotRequired: false) is { } authNotice)
+        {
+            attention.Add(new("Вход в Twitch", authNotice, IsWarning: true));
+        }
+
+        var hasPartialFailures = result.Failures.Count > 0 || result.UnmigratedLegacyFiles.Count > 0;
+        var isPartial = hasPartialFailures || attention.Count > 0;
+        var headline = result.Failures.Any(static f => !f.DestinationWritten)
+            ? "Данные перенесены частично"
+            : isPartial
+                ? "Данные перенесены, есть заметки по настройке"
+                : "Данные успешно перенесены";
+
+        return new(headline, transferred, attention, isPartial);
+    }
+
+    private static void AddBroadcastProfilesSummary(
+        string targetPath,
+        HashSet<string> failedTargets,
+        List<FirstRunSummaryItem> transferred,
+        List<FirstRunSummaryItem> attention)
+    {
+        if (IsAnyFailed(failedTargets, "settings/broadcast-profiles.json", "broadcast-profiles.json"))
+        {
+            attention.Add(new("Профили эфира", "Не удалось перенести файл профилей – создайте или восстановите их в разделе «Каналы и профили».", IsWarning: true));
+            return;
+        }
+
+        var profiles = ReadJson<BroadcastProfilesSettings>(ResolveTargetFile(targetPath, "settings/broadcast-profiles.json", "broadcast-profiles.json"));
+        if (profiles is { Profiles.Count: > 0 })
+        {
+            transferred.Add(new("Профили эфира", Count(profiles.Profiles.Count, "профиль", "профиля", "профилей")));
+            return;
+        }
+
+        if (profiles is not null)
+        {
+            transferred.Add(new("Профили эфира", "Список профилей пуст – создать можно в разделе «Каналы и профили»"));
+            return;
+        }
+
+        attention.Add(new("Профили эфира", "В старой папке не найдены – при необходимости создайте профили в разделе «Каналы и профили»."));
+    }
+
+    private static void AddOverlayAndPortSummary(
+        string targetPath,
+        HashSet<string> failedTargets,
+        List<FirstRunSummaryItem> transferred,
+        List<FirstRunSummaryItem> attention)
+    {
+        var obsChatFailed = IsAnyFailed(failedTargets, "settings/obs-chat.json", "obs-chat.json");
+        var settingsFailed = IsAnyFailed(failedTargets, "settings/settings.json", "settings.json");
+
+        if (obsChatFailed || settingsFailed)
+        {
+            attention.Add(new("Оверлей и локальный порт", "Не удалось перенести часть параметров оверлея или порта – проверьте раздел «Настройки».", IsWarning: true));
+            return;
+        }
+
+        var obsChatPath = ResolveTargetFile(targetPath, "settings/obs-chat.json", "obs-chat.json");
+        var hasObsChat = obsChatPath is not null && ReadJsonNode(obsChatPath) is JsonObject;
+        var appSettings = ReadJson<AppSettings>(ResolveTargetFile(targetPath, "settings/settings.json", "settings.json"));
+        var port = appSettings?.Twitch.HttpServerPort;
+
+        if (hasObsChat && port is > 0)
+        {
+            transferred.Add(new("Оверлей и локальный порт", $"Оформление чата OBS и порт {port}"));
+        }
+        else if (hasObsChat)
+        {
+            transferred.Add(new("Оверлей и локальный порт", "Оформление чата для OBS"));
+        }
+        else if (port is > 0)
+        {
+            transferred.Add(new("Оверлей и локальный порт", $"Локальный порт веб-сервера {port}"));
+        }
+        else
+        {
+            attention.Add(new("Оверлей и локальный порт", "Отдельные настройки оверлея не найдены – используются значения по умолчанию."));
+        }
+    }
+
+    private static void AddObsSummary(
+        string targetPath,
+        HashSet<string> failedTargets,
+        List<FirstRunSummaryItem> transferred,
+        List<FirstRunSummaryItem> attention)
+    {
+        if (IsAnyFailed(failedTargets, "settings/obs-integration.json", "obs-integration.json"))
+        {
+            attention.Add(new("OBS и аудиоисточники", "Не удалось перенести настройки OBS – задайте подключение заново в разделе «Настройки».", IsWarning: true));
+            return;
+        }
+
+        var obs = ReadJson<ObsIntegrationSettings>(ResolveTargetFile(targetPath, "settings/obs-integration.json", "obs-integration.json"));
+        if (obs is null)
+        {
+            attention.Add(new("OBS и аудиоисточники", "Настройки OBS в старой папке не найдены – при необходимости подключите OBS в Настройках."));
+            return;
+        }
+
+        var parts = new List<string>
+        {
+            obs.Enabled ? $"подключение {obs.Host}:{obs.Port}" : "параметры подключения сохранены",
+        };
+
+        if (!string.IsNullOrWhiteSpace(obs.DashboardMicrophoneName))
+        {
+            parts.Add($"микрофон «{obs.DashboardMicrophoneName.Trim()}»");
+        }
+
+        var audioCount = obs.GetDashboardSourceNames().Count;
+        if (audioCount > 0)
+        {
+            parts.Add(Count(audioCount, "аудиоисточник", "аудиоисточника", "аудиоисточников"));
+        }
+
+        transferred.Add(new("OBS и аудиоисточники", Capitalize(string.Join(", ", parts))));
+    }
+
+    private static void AddAutoBroadcastSummary(
+        string targetPath,
+        HashSet<string> failedTargets,
+        List<FirstRunSummaryItem> transferred,
+        List<FirstRunSummaryItem> attention)
+    {
+        if (IsAnyFailed(failedTargets, "settings/settings.json", "settings.json", "settings/platform-lifecycle.json", "platform-lifecycle.json"))
+        {
+            attention.Add(new("Авто-рассылка", "Не удалось перенести настройки авто-рассылки – проверьте раздел «Автоматика».", IsWarning: true));
+            return;
+        }
+
+        var appSettings = ReadJson<AppSettings>(ResolveTargetFile(targetPath, "settings/settings.json", "settings.json"));
+        var hasLifecycle = ResolveTargetFile(targetPath, "settings/platform-lifecycle.json", "platform-lifecycle.json") is not null;
+
+        if (appSettings is null && !hasLifecycle)
+        {
+            attention.Add(new("Авто-рассылка", "Параметры авто-рассылки в старой папке не найдены."));
+            return;
+        }
+
+        var auto = appSettings?.Twitch.AutoBroadcast;
+        if (auto is not null)
+        {
+            var status = auto.AutoBroadcastEnabled
+                ? $"включена, каждые {auto.BroadcastIntervalMinutes} мин"
+                : $"перенесена (сейчас выключена, интервал {auto.BroadcastIntervalMinutes} мин)";
+            transferred.Add(new("Авто-рассылка", Capitalize(status)));
+            return;
+        }
+
+        transferred.Add(new("Авто-рассылка", "Настройки автозапуска и рассылки"));
+    }
+
+    private static void AddPhrasesAndRanksSummary(
+        string targetPath,
+        HashSet<string> failedTargets,
+        List<FirstRunSummaryItem> transferred,
+        List<FirstRunSummaryItem> attention)
+    {
+        if (IsAnyFailed(failedTargets, "settings/settings.json", "settings.json", "settings/commands.json", "commands.json"))
+        {
+            attention.Add(new("Фразы и ранги", "Не удалось перенести часть фраз или рангов – проверьте раздел «Настройки» и «Бот».", IsWarning: true));
+            return;
+        }
+
+        var appSettings = ReadJson<AppSettings>(ResolveTargetFile(targetPath, "settings/settings.json", "settings.json"));
+        var commands = ReadJson<CommandSettings>(ResolveTargetFile(targetPath, "settings/commands.json", "commands.json"));
+
+        if (appSettings is null && commands is null)
+        {
+            attention.Add(new("Фразы и ранги", "Пользовательские фразы и ранги в старой папке не найдены."));
+            return;
+        }
+
+        var parts = new List<string>();
+        if (appSettings is { Ranks.Ranks.Count: > 0 })
+        {
+            parts.Add(Count(appSettings.Ranks.Ranks.Count, "ранг", "ранга", "рангов"));
+        }
+
+        if (appSettings is not null)
+        {
+            parts.Add("фразы сообщений бота");
+        }
+
+        if (commands is { Commands.Count: > 0 })
+        {
+            parts.Add(Count(commands.Commands.Count, "настроенная команда", "настроенные команды", "настроенных команд"));
+        }
+
+        transferred.Add(new("Фразы и ранги", parts.Count > 0 ? Capitalize(string.Join(", ", parts)) : "Параметры рангов и фраз"));
+    }
+
+    private static void AddStatisticsSummary(
+        string targetPath,
+        HashSet<string> failedTargets,
+        List<FirstRunSummaryItem> transferred,
+        List<FirstRunSummaryItem> attention)
+    {
+        if (IsAnyFailed(failedTargets, "users_statistics.json", "user_statistics_catalog.json", "stream_sessions.json", "broadcasts.json", "bot_statistics.json"))
+        {
+            attention.Add(new("Статистика зрителей и сессий", "Часть файлов статистики не перенеслась и осталась в старой папке.", IsWarning: true));
+            return;
+        }
+
+        var viewersCount = CountViewers(targetPath);
+        var sessionsCount = CountSessions(targetPath);
+        var botNode = ReadJsonNode(ResolveTargetFile(targetPath, "bot_statistics.json"));
+        var messagesProcessed = ReadUInt64Property(botNode, "totalMessagesProcessed");
+
+        var parts = new List<string>();
+        if (viewersCount > 0)
+        {
+            parts.Add(Count(viewersCount, "зритель", "зрителя", "зрителей"));
+        }
+
+        if (sessionsCount > 0)
+        {
+            parts.Add(Count(sessionsCount, "эфир", "эфира", "эфиров"));
+        }
+
+        if (parts.Count == 0 && messagesProcessed > 0)
+        {
+            parts.Add(Count((long)messagesProcessed, "сообщение", "сообщения", "сообщений"));
+        }
+
+        if (parts.Count > 0)
+        {
+            transferred.Add(new("Статистика зрителей и сессий", Capitalize(string.Join(", ", parts))));
+            return;
+        }
+
+        var hasAnyStatsFile = ResolveTargetFile(targetPath, "users_statistics.json", "user_statistics_catalog.json", "stream_sessions.json", "broadcasts.json", "bot_statistics.json") is not null;
+        if (hasAnyStatsFile)
+        {
+            transferred.Add(new("Статистика зрителей и сессий", "Файлы статистики перенесены"));
+        }
+        else
+        {
+            attention.Add(new("Статистика зрителей и сессий", "Накопленная статистика зрителей и эфиров в старой папке не найдена."));
+        }
+    }
+
+    private static int CountViewers(string targetPath)
+    {
+        var catalog = ReadJsonNode(ResolveTargetFile(targetPath, "user_statistics_catalog.json"));
+        if (GetJsonProperty(catalog, "accounts") is { } accounts)
+        {
+            var count = CountJsonItems(accounts);
+            if (count > 0)
+            {
+                return count;
+            }
+        }
+
+        var total = 0;
+        var twitchUsers = ReadJsonNode(ResolveTargetFile(targetPath, "users_statistics.json"));
+        total += CountJsonItems(twitchUsers);
+
+        var youtubeUsers = ReadJsonNode(ResolveTargetFile(targetPath, "youtube/users_statistics.json"));
+        total += CountJsonItems(youtubeUsers);
+
+        return total;
+    }
+
+    private static int CountSessions(string targetPath)
+    {
+        var broadcasts = ReadJsonNode(ResolveTargetFile(targetPath, "broadcasts.json"));
+        var broadcastCount = CountJsonItems(GetJsonProperty(broadcasts, "records") ?? broadcasts);
+        if (broadcastCount > 0)
+        {
+            return broadcastCount;
+        }
+
+        var sessions = ReadJsonNode(ResolveTargetFile(targetPath, "stream_sessions.json"));
+        return CountJsonItems(GetJsonProperty(sessions, "sessions") ?? sessions);
+    }
+
+    private static JsonNode? GetJsonProperty(JsonNode? node, string propertyName)
+    {
+        if (node is not JsonObject obj)
+        {
+            return null;
+        }
+
+        foreach (var pair in obj)
+        {
+            if (string.Equals(pair.Key, propertyName, StringComparison.OrdinalIgnoreCase))
+            {
+                return pair.Value;
+            }
+        }
+
+        return null;
+    }
+
+    private static int CountJsonItems(JsonNode? node)
+    {
+        return node switch
+        {
+            JsonArray array => array.Count,
+            JsonObject obj => obj.Count,
+            _ => 0,
+        };
+    }
+
+    private static ulong ReadUInt64Property(JsonNode? node, string propertyName)
+    {
+        if (GetJsonProperty(node, propertyName) is not JsonValue value)
+        {
+            return 0;
+        }
+
+        if (value.TryGetValue(out ulong parsed))
+        {
+            return parsed;
+        }
+
+        if (value.TryGetValue(out long signed) && signed > 0)
+        {
+            return (ulong)signed;
+        }
+
+        return 0;
+    }
+
+    private static bool IsAnyFailed(HashSet<string> failedTargets, params string[] relativePaths)
+    {
+        foreach (var path in relativePaths)
+        {
+            if (failedTargets.Contains(NormalizeRelativePath(path)))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static string NormalizeRelativePath(string path)
+    {
+        return path.Replace('\\', '/').Trim('/');
+    }
+
+    private static string? ResolveTargetFile(string targetPath, params string[] relativeCandidates)
+    {
+        if (string.IsNullOrWhiteSpace(targetPath))
+        {
+            return null;
+        }
+
+        foreach (var candidate in relativeCandidates)
+        {
+            var full = Path.Combine(targetPath, candidate.Replace('/', Path.DirectorySeparatorChar));
+            if (File.Exists(full))
+            {
+                return full;
+            }
+        }
+
+        return null;
+    }
+
+    private static JsonNode? ReadJsonNode(string? filePath)
+    {
+        if (string.IsNullOrWhiteSpace(filePath) || !File.Exists(filePath))
+        {
+            return null;
+        }
+
+        try
+        {
+            return JsonNode.Parse(File.ReadAllText(filePath));
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or JsonException)
+        {
+            return null;
+        }
+    }
+
+    private static T? ReadJson<T>(string? filePath) where T : class
+    {
+        if (string.IsNullOrWhiteSpace(filePath) || !File.Exists(filePath))
+        {
+            return null;
+        }
+
+        try
+        {
+            return JsonSerializer.Deserialize<T>(File.ReadAllText(filePath), ImportSummaryJsonOptions);
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or JsonException)
+        {
+            return null;
+        }
+    }
+
+    private static string Capitalize(string text)
+    {
+        return text.Length == 0 ? text : char.ToUpper(text[0], Russian) + text[1..];
     }
 
     private static string Decapitalize(string text)

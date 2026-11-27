@@ -4,6 +4,7 @@ using KeepShell.Testing;
 using KeepShell.ViewModels;
 using MahApps.Metro.IconPacks;
 using Microsoft.Extensions.Logging.Abstractions;
+using PoproshaykaBot.Core.Chat;
 using PoproshaykaBot.Core.Dashboard;
 using PoproshaykaBot.Core.Debugging;
 using PoproshaykaBot.Core.Infrastructure.Events;
@@ -47,19 +48,12 @@ public sealed class SettingsNavigationSaveTests
 
         var source = shell.Selected;
         var loads = contributor.LoadCount;
-        var openings = 0;
-        var opened = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        multistream.SectionRequested += (_, _) =>
-        {
-            openings++;
-            opened.TrySetResult();
-        };
 
         settings.Dirty = true;
         if (saveOnLeave)
         {
             harness.Prompt.Answer = UnsavedChangesDecision.Save;
-            settings.NavigateToMultistreamCommand.Execute(null);
+            shell.Selected = multistreamTab;
         }
         else
         {
@@ -73,7 +67,6 @@ public sealed class SettingsNavigationSaveTests
             shell.Selected = settingsTab;
             shell.Selected = multistreamTab;
             shell.Selected = shell.FindSectionByKey(SectionKeys.Logs);
-            settings.NavigateToMultistreamCommand.Execute(null);
             shell.OpenSettingsCommand.Execute(null);
             settings.OnEnter();
             multistream.OnEnter();
@@ -94,7 +87,6 @@ public sealed class SettingsNavigationSaveTests
                 Assert.That(contributor.LoadCount, Is.EqualTo(loads));
                 Assert.That(contributor.SaveCount, Is.EqualTo(1));
                 Assert.That(harness.Prompt.AskCount, Is.EqualTo(saveOnLeave ? 1 : 0));
-                Assert.That(openings, Is.Zero);
             });
         }
         finally
@@ -103,17 +95,13 @@ public sealed class SettingsNavigationSaveTests
             await save;
         }
 
-        if (saveOnLeave)
-        {
-            await opened.Task.WaitAsync(TimeSpan.FromSeconds(5));
-        }
+        await Task.Yield();
 
         Assert.Multiple(() =>
         {
             Assert.That(shell.Selected, Is.SameAs(multistreamTab));
             Assert.That(settings.HasUnsavedChanges, Is.False);
             Assert.That(contributor.CollectedSettings, Is.SameAs(contributor.SavedSettings));
-            Assert.That(openings, Is.EqualTo(saveOnLeave ? 1 : 0));
         });
 
         shell.Selected = shell.FindSectionByKey(SectionKeys.Logs);
@@ -131,7 +119,7 @@ public sealed class SettingsNavigationSaveTests
         settings.SettingsSaved += (_, _) => settingsSaved++;
         settings.Dirty = true;
         harness.Prompt.Answer = UnsavedChangesDecision.Save;
-        settings.NavigateToMultistreamCommand.Execute(null);
+        shell.Selected = shell.FindSectionByKey(SectionKeys.Multistream);
         var save = settings.SaveCommand.ExecutionTask!;
 
         if (disposeShell)
@@ -182,6 +170,28 @@ public sealed class SettingsNavigationSaveTests
         });
     }
 
+    [Test]
+    public async Task Navigation_exposes_channels_and_profiles_and_routes_chat_youtube_setup_in_one_click()
+    {
+        await using var harness = new Harness();
+        var shell = harness.Shell;
+        var multistreamSection = shell.FindSectionByKey(SectionKeys.Multistream);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(multistreamSection?.Title, Is.EqualTo("Каналы и профили"));
+            Assert.That(shell.FindSectionByKey("Мультистрим"), Is.SameAs(multistreamSection));
+            Assert.That(shell.FindSectionByKey("Каналы и профили"), Is.SameAs(multistreamSection));
+        });
+
+        harness.ChatTile.SecondaryChat.FallbackActionCommand!.Execute(null);
+        Assert.Multiple(() =>
+        {
+            Assert.That(shell.Selected, Is.SameAs(multistreamSection));
+            Assert.That(harness.Multistream.SelectedPlatform, Is.EqualTo(StreamingPlatform.YouTube));
+        });
+    }
+
     private sealed class Harness : IAsyncDisposable
     {
         private readonly DirectoryInfo _root = Directory.CreateTempSubdirectory("poproshayka-settings-navigation-");
@@ -189,6 +199,7 @@ public sealed class SettingsNavigationSaveTests
         private readonly DashboardViewModel _overview;
         private readonly StreamHistoryPageViewModel _history;
         private readonly MultistreamTileViewModel _tile;
+        private readonly ChatDisplayTileViewModel _chatTile;
         private readonly UpdateBannerViewModel _update;
         private readonly OnboardingBannerViewModel _onboarding;
 
@@ -207,11 +218,26 @@ public sealed class SettingsNavigationSaveTests
             var youtube = new YouTubeSettingsStore(filePath: Path.Combine(_root.FullName, "youtube.json"));
             Settings = new([Contributor], manager, gate, server, bus, NullLogger<SettingsPageViewModel>.Instance, dialogs, store);
 
+            var youtubePlatform = new StubPlatform(StreamingPlatform.YouTube, "YouTube", isEnabled: false);
+            var twitchPlatform = new StubPlatform(StreamingPlatform.Twitch, "Twitch", isEnabled: true);
+            var registry = new ChatPlatformRegistry([twitchPlatform, youtubePlatform]);
             _connection = new(new AppHost([], NullLogger<AppHost>.Instance), [], null, bus, NullLogger<BotConnectionManager>.Instance);
-            _tile = new(new ChatPlatformRegistry([]), catalog, _connection, new PlatformAuthRegistry([]), [], bus, dispatcher, youtube);
+            _tile = new(registry, catalog, _connection, new PlatformAuthRegistry([]), [], bus, dispatcher, youtube);
+            _chatTile = new(
+                manager,
+                new TargetChannelProvider(manager, new DebugChannelStore(filePath: Path.Combine(_root.FullName, "debug-chat.json")), DebugChannelOverride.None),
+                NullLogger<ChatDisplayTileViewModel>.Instance,
+                DispatchProxy.Create<IShellLauncher, InertProxy>(),
+                dialogs,
+                bus,
+                new PoproshaykaBot.Core.Chat.Display.ChatDisplayStore(NullLogger<PoproshaykaBot.Core.Chat.Display.ChatDisplayStore>.Instance),
+                registry,
+                youtube,
+                dispatcher,
+                store);
             Multistream = new(Settings, _tile, []);
             var layout = new DashboardLayoutStore(filePath: Path.Combine(_root.FullName, "layout.json"));
-            _overview = new([_tile], new DashboardLayoutCoordinator(layout), TimeProvider.System);
+            _overview = new([_tile, _chatTile], new DashboardLayoutCoordinator(layout), TimeProvider.System);
             var history = new BroadcastHistoryStore(null, Path.Combine(_root.FullName, "broadcasts.json"), Path.Combine(_root.FullName, "sessions.json"));
             var boxArt = new GameBoxArtProvider(new FakeBoxArtCache(), NullLogger<GameBoxArtProvider>.Instance);
             _history = new(history, new UserStatisticsRepository(NullLogger<UserStatisticsRepository>.Instance), store, boxArt, bus);
@@ -223,7 +249,7 @@ public sealed class SettingsNavigationSaveTests
                 dispatcher,
                 DispatchProxy.Create<IShellLauncher, InertProxy>(),
                 windows);
-            _onboarding = new(new OnboardingChecklist(manager, accounts), DispatchProxy.Create<IOnboardingWizardLauncher, InertProxy>(), bus);
+            _onboarding = new(new OnboardingChecklist(manager, accounts), bus);
             var debug = new DebugBannerViewModel(new TargetChannelProvider(manager,
                 new DebugChannelStore(filePath: Path.Combine(_root.FullName, "debug.json")), DebugChannelOverride.None));
             var preferences = new ShellPreferences(store) { LastPage = SectionKeys.Settings };
@@ -236,6 +262,7 @@ public sealed class SettingsNavigationSaveTests
         public FakeUnsavedChangesPrompt Prompt { get; } = new();
         public SettingsPageViewModel Settings { get; }
         public MultistreamPageViewModel Multistream { get; }
+        public ChatDisplayTileViewModel ChatTile => _chatTile;
         public ShellViewModel Shell { get; }
 
         public async ValueTask DisposeAsync()
@@ -245,6 +272,7 @@ public sealed class SettingsNavigationSaveTests
             _update.Dispose();
             _history.Dispose();
             _overview.Dispose();
+            _chatTile.Dispose();
             _tile.Dispose();
             Settings.Dispose();
             await _connection.DisposeAsync();
@@ -288,6 +316,25 @@ public sealed class SettingsNavigationSaveTests
     private sealed class EmptySubscription : IDisposable
     {
         public void Dispose() { }
+    }
+
+    private sealed class StubPlatform(StreamingPlatform id, string name, bool isEnabled) : IChatPlatform
+    {
+        public StreamingPlatform Id => id;
+        public string DisplayName => name;
+        public PlatformCapabilities Capabilities => PlatformCapabilities.None;
+        public bool IsEnabled => isEnabled;
+        public bool IsConnected => false;
+        public IStreamStatus StreamStatus { get; } = new StubStreamStatus();
+        public IPlatformMessenger Messenger => throw new NotSupportedException();
+    }
+
+    private sealed class StubStreamStatus : IStreamStatus
+    {
+        public StreamStatus CurrentStatus => StreamStatus.Offline;
+        public StreamInfo? CurrentStream => null;
+        public StreamStatusSnapshot GetSnapshot() => new(CurrentStatus, null, null);
+        public Task RefreshLiveSnapshotAsync() => Task.CompletedTask;
     }
 
     public class InertProxy : DispatchProxy

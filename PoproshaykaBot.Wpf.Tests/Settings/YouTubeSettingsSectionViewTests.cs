@@ -14,9 +14,7 @@ using PoproshaykaBot.Core.Twitch.Auth;
 using PoproshaykaBot.Core.YouTube;
 using PoproshaykaBot.Core.YouTube.Auth;
 using PoproshaykaBot.Core.YouTube.Quota;
-using PoproshaykaBot.Wpf.ViewModels.Onboarding;
 using PoproshaykaBot.Wpf.ViewModels.Settings;
-using PoproshaykaBot.Wpf.Views.Onboarding;
 using PoproshaykaBot.Wpf.Views.Settings;
 using System.IO;
 using System.Windows;
@@ -179,34 +177,21 @@ public sealed class YouTubeSettingsSectionViewTests
     }
 
     [Test]
-    public void В_мастере_YouTube_дополнительные_секции_свёрнуты_по_умолчанию_и_есть_подсказка_блокировки()
+    public void YouTubeSettingsSectionView_инструкция_свёрнута_по_умолчанию()
     {
         using var editor = CreateSectionViewModel();
-        using var page = new YouTubeOnboardingPageViewModel(editor);
-        var context = new OnboardingContext(new AppSettings(), new(), new(), new YouTubeSettings { Enabled = true });
-        page.OnEnter(context);
-
-        var onboardingView = new YouTubeOnboardingPageView { DataContext = page };
-        onboardingView.Measure(new Size(688, 900));
-        onboardingView.Arrange(new Rect(0, 0, 688, 900));
-        onboardingView.UpdateLayout();
 
         var settingsView = new YouTubeSettingsSectionView { DataContext = editor };
         settingsView.Measure(new Size(688, 900));
         settingsView.Arrange(new Rect(0, 0, 688, 900));
         settingsView.UpdateLayout();
 
-        var expanders = Descendants<Expander>(settingsView).ToArray();
-        var broadcasterExpander = Descendants<Expander>(onboardingView).Single(e => Equals(e.Header, "Аккаунт стримера (необязательно)"));
-        var hintBlock = Descendants<TextBlock>(onboardingView).Single(tb => tb.Text == page.ValidationHint);
+        var guideExpander = Descendants<Expander>(settingsView).First(e => Equals(e.Header, "Памятка по проекту Google Cloud"));
 
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(editor.IsAdvancedExpanded, Is.False);
             Assert.That(editor.IsGuideExpanded, Is.False);
-            Assert.That(expanders.All(e => !e.IsExpanded), Is.True);
-            Assert.That(broadcasterExpander.IsExpanded, Is.False);
-            Assert.That(hintBlock.Visibility, Is.EqualTo(Visibility.Visible));
+            Assert.That(guideExpander.IsExpanded, Is.False);
         }
     }
 
@@ -283,51 +268,6 @@ public sealed class YouTubeSettingsSectionViewTests
                 Assert.That(AutomationProperties.GetName(refreshBox.FindName("Pwd") as DependencyObject ?? throw new InvalidOperationException()), Is.EqualTo("Refresh Token"));
                 Assert.That(AutomationProperties.GetName(refreshBox.FindName("Plain") as DependencyObject ?? throw new InvalidOperationException()), Is.EqualTo("Refresh Token"));
                 Assert.That(scopesBox, Is.Not.Null);
-            }
-        }
-        finally
-        {
-            if (Directory.Exists(tempDir))
-            {
-                Directory.Delete(tempDir, recursive: true);
-            }
-        }
-    }
-
-    [Test]
-    public void HttpServerCheckPageView_имеет_имя_порта_и_одну_кнопку_проверки_при_ошибке_ввода()
-    {
-        var tempDir = Path.Combine(Path.GetTempPath(), "PoproshaykaBotTests", Guid.NewGuid().ToString("N"));
-        Directory.CreateDirectory(tempDir);
-        try
-        {
-            var settingsManager = new SettingsManager(NullLogger<SettingsManager>.Instance, Path.Combine(tempDir, "settings.json"));
-            var server = new KestrelHttpServer(null!, settingsManager, [], NullLogger<KestrelHttpServer>.Instance, NullLoggerFactory.Instance);
-            var vm = new HttpServerCheckPageViewModel(settingsManager, server, NullLogger<HttpServerCheckPageViewModel>.Instance);
-            var context = new OnboardingContext(
-                new AppSettings { Twitch = new TwitchSettings { Enabled = false, HttpServerPort = 8080 } },
-                new(),
-                new(),
-                new YouTubeSettings { Enabled = true });
-            vm.OnEnter(context);
-            vm.PortText = "99999";
-
-            var view = new HttpServerCheckPageView { DataContext = vm };
-            view.Measure(new Size(688, 400));
-            view.Arrange(new Rect(0, 0, 688, 400));
-            view.UpdateLayout();
-
-            var portBox = Descendants<TextBox>(view).Single(e => AutomationProperties.GetName(e) == "Порт HTTP-сервера");
-            var checkButtons = Descendants<Button>(view).Where(b => Equals(b.Content, "Проверить порт") && b.Visibility == Visibility.Visible).ToArray();
-            var retryButtons = Descendants<Button>(view).Where(b => Equals(b.Content, "Повторить проверку") && b.Visibility == Visibility.Visible).ToArray();
-            var errorBlock = Descendants<TextBlock>(view).Single(tb => tb.Text == vm.PortErrorText);
-
-            using (Assert.EnterMultipleScope())
-            {
-                Assert.That(portBox, Is.Not.Null);
-                Assert.That(checkButtons, Has.Length.EqualTo(1));
-                Assert.That(retryButtons, Is.Empty);
-                Assert.That(errorBlock.Visibility, Is.EqualTo(Visibility.Visible));
             }
         }
         finally

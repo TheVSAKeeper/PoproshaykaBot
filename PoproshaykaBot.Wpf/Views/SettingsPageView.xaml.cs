@@ -123,8 +123,7 @@ public partial class SettingsPageView : UserControl, IView<SettingsPageViewModel
             SectionRail.SetCurrentValue(SettingsRail.SearchTextProperty, sections.Query);
         }
 
-        if (e.PropertyName == nameof(SettingsSectionList.Selected)
-            || e.PropertyName == nameof(SettingsSectionList.SelectedChild) && _sections?.Selected?.Key == PlatformSettingsPages.SectionKey)
+        if (e.PropertyName == nameof(SettingsSectionList.Selected))
         {
             ClearBlocksCache();
             SectionScroll.ScrollToVerticalOffset(0);
@@ -138,7 +137,7 @@ public partial class SettingsPageView : UserControl, IView<SettingsPageViewModel
 
     private void ScrollToBlock(SettingsSubsection child)
     {
-        if (_sections?.Selected is not { } section || section.Key == PlatformSettingsPages.SectionKey)
+        if (_sections?.Selected is not { } section)
         {
             return;
         }
@@ -187,7 +186,7 @@ public partial class SettingsPageView : UserControl, IView<SettingsPageViewModel
 
     private void SectionScroll_OnScrollChanged(object sender, ScrollChangedEventArgs e)
     {
-        if (_sections is not { Selected: { Children.Count: > 0 } section } || section.Key == PlatformSettingsPages.SectionKey)
+        if (_sections is not { Selected: { Children.Count: > 0 } section })
         {
             return;
         }

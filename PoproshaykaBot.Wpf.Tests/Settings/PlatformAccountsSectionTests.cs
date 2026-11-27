@@ -554,9 +554,9 @@ public sealed class PlatformAccountsSectionTests
         {
             Assert.That(card.AuthMethods, Has.Count.EqualTo(2));
             Assert.That(card.ApiAuthMethod.Title, Is.EqualTo("API / OAuth"));
-            Assert.That(card.WebChatMethod?.Title, Is.EqualTo("Веб-чат"));
+            Assert.That(card.WebChatMethod?.Title, Is.EqualTo("Вход для чата в окне"));
             Assert.That(card.WebChatMethod?.Status, Is.EqualTo(PlatformAuthMethodStatus.Attention));
-            Assert.That(card.WebChatStatusText, Is.EqualTo("Веб-чат: не подключён"));
+            Assert.That(card.WebChatStatusText, Is.EqualTo("Вход для чата в окне: не подключён"));
             Assert.That(card.WebChatStatusSeverity, Is.EqualTo(StatusSeverity.Warning));
             Assert.That(card.CanSignInWebChat, Is.True);
             Assert.That(card.CanResetWebChat, Is.False);
@@ -568,7 +568,7 @@ public sealed class PlatformAccountsSectionTests
         Assert.Multiple(() =>
         {
             Assert.That(webChatLogin.LastRequest?.Descriptor.Platform, Is.EqualTo(platform));
-            Assert.That(afterSignIn.WebChatStatusText, Is.EqualTo("Веб-чат: подключён"));
+            Assert.That(afterSignIn.WebChatStatusText, Is.EqualTo("Вход для чата в окне: подключён"));
             Assert.That(afterSignIn.WebChatStatusSeverity, Is.EqualTo(StatusSeverity.Success));
             Assert.That(afterSignIn.CanSignInWebChat, Is.False);
             Assert.That(afterSignIn.CanResetWebChat, Is.True);
@@ -584,7 +584,7 @@ public sealed class PlatformAccountsSectionTests
         var afterReset = vm.Accounts.Single();
         Assert.Multiple(() =>
         {
-            Assert.That(afterReset.WebChatStatusText, Is.EqualTo("Веб-чат: не подключён"));
+            Assert.That(afterReset.WebChatStatusText, Is.EqualTo("Вход для чата в окне: не подключён"));
             Assert.That(afterReset.WebChatStatusSeverity, Is.EqualTo(StatusSeverity.Warning));
             Assert.That(afterReset.CanSignInWebChat, Is.True);
             Assert.That(afterReset.CanResetWebChat, Is.False);
@@ -889,12 +889,12 @@ public sealed class PlatformAccountsSectionTests
         Assert.Multiple(() =>
         {
             Assert.That(buttons.Any(b => Equals(b.Content, "Отменить вход") && b.ActualHeight > 0), Is.True);
-            Assert.That(buttons.Any(b => Equals(b.Content, "Подключить веб-чат") && b.ActualHeight > 0), Is.True);
+            Assert.That(buttons.Any(b => Equals(b.Content, "Вход для чата в окне") && b.ActualHeight > 0), Is.True);
             Assert.That(buttons.Any(b => Equals(b.Content, "Переподключить") && b.ActualHeight > 0), Is.True);
             Assert.That(buttons.Any(b => Equals(b.Content, "Отключить") && b.ActualHeight > 0), Is.True);
-            Assert.That(checkboxes.Any(c => Equals(c.Content, "Сразу подключить веб-чат после входа")), Is.True);
-            Assert.That(texts, Has.Some.EqualTo("Веб-чат: не подключён"));
-            Assert.That(texts, Has.Some.EqualTo("Веб-чат: подключён"));
+            Assert.That(checkboxes.Any(c => Equals(c.Content, "Сразу выполнить вход для чата в окне после авторизации")), Is.True);
+            Assert.That(texts, Has.Some.EqualTo("Вход для чата в окне: не подключён"));
+            Assert.That(texts, Has.Some.EqualTo("Вход для чата в окне: подключён"));
         });
 
         TestResources.CaptureAccountLayout(host, $"accounts-ux-{theme}", 820, 900);

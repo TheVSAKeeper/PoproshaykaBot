@@ -119,6 +119,29 @@
                            Style="{StaticResource Form.Hint}"
                            Margin="0,0,0,12" />
 
+                <Border Background="{DynamicResource State.WarningSoft}"
+                        BorderBrush="{DynamicResource State.Warning}"
+                        BorderThickness="1"
+                        CornerRadius="{DynamicResource Radius.S}"
+                        Padding="10,8"
+                        Margin="0,0,0,10"
+                        AutomationProperties.AutomationId="PlatformAccountsStep1DependencyBanner"
+                        Visibility="{Binding HasStep1DependencyNotice, Converter={StaticResource BoolToVisibility}}">
+                    <StackPanel Orientation="Horizontal">
+                        <iconPacks:PackIconLucide Kind="{x:Static iconPacks:PackIconLucideKind.TriangleAlert}"
+                                                  Width="15"
+                                                  Height="15"
+                                                  Foreground="{DynamicResource State.WarningText}"
+                                                  VerticalAlignment="Center"
+                                                  Margin="0,0,8,0" />
+                        <TextBlock Text="{Binding Step1DependencyNotice}"
+                                   Foreground="{DynamicResource State.WarningText}"
+                                   FontSize="{DynamicResource Font.Size.S}"
+                                   TextWrapping="Wrap"
+                                   VerticalAlignment="Center" />
+                    </StackPanel>
+                </Border>
+
                 <WrapPanel Margin="0,0,0,10"
                            Visibility="{Binding CanAuthorize, Converter={StaticResource BoolToVisibility}}">
                     <Button Content="Войти (бот + стример)"
@@ -141,11 +164,11 @@
 
                 <StackPanel Margin="0,0,0,10"
                             Visibility="{Binding CanAuthorize, Converter={StaticResource BoolToVisibility}}">
-                    <CheckBox Content="Сразу подключить веб-чат после входа"
+                    <CheckBox Content="Сразу выполнить вход для чата в окне после авторизации"
                               Style="{StaticResource CheckBox.Default}"
                               IsChecked="{Binding ConnectWebChatAfterLogin, Mode=TwoWay}"
                               AutomationProperties.AutomationId="PlatformAccountsConnectWebChatAfterLogin"
-                              ToolTip="Для отправки сообщений в веб-чат, если браузерная сессия ещё не привязана."
+                              ToolTip="Чтобы сразу отправлять сообщения во встроенном чате в окне без повторного входа."
                               Visibility="{Binding SupportsWebChatAfterLogin, Converter={StaticResource BoolToVisibility}}"
                               Margin="0,0,0,6" />
 
@@ -267,7 +290,7 @@
                                             <WrapPanel DockPanel.Dock="Right"
                                                        VerticalAlignment="Center"
                                                        Margin="10,0,0,0">
-                                                <Button Content="Подключить веб-чат"
+                                                <Button Content="Вход для чата в окне"
                                                         Style="{StaticResource Button.Primary}"
                                                         Command="{Binding SignInWebChatCommand}"
                                                         AutomationProperties.AutomationId="PlatformAccountConnectWebChat"

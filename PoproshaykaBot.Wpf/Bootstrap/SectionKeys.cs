@@ -20,6 +20,8 @@ public static class SectionKeys
     public const string ObsSuffix = ":obs";
     public const string ObsFullSuffix = ":obs-full";
     public const string EditSuffix = ":edit";
+    public const string ReadySuffix = ":ready";
+    public const string YouTubeEmptySuffix = ":youtube-empty";
 
     public const string UsersSelected = Users + SelectedSuffix;
     public const string StreamsSelected = Streams + SelectedSuffix;
@@ -30,6 +32,8 @@ public static class SectionKeys
     public const string OverviewObs = Overview + ObsSuffix;
     public const string OverviewObsFull = Overview + ObsFullSuffix;
     public const string OverviewEdit = Overview + EditSuffix;
+    public const string OverviewYouTubeEmpty = Overview + YouTubeEmptySuffix;
+    public const string MultistreamReady = Multistream + ReadySuffix;
 
     public static IReadOnlyList<string> All { get; } = [Overview, Multistream, Users, Streams, Bot, Logs, Diagnostics, Settings];
 
@@ -48,6 +52,8 @@ public static class SectionKeys
     public static IReadOnlyDictionary<string, string> LegacyTitles { get; } = new Dictionary<string, string>(StringComparer.Ordinal)
     {
         ["Обзор"] = Overview,
+        ["Мультистрим"] = Multistream,
+        ["Каналы и профили"] = Multistream,
         ["Пользователи"] = Users,
         ["История стримов"] = Streams,
         ["Команды"] = Commands,
@@ -101,9 +107,14 @@ public static class SectionKeys
     {
         ArgumentNullException.ThrowIfNull(key);
 
-        if (IsObsCase(key) || IsEditCase(key))
+        if (IsObsCase(key) || IsEditCase(key) || string.Equals(key, OverviewYouTubeEmpty, StringComparison.OrdinalIgnoreCase))
         {
             return Overview;
+        }
+
+        if (string.Equals(key, MultistreamReady, StringComparison.OrdinalIgnoreCase))
+        {
+            return Multistream;
         }
 
         if (IsSelectedCase(key))

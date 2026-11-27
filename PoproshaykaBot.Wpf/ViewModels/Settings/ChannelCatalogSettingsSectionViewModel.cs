@@ -74,7 +74,13 @@ public sealed partial class ChannelCatalogSettingsSectionViewModel : ObservableO
     private StatusSeverity _statusNoticeSeverity;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasStepDependencyNotice))]
+    private string? _stepDependencyNotice;
+
+    [ObservableProperty]
     private ChannelCatalogItemViewModel? _selectedChannel;
+
+    public bool HasStepDependencyNotice => !string.IsNullOrWhiteSpace(StepDependencyNotice);
 
     public ChannelCatalogSettingsSectionViewModel(
         ChannelCatalogStore catalogStore,
@@ -134,7 +140,7 @@ public sealed partial class ChannelCatalogSettingsSectionViewModel : ObservableO
                 return twitch.ClientId.Trim() != settings.ClientId
                     || twitch.ClientSecret.Trim() != settings.ClientSecret
                     || twitch.RedirectUri.Trim() != settings.RedirectUri
-                    ? "Сначала сохраните новые реквизиты в блоке «Приложение Twitch», затем повторите вход."
+                    ? "Сначала заполните и сохраните Шаг 1 («Доступ площадки») выше, затем повторите вход."
                     : null;
             };
         }
@@ -146,7 +152,7 @@ public sealed partial class ChannelCatalogSettingsSectionViewModel : ObservableO
                 var settings = _youtubeSettingsStore.Load();
                 var secret = _youtubeAccountsStore.LoadClientSecret();
                 return youtube.ClientId.Trim() != settings.ClientId || youtube.ClientSecret.Trim() != secret
-                    ? "Сначала сохраните новые реквиты в блоке «Google-проект», затем повторите вход."
+                    ? "Сначала заполните и сохраните Шаг 1 («Доступ площадки») выше, затем повторите вход."
                     : null;
             };
         }
@@ -726,6 +732,7 @@ public sealed partial class ChannelCatalogSettingsSectionViewModel : ObservableO
             BroadcasterContextId = AuthContextIds.Default,
             BotContextId = AuthContextIds.Default,
         };
+        PreFillSignedInAccounts(entry, platform, channelId);
 
         var isFirstForPlatform = !_allChannels.Any(c => c.Platform == platform);
         if (isFirstForPlatform)
@@ -899,6 +906,59 @@ public sealed partial class ChannelCatalogSettingsSectionViewModel : ObservableO
         }
 
         OnPropertyChanged(nameof(SelectedPreselectedNextOption));
+    }
+
+    private void PreFillSignedInAccounts(ChannelCatalogEntry entry, StreamingPlatform platform, string channelId)
+    {
+        var accounts = ListAccounts(platform);
+        if (accounts is not { Count: > 0 })
+        {
+            return;
+        }
+
+        if (FindPreferredGrant(accounts, PlatformAuthRole.Bot, channelId) is { } bot)
+        {
+            entry.BotAccountId = bot.AccountId;
+            entry.BotContextId = AuthContextIds.Normalize(bot.ContextId);
+        }
+
+        if (FindPreferredGrant(accounts, PlatformAuthRole.Broadcaster, channelId) is { } broadcaster)
+        {
+            entry.BroadcasterAccountId = broadcaster.AccountId;
+            entry.BroadcasterContextId = AuthContextIds.Normalize(broadcaster.ContextId);
+        }
+    }
+
+    private static (string AccountId, string ContextId)? FindPreferredGrant(
+        IReadOnlyList<PlatformAccount> accounts,
+        PlatformAuthRole role,
+        string channelId)
+    {
+        var candidates = accounts
+            .SelectMany(account => account.Authorizations
+                .Where(grant => grant.Role == role && grant.HasToken)
+                .Select(grant => (AccountId: account.Key.AccountId, grant.ContextId, grant.IsDefault)))
+            .Where(candidate => !string.IsNullOrWhiteSpace(candidate.AccountId))
+            .ToArray();
+        if (candidates.Length == 0)
+        {
+            return null;
+        }
+
+        var chosen = role == PlatformAuthRole.Broadcaster
+            ? candidates.FirstOrDefault(candidate => string.Equals(candidate.AccountId, channelId, StringComparison.Ordinal))
+            : default;
+        if (string.IsNullOrWhiteSpace(chosen.AccountId))
+        {
+            chosen = candidates.FirstOrDefault(static candidate => candidate.IsDefault);
+        }
+
+        if (string.IsNullOrWhiteSpace(chosen.AccountId))
+        {
+            chosen = candidates[0];
+        }
+
+        return (chosen.AccountId, chosen.ContextId);
     }
 
     private IReadOnlyList<PlatformAccount>? ListAccounts(StreamingPlatform platform)

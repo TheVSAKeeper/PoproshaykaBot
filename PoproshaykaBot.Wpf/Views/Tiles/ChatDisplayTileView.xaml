@@ -63,13 +63,13 @@
                             <TextBlock DockPanel.Dock="Left" Text="{Binding DisplayName}" Style="{StaticResource ChatPaneTitle}"
                                        VerticalAlignment="Center" />
                             <Button DockPanel.Dock="Right"
-                                    Content="Войти в браузере"
+                                    Content="Вход для чата в окне"
                                     Command="{Binding SignInBrowserCommand}"
                                     Style="{StaticResource Button.Ghost}"
                                     Padding="6,1" MinHeight="22" Margin="6,0,0,0"
                                     FontSize="{DynamicResource Font.Size.S}"
-                                    AutomationProperties.Name="{Binding DisplayName, StringFormat='Войти в веб-чат {0}'}"
-                                    ToolTip="{Binding DisplayName, StringFormat='Войти в аккаунт {0} внутри плитки для отправки сообщений и модерации чата'}"
+                                    AutomationProperties.Name="{Binding DisplayName, StringFormat='Вход для чата в окне {0}'}"
+                                    ToolTip="{Binding DisplayName, StringFormat='Выполнить вход для чата в окне ({0}) для отправки сообщений и модерации'}"
                                     Visibility="{Binding CanSignInBrowser, Converter={StaticResource BoolToVisibility}}" />
                             <Button DockPanel.Dock="Right"
                                     Content="Выйти"

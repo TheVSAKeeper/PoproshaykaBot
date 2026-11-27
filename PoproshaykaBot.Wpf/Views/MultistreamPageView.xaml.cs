@@ -184,16 +184,14 @@ public partial class MultistreamPageView : UserControl, IView<MultistreamPageVie
         }
 
         DetailScroll.UpdateLayout();
-        if (section is MultistreamSection.Automation or MultistreamSection.Channels or MultistreamSection.Parameters or MultistreamSection.Accounts)
+        if (section is MultistreamSection.Automation or MultistreamSection.Parameters)
         {
             var topTarget = section switch
             {
                 MultistreamSection.Automation => FindControl(AutomationSection, control => control.IsTabStop),
-                MultistreamSection.Parameters => FindControl(PlatformSettingsHost, control =>
+                _ => FindControl(PlatformSettingsHost, control =>
                         AutomationProperties.GetAutomationId(control) == "MultistreamEnableYouTube")
                     ?? FindControl(PlatformSettingsHost, control => control.IsTabStop),
-                MultistreamSection.Accounts => FindControl(PlatformAccountsHost, control => control.IsTabStop),
-                _ => FindChannelTarget(),
             };
 
             _revealingSection = true;
@@ -213,6 +211,7 @@ public partial class MultistreamPageView : UserControl, IView<MultistreamPageVie
         var target = section switch
         {
             MultistreamSection.Platforms => FindPlatformTarget(page.SelectedCard),
+            MultistreamSection.Accounts => FindControl(PlatformAccountsHost, control => control.IsTabStop),
             MultistreamSection.BotAuthorization => FindControl(ChannelEditor, control =>
                     AutomationProperties.GetAutomationId(control) is "ChannelBotAuthorization" or "DefaultBotAuthorization")
                 ?? FindChannelTarget(),

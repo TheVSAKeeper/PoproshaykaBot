@@ -47,7 +47,6 @@ public sealed class BotAutomation(
     DiagnosticsSnapshotSource? diagnosticsSource = null,
     ChannelCatalogStore? channelCatalog = null,
     IEnumerable<IPlatformChannelMonitor>? channelMonitors = null,
-    IOnboardingWizardLauncher? onboardingWizard = null,
     IMcpConnectNotificationGate? connectNotificationGate = null,
     IChannelSwitchCoordinator? channelSwitchCoordinator = null,
     PreviousRunState? previousRun = null,
@@ -164,8 +163,6 @@ public sealed class BotAutomation(
 
     public BotLifecyclePhase Connect(StreamingPlatform? platform = null)
     {
-        EnsureOnboardingClosed();
-
         if (platform is { } target)
         {
             return ConnectPlatform(target);
@@ -229,7 +226,6 @@ public sealed class BotAutomation(
     public async Task<BotLifecyclePhase> DisconnectAsync(StreamingPlatform? platform = null, CancellationToken cancellationToken = default)
     {
         ThrowIfDisconnectCancelled(cancellationToken);
-        EnsureOnboardingClosed();
 
         if (platform is { } target)
         {
@@ -1184,14 +1180,6 @@ public sealed class BotAutomation(
             : "Запрос отключения бота отменён до выполнения – проверьте текущую фазу через get_bot_state.";
 
         throw new InvalidOperationException(message);
-    }
-
-    private void EnsureOnboardingClosed()
-    {
-        if (onboardingWizard?.IsOpen == true)
-        {
-            throw new InvalidOperationException("Открыт мастер первоначальной настройки – сначала завершите или закройте мастер.");
-        }
     }
 
     private bool HasAnyPlatformInPhase(BotLifecyclePhase phase)

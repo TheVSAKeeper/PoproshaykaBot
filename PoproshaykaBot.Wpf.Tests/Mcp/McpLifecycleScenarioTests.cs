@@ -157,34 +157,6 @@ public sealed class McpLifecycleScenarioTests
     }
 
     [Test]
-    public async Task Scenario3_ConnectBot_IsBlockedWhileOnboardingWizardOpen_AndSucceedsWhenClosed()
-    {
-        var controller = new McpTestHarness.FakeBotConnectionController
-        {
-            CurrentPhase = BotLifecyclePhase.Idle,
-        };
-
-        await using var harness = await McpTestHarness.StartAsync(
-            allowMutations: true,
-            connectionController: controller);
-        await using var client = await harness.ConnectClientAsync();
-
-        harness.OnboardingWizard.Show();
-        var (blockedError, blockedMessage) = await McpTestHarness.CallToolExpectResultAsync(client, "connect_bot");
-
-        harness.OnboardingWizard.Close();
-        using var acceptedDoc = await McpTestHarness.CallToolJsonAsync(client, "connect_bot");
-
-        using (Assert.EnterMultipleScope())
-        {
-            Assert.That(blockedError, Is.True);
-            Assert.That(blockedMessage, Does.Contain("мастер"));
-            Assert.That(acceptedDoc.RootElement.GetProperty("accepted").GetBoolean(), Is.True);
-            Assert.That(controller.StartCalls, Is.EqualTo(1));
-        }
-    }
-
-    [Test]
     public async Task Scenario4_DisconnectBot_DuringOnlineStreamWithAutoStop_DisconnectsCleanlyWithoutDoubleStop()
     {
         var eventBus = new InMemoryEventBus(NullLogger<InMemoryEventBus>.Instance);

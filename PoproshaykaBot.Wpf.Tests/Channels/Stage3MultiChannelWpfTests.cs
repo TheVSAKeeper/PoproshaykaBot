@@ -122,7 +122,7 @@ public sealed class Stage3MultiChannelWpfTests
         Assert.Multiple(() =>
         {
             Assert.That(vm.SelectedChannel?.ChannelId, Is.EqualTo("10"));
-            Assert.That(vm.SelectedChannel?.ToEntry().GetAccountAssignment(PlatformAuthRole.Bot), Is.Null);
+            Assert.That(vm.SelectedChannel?.ToEntry().GetAccountAssignment(PlatformAuthRole.Bot)?.Account.AccountId, Is.EqualTo("90"));
             Assert.That(vm.AuthorizeDefaultBotCommand.CanExecute(null), Is.False);
         });
     }

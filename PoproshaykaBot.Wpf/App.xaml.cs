@@ -40,11 +40,10 @@ using PoproshaykaBot.Wpf.ViewModels;
 using PoproshaykaBot.Wpf.ViewModels.Diagnostics;
 using PoproshaykaBot.Wpf.ViewModels.Controls;
 using PoproshaykaBot.Wpf.ViewModels.Dialogs;
-using PoproshaykaBot.Wpf.ViewModels.Onboarding;
+using PoproshaykaBot.Wpf.ViewModels.Migration;
 using PoproshaykaBot.Wpf.ViewModels.Settings;
 using PoproshaykaBot.Wpf.ViewModels.Tiles;
 using PoproshaykaBot.Wpf.Views;
-using PoproshaykaBot.Wpf.Views.Onboarding;
 using Serilog;
 using Serilog.Debugging;
 using Serilog.Events;
@@ -249,7 +248,6 @@ public partial class App : Application
 
             try
             {
-                var offerImport = false;
                 IReadOnlyList<LegacyDataSummary> importCandidates = [];
                 LegacyDataSummary? importTarget = null;
 
@@ -269,7 +267,11 @@ public partial class App : Application
                     else
                     {
                         await Task.Run(MigrateLegacySettingsLayout);
-                        (offerImport, importCandidates, importTarget) = await ScanLegacyImportCandidatesAsync(uiSettings);
+                    }
+
+                    if (!IsGallery)
+                    {
+                        (_, importCandidates, importTarget) = await ScanLegacyImportCandidatesAsync(uiSettings, IsHeadless);
                     }
                 }
 
@@ -286,23 +288,21 @@ public partial class App : Application
                     return;
                 }
 
-                var checklist = _services.GetRequiredService<OnboardingChecklist>();
-                var onboardingPlan = GetStartupOnboardingPlan(checklist, offerImport);
+                var firstRunOutcome = FirstRunStartOutcome.None;
 
-                if (onboardingPlan.ShouldShow)
+                if (ShouldShowFirstRunStart(importTarget, uiSettings, IsGallery))
                 {
                     splash?.Dispose();
                     splash = null;
 
-                    var (modalWait, _) = await ShowStartupOnboardingWizardAsync(
-                        onboardingPlan,
+                    var (modalWait, outcome, _) = await ShowFirstRunStartWindowAsync(
                         importCandidates,
-                        importTarget,
                         uiSettings,
                         uiSettingsPath,
                         themePackLoader,
                         coreUiLogSink);
                     interactiveWait += modalWait;
+                    firstRunOutcome = outcome;
                 }
 
                 _services.GetRequiredService<StatisticsPreload>().Start();
@@ -338,6 +338,16 @@ public partial class App : Application
                 {
                     var window = _services.GetRequiredService<MainWindow>();
                     MainWindow = window;
+
+                    var shell = _services.GetRequiredService<ShellViewModel>();
+                    if (firstRunOutcome == FirstRunStartOutcome.ConnectYouTube)
+                    {
+                        shell.OpenConnectYouTube();
+                    }
+                    else if (firstRunOutcome is FirstRunStartOutcome.OpenDashboard or FirstRunStartOutcome.StartFresh)
+                    {
+                        shell.OpenOverview();
+                    }
 
                     if (IsHeadless)
                     {
@@ -720,7 +730,6 @@ public partial class App : Application
         services.AddSingleton<ChannelSwitchPromptBannerViewModel>();
         services.AddSingleton<DebugBannerViewModel>();
         services.AddSingleton<IUnsavedChangesPrompt, UnsavedChangesPrompt>();
-        services.AddSingleton<IOnboardingWizardLauncher, OnboardingWizardLauncher>();
         services.AddSingleton<IEmbeddedTwitchAuthDialog, EmbeddedTwitchAuthDialog>();
         services.AddSingleton<IEmbeddedYouTubeAuthDialog, EmbeddedYouTubeAuthDialog>();
         services.AddSingleton<IPlatformWebChatLoginDialog, EmbeddedPlatformChatLoginDialog>();
@@ -739,8 +748,6 @@ public partial class App : Application
         services.AddTransient<EmbeddedTwitchAuthDialogViewModel>();
         services.AddTransient<EmbeddedYouTubeAuthDialogViewModel>();
         services.AddTransient<EmbeddedPlatformChatLoginDialogViewModel>();
-        services.AddTransient<MultistreamPlatformSetupDialogViewModel>();
-        services.AddTransient<MultistreamChannelWizardDialogViewModel>();
 
         services.AddTransient<BasicSettingsSectionViewModel>();
         services.AddTransient<RateLimitingSettingsViewModel>();
@@ -781,22 +788,6 @@ public partial class App : Application
         services.AddTransient<ISettingsSectionContributor, ViewModels.Settings.Contributors.MiscSettingsSectionContributor>();
 
         services.AddSingleton<SettingsPageViewModel>();
-
-        services.AddTransient<IOnboardingPageViewModel, WelcomePageViewModel>();
-        services.AddTransient<IOnboardingPageViewModel, LegacyImportPageViewModel>();
-        services.AddTransient<IOnboardingPageViewModel, AppearancePageViewModel>();
-        services.AddTransient<IOnboardingPageViewModel, PlatformsPageViewModel>();
-        services.AddTransient<IOnboardingPageViewModel, CredentialsPageViewModel>();
-        services.AddTransient<IOnboardingPageViewModel, HttpServerCheckPageViewModel>();
-        services.AddTransient<IOnboardingPageViewModel, BotAuthorizationPageViewModel>();
-        services.AddTransient<IOnboardingPageViewModel, BroadcasterAuthorizationPageViewModel>();
-        services.AddTransient<IOnboardingPageViewModel, YouTubeOnboardingPageViewModel>();
-        services.AddTransient<IOnboardingPageViewModel, BotConnectionPageViewModel>();
-        services.AddTransient<IOnboardingPageViewModel, HealthCheckPageViewModel>();
-        services.AddTransient<IOnboardingPageViewModel, CompletionPageViewModel>();
-
-        services.AddTransient<OnboardingWizardViewModel>();
-        services.AddTransient<OnboardingWizardWindow>();
     }
 
     private ServiceProvider BuildAndInitializeServices(

@@ -63,7 +63,6 @@ public class SettingsBlocksTests
             Assert.That(presentation.Group?.Title, Is.EqualTo("VK Видео Live"));
             Assert.That(PlatformSettingsPages.GetPlatform(presentation.Group), Is.EqualTo(StreamingPlatform.VkLive));
             Assert.That(presentation.Blocks, Is.EqualTo(new[] { catalog, credentials }));
-            Assert.That(extracted.LinkTargets.Select(t => t.Key), Is.EqualTo(new[] { "vklive" }));
             Assert.That(PlatformVisuals.Get(StreamingPlatform.VkLive).Platform, Is.EqualTo(StreamingPlatform.VkLive));
             Assert.That(PlatformVisuals.ResolveGeometry(StreamingPlatform.VkLive),
                 Is.Not.SameAs(PlatformVisuals.ResolveGeometry(StreamingPlatform.Twitch)));
@@ -153,29 +152,17 @@ public class SettingsBlocksTests
     }
 
     [Test]
-    public void Площадки_в_настройках_одной_секцией_без_подпунктов_ищутся_по_словам_и_маршрутизируются()
+    public void Пустая_заглушка_площадок_удалена_из_настроек_а_устаревшие_пути_ведут_в_базовый_раздел()
     {
         using var pageVm = CreateFullPageViewModel();
-        var section = pageVm.Sections[PlatformSettingsPages.SectionKey];
-        var requested = new List<StreamingPlatform?>();
-        pageVm.MultistreamRequested += (_, platform) => requested.Add(platform);
 
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(section.Title, Is.EqualTo("Площадки"));
-            Assert.That(pageVm.PlatformsCardTitle, Is.EqualTo("Площадки и мультистрим"));
-            Assert.That(section.Children, Is.Empty);
             Assert.That(pageVm.Sections.Items.Select(item => item.Key),
-                Has.None.Matches<string>(key => key is "oauth" or "youtube" or "channels"));
-            Assert.That(pageVm.PlatformLinkTargets.Select(t => t.Key), Is.EqualTo(new[] { "twitch", "youtube", "multistream" }));
+                Has.None.Matches<string>(key => key is "platforms" or "oauth" or "youtube" or "channels"));
+            Assert.That(pageVm.PlatformPresentations.Select(p => p.Group?.Key),
+                Is.EquivalentTo(new[] { "twitch", "youtube", "multistream" }));
         }
-
-        foreach (var term in new[] { "oauth", "квота", "профили" })
-        {
-            pageVm.Sections.Filter(term);
-            Assert.That(section.IsVisible, Is.True, $"Поиск по «{term}» должен находить раздел «Площадки».");
-        }
-        pageVm.Sections.Filter(string.Empty);
 
         foreach (var legacy in new[]
         {
@@ -186,25 +173,15 @@ public class SettingsBlocksTests
             "basic/channel",
             "stream/auto",
             "stream/lifecycle",
+            "platforms",
             "platforms/twitch",
             "platforms/youtube",
             "platforms/multistream",
         })
         {
-            Assert.That(PlatformSettingsPages.RestorePath(legacy), Is.EqualTo(PlatformSettingsPages.SectionKey),
-                $"Устаревший путь «{legacy}» должен восстанавливаться на «{PlatformSettingsPages.SectionKey}».");
+            Assert.That(PlatformSettingsPages.RestorePath(legacy), Is.EqualTo("basic"),
+                $"Устаревший путь «{legacy}» должен восстанавливаться на «basic».");
         }
-
-        pageVm.NavigateToMultistreamCommand.Execute(new PlatformLinkTarget("twitch", "Twitch", StreamingPlatform.Twitch));
-        pageVm.NavigateToMultistreamCommand.Execute(new PlatformLinkTarget("youtube", "YouTube", StreamingPlatform.YouTube));
-        pageVm.NavigateToMultistreamCommand.Execute(new PlatformLinkTarget("multistream", "Профили и автоматика", null));
-
-        Assert.That(requested, Is.EqualTo(new StreamingPlatform?[]
-        {
-            StreamingPlatform.Twitch,
-            StreamingPlatform.YouTube,
-            null,
-        }));
     }
 
     [Test]

@@ -11,7 +11,7 @@ namespace PoproshaykaBot.Wpf.ViewModels;
 public sealed partial class OnboardingBannerViewModel : ObservableObject, IDisposable
 {
     private readonly OnboardingChecklist _checklist;
-    private readonly IOnboardingWizardLauncher _wizardLauncher;
+    private readonly Action? _onConfigure;
     private readonly List<IDisposable> _subscriptions = [];
 
     private bool _suppressed;
@@ -30,18 +30,19 @@ public sealed partial class OnboardingBannerViewModel : ObservableObject, IDispo
 
     public OnboardingBannerViewModel(
         OnboardingChecklist checklist,
-        IOnboardingWizardLauncher wizardLauncher,
-        IEventBus eventBus)
+        IEventBus eventBus,
+        Action? onConfigure = null)
     {
         _checklist = checklist;
-        _wizardLauncher = wizardLauncher;
-        _wizardLauncher.Closed += OnWizardClosed;
+        _onConfigure = onConfigure;
 
         _subscriptions.Add(eventBus.SubscribeOnUi<BotLifecyclePhaseChanged>(_ => Refresh()));
         _subscriptions.Add(eventBus.SubscribeOnUi<PlatformAuthorizationRefreshed>(_ => Refresh()));
 
         Refresh();
     }
+
+    public event EventHandler? ConfigureRequested;
 
     public void Suppress()
     {
@@ -72,8 +73,6 @@ public sealed partial class OnboardingBannerViewModel : ObservableObject, IDispo
 
     public void Dispose()
     {
-        _wizardLauncher.Closed -= OnWizardClosed;
-
         foreach (var subscription in _subscriptions)
         {
             subscription.Dispose();
@@ -83,13 +82,9 @@ public sealed partial class OnboardingBannerViewModel : ObservableObject, IDispo
     }
 
     [RelayCommand]
-    private void OpenWizard()
+    private void Configure()
     {
-        _wizardLauncher.Show(_checklist.RequiresWizard ? OnboardingStep.None : _checklist.FirstMissingStep);
-    }
-
-    private void OnWizardClosed(object? sender, EventArgs e)
-    {
-        Refresh();
+        _onConfigure?.Invoke();
+        ConfigureRequested?.Invoke(this, EventArgs.Empty);
     }
 }

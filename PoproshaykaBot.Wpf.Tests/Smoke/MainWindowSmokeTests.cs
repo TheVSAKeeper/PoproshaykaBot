@@ -88,40 +88,30 @@ public class MainWindowSmokeTests
         setup!.AsButton().Invoke();
 
         var enable = WaitForDescendant(cf => cf.ByAutomationId("MultistreamEnableYouTube"));
-        Assert.That(enable, Is.Not.Null, "Выключенный YouTube должен открывать вкладку «Параметры и доступ» с галкой «Включить YouTube».");
-
-        var channelsTab = WaitForDescendant(cf => cf.ByAutomationId("MultistreamTabChannels"));
-        Assert.That(channelsTab, Is.Not.Null, "Вкладка «Каналы» должна быть доступна на странице «Мультистрим».");
-        channelsTab!.AsRadioButton().IsChecked = true;
+        Assert.That(enable, Is.Not.Null, "Выключенный YouTube должен раскрывать Шаг 1 («Доступ площадки») с галкой «Включить YouTube».");
 
         var platform = WaitForDescendant(cf => cf.ByAutomationId("MultistreamEditorPlatform").And(cf.ByName("Каналы YouTube")));
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(platform, Is.Not.Null, "Переключение на вкладку «Каналы» должно показать редактор каналов YouTube.");
+            Assert.That(platform, Is.Not.Null, "Шаг 3 («Каналы») для YouTube должен быть виден на том же экране без переключения вкладок.");
             Assert.That(_session!.MainWindow.FindFirstDescendant(cf => cf.ByName("Управление подключением по площадкам")), Is.Null,
                 "Управление отдельными площадками больше не должно находиться в меню шапки.");
         }
     }
 
     [Test]
-    public void PlatformSettingsLink_ShouldOpenMultistreamEditor()
+    public void NavigationRail_ShouldExposeChannelsAndProfilesWithoutSettingsStub()
     {
         InvokeNamedButton("Настройки");
-        InvokeNamedButton("Площадки");
 
-        var link = WaitForDescendant(cf => cf.ByAutomationId("MultistreamSettingsLink-youtube"));
-        Assert.That(link, Is.Not.Null, "Раздел «Площадки и мультистрим» должен содержать ссылку на YouTube в «Мультистриме».");
-        link!.AsButton().Invoke();
+        _ = WaitForDescendant(cf => cf.ByName("Поиск по разделам"));
+        Assert.That(_session!.MainWindow.FindFirstDescendant(cf => cf.ByControlType(ControlType.Button).And(cf.ByName("Площадки"))), Is.Null,
+            "Пустая вкладка-заглушка «Площадки» должна быть удалена из «Настроек».");
 
-        var enable = WaitForDescendant(cf => cf.ByAutomationId("MultistreamEnableYouTube"));
-        Assert.That(enable, Is.Not.Null, "Выключенный YouTube должен открываться на вкладке «Параметры и доступ» с галкой «Включить YouTube».");
+        InvokeNamedButton("Каналы и профили");
 
-        var channelsTab = WaitForDescendant(cf => cf.ByAutomationId("MultistreamTabChannels"));
-        Assert.That(channelsTab, Is.Not.Null, "Вкладка «Каналы» должна быть доступна на странице «Мультистрим».");
-        channelsTab!.AsRadioButton().IsChecked = true;
-
-        var editor = WaitForDescendant(cf => cf.ByAutomationId("MultistreamEditorPlatform").And(cf.ByName("Каналы YouTube")));
-        Assert.That(editor, Is.Not.Null, "Переключение на вкладку «Каналы» должно показать редактор каналов YouTube.");
+        var editor = WaitForDescendant(cf => cf.ByAutomationId("MultistreamEditorPlatform"));
+        Assert.That(editor, Is.Not.Null, "Раздел «Каналы и профили» должен открываться из левого меню.");
 
         var automation = WaitForDescendant(cf => cf.ByAutomationId("MultistreamOpenAutomation"));
         Assert.That(automation, Is.Not.Null, "Пункт «Профили и автоматика» должен быть доступен в боковом списке.");

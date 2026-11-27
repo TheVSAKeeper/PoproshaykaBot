@@ -304,7 +304,6 @@ public sealed class McpEndToEndContractTests
             var mcpPreferences = provider.GetRequiredService<McpPreferences>();
             var resolvedBindingErrors = provider.GetRequiredService<BindingErrorSink>();
             var notificationGate = provider.GetRequiredService<IMcpConnectNotificationGate>();
-            var wizardLauncher = provider.GetRequiredService<IOnboardingWizardLauncher>();
 
             var ctor = typeof(BotAutomation).GetConstructors().Single();
             var optionalDependencies = ctor.GetParameters()
@@ -318,7 +317,6 @@ public sealed class McpEndToEndContractTests
                 Assert.That(mcpPreferences, Is.Not.Null);
                 Assert.That(resolvedBindingErrors, Is.SameAs(bindingErrors));
                 Assert.That(notificationGate, Is.Not.Null);
-                Assert.That(wizardLauncher, Is.Not.Null);
 
                 foreach (var parameter in optionalDependencies)
                 {

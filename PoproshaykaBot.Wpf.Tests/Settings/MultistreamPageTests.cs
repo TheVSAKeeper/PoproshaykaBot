@@ -80,17 +80,19 @@ public sealed class MultistreamPageTests
 
             page.OpenPlatform(platform);
             page.OpenPlatform(StreamingPlatform.YouTube);
-            page.SelectPlatformTabCommand.Execute(MultistreamPlatformTab.Parameters);
 
             Assert.Multiple(() =>
             {
+                Assert.That(page.PageTitle, Is.EqualTo("Каналы и профили"));
+                Assert.That(page.UnsavedChangesSubject, Does.Contain("Каналы и профили"));
                 Assert.That(page.Cards.Select(card => card.Status.Platform), Is.EqualTo(registeredPlatforms.Select(platform => platform.Id)));
                 Assert.That(youTubeControls.Settings, Is.Null);
                 Assert.That(page.Cards.Single(card => card.Status.Platform == platform).Controls, Is.Null);
                 Assert.That(page.SelectedPlatform, Is.EqualTo(platform));
                 Assert.That(page.SelectedPlatformChannelCount, Is.EqualTo(2));
                 Assert.That(page.HasSelectedPlatformChannels, Is.True);
-                Assert.That(page.SelectedPlatformTab, Is.EqualTo(MultistreamPlatformTab.Channels));
+                Assert.That(page.HasStep1, Is.False);
+                Assert.That(page.HasStep2, Is.False);
                 Assert.That(page.EditorTitle, Is.EqualTo("Каналы VK Видео Live"));
                 Assert.That(page.HasPlatformSettings, Is.False);
                 Assert.That(editor.SelectedPlatform, Is.EqualTo(platform));
@@ -182,13 +184,10 @@ public sealed class MultistreamPageTests
             {
                 Assert.That(page.SelectedPlatform, Is.EqualTo(StreamingPlatform.YouTube));
                 Assert.That(page.HasPlatformSettings, Is.True);
-                Assert.That(page.SelectedPlatformTab, Is.EqualTo(MultistreamPlatformTab.Parameters));
-                Assert.That(page.IsParametersTabSelected, Is.True);
+                Assert.That(page.IsStep1Complete, Is.False);
+                Assert.That(page.IsStep1Expanded, Is.True);
                 Assert.That(page.TakeSectionRequest(), Is.EqualTo(MultistreamSection.Parameters));
             });
-
-            page.SelectPlatformTabCommand.Execute(MultistreamPlatformTab.Channels);
-            Assert.That(page.SelectedPlatformTab, Is.EqualTo(MultistreamPlatformTab.Channels));
 
             page.OpenAutomationCommand.Execute(null);
             Assert.Multiple(() =>
@@ -355,7 +354,7 @@ public sealed class MultistreamPageTests
                 dispatcher,
                 DispatchProxy.Create<IShellLauncher, InertProxy>(),
                 windows);
-            using var onboardingBanner = new OnboardingBannerViewModel(new OnboardingChecklist(manager, accounts), DispatchProxy.Create<IOnboardingWizardLauncher, InertProxy>(), bus);
+            using var onboardingBanner = new OnboardingBannerViewModel(new OnboardingChecklist(manager, accounts), bus);
             var debugBanner = new DebugBannerViewModel(new TargetChannelProvider(manager, new DebugChannelStore(filePath: Path.Combine(data.FullName, "dbg.json")), DebugChannelOverride.None));
             var preferences = new ShellPreferences(store) { LastPage = SectionKeys.Settings };
 
@@ -431,7 +430,7 @@ public sealed class MultistreamPageTests
                 Assert.That(card.Status.IsDisabled, Is.True);
                 Assert.That(card.Status.PlatformActionLabel, Is.EqualTo("Настроить"));
                 Assert.That(page.HasPlatformSettings, Is.False);
-                Assert.That(page.SelectedPlatformTab, Is.EqualTo(MultistreamPlatformTab.Channels));
+                Assert.That(page.HasStep1, Is.False);
                 Assert.That(page.ShowParametersButtonInHeader, Is.False);
                 Assert.That(page.HeaderSetupActionLabel, Is.EqualTo("Открыть параметры"));
                 Assert.That(channel.BotSummaryText, Is.Empty);
@@ -596,9 +595,9 @@ public sealed class MultistreamPageTests
     }
 
     [Test]
-    public async Task Guided_readiness_summary_and_wizard_commands_reflect_state_and_reload_cleanly()
+    public async Task Vertical_123_route_collapses_ready_steps_explains_dependencies_and_prefills_account_on_add_channel()
     {
-        var data = Directory.CreateTempSubdirectory("poproshayka-multistream-guided-");
+        var data = Directory.CreateTempSubdirectory("poproshayka-multistream-123-");
         try
         {
             var ytEnabled = false;
@@ -616,28 +615,25 @@ public sealed class MultistreamPageTests
             ytAccountsStore.SaveAll(
                 "secret",
                 new YouTubeAccountSettings { ChannelId = "UC_BOT", ChannelTitle = "BotYT", AccessToken = "tok", RefreshToken = "ref", AccessTokenExpiresAt = DateTimeOffset.UtcNow.AddDays(30) },
-                new YouTubeAccountSettings());
+                new YouTubeAccountSettings { ChannelId = "UC_MAIN", ChannelTitle = "OwnerYT", AccessToken = "tok2", RefreshToken = "ref2", AccessTokenExpiresAt = DateTimeOffset.UtcNow.AddDays(30) });
 
             var dialogSpy = new CapturingDialogService();
-            var adapter = new MultiChannelFakeAdapter(StreamingPlatform.YouTube, ytAccountsStore);
-            var services = new ServiceCollection();
-            services.AddSingleton(catalog);
-            services.AddSingleton<IPlatformChannelAdapter>(adapter);
-            services.AddSingleton(accounts);
-            services.AddSingleton(ytAccountsStore);
-            services.AddSingleton(ytSettingsStore);
-            services.AddSingleton<IChatPlatformRegistry>(registry);
-            services.AddTransient<MultistreamPlatformSetupDialogViewModel>();
-            services.AddTransient<MultistreamChannelWizardDialogViewModel>();
-            await using var provider = services.BuildServiceProvider();
-
+            var adapter = new MultiChannelFakeAdapter(StreamingPlatform.YouTube, ytAccountsStore,
+                resolve: (raw, _, _) => Task.FromResult<ResolvedChannelIdentity?>(
+                    new(new(StreamingPlatform.YouTube, "UC_MAIN"), raw, "@main", "https://youtube.com/@main")));
             var ytVm = new YouTubeSettingsSectionViewModel(
                 DispatchProxy.Create<IYouTubeOAuthService, InertProxy>(),
                 DispatchProxy.Create<IShellLauncher, InertProxy>(),
                 dialogSpy, dispatcher, TimeProvider.System, NullLoggerFactory.Instance);
             var editor = new ChannelCatalogSettingsSectionViewModel(catalog, [adapter], accounts, ytAccountsStore, platformRegistry: registry);
             var groups = new ChannelGroupsSettingsSectionViewModel(catalog, new UserStatisticsRepository(NullLogger<UserStatisticsRepository>.Instance));
-            var platformAccounts = new PlatformAccountsSectionViewModel(catalog, accounts, ytAccountsStore, platformRegistry: registry);
+            var platformAccounts = new PlatformAccountsSectionViewModel(
+                catalog, accounts, ytAccountsStore,
+                youtubeOAuth: DispatchProxy.Create<IYouTubeOAuthService, InertProxy>(),
+                youtubeSettingsStore: ytSettingsStore,
+                shellLauncher: DispatchProxy.Create<IShellLauncher, InertProxy>(),
+                dialogService: dialogSpy,
+                platformRegistry: registry);
 
             using var settings = new SettingsPageViewModel(
                 [
@@ -650,66 +646,61 @@ public sealed class MultistreamPageTests
             using var status = new MultistreamTileViewModel(registry, catalog, connection, new PlatformAuthRegistry([]),
                 [], bus, dispatcher, ytSettingsStore);
             var ytControls = new YouTubeMultistreamPlatformControls(settings);
-            var page = new MultistreamPageViewModel(
-                settings, status, [ytControls], platformAccounts,
-                dialogSpy, provider.GetRequiredService<IServiceScopeFactory>(), ytSettingsStore, catalog);
+            var page = new MultistreamPageViewModel(settings, status, [ytControls], platformAccounts, ytSettingsStore, catalog);
             page.OnEnter();
 
             Assert.Multiple(() =>
             {
-                Assert.That(page.PlatformReadinessText, Is.EqualTo("Площадка: отключена"));
-                Assert.That(page.PlatformReadinessSeverity, Is.EqualTo(StatusSeverity.Warning));
-                Assert.That(page.GuidedPrimaryActionLabel, Is.EqualTo("Настроить площадку"));
-                Assert.That(page.IsGuidedActionPrimary, Is.True);
-                Assert.That(page.GuidedNextAction, Is.EqualTo(MultistreamGuidedNextAction.PlatformSetup));
-                Assert.That(page.OpenAssignAccountWizardCommand.CanExecute(null), Is.False);
+                Assert.That(page.IsStep1Complete, Is.False);
+                Assert.That(page.IsStep1Expanded, Is.True);
+                Assert.That(page.IsStep2Complete, Is.False);
+                Assert.That(page.IsStep2Expanded, Is.True);
+                Assert.That(platformAccounts.CanAuthorize, Is.True, "Кнопки авторизации не должны скрываться молча при незаполненном Шаге 1");
+                Assert.That(platformAccounts.Step1DependencyNotice, Does.Contain("Шаг 1 («Доступ площадки»)"));
+                Assert.That(editor.StepDependencyNotice, Does.Contain("Шаг 1 («Доступ площадки»)"));
             });
 
-            dialogSpy.OnShowAsync = async vm =>
-            {
-                var wizard = (MultistreamPlatformSetupDialogViewModel)vm;
-                await wizard.EnableYouTubeAndContinueCommand.ExecuteAsync(null);
-                ytEnabled = true;
-                return true;
-            };
+            ytVm.Enabled = true;
+            ytVm.ClientId = "yt-client";
+            ytVm.ClientSecret = "secret";
+            ytEnabled = true;
+            Assert.That(page.IsStep1Complete, Is.False, "Несохранённые изменения Шага 1 не должны сворачивать его как готовый");
+            Assert.That(platformAccounts.Step1DependencyNotice, Does.Contain("Шаг 1 («Доступ площадки»)"));
 
-            await page.ExecuteGuidedPrimaryActionCommand.ExecuteAsync(null);
-            Assert.Multiple(() =>
-            {
-                Assert.That(dialogSpy.LastDialog, Is.InstanceOf<MultistreamPlatformSetupDialogViewModel>());
-                Assert.That(ytSettingsStore.Load().Enabled, Is.True);
-                Assert.That(page.HasUnsavedChanges, Is.False);
-                Assert.That(page.PlatformReadinessText, Is.EqualTo("Площадка: включена"));
-                Assert.That(page.GuidedPrimaryActionLabel, Is.EqualTo("Добавить канал"));
-                Assert.That(page.GuidedNextAction, Is.EqualTo(MultistreamGuidedNextAction.AddChannel));
-            });
-
-            catalog.Save(new()
-            {
-                Channels =
-                [
-                    new()
-                    {
-                        Platform = StreamingPlatform.YouTube,
-                        ChannelId = "UC_MAIN",
-                        DisplayName = "@MainYT",
-                        IsConfigured = true,
-                        BotAccountId = "UC_BOT",
-                        BotContextId = AuthContextIds.Default,
-                        BotVerifiedSubjectId = "UC_BOT",
-                    },
-                ],
-                Platforms = [new() { Platform = StreamingPlatform.YouTube, ActiveChannelId = "UC_MAIN" }],
-            });
+            await settings.SaveCommand.ExecuteAsync(null);
             page.OnEnter();
 
             Assert.Multiple(() =>
             {
-                Assert.That(page.ChannelReadinessText, Does.Contain("@MainYT").And.Contain("доступ ОК"));
-                Assert.That(page.ChannelReadinessSeverity, Is.EqualTo(StatusSeverity.Success));
-                Assert.That(page.GuidedPrimaryActionLabel, Is.EqualTo("Мастер настройки"));
-                Assert.That(page.IsGuidedActionPrimary, Is.False);
-                Assert.That(page.OpenAssignAccountWizardCommand.CanExecute(null), Is.True);
+                Assert.That(page.IsStep1Complete, Is.True);
+                Assert.That(page.IsStep1CollapsedSummaryVisible, Is.True);
+                Assert.That(page.IsStep1Expanded, Is.False);
+                Assert.That(platformAccounts.Step1DependencyNotice, Is.Null);
+                Assert.That(page.IsStep2Complete, Is.True);
+                Assert.That(page.IsStep2CollapsedSummaryVisible, Is.True);
+                Assert.That(page.IsStep2Expanded, Is.False);
+                Assert.That(editor.StepDependencyNotice, Is.Null);
+            });
+
+            page.ToggleStep1Command.Execute(null);
+            page.ToggleStep2Command.Execute(null);
+            Assert.Multiple(() =>
+            {
+                Assert.That(page.IsStep1Expanded, Is.True);
+                Assert.That(page.IsStep2Expanded, Is.True);
+            });
+
+            page.ToggleStep1Command.Execute(null);
+            page.ToggleStep2Command.Execute(null);
+
+            editor.NewChannelInput = "@main";
+            await editor.AddChannelCommand.ExecuteAsync(null);
+            var added = editor.SelectedChannel!;
+            Assert.Multiple(() =>
+            {
+                Assert.That(added.ChannelId, Is.EqualTo("UC_MAIN"));
+                Assert.That(added.Roles[0].AccountId, Is.EqualTo("UC_BOT"), "Роль бота должна автоподставляться из Шага 2");
+                Assert.That(added.Roles[1].AccountId, Is.EqualTo("UC_MAIN"), "Роль стримера должна автоподставляться из Шага 2");
             });
         }
         finally
@@ -762,12 +753,16 @@ public sealed class MultistreamPageTests
         public IPlatformMessenger Messenger => throw new NotSupportedException();
     }
 
-    private sealed class MultiChannelFakeAdapter(StreamingPlatform platform, YouTubeAccountsStore accounts) : IPlatformChannelAdapter
+    private sealed class MultiChannelFakeAdapter(
+        StreamingPlatform platform,
+        YouTubeAccountsStore accounts,
+        Func<string, string?, CancellationToken, Task<ResolvedChannelIdentity?>>? resolve = null) : IPlatformChannelAdapter
     {
         public StreamingPlatform Platform => platform;
         public PlatformCapabilities Capabilities => PlatformCapabilities.MultiChannelMonitoring | PlatformCapabilities.BackgroundStreamMonitoring;
         public IReadOnlyList<PlatformAccount> ListAccounts() => accounts.ListAccounts();
-        public Task<ResolvedChannelIdentity?> ResolveChannelIdentityAsync(string rawInput, string? preferredContextId, CancellationToken cancellationToken) => Task.FromResult<ResolvedChannelIdentity?>(null);
+        public Task<ResolvedChannelIdentity?> ResolveChannelIdentityAsync(string rawInput, string? preferredContextId, CancellationToken cancellationToken) =>
+            resolve is not null ? resolve(rawInput, preferredContextId, cancellationToken) : Task.FromResult<ResolvedChannelIdentity?>(null);
         public Task<ChannelAccessVerification> VerifyChannelAccessAsync(ChannelKey channel, PlatformAuthRole role, string contextId, CancellationToken cancellationToken) =>
             Task.FromResult(new ChannelAccessVerification(true, "id"));
         public Task<ChannelLiveProbeResult> ProbeChannelLiveAsync(ChannelCatalogEntry channel, CancellationToken cancellationToken) =>

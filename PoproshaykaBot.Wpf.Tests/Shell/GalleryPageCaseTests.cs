@@ -67,4 +67,19 @@ public class GalleryPageCaseTests
             Assert.That(SectionKeys.PageOf(SectionKeys.StreamsCards), Is.EqualTo(SectionKeys.Streams));
         }
     }
+
+    [Test]
+    public void Кейсы_пустого_чата_YouTube_и_готовой_настройки_площадки_распознаются()
+    {
+        var requested = string.Join(',', SectionKeys.OverviewYouTubeEmpty, SectionKeys.MultistreamReady);
+        var arguments = GalleryHost.Parse(["--pages", requested], "gallery-out");
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(arguments.Pages, Is.EqualTo(new[] { SectionKeys.OverviewYouTubeEmpty, SectionKeys.MultistreamReady }));
+            Assert.That(arguments.Unknown, Is.Empty);
+            Assert.That(SectionKeys.PageOf(SectionKeys.OverviewYouTubeEmpty), Is.EqualTo(SectionKeys.Overview));
+            Assert.That(SectionKeys.PageOf(SectionKeys.MultistreamReady), Is.EqualTo(SectionKeys.Multistream));
+        }
+    }
 }

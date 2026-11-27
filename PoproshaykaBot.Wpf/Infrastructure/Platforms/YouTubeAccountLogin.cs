@@ -80,7 +80,7 @@ public sealed class YouTubeAccountLogin(
         var secret = accountsStore.LoadClientSecret();
         if (string.IsNullOrWhiteSpace(settings.ClientId) || string.IsNullOrWhiteSpace(secret))
         {
-            return new("Заполните и сохраните ключи во вкладке «Параметры и доступ».", StatusSeverity.Warning, []);
+            return new("Сначала заполните и сохраните Шаг 1 («Доступ площадки») выше.", StatusSeverity.Warning, []);
         }
 
         var roles = request.Roles.Count > 0 ? request.Roles : [PlatformAuthRole.Bot];

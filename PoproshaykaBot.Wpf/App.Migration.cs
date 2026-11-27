@@ -10,7 +10,8 @@ namespace PoproshaykaBot.Wpf;
 public partial class App
 {
     internal static async Task<(bool OfferImport, IReadOnlyList<LegacyDataSummary> Candidates, LegacyDataSummary? Target)> ScanLegacyImportCandidatesAsync(
-        ISettingsStore uiSettings)
+        ISettingsStore uiSettings,
+        bool isHeadless = false)
     {
         if (uiSettings.GetBool(SettingsKeys.LegacyImportDismissed))
         {
@@ -22,8 +23,14 @@ public partial class App
 
         try
         {
+            if (isHeadless)
+            {
+                var headlessTarget = LegacyDataScanner.Inspect(AppPaths.BaseDirectory, logger);
+                return (headlessTarget is null, [], headlessTarget);
+            }
+
             var (candidates, target) = await LegacyImportViewModel.ScanAsync(logger);
-            var offerImport = candidates.Count > 0 || target is null;
+            var offerImport = target is null;
 
             if (offerImport)
             {

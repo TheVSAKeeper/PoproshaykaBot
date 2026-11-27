@@ -130,7 +130,7 @@
                         </StackPanel>
                         <WrapPanel Margin="0,10,0,0"
                                    Visibility="{Binding IsBroadcast, Converter={StaticResource BoolToVisibility}}">
-                            <Button Content="Открыть цели в «Мультистриме»"
+                            <Button Content="Открыть цели в «Каналах и профилях»"
                                     Command="{Binding OpenProfileTargetsCommand}"
                                     Style="{StaticResource Button.Secondary}"
                                     Margin="0,0,8,4" />

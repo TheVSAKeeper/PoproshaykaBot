@@ -3,24 +3,15 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using KeepShell.ViewModels;
 using MahApps.Metro.IconPacks;
-using Microsoft.Extensions.DependencyInjection;
 using PoproshaykaBot.Core.Platforms;
 using PoproshaykaBot.Core.Platforms.Auth;
 using PoproshaykaBot.Core.Settings.Stores;
 using PoproshaykaBot.Core.Streaming;
 using PoproshaykaBot.Wpf.Infrastructure;
-using PoproshaykaBot.Wpf.ViewModels.Dialogs;
 using PoproshaykaBot.Wpf.ViewModels.Settings;
 using PoproshaykaBot.Wpf.ViewModels.Tiles;
 
 namespace PoproshaykaBot.Wpf.ViewModels;
-
-public enum MultistreamPlatformTab
-{
-    Channels = 0,
-    Accounts = 1,
-    Parameters = 2,
-}
 
 public enum MultistreamAutomationTab
 {
@@ -38,15 +29,6 @@ internal enum MultistreamSection
     BotAuthorization = 4,
     Parameters = 5,
     Accounts = 6,
-}
-
-public enum MultistreamGuidedNextAction
-{
-    None = 0,
-    PlatformSetup = 1,
-    AddChannel = 2,
-    AssignAccount = 3,
-    RevisitSetup = 4,
 }
 
 public sealed record MultistreamAutomationTabOption(
@@ -92,21 +74,17 @@ public sealed partial class MultistreamPlatformCard : ObservableObject
 public sealed partial class MultistreamPageViewModel : ObservableObject, IPageHeader, IUnsavedChangesPage
 {
     private readonly IReadOnlyDictionary<StreamingPlatform, IReadOnlyList<SettingsSectionBlockDescriptor>> _platformSettings;
-    private readonly IDialogService? _dialogService;
-    private readonly IServiceScopeFactory? _scopeFactory;
     private readonly ChannelCatalogStore? _catalogStore;
     private MultistreamSection _requestedSection;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(SelectedPlatform), nameof(HasSelectedPlatform), nameof(IsPlatformSelected),
         nameof(SelectedPlatformCard), nameof(PlatformSettings), nameof(HasPlatformSettings),
-        nameof(HasPlatformAccounts), nameof(HasPlatformTabs),
+        nameof(HasPlatformAccounts), nameof(HasStep1), nameof(HasStep2),
         nameof(PlatformSettingsTitle), nameof(EditorTitle), nameof(ShowParametersButtonInHeader),
         nameof(ShowBotAuthButtonInHeader), nameof(HeaderSetupActionLabel),
         nameof(SelectedPlatformChannelCount), nameof(HasSelectedPlatformChannels),
         nameof(SelectedPlatformAccountCount), nameof(HasSelectedPlatformAccounts))]
-    [NotifyCanExecuteChangedFor(nameof(ExecuteGuidedPrimaryActionCommand), nameof(OpenPlatformSetupWizardCommand),
-        nameof(OpenAddChannelWizardCommand), nameof(OpenAssignAccountWizardCommand))]
     private MultistreamPlatformCard? _selectedCard;
 
     [ObservableProperty]
@@ -114,58 +92,36 @@ public sealed partial class MultistreamPageViewModel : ObservableObject, IPageHe
     private bool _isAutomationSelected;
 
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(IsChannelsTabSelected), nameof(IsAccountsTabSelected), nameof(IsParametersTabSelected))]
-    private MultistreamPlatformTab _selectedPlatformTab = MultistreamPlatformTab.Channels;
-
-    [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsProfilesTabSelected), nameof(IsAutomationTabSelected), nameof(IsGroupsTabSelected))]
     private MultistreamAutomationTab _selectedAutomationTab = MultistreamAutomationTab.Profiles;
 
     [ObservableProperty]
-    private string _platformReadinessText = "Площадка: не выбрана";
+    [NotifyPropertyChangedFor(nameof(IsStep1Expanded), nameof(IsStep1CollapsedSummaryVisible), nameof(IsStep1BodyVisible), nameof(Step1HeaderActionLabel))]
+    private bool _isStep1Complete;
 
     [ObservableProperty]
-    private StatusSeverity _platformReadinessSeverity;
+    [NotifyPropertyChangedFor(nameof(IsStep1Expanded), nameof(IsStep1CollapsedSummaryVisible), nameof(IsStep1BodyVisible), nameof(Step1HeaderActionLabel))]
+    private bool _isStep1UserExpanded;
 
     [ObservableProperty]
-    private string _accountReadinessText = "Аккаунт: нужен вход бота";
+    private string _step1SummaryText = string.Empty;
 
     [ObservableProperty]
-    private StatusSeverity _accountReadinessSeverity;
+    [NotifyPropertyChangedFor(nameof(IsStep2Expanded), nameof(IsStep2CollapsedSummaryVisible), nameof(IsStep2BodyVisible), nameof(Step2HeaderActionLabel))]
+    private bool _isStep2Complete;
 
     [ObservableProperty]
-    private string _channelReadinessText = "Канал: не добавлен";
+    [NotifyPropertyChangedFor(nameof(IsStep2Expanded), nameof(IsStep2CollapsedSummaryVisible), nameof(IsStep2BodyVisible), nameof(Step2HeaderActionLabel))]
+    private bool _isStep2UserExpanded;
 
     [ObservableProperty]
-    private StatusSeverity _channelReadinessSeverity;
-
-    [ObservableProperty]
-    private string _guidedPrimaryActionLabel = "Настроить площадку";
-
-    [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(ShowQuickPlatformSetupButton), nameof(ShowQuickAddChannelButton), nameof(ShowQuickAssignAccountButton))]
-    private bool _isGuidedActionPrimary = true;
-
-    [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(ShowQuickPlatformSetupButton), nameof(ShowQuickAddChannelButton), nameof(ShowQuickAssignAccountButton))]
-    private MultistreamGuidedNextAction _guidedNextAction = MultistreamGuidedNextAction.PlatformSetup;
-
-    public bool ShowQuickPlatformSetupButton =>
-        GuidedNextAction is not (MultistreamGuidedNextAction.PlatformSetup or MultistreamGuidedNextAction.RevisitSetup);
-
-    public bool ShowQuickAddChannelButton =>
-        !(IsGuidedActionPrimary && GuidedNextAction == MultistreamGuidedNextAction.AddChannel);
-
-    public bool ShowQuickAssignAccountButton =>
-        !(IsGuidedActionPrimary && GuidedNextAction == MultistreamGuidedNextAction.AssignAccount);
+    private string _step2SummaryText = string.Empty;
 
     public MultistreamPageViewModel(
         SettingsPageViewModel settingsPage,
         MultistreamTileViewModel status,
         IEnumerable<IMultistreamPlatformControls> platformControls,
         PlatformAccountsSectionViewModel? accounts = null,
-        IDialogService? dialogService = null,
-        IServiceScopeFactory? scopeFactory = null,
         YouTubeSettingsStore? youtubeSettingsStore = null,
         ChannelCatalogStore? catalogStore = null)
     {
@@ -175,15 +131,25 @@ public sealed partial class MultistreamPageViewModel : ObservableObject, IPageHe
         Settings = settingsPage;
         Status = status;
         Accounts = accounts;
-        _dialogService = dialogService;
-        _scopeFactory = scopeFactory;
         _catalogStore = catalogStore;
 
         Settings.PropertyChanged += OnSettingsPropertyChanged;
+        Settings.SettingsSaved += OnSettingsSaved;
+        var (twitchDraft, youtubeDraft) = settingsPage.GetCredentialDrafts();
+        if (twitchDraft is not null)
+        {
+            twitchDraft.SettingChanged += OnCredentialDraftChanged;
+        }
+
+        if (youtubeDraft is not null)
+        {
+            youtubeDraft.SettingChanged += OnCredentialDraftChanged;
+        }
+
         status.ApplyPlatformControls(platformControls);
         var controls = platformControls.ToDictionary(item => item.Platform);
         Cards = [.. status.Rows.Select(row => new MultistreamPlatformCard(row, controls.GetValueOrDefault(row.Platform)))];
-        Catalog = Cards.Count > 0 ? settingsPage.GetSectionContent<ChannelCatalogSettingsSectionViewModel>() : null;
+        Catalog = Cards.Count > 0 ? settingsPage.FindSectionContent<ChannelCatalogSettingsSectionViewModel>() : null;
         if (Catalog is not null)
         {
             Catalog.PropertyChanged += OnCatalogPropertyChanged;
@@ -193,7 +159,6 @@ public sealed partial class MultistreamPageViewModel : ObservableObject, IPageHe
 
         if (Accounts is not null)
         {
-            var (twitchDraft, youtubeDraft) = settingsPage.GetCredentialDrafts();
             Accounts.SetCredentialDrafts(twitchDraft, youtubeDraft);
             Accounts.PropertyChanged += OnAccountsPropertyChanged;
             Accounts.AccountsChanged += OnAccountsSectionChanged;
@@ -211,12 +176,12 @@ public sealed partial class MultistreamPageViewModel : ObservableObject, IPageHe
         LifecycleAndBroadcastBlocks = [.. AutomationSettings.Where(b => b.Key is "stream/lifecycle" or "stream/auto")];
         ChannelGroupsBlocks = [.. AutomationSettings.Where(b => b.Key == "channels/groups")];
         SelectedCard = Cards.Count > 0 ? Cards[0] : null;
-        RefreshReadinessSummary();
+        RefreshStepStates();
     }
 
     internal event EventHandler? SectionRequested;
 
-    public string PageTitle => "Мультистрим";
+    public string PageTitle => "Каналы и профили";
 
     public string? PageDescription => null;
 
@@ -259,42 +224,6 @@ public sealed partial class MultistreamPageViewModel : ObservableObject, IPageHe
     {
         get => IsAutomationSelected;
         set => IsAutomationSelected = value;
-    }
-
-    public bool IsChannelsTabSelected
-    {
-        get => SelectedPlatformTab == MultistreamPlatformTab.Channels;
-        set
-        {
-            if (value)
-            {
-                SelectPlatformTab(MultistreamPlatformTab.Channels);
-            }
-        }
-    }
-
-    public bool IsAccountsTabSelected
-    {
-        get => SelectedPlatformTab == MultistreamPlatformTab.Accounts;
-        set
-        {
-            if (value)
-            {
-                SelectPlatformTab(MultistreamPlatformTab.Accounts);
-            }
-        }
-    }
-
-    public bool IsParametersTabSelected
-    {
-        get => SelectedPlatformTab == MultistreamPlatformTab.Parameters;
-        set
-        {
-            if (value)
-            {
-                SelectPlatformTab(MultistreamPlatformTab.Parameters);
-            }
-        }
     }
 
     public bool IsProfilesTabSelected
@@ -354,7 +283,25 @@ public sealed partial class MultistreamPageViewModel : ObservableObject, IPageHe
 
     public bool HasPlatformAccounts => Accounts?.SupportsAccountsFor(SelectedPlatform) == true;
 
-    public bool HasPlatformTabs => HasPlatformSettings || HasPlatformAccounts;
+    public bool HasStep1 => HasPlatformSettings;
+
+    public bool HasStep2 => HasPlatformAccounts;
+
+    public bool IsStep1Expanded => HasStep1 && (!IsStep1Complete || IsStep1UserExpanded);
+
+    public bool IsStep1CollapsedSummaryVisible => HasStep1 && IsStep1Complete && !IsStep1Expanded;
+
+    public bool IsStep1BodyVisible => HasStep1 && IsStep1Expanded;
+
+    public string Step1HeaderActionLabel => IsStep1Expanded ? "Свернуть" : "Изменить";
+
+    public bool IsStep2Expanded => HasStep2 && (!IsStep2Complete || IsStep2UserExpanded);
+
+    public bool IsStep2CollapsedSummaryVisible => HasStep2 && IsStep2Complete && !IsStep2Expanded;
+
+    public bool IsStep2BodyVisible => HasStep2 && IsStep2Expanded;
+
+    public string Step2HeaderActionLabel => IsStep2Expanded ? "Свернуть" : "Изменить";
 
     public IReadOnlyList<SettingsSectionBlockDescriptor> AutomationSettings { get; }
 
@@ -380,7 +327,7 @@ public sealed partial class MultistreamPageViewModel : ObservableObject, IPageHe
 
     public bool HasUnsavedChanges => Settings.HasUnsavedChanges;
 
-    public string UnsavedChangesSubject => "На странице «Мультистрим» есть несохранённые изменения.";
+    public string UnsavedChangesSubject => "На странице «Каналы и профили» есть несохранённые изменения.";
 
     public void OnEnter()
     {
@@ -401,7 +348,10 @@ public sealed partial class MultistreamPageViewModel : ObservableObject, IPageHe
         }
 
         Settings.ReloadDraft();
-        RefreshReadinessSummary();
+        Accounts?.RefreshCredentialDependency();
+        IsStep1UserExpanded = false;
+        IsStep2UserExpanded = false;
+        RefreshStepStates();
     }
 
     [RelayCommand]
@@ -414,22 +364,23 @@ public sealed partial class MultistreamPageViewModel : ObservableObject, IPageHe
 
         IsAutomationSelected = false;
         SelectedCard = card;
-        NormalizeSelectedPlatformTab();
     }
 
     [RelayCommand]
-    public void SelectPlatformTab(MultistreamPlatformTab tab)
+    public void ToggleStep1()
     {
-        var previous = SelectedPlatformTab;
-        SelectedPlatformTab = tab switch
+        if (IsStep1Complete)
         {
-            MultistreamPlatformTab.Parameters when !HasPlatformSettings => MultistreamPlatformTab.Channels,
-            MultistreamPlatformTab.Accounts when !HasPlatformAccounts => MultistreamPlatformTab.Channels,
-            _ => tab,
-        };
-        if (SelectedPlatformTab == MultistreamPlatformTab.Accounts && previous != MultistreamPlatformTab.Accounts)
+            IsStep1UserExpanded = !IsStep1UserExpanded;
+        }
+    }
+
+    [RelayCommand]
+    public void ToggleStep2()
+    {
+        if (IsStep2Complete)
         {
-            Accounts?.Load();
+            IsStep2UserExpanded = !IsStep2UserExpanded;
         }
     }
 
@@ -445,7 +396,7 @@ public sealed partial class MultistreamPageViewModel : ObservableObject, IPageHe
         }
 
         IsAutomationSelected = false;
-        SelectedPlatformTab = MultistreamPlatformTab.Parameters;
+        IsStep1UserExpanded = true;
         Reveal(MultistreamSection.Parameters);
     }
 
@@ -458,8 +409,15 @@ public sealed partial class MultistreamPageViewModel : ObservableObject, IPageHe
         }
 
         IsAutomationSelected = false;
-        SelectedPlatformTab = MultistreamPlatformTab.Channels;
-        Reveal(MultistreamSection.BotAuthorization);
+        if (HasPlatformAccounts)
+        {
+            IsStep2UserExpanded = true;
+            Reveal(MultistreamSection.Accounts);
+        }
+        else
+        {
+            Reveal(MultistreamSection.BotAuthorization);
+        }
     }
 
     [RelayCommand]
@@ -476,24 +434,26 @@ public sealed partial class MultistreamPageViewModel : ObservableObject, IPageHe
             IsAutomationSelected = false;
             SelectedCard = card;
             Catalog?.SelectActiveChannel();
-            if (card.Controls?.RequiresCardSetup == true && HasPlatformSettings)
+            if (HasStep1 && !IsStep1Complete)
             {
-                SelectedPlatformTab = MultistreamPlatformTab.Parameters;
+                IsStep1UserExpanded = true;
                 Reveal(MultistreamSection.Parameters);
             }
             else if (card.Status.IsBlockedByDebugSession)
             {
-                SelectedPlatformTab = MultistreamPlatformTab.Channels;
                 Reveal(MultistreamSection.Platforms);
+            }
+            else if (HasStep2 && (!IsStep2Complete || card.Status.NeedsBotAuthorization))
+            {
+                IsStep2UserExpanded = true;
+                Reveal(MultistreamSection.Accounts);
             }
             else if (card.Status.NeedsBotAuthorization)
             {
-                SelectedPlatformTab = MultistreamPlatformTab.Channels;
                 Reveal(MultistreamSection.BotAuthorization);
             }
             else
             {
-                SelectedPlatformTab = MultistreamPlatformTab.Channels;
                 Reveal(MultistreamSection.Channels);
             }
         }
@@ -524,101 +484,6 @@ public sealed partial class MultistreamPageViewModel : ObservableObject, IPageHe
         }
     }
 
-    private bool CanOpenWizards() =>
-        !Settings.IsSaving
-        && SelectedPlatform is not null
-        && _dialogService is not null
-        && _scopeFactory is not null;
-
-    private bool CanOpenAssignAccountWizard() => CanOpenWizards() && HasSelectedPlatformChannels;
-
-    [RelayCommand(CanExecute = nameof(CanOpenWizards))]
-    private Task ExecuteGuidedPrimaryActionAsync() => GuidedNextAction switch
-    {
-        MultistreamGuidedNextAction.AddChannel => OpenAddChannelWizardAsync(),
-        MultistreamGuidedNextAction.AssignAccount => OpenAssignAccountWizardAsync(),
-        _ => OpenPlatformSetupWizardAsync(),
-    };
-
-    [RelayCommand(CanExecute = nameof(CanOpenWizards))]
-    private async Task OpenPlatformSetupWizardAsync()
-    {
-        if (SelectedPlatform is not { } platform || _dialogService is null || _scopeFactory is null)
-        {
-            return;
-        }
-
-        using var scope = _scopeFactory.CreateScope();
-        var dialog = scope.ServiceProvider.GetRequiredService<MultistreamPlatformSetupDialogViewModel>();
-        dialog.Initialize(platform);
-
-        if (await _dialogService.ShowAsync(dialog).ConfigureAwait(true) || dialog.HasSavedChanges)
-        {
-            ReloadAfterWizard();
-        }
-    }
-
-    [RelayCommand(CanExecute = nameof(CanOpenWizards))]
-    private async Task OpenAddChannelWizardAsync()
-    {
-        if (SelectedPlatform is not { } platform || _dialogService is null || _scopeFactory is null)
-        {
-            return;
-        }
-
-        using var scope = _scopeFactory.CreateScope();
-        var dialog = scope.ServiceProvider.GetRequiredService<MultistreamChannelWizardDialogViewModel>();
-        dialog.InitializeForAdd(platform);
-
-        if (await _dialogService.ShowAsync(dialog).ConfigureAwait(true) || dialog.HasSavedChanges)
-        {
-            ReloadAfterWizard();
-        }
-    }
-
-    [RelayCommand(CanExecute = nameof(CanOpenAssignAccountWizard))]
-    private async Task OpenAssignAccountWizardAsync()
-    {
-        if (SelectedPlatform is not { } platform || _dialogService is null || _scopeFactory is null)
-        {
-            return;
-        }
-
-        var preferredChannelId = Catalog?.SelectedChannel?.ChannelId
-            ?? _catalogStore?.GetActiveChannel(platform)?.ChannelId;
-
-        using var scope = _scopeFactory.CreateScope();
-        var dialog = scope.ServiceProvider.GetRequiredService<MultistreamChannelWizardDialogViewModel>();
-        dialog.InitializeForAssignAccount(platform, preferredChannelId);
-
-        if (await _dialogService.ShowAsync(dialog).ConfigureAwait(true) || dialog.HasSavedChanges)
-        {
-            ReloadAfterWizard();
-        }
-    }
-
-    private void ReloadAfterWizard()
-    {
-        Settings.ReloadDraft();
-        if (SelectedPlatform is { } platform)
-        {
-            if (Catalog is not null)
-            {
-                Catalog.SelectedPlatform = platform;
-                Catalog.SelectActiveChannel();
-            }
-
-            if (Accounts is not null)
-            {
-                Accounts.SelectedPlatform = platform;
-                Accounts.Load();
-            }
-        }
-
-        NotifyHeaderActionsChanged();
-        RefreshReadinessSummary();
-    }
-
     internal MultistreamSection TakeSectionRequest()
     {
         var requested = _requestedSection;
@@ -646,6 +511,9 @@ public sealed partial class MultistreamPageViewModel : ObservableObject, IPageHe
             }
         }
 
+        IsStep1UserExpanded = false;
+        IsStep2UserExpanded = false;
+
         if (newValue is not null)
         {
             newValue.Status.PropertyChanged += OnSelectedCardStatusChanged;
@@ -662,52 +530,56 @@ public sealed partial class MultistreamPageViewModel : ObservableObject, IPageHe
             if (Accounts is not null)
             {
                 Accounts.SelectedPlatform = newValue.Status.Platform;
+                Accounts.Load();
             }
         }
 
-        NormalizeSelectedPlatformTab();
         SyncCardSelection();
-        RefreshReadinessSummary();
-    }
-
-    private void NormalizeSelectedPlatformTab()
-    {
-        if ((SelectedPlatformTab == MultistreamPlatformTab.Parameters && !HasPlatformSettings)
-            || (SelectedPlatformTab == MultistreamPlatformTab.Accounts && !HasPlatformAccounts))
-        {
-            SelectedPlatformTab = MultistreamPlatformTab.Channels;
-        }
+        RefreshStepStates();
     }
 
     private void OnSettingsPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (string.IsNullOrEmpty(e.PropertyName) || e.PropertyName == nameof(SettingsPageViewModel.IsSaving))
+        if (string.IsNullOrEmpty(e.PropertyName) || e.PropertyName == nameof(SettingsPageViewModel.HasChanges))
         {
-            NotifyWizardCommandsCanExecuteChanged();
+            RefreshStepStates();
         }
+    }
+
+    private void OnSettingsSaved(object? sender, EventArgs e)
+    {
+        Accounts?.RefreshCredentialDependency();
+        IsStep1UserExpanded = false;
+        RefreshStepStates();
+    }
+
+    private void OnCredentialDraftChanged(object? sender, EventArgs e)
+    {
+        RefreshStepStates();
     }
 
     private void OnCatalogAccountsChanged(object? sender, StreamingPlatform platform)
     {
         Accounts?.RefreshIfPlatform(platform);
-        RefreshReadinessSummary();
+        RefreshStepStates();
     }
 
     private void OnAccountsSectionChanged(object? sender, StreamingPlatform platform)
     {
         Catalog?.RefreshAccountOptions(platform);
-        RefreshReadinessSummary();
+        RefreshStepStates();
     }
 
     private void OnAccountsPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
         if (string.IsNullOrEmpty(e.PropertyName)
             || e.PropertyName is nameof(PlatformAccountsSectionViewModel.AccountCount)
-                or nameof(PlatformAccountsSectionViewModel.HasAccounts))
+                or nameof(PlatformAccountsSectionViewModel.HasAccounts)
+                or nameof(PlatformAccountsSectionViewModel.Step1DependencyNotice))
         {
             OnPropertyChanged(nameof(SelectedPlatformAccountCount));
             OnPropertyChanged(nameof(HasSelectedPlatformAccounts));
-            RefreshReadinessSummary();
+            RefreshStepStates();
         }
     }
 
@@ -721,14 +593,14 @@ public sealed partial class MultistreamPageViewModel : ObservableObject, IPageHe
                 or nameof(MultistreamPlatformRowViewModel.ChannelCount))
         {
             NotifyHeaderActionsChanged();
-            RefreshReadinessSummary();
+            RefreshStepStates();
         }
     }
 
     private void OnSelectedCardControlsChanged(object? sender, EventArgs e)
     {
         NotifyHeaderActionsChanged();
-        RefreshReadinessSummary();
+        RefreshStepStates();
     }
 
     private void OnCatalogPropertyChanged(object? sender, PropertyChangedEventArgs e)
@@ -745,8 +617,7 @@ public sealed partial class MultistreamPageViewModel : ObservableObject, IPageHe
         {
             OnPropertyChanged(nameof(SelectedPlatformChannelCount));
             OnPropertyChanged(nameof(HasSelectedPlatformChannels));
-            OpenAssignAccountWizardCommand.NotifyCanExecuteChanged();
-            RefreshReadinessSummary();
+            RefreshStepStates();
         }
     }
 
@@ -811,114 +682,78 @@ public sealed partial class MultistreamPageViewModel : ObservableObject, IPageHe
         OnPropertyChanged(nameof(HeaderSetupActionLabel));
     }
 
-    private void NotifyWizardCommandsCanExecuteChanged()
-    {
-        ExecuteGuidedPrimaryActionCommand.NotifyCanExecuteChanged();
-        OpenPlatformSetupWizardCommand.NotifyCanExecuteChanged();
-        OpenAddChannelWizardCommand.NotifyCanExecuteChanged();
-        OpenAssignAccountWizardCommand.NotifyCanExecuteChanged();
-    }
-
-    internal void RefreshReadinessSummary()
+    internal void RefreshStepStates()
     {
         if (SelectedCard is not { } card)
         {
-            PlatformReadinessText = "Площадка: не выбрана";
-            PlatformReadinessSeverity = StatusSeverity.None;
-            AccountReadinessText = "Аккаунт: –";
-            AccountReadinessSeverity = StatusSeverity.None;
-            ChannelReadinessText = "Канал: –";
-            ChannelReadinessSeverity = StatusSeverity.None;
-            GuidedNextAction = MultistreamGuidedNextAction.PlatformSetup;
-            GuidedPrimaryActionLabel = "Настроить площадку";
-            IsGuidedActionPrimary = false;
-            NotifyWizardCommandsCanExecuteChanged();
+            IsStep1Complete = false;
+            Step1SummaryText = string.Empty;
+            IsStep2Complete = false;
+            Step2SummaryText = string.Empty;
+            if (Catalog is not null)
+            {
+                Catalog.StepDependencyNotice = null;
+            }
+
             return;
         }
 
         var platform = card.Status.Platform;
-        var platformEnabled = ResolvePlatformEnabled(card);
-        PlatformReadinessText = platformEnabled ? "Площадка: включена" : "Площадка: отключена";
-        PlatformReadinessSeverity = platformEnabled ? StatusSeverity.Success : StatusSeverity.Warning;
-
-        var (hasBotReady, hasBroadcasterReady, hasBroadcasterScopeWarning) = ResolveAccountReadiness(card);
-        if (!hasBotReady)
+        var (step1Ready, step1Summary, step1Missing) = HasStep1
+            ? Settings.EvaluateStep1Readiness(platform)
+            : (true, null, null);
+        if (HasStep1 && card.Controls?.RequiresCardSetup == true && step1Ready)
         {
-            AccountReadinessText = "Аккаунт: нужен вход бота";
-            AccountReadinessSeverity = StatusSeverity.Warning;
-        }
-        else if (hasBroadcasterScopeWarning)
-        {
-            AccountReadinessText = "Аккаунт: владельцу нужны права записи";
-            AccountReadinessSeverity = StatusSeverity.Warning;
-        }
-        else if (hasBroadcasterReady)
-        {
-            AccountReadinessText = "Аккаунт: бот и владелец";
-            AccountReadinessSeverity = StatusSeverity.Success;
-        }
-        else
-        {
-            AccountReadinessText = "Аккаунт: бот готов";
-            AccountReadinessSeverity = StatusSeverity.Success;
+            step1Ready = false;
+            step1Missing = "Сохраните включение и параметры площадки в Шаге 1 («Доступ площадки») выше.";
         }
 
-        var (hasChannels, channelReady, channelText, channelSeverity) = ResolveChannelReadiness(platform);
-        ChannelReadinessText = channelText;
-        ChannelReadinessSeverity = channelSeverity;
+        IsStep1Complete = step1Ready;
+        Step1SummaryText = step1Summary ?? "Доступ настроен";
 
-        if (!platformEnabled || !hasBotReady)
-        {
-            GuidedNextAction = MultistreamGuidedNextAction.PlatformSetup;
-            GuidedPrimaryActionLabel = "Настроить площадку";
-            IsGuidedActionPrimary = true;
-        }
-        else if (!hasChannels)
-        {
-            GuidedNextAction = MultistreamGuidedNextAction.AddChannel;
-            GuidedPrimaryActionLabel = "Добавить канал";
-            IsGuidedActionPrimary = true;
-        }
-        else if (!channelReady)
-        {
-            GuidedNextAction = MultistreamGuidedNextAction.AssignAccount;
-            GuidedPrimaryActionLabel = "Назначить аккаунт";
-            IsGuidedActionPrimary = true;
-        }
-        else
-        {
-            GuidedNextAction = MultistreamGuidedNextAction.RevisitSetup;
-            GuidedPrimaryActionLabel = "Мастер настройки";
-            IsGuidedActionPrimary = false;
-        }
+        var (hasBotReady, hasBroadcasterScopeWarning, step2Summary) = ResolveAccountReadiness(card);
+        var step2Ready = !HasStep2 || (step1Ready && hasBotReady && !hasBroadcasterScopeWarning);
+        IsStep2Complete = step2Ready;
+        Step2SummaryText = step2Summary;
 
-        NotifyWizardCommandsCanExecuteChanged();
+        if (Catalog is not null && Catalog.SelectedPlatform == platform)
+        {
+            if (HasStep1 && !step1Ready)
+            {
+                Catalog.StepDependencyNotice = step1Missing
+                    ?? Accounts?.Step1DependencyNotice
+                    ?? "Сначала заполните и сохраните Шаг 1 («Доступ площадки») выше, чтобы добавлять каналы и назначать роли.";
+            }
+            else if (HasStep2 && !step2Ready)
+            {
+                Catalog.StepDependencyNotice = hasBroadcasterScopeWarning
+                    ? "Проверьте права стримера на Шаге 2 («Аккаунты и проверка прав») выше."
+                    : "Сначала войдите в аккаунт на Шаге 2 («Аккаунты и проверка прав») выше, чтобы назначать роли и проверять доступ.";
+            }
+            else
+            {
+                Catalog.StepDependencyNotice = null;
+            }
+        }
     }
 
-    private static bool ResolvePlatformEnabled(MultistreamPlatformCard card)
-    {
-        if (card.Controls is not null)
-        {
-            return !card.Controls.RequiresCardSetup;
-        }
-
-        return card.Status.Source.IsEnabled;
-    }
-
-    private (bool HasBotReady, bool HasBroadcasterReady, bool HasBroadcasterScopeWarning) ResolveAccountReadiness(MultistreamPlatformCard card)
+    private (bool HasBotReady, bool HasBroadcasterScopeWarning, string Summary) ResolveAccountReadiness(
+        MultistreamPlatformCard card)
     {
         var platform = card.Status.Platform;
         if (card.Status.NeedsBotAuthorization)
         {
-            return (false, false, false);
+            return (false, false, string.Empty);
         }
 
         if (Accounts is not null && Accounts.SupportsAccountsFor(platform) && Accounts.SelectedPlatform == platform)
         {
-            var hasBot = Accounts.Accounts.Any(static account =>
+            var botAccount = Accounts.Accounts.FirstOrDefault(static account =>
                 account.HasBotRole && account.BotBadgeSeverity is StatusSeverity.Success or StatusSeverity.Info);
-            var hasBroadcaster = Accounts.Accounts.Any(static account =>
+            var broadcasterAccount = Accounts.Accounts.FirstOrDefault(static account =>
                 account.HasBroadcasterRole && account.BroadcasterBadgeSeverity is StatusSeverity.Success or StatusSeverity.Info);
+            var hasBot = botAccount is not null;
+            var hasBroadcaster = broadcasterAccount is not null;
             var activePlatformChannel = _catalogStore?.GetActiveChannel(platform);
             var activeBroadcasterId = activePlatformChannel?.GetAccountAssignment(PlatformAuthRole.Broadcaster)?.Account.AccountId;
             var activeBroadcasterContextId = activePlatformChannel?.BroadcasterContextId;
@@ -933,73 +768,20 @@ public sealed partial class MultistreamPageViewModel : ObservableObject, IPageHe
                     && (string.IsNullOrWhiteSpace(activeBroadcasterContextId)
                         || string.Equals(grant.ContextId, activeBroadcasterContextId, StringComparison.Ordinal))));
 
-            return (hasBot, hasBroadcaster, hasBroadcasterScopeWarning);
+            var summary = hasBroadcaster && broadcasterAccount is not null && botAccount is not null
+                ? ReferenceEquals(botAccount, broadcasterAccount)
+                    ? $"Бот и стример: {botAccount.DisplayName}"
+                    : $"Бот: {botAccount.DisplayName}, стример: {broadcasterAccount.DisplayName}"
+                : botAccount is not null
+                    ? $"Бот: {botAccount.DisplayName}"
+                    : "Аккаунты готовы";
+            return (hasBot, hasBroadcasterScopeWarning, summary);
         }
 
-        var activeChannel = Catalog?.VisibleChannels.FirstOrDefault(static item => item.IsActive)
-            ?? Catalog?.VisibleChannels.FirstOrDefault();
-        var hasBroadcasterAssigned = activeChannel is not null && activeChannel.Roles[1].HasAssignedAccount;
-        return (true, hasBroadcasterAssigned, false);
-    }
-
-    private (bool HasChannels, bool IsChannelReady, string Text, StatusSeverity Severity) ResolveChannelReadiness(StreamingPlatform platform)
-    {
-        var channels = Catalog?.VisibleChannels;
-        if (channels is null || channels.Count == 0)
-        {
-            var stored = _catalogStore?.GetActiveChannel(platform);
-            if (stored is null)
-            {
-                return (false, false, "Канал: не добавлен", StatusSeverity.Warning);
-            }
-
-            var storedName = string.IsNullOrWhiteSpace(stored.DisplayName) ? stored.ChannelId : stored.DisplayName;
-            var botAssignment = stored.GetAccountAssignment(PlatformAuthRole.Bot);
-            if (botAssignment is null)
-            {
-                return (true, false, $"Канал: {storedName} · нет аккаунта", StatusSeverity.Warning);
-            }
-
-            return botAssignment.IsVerified
-                ? (true, true, $"Канал: {storedName} · доступ ОК", StatusSeverity.Success)
-                : (true, false, $"Канал: {storedName} · нужна проверка", StatusSeverity.Warning);
-        }
-
-        var active = channels.FirstOrDefault(static item => item.IsActive) ?? channels[0];
-        var botRole = active.Roles[0];
-        if (!botRole.CanManageAccount)
-        {
-            return (true, true, $"Канал: {active.DisplayName}", StatusSeverity.Info);
-        }
-
-        if (!botRole.HasAssignedAccount)
-        {
-            return (true, false, $"Канал: {active.DisplayName} · нет аккаунта", StatusSeverity.Warning);
-        }
-
-        if (botRole.StatusSeverity == StatusSeverity.Error)
-        {
-            return (true, false, $"Канал: {active.DisplayName} · ошибка доступа", StatusSeverity.Error);
-        }
-
-        if (botRole.NeedsVerification)
-        {
-            return (true, false, $"Канал: {active.DisplayName} · нужна проверка", StatusSeverity.Warning);
-        }
-
-        return (true, true, $"Канал: {active.DisplayName} · доступ ОК", StatusSeverity.Success);
+        return (true, false, "Аккаунты готовы");
     }
 
     partial void OnIsAutomationSelectedChanged(bool value) => SyncCardSelection();
-
-    partial void OnSelectedPlatformTabChanged(MultistreamPlatformTab value)
-    {
-        if ((value == MultistreamPlatformTab.Parameters && !HasPlatformSettings)
-            || (value == MultistreamPlatformTab.Accounts && !HasPlatformAccounts))
-        {
-            SelectedPlatformTab = MultistreamPlatformTab.Channels;
-        }
-    }
 
     private void SyncCardSelection()
     {

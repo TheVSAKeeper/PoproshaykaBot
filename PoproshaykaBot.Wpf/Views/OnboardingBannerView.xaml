@@ -53,11 +53,11 @@
             </Grid>
 
             <Button Grid.Column="2"
-                    Content="Открыть мастер"
+                    Content="Настроить"
                     Margin="0,8,14,8"
                     VerticalAlignment="Center"
                     Style="{StaticResource Button.Primary}"
-                    Command="{Binding OpenWizardCommand}" />
+                    Command="{Binding ConfigureCommand}" />
         </Grid>
     </Border>
 </UserControl>

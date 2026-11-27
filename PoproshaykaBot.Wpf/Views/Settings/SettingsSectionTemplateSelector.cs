@@ -10,17 +10,10 @@ public sealed class SettingsSectionTemplateSelector : DataTemplateSelector
 
     public DataTemplate? SingleBlockTemplate { get; set; }
 
-    public DataTemplate? PlatformLinkTemplate { get; set; }
-
     public override DataTemplate? SelectTemplate(object item, DependencyObject container)
     {
         if (item is SettingsSectionPresentation presentation)
         {
-            if (presentation.Section.Key == PlatformSettingsPages.SectionKey)
-            {
-                return PlatformLinkTemplate;
-            }
-
             return presentation.HasMultipleBlocks ? MultiBlockTemplate : SingleBlockTemplate;
         }
 

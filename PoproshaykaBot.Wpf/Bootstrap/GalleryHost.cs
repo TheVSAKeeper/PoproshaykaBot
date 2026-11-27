@@ -134,6 +134,16 @@ public sealed class GalleryHost : IGalleryHost
             return await CaptureEditAsync(item.Name, context).ConfigureAwait(true);
         }
 
+        if (string.Equals(item.Name, SectionKeys.OverviewYouTubeEmpty, StringComparison.OrdinalIgnoreCase))
+        {
+            return await CaptureOverviewYouTubeEmptyAsync(item.Name, context).ConfigureAwait(true);
+        }
+
+        if (string.Equals(item.Name, SectionKeys.MultistreamReady, StringComparison.OrdinalIgnoreCase))
+        {
+            return await CaptureMultistreamReadyAsync(item.Name, context).ConfigureAwait(true);
+        }
+
         if (item.Name == SectionKeys.BotMessages)
         {
             _shell.OpenBotRule("broadcast");
@@ -191,6 +201,7 @@ public sealed class GalleryHost : IGalleryHost
             .Concat(SectionKeys.Params)
             .Concat(SectionKeys.Obs)
             .Concat(SectionKeys.Edit)
+            .Concat([SectionKeys.OverviewYouTubeEmpty, SectionKeys.MultistreamReady])
             .FirstOrDefault(known => string.Equals(known, requested, StringComparison.OrdinalIgnoreCase));
     }
 
@@ -347,6 +358,73 @@ public sealed class GalleryHost : IGalleryHost
         finally
         {
             tile.EndPreview();
+
+            await context.SettleAsync().ConfigureAwait(true);
+        }
+    }
+
+    private async Task<GalleryShot> CaptureOverviewYouTubeEmptyAsync(string name, GalleryContext context)
+    {
+        Navigate(SectionKeys.Overview);
+
+        var chat = _services.GetServices<DashboardTileViewModel>().OfType<ChatDisplayTileViewModel>().Single();
+        var previousMode = chat.SelectedMode;
+        var columnsMode = chat.Modes.FirstOrDefault(static mode => mode.Layout == ChatDisplayLayout.Columns);
+        if (columnsMode is not null)
+        {
+            chat.SelectModeCommand.Execute(columnsMode);
+        }
+
+        try
+        {
+            await context.SettleAsync().ConfigureAwait(true);
+
+            return context.Save(ViewCapture.Slug(name));
+        }
+        finally
+        {
+            chat.SelectModeCommand.Execute(previousMode);
+
+            await context.SettleAsync().ConfigureAwait(true);
+        }
+    }
+
+    private async Task<GalleryShot> CaptureMultistreamReadyAsync(string name, GalleryContext context)
+    {
+        Navigate(SectionKeys.Multistream);
+
+        var page = _services.GetRequiredService<MultistreamPageViewModel>();
+        var previousStep1Complete = page.IsStep1Complete;
+        var previousStep1Summary = page.Step1SummaryText;
+        var previousStep2Complete = page.IsStep2Complete;
+        var previousStep2Summary = page.Step2SummaryText;
+        var previousCatalogNotice = page.Catalog?.StepDependencyNotice;
+
+        page.IsStep1Complete = true;
+        page.Step1SummaryText = "Ключи приложения и Redirect URI настроены";
+        page.IsStep2Complete = true;
+        page.Step2SummaryText = "Бот и стример готовы";
+        if (page.Catalog is not null)
+        {
+            page.Catalog.StepDependencyNotice = null;
+        }
+
+        try
+        {
+            await context.SettleAsync().ConfigureAwait(true);
+
+            return context.Save(ViewCapture.Slug(name));
+        }
+        finally
+        {
+            page.IsStep1Complete = previousStep1Complete;
+            page.Step1SummaryText = previousStep1Summary;
+            page.IsStep2Complete = previousStep2Complete;
+            page.Step2SummaryText = previousStep2Summary;
+            if (page.Catalog is not null)
+            {
+                page.Catalog.StepDependencyNotice = previousCatalogNotice;
+            }
 
             await context.SettleAsync().ConfigureAwait(true);
         }

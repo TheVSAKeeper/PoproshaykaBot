@@ -83,7 +83,6 @@ internal sealed class McpTestHarness : IAsyncDisposable
         ObsIntegrationStore obsIntegrationStore,
         ChannelCatalogStore channelCatalogStore,
         IBotConnectionController connectionController,
-        FakeOnboardingWizardLauncher onboardingWizard,
         ServiceProvider coreProvider,
         PerformanceMonitor performanceMonitor,
         ChatHistoryManager chatHistoryManager)
@@ -104,7 +103,6 @@ internal sealed class McpTestHarness : IAsyncDisposable
         ObsIntegrationStore = obsIntegrationStore;
         ChannelCatalogStore = channelCatalogStore;
         ConnectionController = connectionController;
-        OnboardingWizard = onboardingWizard;
         _coreProvider = coreProvider;
         _performanceMonitor = performanceMonitor;
         _chatHistoryManager = chatHistoryManager;
@@ -141,8 +139,6 @@ internal sealed class McpTestHarness : IAsyncDisposable
     public ChannelCatalogStore ChannelCatalogStore { get; }
 
     public IBotConnectionController ConnectionController { get; }
-
-    public FakeOnboardingWizardLauncher OnboardingWizard { get; }
 
     public string Endpoint => Host.Endpoint ?? throw new InvalidOperationException("MCP-сервер не запущен.");
 
@@ -276,7 +272,6 @@ internal sealed class McpTestHarness : IAsyncDisposable
             NullLogger<DiagnosticsCollector>.Instance);
 
         var controller = connectionController ?? new FakeBotConnectionController();
-        var onboardingWizard = new FakeOnboardingWizardLauncher();
         var chatHistoryManager = new ChatHistoryManager(settingsManager, eventBus);
         var commandProcessor = new ChatCommandProcessor(
             [new FakeHelpCommand()],
@@ -299,7 +294,6 @@ internal sealed class McpTestHarness : IAsyncDisposable
             NullLogger<BotAutomation>.Instance,
             diagnosticsSource: diagnosticsSource,
             channelCatalog: channelCatalogStore,
-            onboardingWizard: onboardingWizard,
             connectNotificationGate: new McpConnectNotificationGate(),
             settingsSnapshotContributors: snapshotContributors,
             onboardingChecklist: onboardingChecklist,
@@ -371,7 +365,6 @@ internal sealed class McpTestHarness : IAsyncDisposable
             obsIntegrationStore,
             channelCatalogStore,
             controller,
-            onboardingWizard,
             coreProvider,
             performanceMonitor,
             chatHistoryManager);
@@ -707,27 +700,6 @@ internal sealed class McpTestHarness : IAsyncDisposable
         }
 
         public Task StopAsync(StreamingPlatform platform, BotStopMode mode = BotStopMode.Graceful) => StopAsync(mode);
-    }
-
-    internal sealed class FakeOnboardingWizardLauncher : IOnboardingWizardLauncher
-    {
-        public event EventHandler? Closed;
-
-        public bool HasBeenShown { get; private set; }
-
-        public bool IsOpen { get; set; }
-
-        public void Show(OnboardingStep step = OnboardingStep.None)
-        {
-            HasBeenShown = true;
-            IsOpen = true;
-        }
-
-        public void Close()
-        {
-            IsOpen = false;
-            Closed?.Invoke(this, EventArgs.Empty);
-        }
     }
 
     internal sealed class FakeStreamStatus(StreamStatus status, StreamInfo? stream) : IStreamStatus

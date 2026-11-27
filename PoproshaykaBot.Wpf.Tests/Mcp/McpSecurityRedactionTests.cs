@@ -8,12 +8,8 @@ using KeepShell.Views.Controls;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using PoproshaykaBot.Core.Settings.Obs;
-using PoproshaykaBot.Core.Twitch.Auth;
-using PoproshaykaBot.Core.Twitch.Onboarding;
 using PoproshaykaBot.Wpf.Bootstrap;
-using PoproshaykaBot.Wpf.ViewModels.Onboarding;
 using PoproshaykaBot.Wpf.ViewModels.Settings;
-using PoproshaykaBot.Wpf.Views.Onboarding;
 using PoproshaykaBot.Wpf.Views.Settings;
 using Serilog.Events;
 using Serilog.Parsing;
@@ -248,22 +244,21 @@ public sealed class McpSecurityRedactionTests
 
     [Test]
     [Apartment(ApartmentState.STA)]
-    public void CredentialsPageView_ViewSnapshot_RedactsRevealableTextBoxWhenMaskedAndRevealed()
+    public void OAuthSettingsView_ViewSnapshot_RedactsRevealableTextBoxWhenMaskedAndRevealed()
     {
         TestResources.Ensure(ViewResourceDictionaries);
         AppScaledSizes.Register(Application.Current!);
 
-        using var viewModel = new CredentialsPageViewModel(
-            new StubClientCredentialsValidator(),
-            new StubOnboardingChannelValidator(),
-            NullLogger<CredentialsPageViewModel>.Instance,
-            new ManualUiDispatcher())
+        var viewModel = new MutableOAuthCredentialsViewModel
         {
             ClientId = "test-client-id",
             ClientSecret = TwitchClientSecretCanary,
+            RedirectUri = "http://localhost:8080",
+            ChannelHintText = string.Empty,
+            ChannelHintSeverity = KeepShell.ViewModels.StatusSeverity.None,
         };
 
-        var view = new CredentialsPageView { DataContext = viewModel };
+        var view = new OAuthSettingsView { DataContext = viewModel };
         var window = new Window
         {
             WindowStyle = WindowStyle.None,
@@ -358,32 +353,18 @@ public sealed class McpSecurityRedactionTests
         }
     }
 
+    internal sealed class MutableOAuthCredentialsViewModel
+    {
+        public string ClientId { get; set; } = string.Empty;
+        public string ClientSecret { get; set; } = string.Empty;
+        public string RedirectUri { get; set; } = "http://localhost:8080";
+        public string ChannelHintText { get; set; } = string.Empty;
+        public KeepShell.ViewModels.StatusSeverity ChannelHintSeverity { get; set; }
+    }
+
     private sealed class EmptyProvider : IServiceProvider
     {
         public object? GetService(Type serviceType) => null;
-    }
-
-    private sealed class StubClientCredentialsValidator : IClientCredentialsValidator
-    {
-        public Task<ClientCredentialsValidationResult> ValidateAsync(
-            string clientId,
-            string clientSecret,
-            CancellationToken cancellationToken) => Task.FromResult(ClientCredentialsValidationResult.Valid);
-    }
-
-    private sealed class StubOnboardingChannelValidator : IOnboardingChannelValidator
-    {
-        public Task<ChannelValidationResult> ValidateAsync(
-            string login,
-            string clientId,
-            string accessToken,
-            CancellationToken cancellationToken) => Task.FromResult(ChannelValidationResult.Skipped);
-
-        public Task<ChannelValidationResult> ValidateWithAppTokenAsync(
-            string login,
-            string clientId,
-            string clientSecret,
-            CancellationToken cancellationToken) => Task.FromResult(ChannelValidationResult.Skipped);
     }
 
     private sealed class StubClipboardService : IClipboardService

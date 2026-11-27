@@ -35,13 +35,16 @@ public sealed partial class PlatformAccountsSectionViewModel : ObservableObject,
     private readonly IPlatformAuthRegistry? _authRegistry;
     private readonly Dictionary<StreamingPlatform, Func<string?>> _unsavedCredentialChecks = [];
     private readonly Dictionary<GrantDraftKey, GrantDraft> _unsavedDrafts = [];
+    private OAuthSettingsViewModel? _twitchDraft;
+    private YouTubeSettingsSectionViewModel? _youtubeDraft;
     private CancellationTokenSource? _authorizationCts;
     private bool _disposed;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(PlatformDisplayName), nameof(AccountsTitle), nameof(SupportsAccounts),
         nameof(CanAuthorize), nameof(SupportsBrowserToggle), nameof(SupportsWebChatAfterLogin),
-        nameof(BrowserToggleHint), nameof(OAuthMethodHint), nameof(HasOAuthMethodHint))]
+        nameof(BrowserToggleHint), nameof(OAuthMethodHint), nameof(HasOAuthMethodHint),
+        nameof(Step1DependencyNotice), nameof(HasStep1DependencyNotice))]
     [NotifyCanExecuteChangedFor(nameof(AuthorizeCombinedCommand), nameof(AuthorizeBotCommand), nameof(AuthorizeBroadcasterCommand))]
     private StreamingPlatform _selectedPlatform = StreamingPlatform.Twitch;
 
@@ -138,7 +141,7 @@ public sealed partial class PlatformAccountsSectionViewModel : ObservableObject,
 
     public string BrowserToggleHint =>
         _accountLogins.GetValueOrDefault(SelectedPlatform)?.OAuthMethod.HintText
-        ?? "Дополнительный способ входа: по умолчанию используется встроенное окно, где веб-чат привязывается сразу.";
+        ?? "Дополнительный способ входа: по умолчанию используется встроенное окно, где сразу выполняется вход для чата в окне.";
 
     public string? OAuthMethodHint => CanAuthorize && !SupportsBrowserToggle
         ? _accountLogins.GetValueOrDefault(SelectedPlatform)?.OAuthMethod.HintText
@@ -148,33 +151,128 @@ public sealed partial class PlatformAccountsSectionViewModel : ObservableObject,
 
     public bool CanAuthorize => CanAuthorizePlatform(SelectedPlatform);
 
+    public string? Step1DependencyNotice => GetStep1DependencyNotice(SelectedPlatform);
+
+    public bool HasStep1DependencyNotice => !string.IsNullOrWhiteSpace(Step1DependencyNotice);
+
     internal void SetCredentialDrafts(OAuthSettingsViewModel? twitch, YouTubeSettingsSectionViewModel? youtube)
     {
+        if (_twitchDraft is not null)
+        {
+            _twitchDraft.SettingChanged -= OnCredentialDraftChanged;
+        }
+
+        if (_youtubeDraft is not null)
+        {
+            _youtubeDraft.SettingChanged -= OnCredentialDraftChanged;
+        }
+
+        _twitchDraft = twitch;
+        _youtubeDraft = youtube;
+
+        if (_twitchDraft is not null)
+        {
+            _twitchDraft.SettingChanged += OnCredentialDraftChanged;
+        }
+
+        if (_youtubeDraft is not null)
+        {
+            _youtubeDraft.SettingChanged += OnCredentialDraftChanged;
+        }
+
         _unsavedCredentialChecks.Clear();
         if (twitch is not null && _settingsManager is not null)
         {
-            _unsavedCredentialChecks[StreamingPlatform.Twitch] = () =>
-            {
-                var settings = _settingsManager.Current.Twitch;
-                return twitch.ClientId.Trim() != settings.ClientId
-                    || twitch.ClientSecret.Trim() != settings.ClientSecret
-                    || twitch.RedirectUri.Trim() != settings.RedirectUri
-                    ? "Сначала сохраните новые реквизиты во вкладке «Параметры и доступ», затем повторите вход."
-                    : null;
-            };
+            _unsavedCredentialChecks[StreamingPlatform.Twitch] = () => GetStep1DependencyNotice(StreamingPlatform.Twitch);
         }
 
         if (youtube is not null && _youtubeSettingsStore is not null && _youtubeAccountsStore is not null)
         {
-            _unsavedCredentialChecks[StreamingPlatform.YouTube] = () =>
-            {
-                var settings = _youtubeSettingsStore.Load();
-                var secret = _youtubeAccountsStore.LoadClientSecret();
-                return youtube.ClientId.Trim() != settings.ClientId || youtube.ClientSecret.Trim() != secret
-                    ? "Сначала сохраните новые реквизиты во вкладке «Параметры и доступ», затем повторите вход."
-                    : null;
-            };
+            _unsavedCredentialChecks[StreamingPlatform.YouTube] = () => GetStep1DependencyNotice(StreamingPlatform.YouTube);
         }
+
+        RefreshCredentialDependency();
+    }
+
+    internal void RefreshCredentialDependency()
+    {
+        OnPropertyChanged(nameof(Step1DependencyNotice));
+        OnPropertyChanged(nameof(HasStep1DependencyNotice));
+    }
+
+    private void OnCredentialDraftChanged(object? sender, EventArgs e) => RefreshCredentialDependency();
+
+    private string? GetStep1DependencyNotice(StreamingPlatform platform)
+    {
+        if (platform == StreamingPlatform.Twitch && _twitchDraft is not null && _settingsManager is not null)
+        {
+            List<string> missing = [];
+            if (string.IsNullOrWhiteSpace(_twitchDraft.ClientId))
+            {
+                missing.Add("Client ID");
+            }
+
+            if (string.IsNullOrWhiteSpace(_twitchDraft.ClientSecret))
+            {
+                missing.Add("Client Secret");
+            }
+
+            if (OAuthSettingsViewModel.ValidateRedirectUri(_twitchDraft.RedirectUri, new(_twitchDraft))
+                != System.ComponentModel.DataAnnotations.ValidationResult.Success)
+            {
+                missing.Add("Redirect URI");
+            }
+
+            if (missing.Count > 0)
+            {
+                return $"Сначала заполните и сохраните Шаг 1 («Доступ площадки») выше: не хватает {string.Join(", ", missing)}.";
+            }
+
+            var settings = _settingsManager.Current.Twitch;
+            if (_twitchDraft.ClientId.Trim() != settings.ClientId
+                || _twitchDraft.ClientSecret.Trim() != settings.ClientSecret
+                || _twitchDraft.RedirectUri.Trim() != settings.RedirectUri)
+            {
+                return "Сначала заполните и сохраните Шаг 1 («Доступ площадки») выше: есть несохранённые изменения реквизитов.";
+            }
+
+            return null;
+        }
+
+        if (platform == StreamingPlatform.YouTube && _youtubeDraft is not null && _youtubeSettingsStore is not null && _youtubeAccountsStore is not null)
+        {
+            List<string> missing = [];
+            if (!_youtubeDraft.Enabled)
+            {
+                missing.Add("включить YouTube");
+            }
+
+            if (string.IsNullOrWhiteSpace(_youtubeDraft.ClientId))
+            {
+                missing.Add("указать Client ID");
+            }
+
+            if (string.IsNullOrWhiteSpace(_youtubeDraft.ClientSecret))
+            {
+                missing.Add("указать Client Secret");
+            }
+
+            if (missing.Count > 0)
+            {
+                return $"Сначала заполните и сохраните Шаг 1 («Доступ площадки») выше: нужно {string.Join(", ", missing)}.";
+            }
+
+            var settings = _youtubeSettingsStore.Load();
+            var secret = _youtubeAccountsStore.LoadClientSecret();
+            if (_youtubeDraft.Enabled != settings.Enabled
+                || _youtubeDraft.ClientId.Trim() != settings.ClientId
+                || _youtubeDraft.ClientSecret.Trim() != secret)
+            {
+                return "Сначала заполните и сохраните Шаг 1 («Доступ площадки») выше: есть несохранённые изменения параметров.";
+            }
+        }
+
+        return null;
     }
 
     public bool SupportsAccountsFor(StreamingPlatform? platform) =>
@@ -198,6 +296,16 @@ public sealed partial class PlatformAccountsSectionViewModel : ObservableObject,
         }
 
         _disposed = true;
+        if (_twitchDraft is not null)
+        {
+            _twitchDraft.SettingChanged -= OnCredentialDraftChanged;
+        }
+
+        if (_youtubeDraft is not null)
+        {
+            _youtubeDraft.SettingChanged -= OnCredentialDraftChanged;
+        }
+
         CancelActiveAuthorization(notice: null, dispose: true);
     }
 
@@ -307,7 +415,7 @@ public sealed partial class PlatformAccountsSectionViewModel : ObservableObject,
         PlatformAuthMethodDescriptor? webChatMethod = supportsWebChat
             ? new(
                 "web-chat",
-                "Веб-чат",
+                "Вход для чата в окне",
                 hasWebChatSession ? PlatformAuthMethodStatus.Ready : PlatformAuthMethodStatus.Attention,
                 hasWebChatSession ? "Подключён" : "Не подключён")
             : null;
@@ -589,13 +697,13 @@ public sealed partial class PlatformAccountsSectionViewModel : ObservableObject,
         }
         catch (Exception exception)
         {
-            _logger?.LogWarning(exception, "Ошибка открытия окна веб-чата для {Platform} {AccountId}", card.Platform, card.AccountId);
+            _logger?.LogWarning(exception, "Ошибка открытия окна входа для чата в окне для {Platform} {AccountId}", card.Platform, card.AccountId);
             if (!_disposed && SelectedPlatform == card.Platform)
             {
                 SetNotice(
                     fromPostLogin
-                        ? $"Аккаунт «{card.DisplayName}» сохранён, но не удалось открыть окно веб-чата."
-                        : "Не удалось открыть окно входа в веб-чат.",
+                        ? $"Аккаунт «{card.DisplayName}» сохранён, но не удалось открыть окно для входа в чат."
+                        : "Не удалось открыть окно входа для чата в окне.",
                     StatusSeverity.Warning);
             }
 
@@ -613,12 +721,12 @@ public sealed partial class PlatformAccountsSectionViewModel : ObservableObject,
             {
                 if (result.Outcome == PlatformWebChatLoginOutcome.Canceled)
                 {
-                    SetNotice($"Аккаунт «{card.DisplayName}» сохранён. Веб-чат можно подключить позже в карточке аккаунта.", StatusSeverity.Info);
+                    SetNotice($"Аккаунт «{card.DisplayName}» сохранён. Вход для чата в окне можно выполнить позже в карточке аккаунта.", StatusSeverity.Info);
                 }
                 else if (!string.IsNullOrWhiteSpace(result.Message))
                 {
                     var severity = result.Severity == StatusSeverity.Error ? StatusSeverity.Warning : result.Severity;
-                    SetNotice($"Аккаунт «{card.DisplayName}» сохранён, но веб-чат не подключён: {result.Message}", severity);
+                    SetNotice($"Аккаунт «{card.DisplayName}» сохранён, но вход для чата в окне не выполнен: {result.Message}", severity);
                 }
             }
             else if (!string.IsNullOrWhiteSpace(result.Message))
@@ -639,7 +747,7 @@ public sealed partial class PlatformAccountsSectionViewModel : ObservableObject,
 
         if (fromPostLogin && result.Persisted)
         {
-            SetNotice($"Аккаунт «{card.DisplayName}» и веб-чат подключены.", StatusSeverity.Success);
+            SetNotice($"Аккаунт «{card.DisplayName}» и вход для чата в окне подключены.", StatusSeverity.Success);
         }
         else if (!string.IsNullOrWhiteSpace(result.Message))
         {
@@ -1246,7 +1354,7 @@ public sealed partial class PlatformAccountCardViewModel : ObservableObject
 
     public StatusSeverity ApiAuthStatusSeverity => MapStatusSeverity(ApiAuthMethod.Status);
 
-    public string WebChatStatusText => HasWebChatSession ? "Веб-чат: подключён" : "Веб-чат: не подключён";
+    public string WebChatStatusText => HasWebChatSession ? "Вход для чата в окне: подключён" : "Вход для чата в окне: не подключён";
 
     public StatusSeverity WebChatStatusSeverity => HasWebChatSession ? StatusSeverity.Success : StatusSeverity.Warning;
 

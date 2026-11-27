@@ -21,7 +21,6 @@ using PoproshaykaBot.Core.YouTube;
 using PoproshaykaBot.Core.YouTube.Auth;
 using PoproshaykaBot.Wpf.Mcp;
 using PoproshaykaBot.Wpf.Tests.Support;
-using PoproshaykaBot.Wpf.ViewModels.Onboarding;
 using PoproshaykaBot.Wpf.ViewModels.Settings;
 using System.Diagnostics.CodeAnalysis;
 using System.IO;
@@ -31,125 +30,6 @@ namespace PoproshaykaBot.Wpf.Tests.Multiplatform;
 [TestFixture]
 public sealed class Stage8Layer4Tests
 {
-    [Test]
-    public async Task YouTubeOnboardingPage_IsApplicableOnlyWhenEnabledAndRequiresBotAuth()
-    {
-        using var editor = new YouTubeSettingsSectionViewModel(
-            new StubYouTubeOAuthService(),
-            new StubLauncher(),
-            new StubDialogService(),
-            new ManualUiDispatcher(),
-            TimeProvider.System,
-            NullLoggerFactory.Instance);
-        using var page = new YouTubeOnboardingPageViewModel(editor, new StubYouTubeIdentityClient());
-
-        var disabledContext = new OnboardingContext(new AppSettings(), new(), new());
-        Assert.Multiple(() =>
-        {
-            Assert.That(editor.ShowQuotaDiagnostics, Is.False);
-            Assert.That(editor.ShowEnableToggle, Is.False);
-            Assert.That(page.IsApplicable(disabledContext), Is.False);
-        });
-
-        var enabledContext = new OnboardingContext(
-            new AppSettings(),
-            new(),
-            new(),
-            new YouTubeSettings { Enabled = true });
-        Assert.That(page.IsApplicable(enabledContext), Is.True);
-
-        page.OnEnter(enabledContext);
-        Assert.That(page.CanAdvance, Is.False);
-
-        editor.ClientId = "yt-client";
-        editor.ClientSecret = "yt-secret";
-        editor.Channel = "@ytchan";
-        Assert.That(page.CanAdvance, Is.False, "Без авторизации бота YouTube мастер не должен пускать дальше.");
-
-        editor.Bot.Load(new YouTubeAccountSettings
-        {
-            ChannelId = "UC_BOT",
-            ChannelTitle = "Bot Channel",
-            AccessToken = "yt-bot-token",
-            RefreshToken = "yt-bot-refresh",
-            Scopes = [.. YouTubeScopes.BotRequired],
-            StoredScopes = [.. YouTubeScopes.BotRequired],
-        });
-        Assert.That(page.CanAdvance, Is.True);
-
-        var left = await page.OnLeavingAsync(enabledContext);
-        Assert.Multiple(() =>
-        {
-            Assert.That(left, Is.True);
-            Assert.That(enabledContext.YouTubeSettings.Enabled, Is.True);
-            Assert.That(enabledContext.YouTubeSettings.ClientId, Is.EqualTo("yt-client"));
-            Assert.That(enabledContext.YouTubeSettings.Channel, Is.EqualTo("@ytchan"));
-            Assert.That(enabledContext.YouTubeClientSecret, Is.EqualTo("yt-secret"));
-            Assert.That(enabledContext.YouTubeBotAccount.ChannelId, Is.EqualTo("UC_BOT"));
-        });
-    }
-
-    [Test]
-    public async Task HealthCheckPage_SelectsYouTubeWhenEnabledAndDetectsMultiplatformEcho()
-    {
-        var messenger = new StubChatMessenger();
-        var bus = new InMemoryEventBus(NullLogger<InMemoryEventBus>.Instance);
-        using var page = new HealthCheckPageViewModel(
-            messenger,
-            bus,
-            NullLogger<HealthCheckPageViewModel>.Instance,
-            new StubLauncher());
-
-        var context = new OnboardingContext(
-            new AppSettings(),
-            new(),
-            new(),
-            new YouTubeSettings { Enabled = true, ClientId = "cid", Channel = "@yt" });
-
-        page.OnEnter(context);
-
-        Assert.Multiple(() =>
-        {
-            Assert.That(page.HasYouTubeEnabled, Is.True);
-            Assert.That(page.SelectedPlatform, Is.EqualTo(StreamingPlatform.Twitch));
-        });
-
-        page.IsYouTubeSelected = true;
-        page.ChatTestMessage = "привет ютуб";
-        page.SendChatTestCommand.Execute(null);
-
-        Assert.That(messenger.Calls, Is.EqualTo(new[] { (StreamingPlatform.YouTube, "привет ютуб") }));
-
-        var entry = new ChatMessageData
-        {
-            Platform = StreamingPlatform.YouTube,
-            Channel = "yt",
-            MessageId = "m-yt",
-            UserId = "u-bot",
-            DisplayName = "bot",
-            Message = "hi",
-            IsBot = true,
-        };
-        await bus.PublishAsync(new ChatMessageReceived(
-            StreamingPlatform.YouTube,
-            "yt",
-            "m-yt",
-            "u-bot",
-            "bot",
-            "bot",
-            "hi",
-            UserStatus.Moderator,
-            false,
-            entry,
-            IsBot: true));
-
-        Assert.Multiple(() =>
-        {
-            Assert.That(page.BotStatusKnown, Is.True);
-            Assert.That(page.BotStatusText, Contains.Substring("YouTube"));
-        });
-    }
-
     [Test]
     public void BotAutomation_GetStatePopulatesPlatformsAndBroadcast()
     {
@@ -180,101 +60,6 @@ public sealed class Stage8Layer4Tests
             Assert.That(state.Broadcast.CurrentBroadcastId, Is.EqualTo(broadcastId));
             Assert.That(state.Broadcast.LivePlatforms, Is.EqualTo(new[] { StreamingPlatform.Twitch }));
         });
-    }
-
-    [Test]
-    public void BotConnectionPage_StartsMissingYouTubeWhenTwitchAlreadyConnected()
-    {
-        var tempDir = Path.Combine(Path.GetTempPath(), "pb-stage8-l4-conn-" + Guid.NewGuid().ToString("N"));
-        Directory.CreateDirectory(tempDir);
-        try
-        {
-            var settingsManager = new SettingsManager(NullLogger<SettingsManager>.Instance, Path.Combine(tempDir, "settings.json"));
-            var accountsStore = new Core.Settings.Stores.AccountsStore(null, Path.Combine(tempDir, "accounts.json"));
-            var ytSettingsStore = new Core.Settings.Stores.YouTubeSettingsStore(null, Path.Combine(tempDir, "youtube.json"));
-            var ytAccountsStore = new Core.Settings.Stores.YouTubeAccountsStore(null, Path.Combine(tempDir, "youtube-accounts.json"));
-            var bus = new InMemoryEventBus(NullLogger<InMemoryEventBus>.Instance);
-            var controller = new StubConnectionController();
-            var registry = new StubRegistry(
-                new StubPlatform(StreamingPlatform.Twitch, "Twitch", true, true, "tw", StreamStatus.Online, "Live"),
-                new StubPlatform(StreamingPlatform.YouTube, "YouTube", true, false, "yt", StreamStatus.Offline, null));
-
-            using var page = new BotConnectionPageViewModel(
-                controller,
-                bus,
-                settingsManager,
-                accountsStore,
-                NullLogger<BotConnectionPageViewModel>.Instance,
-                ytSettingsStore,
-                ytAccountsStore,
-                registry);
-
-            var context = new OnboardingContext(
-                new AppSettings(),
-                new(),
-                new(),
-                new YouTubeSettings { Enabled = true, ClientId = "cid", Channel = "@yt" });
-
-            page.OnEnter(context);
-
-            Assert.That(controller.StartedPlatforms, Is.EqualTo(new[] { StreamingPlatform.YouTube }));
-        }
-        finally
-        {
-            if (Directory.Exists(tempDir))
-            {
-                Directory.Delete(tempDir, recursive: true);
-            }
-        }
-    }
-
-    private sealed class StubChatMessenger : IBroadcastMessenger
-    {
-        public List<(StreamingPlatform Platform, string Text)> Calls { get; } = [];
-        public ChatEnqueueResult Send(StreamingPlatform platform, string text, ChatSendCategory category = ChatSendCategory.None)
-        {
-            Calls.Add((platform, text));
-            return ChatEnqueueResult.Queued;
-        }
-        public BroadcastSendResult Send(string text, IReadOnlySet<StreamingPlatform> platforms, ChatSendCategory category = ChatSendCategory.None)
-            => new(new Dictionary<StreamingPlatform, ChatEnqueueResult>());
-        public BroadcastSendResult SendToConnected(string text, ChatSendCategory category = ChatSendCategory.None)
-            => new(new Dictionary<StreamingPlatform, ChatEnqueueResult>());
-        public BroadcastSendResult Send(Func<IChatPlatform, string?> messageFactory, IReadOnlySet<StreamingPlatform>? platforms = null, ChatSendCategory category = ChatSendCategory.None)
-            => new(new Dictionary<StreamingPlatform, ChatEnqueueResult>());
-    }
-
-    private sealed class StubLauncher : IShellLauncher
-    {
-        public bool Open(string pathOrUrl) => true;
-        public bool Reveal(string path) => true;
-        public bool Start(string executable, params string[] arguments) => true;
-    }
-
-    private sealed class StubDialogService : IDialogService
-    {
-        public Task<bool> ShowAsync(IDialogViewModel viewModel) => Task.FromResult(false);
-        public Task<bool> ReplaceAsync(IDialogViewModel viewModel) => Task.FromResult(false);
-        public bool Confirm(string title, string message, bool defaultYes = false) => true;
-        public bool ConfirmWarning(string title, string message, bool defaultYes = false) => true;
-        public void Info(string title, string message) { }
-        public void Warning(string title, string message) { }
-        public void Error(string title, string message) { }
-    }
-
-    private sealed class StubYouTubeOAuthService : IYouTubeOAuthService
-    {
-        public event Action<PlatformAuthRole, string>? StatusChanged { add { } remove { } }
-        public Task<YouTubeOAuthFlowResult> StartOAuthFlowAsync(PlatformAuthRole role, string clientId, string clientSecret, string[]? scopes, Action<string> onAuthUrlReady, CancellationToken ct = default)
-            => throw new NotSupportedException();
-        public Task<YouTubeOAuthFlowResult> StartOAuthFlowToDraftAsync(PlatformAuthRole role, string clientId, string clientSecret, string[]? scopes, Action<string> onAuthUrlReady, CancellationToken ct = default)
-            => throw new NotSupportedException();
-        public Task<string> RefreshTokenAsync(PlatformAuthRole role, string clientId, string clientSecret, string refreshToken, CancellationToken ct = default)
-            => Task.FromResult(string.Empty);
-        public Task<string?> GetAccessTokenAsync(PlatformAuthRole role, CancellationToken ct = default)
-            => Task.FromResult<string?>(null);
-        public bool TryClearAccessToken(PlatformAuthRole role, string expectedToken) => false;
-        public void ClearAccount(PlatformAuthRole role, bool publishAuthorizationRefreshed = false) { }
     }
 
     private sealed class StubPlatform(
@@ -371,14 +156,5 @@ public sealed class Stage8Layer4Tests
     {
         private readonly AppSettings _settings = new();
         public override AppSettings Current => _settings;
-    }
-
-    private sealed class StubYouTubeIdentityClient : IYouTubeChannelIdentityClient
-    {
-        public Task<YouTubeChannelIdentity> GetOwnChannelAsync(string accessToken, CancellationToken ct = default)
-            => Task.FromResult(new YouTubeChannelIdentity("UC_YTCHAN_00000000000001", "YT Chan"));
-
-        public Task<YouTubeChannelIdentity?> ResolveChannelByHandleAsync(string handle, string accessToken, CancellationToken ct = default)
-            => Task.FromResult<YouTubeChannelIdentity?>(new YouTubeChannelIdentity("UC_YTCHAN_00000000000001", "YT Chan"));
     }
 }
