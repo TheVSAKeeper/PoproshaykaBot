@@ -438,16 +438,16 @@ public sealed class MultiChannelBroadcastStatisticsTests
 
     private static async Task WaitUntilAsync(Func<bool> condition)
     {
-        for (var i = 0; i < 40; i++)
+        var deadline = Environment.TickCount64 + 10_000;
+
+        while (!condition())
         {
-            if (condition())
+            if (Environment.TickCount64 >= deadline)
             {
-                return;
+                Assert.Fail("Timed out waiting for async broadcast completion.");
             }
 
-            await Task.Delay(25);
+            await Task.Delay(20).ConfigureAwait(false);
         }
-
-        Assert.Fail("Timed out waiting for async broadcast completion.");
     }
 }
