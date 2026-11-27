@@ -135,26 +135,13 @@ public sealed partial class ChannelCatalogSettingsSectionViewModel : ObservableO
         if (twitch is not null && _settingsManager is not null)
         {
             _unsavedCredentialChecks[StreamingPlatform.Twitch] = () =>
-            {
-                var settings = _settingsManager.Current.Twitch;
-                return twitch.ClientId.Trim() != settings.ClientId
-                    || twitch.ClientSecret.Trim() != settings.ClientSecret
-                    || twitch.RedirectUri.Trim() != settings.RedirectUri
-                    ? "Сначала заполните и сохраните Шаг 1 («Доступ площадки») выше, затем повторите вход."
-                    : null;
-            };
+                PlatformStep1Readiness.EvaluateTwitch(twitch, _settingsManager).MissingReason;
         }
 
         if (youtube is not null && _youtubeSettingsStore is not null && _youtubeAccountsStore is not null)
         {
             _unsavedCredentialChecks[StreamingPlatform.YouTube] = () =>
-            {
-                var settings = _youtubeSettingsStore.Load();
-                var secret = _youtubeAccountsStore.LoadClientSecret();
-                return youtube.ClientId.Trim() != settings.ClientId || youtube.ClientSecret.Trim() != secret
-                    ? "Сначала заполните и сохраните Шаг 1 («Доступ площадки») выше, затем повторите вход."
-                    : null;
-            };
+                PlatformStep1Readiness.EvaluateYouTube(youtube, _youtubeSettingsStore, _youtubeAccountsStore).MissingReason;
         }
     }
 
@@ -945,14 +932,16 @@ public sealed partial class ChannelCatalogSettingsSectionViewModel : ObservableO
             return null;
         }
 
-        var chosen = role == PlatformAuthRole.Broadcaster
-            ? candidates.FirstOrDefault(candidate => string.Equals(candidate.AccountId, channelId, StringComparison.Ordinal))
-            : default;
-        if (string.IsNullOrWhiteSpace(chosen.AccountId))
+        if (role == PlatformAuthRole.Broadcaster)
         {
-            chosen = candidates.FirstOrDefault(static candidate => candidate.IsDefault);
+            var matched = candidates.FirstOrDefault(candidate =>
+                string.Equals(candidate.AccountId, channelId, StringComparison.Ordinal));
+            return string.IsNullOrWhiteSpace(matched.AccountId)
+                ? null
+                : (matched.AccountId, matched.ContextId);
         }
 
+        var chosen = candidates.FirstOrDefault(static candidate => candidate.IsDefault);
         if (string.IsNullOrWhiteSpace(chosen.AccountId))
         {
             chosen = candidates[0];

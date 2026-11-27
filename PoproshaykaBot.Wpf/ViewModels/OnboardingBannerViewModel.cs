@@ -11,7 +11,6 @@ namespace PoproshaykaBot.Wpf.ViewModels;
 public sealed partial class OnboardingBannerViewModel : ObservableObject, IDisposable
 {
     private readonly OnboardingChecklist _checklist;
-    private readonly Action? _onConfigure;
     private readonly List<IDisposable> _subscriptions = [];
 
     private bool _suppressed;
@@ -30,11 +29,9 @@ public sealed partial class OnboardingBannerViewModel : ObservableObject, IDispo
 
     public OnboardingBannerViewModel(
         OnboardingChecklist checklist,
-        IEventBus eventBus,
-        Action? onConfigure = null)
+        IEventBus eventBus)
     {
         _checklist = checklist;
-        _onConfigure = onConfigure;
 
         _subscriptions.Add(eventBus.SubscribeOnUi<BotLifecyclePhaseChanged>(_ => Refresh()));
         _subscriptions.Add(eventBus.SubscribeOnUi<PlatformAuthorizationRefreshed>(_ => Refresh()));
@@ -84,7 +81,6 @@ public sealed partial class OnboardingBannerViewModel : ObservableObject, IDispo
     [RelayCommand]
     private void Configure()
     {
-        _onConfigure?.Invoke();
         ConfigureRequested?.Invoke(this, EventArgs.Empty);
     }
 }

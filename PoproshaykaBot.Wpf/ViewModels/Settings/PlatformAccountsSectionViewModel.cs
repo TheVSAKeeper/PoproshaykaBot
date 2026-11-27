@@ -202,78 +202,15 @@ public sealed partial class PlatformAccountsSectionViewModel : ObservableObject,
 
     private void OnCredentialDraftChanged(object? sender, EventArgs e) => RefreshCredentialDependency();
 
-    private string? GetStep1DependencyNotice(StreamingPlatform platform)
-    {
-        if (platform == StreamingPlatform.Twitch && _twitchDraft is not null && _settingsManager is not null)
-        {
-            List<string> missing = [];
-            if (string.IsNullOrWhiteSpace(_twitchDraft.ClientId))
-            {
-                missing.Add("Client ID");
-            }
-
-            if (string.IsNullOrWhiteSpace(_twitchDraft.ClientSecret))
-            {
-                missing.Add("Client Secret");
-            }
-
-            if (OAuthSettingsViewModel.ValidateRedirectUri(_twitchDraft.RedirectUri, new(_twitchDraft))
-                != System.ComponentModel.DataAnnotations.ValidationResult.Success)
-            {
-                missing.Add("Redirect URI");
-            }
-
-            if (missing.Count > 0)
-            {
-                return $"Сначала заполните и сохраните Шаг 1 («Доступ площадки») выше: не хватает {string.Join(", ", missing)}.";
-            }
-
-            var settings = _settingsManager.Current.Twitch;
-            if (_twitchDraft.ClientId.Trim() != settings.ClientId
-                || _twitchDraft.ClientSecret.Trim() != settings.ClientSecret
-                || _twitchDraft.RedirectUri.Trim() != settings.RedirectUri)
-            {
-                return "Сначала заполните и сохраните Шаг 1 («Доступ площадки») выше: есть несохранённые изменения реквизитов.";
-            }
-
-            return null;
-        }
-
-        if (platform == StreamingPlatform.YouTube && _youtubeDraft is not null && _youtubeSettingsStore is not null && _youtubeAccountsStore is not null)
-        {
-            List<string> missing = [];
-            if (!_youtubeDraft.Enabled)
-            {
-                missing.Add("включить YouTube");
-            }
-
-            if (string.IsNullOrWhiteSpace(_youtubeDraft.ClientId))
-            {
-                missing.Add("указать Client ID");
-            }
-
-            if (string.IsNullOrWhiteSpace(_youtubeDraft.ClientSecret))
-            {
-                missing.Add("указать Client Secret");
-            }
-
-            if (missing.Count > 0)
-            {
-                return $"Сначала заполните и сохраните Шаг 1 («Доступ площадки») выше: нужно {string.Join(", ", missing)}.";
-            }
-
-            var settings = _youtubeSettingsStore.Load();
-            var secret = _youtubeAccountsStore.LoadClientSecret();
-            if (_youtubeDraft.Enabled != settings.Enabled
-                || _youtubeDraft.ClientId.Trim() != settings.ClientId
-                || _youtubeDraft.ClientSecret.Trim() != secret)
-            {
-                return "Сначала заполните и сохраните Шаг 1 («Доступ площадки») выше: есть несохранённые изменения параметров.";
-            }
-        }
-
-        return null;
-    }
+    private string? GetStep1DependencyNotice(StreamingPlatform platform) =>
+        PlatformStep1Readiness.Evaluate(
+                platform,
+                _twitchDraft,
+                _settingsManager,
+                _youtubeDraft,
+                _youtubeSettingsStore,
+                _youtubeAccountsStore)
+            .MissingReason;
 
     public bool SupportsAccountsFor(StreamingPlatform? platform) =>
         platform is { } id && _accountDirectories.ContainsKey(id);

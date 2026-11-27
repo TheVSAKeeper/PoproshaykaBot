@@ -81,6 +81,8 @@ public sealed partial class MultistreamPageViewModel : ObservableObject, IPageHe
     [NotifyPropertyChangedFor(nameof(SelectedPlatform), nameof(HasSelectedPlatform), nameof(IsPlatformSelected),
         nameof(SelectedPlatformCard), nameof(PlatformSettings), nameof(HasPlatformSettings),
         nameof(HasPlatformAccounts), nameof(HasStep1), nameof(HasStep2),
+        nameof(IsStep1Expanded), nameof(IsStep1CollapsedSummaryVisible), nameof(IsStep1BodyVisible), nameof(Step1HeaderActionLabel),
+        nameof(IsStep2Expanded), nameof(IsStep2CollapsedSummaryVisible), nameof(IsStep2BodyVisible), nameof(Step2HeaderActionLabel),
         nameof(PlatformSettingsTitle), nameof(EditorTitle), nameof(ShowParametersButtonInHeader),
         nameof(ShowBotAuthButtonInHeader), nameof(HeaderSetupActionLabel),
         nameof(SelectedPlatformChannelCount), nameof(HasSelectedPlatformChannels),
@@ -396,7 +398,11 @@ public sealed partial class MultistreamPageViewModel : ObservableObject, IPageHe
         }
 
         IsAutomationSelected = false;
-        IsStep1UserExpanded = true;
+        if (IsStep1Complete)
+        {
+            IsStep1UserExpanded = true;
+        }
+
         Reveal(MultistreamSection.Parameters);
     }
 
@@ -411,7 +417,11 @@ public sealed partial class MultistreamPageViewModel : ObservableObject, IPageHe
         IsAutomationSelected = false;
         if (HasPlatformAccounts)
         {
-            IsStep2UserExpanded = true;
+            if (IsStep2Complete)
+            {
+                IsStep2UserExpanded = true;
+            }
+
             Reveal(MultistreamSection.Accounts);
         }
         else
@@ -436,7 +446,6 @@ public sealed partial class MultistreamPageViewModel : ObservableObject, IPageHe
             Catalog?.SelectActiveChannel();
             if (HasStep1 && !IsStep1Complete)
             {
-                IsStep1UserExpanded = true;
                 Reveal(MultistreamSection.Parameters);
             }
             else if (card.Status.IsBlockedByDebugSession)
@@ -445,7 +454,11 @@ public sealed partial class MultistreamPageViewModel : ObservableObject, IPageHe
             }
             else if (HasStep2 && (!IsStep2Complete || card.Status.NeedsBotAuthorization))
             {
-                IsStep2UserExpanded = true;
+                if (IsStep2Complete)
+                {
+                    IsStep2UserExpanded = true;
+                }
+
                 Reveal(MultistreamSection.Accounts);
             }
             else if (card.Status.NeedsBotAuthorization)
@@ -695,13 +708,17 @@ public sealed partial class MultistreamPageViewModel : ObservableObject, IPageHe
                 Catalog.StepDependencyNotice = null;
             }
 
+            NotifyStepVisibilityProperties();
             return;
         }
 
         var platform = card.Status.Platform;
-        var (step1Ready, step1Summary, step1Missing) = HasStep1
+        var readiness = HasStep1
             ? Settings.EvaluateStep1Readiness(platform)
-            : (true, null, null);
+            : new Step1ReadinessResult(true, null, null);
+        var step1Ready = readiness.Ready;
+        var step1Summary = readiness.Summary;
+        var step1Missing = readiness.MissingReason;
         if (HasStep1 && card.Controls?.RequiresCardSetup == true && step1Ready)
         {
             step1Ready = false;
@@ -735,6 +752,22 @@ public sealed partial class MultistreamPageViewModel : ObservableObject, IPageHe
                 Catalog.StepDependencyNotice = null;
             }
         }
+
+        NotifyStepVisibilityProperties();
+    }
+
+    private void NotifyStepVisibilityProperties()
+    {
+        OnPropertyChanged(nameof(HasStep1));
+        OnPropertyChanged(nameof(HasStep2));
+        OnPropertyChanged(nameof(IsStep1Expanded));
+        OnPropertyChanged(nameof(IsStep1CollapsedSummaryVisible));
+        OnPropertyChanged(nameof(IsStep1BodyVisible));
+        OnPropertyChanged(nameof(Step1HeaderActionLabel));
+        OnPropertyChanged(nameof(IsStep2Expanded));
+        OnPropertyChanged(nameof(IsStep2CollapsedSummaryVisible));
+        OnPropertyChanged(nameof(IsStep2BodyVisible));
+        OnPropertyChanged(nameof(Step2HeaderActionLabel));
     }
 
     private (bool HasBotReady, bool HasBroadcasterScopeWarning, string Summary) ResolveAccountReadiness(

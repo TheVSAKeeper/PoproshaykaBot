@@ -435,6 +435,9 @@ public static class LegacyImportText
 
         var transferred = new List<FirstRunSummaryItem>();
         var attention = new List<FirstRunSummaryItem>();
+        var copiedTargets = result.CopiedFiles
+            .Select(NormalizeRelativePath)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
         var failedTargets = result.Failures
             .Where(static failure => !failure.DestinationWritten)
             .Select(static failure => NormalizeRelativePath(failure.RelativeTargetPath))
@@ -442,12 +445,12 @@ public static class LegacyImportText
 
         var targetPath = result.TargetPath;
 
-        AddBroadcastProfilesSummary(targetPath, failedTargets, transferred, attention);
-        AddOverlayAndPortSummary(targetPath, failedTargets, transferred, attention);
-        AddObsSummary(targetPath, failedTargets, transferred, attention);
-        AddAutoBroadcastSummary(targetPath, failedTargets, transferred, attention);
-        AddPhrasesAndRanksSummary(targetPath, failedTargets, transferred, attention);
-        AddStatisticsSummary(targetPath, failedTargets, transferred, attention);
+        AddBroadcastProfilesSummary(targetPath, copiedTargets, failedTargets, transferred, attention);
+        AddOverlayAndPortSummary(targetPath, copiedTargets, failedTargets, transferred, attention);
+        AddObsSummary(targetPath, copiedTargets, failedTargets, transferred, attention);
+        AddAutoBroadcastSummary(targetPath, copiedTargets, failedTargets, transferred, attention);
+        AddPhrasesAndRanksSummary(targetPath, copiedTargets, failedTargets, transferred, attention);
+        AddStatisticsSummary(targetPath, copiedTargets, failedTargets, transferred, attention);
 
         foreach (var failure in result.Failures)
         {
@@ -480,6 +483,7 @@ public static class LegacyImportText
 
     private static void AddBroadcastProfilesSummary(
         string targetPath,
+        HashSet<string> copiedTargets,
         HashSet<string> failedTargets,
         List<FirstRunSummaryItem> transferred,
         List<FirstRunSummaryItem> attention)
@@ -490,7 +494,7 @@ public static class LegacyImportText
             return;
         }
 
-        var profiles = ReadJson<BroadcastProfilesSettings>(ResolveTargetFile(targetPath, "settings/broadcast-profiles.json", "broadcast-profiles.json"));
+        var profiles = ReadJson<BroadcastProfilesSettings>(ResolveCopiedTargetFile(targetPath, copiedTargets, "settings/broadcast-profiles.json", "broadcast-profiles.json"));
         if (profiles is { Profiles.Count: > 0 })
         {
             transferred.Add(new("Профили эфира", Count(profiles.Profiles.Count, "профиль", "профиля", "профилей")));
@@ -508,6 +512,7 @@ public static class LegacyImportText
 
     private static void AddOverlayAndPortSummary(
         string targetPath,
+        HashSet<string> copiedTargets,
         HashSet<string> failedTargets,
         List<FirstRunSummaryItem> transferred,
         List<FirstRunSummaryItem> attention)
@@ -515,18 +520,17 @@ public static class LegacyImportText
         var obsChatFailed = IsAnyFailed(failedTargets, "settings/obs-chat.json", "obs-chat.json");
         var settingsFailed = IsAnyFailed(failedTargets, "settings/settings.json", "settings.json");
 
-        if (obsChatFailed || settingsFailed)
-        {
-            attention.Add(new("Оверлей и локальный порт", "Не удалось перенести часть параметров оверлея или порта – проверьте раздел «Настройки».", IsWarning: true));
-            return;
-        }
-
-        var obsChatPath = ResolveTargetFile(targetPath, "settings/obs-chat.json", "obs-chat.json");
+        var obsChatPath = obsChatFailed
+            ? null
+            : ResolveCopiedTargetFile(targetPath, copiedTargets, "settings/obs-chat.json", "obs-chat.json");
         var hasObsChat = obsChatPath is not null && ReadJsonNode(obsChatPath) is JsonObject;
-        var appSettings = ReadJson<AppSettings>(ResolveTargetFile(targetPath, "settings/settings.json", "settings.json"));
+        var appSettings = settingsFailed
+            ? null
+            : ReadJson<AppSettings>(ResolveCopiedTargetFile(targetPath, copiedTargets, "settings/settings.json", "settings.json"));
         var port = appSettings?.Twitch.HttpServerPort;
+        var hasPort = port is > 0;
 
-        if (hasObsChat && port is > 0)
+        if (hasObsChat && hasPort)
         {
             transferred.Add(new("Оверлей и локальный порт", $"Оформление чата OBS и порт {port}"));
         }
@@ -534,11 +538,24 @@ public static class LegacyImportText
         {
             transferred.Add(new("Оверлей и локальный порт", "Оформление чата для OBS"));
         }
-        else if (port is > 0)
+        else if (hasPort)
         {
             transferred.Add(new("Оверлей и локальный порт", $"Локальный порт веб-сервера {port}"));
         }
-        else
+
+        if (obsChatFailed && settingsFailed)
+        {
+            attention.Add(new("Оверлей и локальный порт", "Не удалось перенести оформление чата OBS и локальный порт веб-сервера – проверьте раздел «Настройки».", IsWarning: true));
+        }
+        else if (obsChatFailed)
+        {
+            attention.Add(new("Оформление чата OBS", "Не удалось перенести оформление чата OBS – проверьте раздел «Настройки».", IsWarning: true));
+        }
+        else if (settingsFailed)
+        {
+            attention.Add(new("Локальный порт веб-сервера", "Не удалось перенести локальный порт веб-сервера – проверьте раздел «Настройки».", IsWarning: true));
+        }
+        else if (!hasObsChat && !hasPort)
         {
             attention.Add(new("Оверлей и локальный порт", "Отдельные настройки оверлея не найдены – используются значения по умолчанию."));
         }
@@ -546,6 +563,7 @@ public static class LegacyImportText
 
     private static void AddObsSummary(
         string targetPath,
+        HashSet<string> copiedTargets,
         HashSet<string> failedTargets,
         List<FirstRunSummaryItem> transferred,
         List<FirstRunSummaryItem> attention)
@@ -556,7 +574,7 @@ public static class LegacyImportText
             return;
         }
 
-        var obs = ReadJson<ObsIntegrationSettings>(ResolveTargetFile(targetPath, "settings/obs-integration.json", "obs-integration.json"));
+        var obs = ReadJson<ObsIntegrationSettings>(ResolveCopiedTargetFile(targetPath, copiedTargets, "settings/obs-integration.json", "obs-integration.json"));
         if (obs is null)
         {
             attention.Add(new("OBS и аудиоисточники", "Настройки OBS в старой папке не найдены – при необходимости подключите OBS в Настройках."));
@@ -584,6 +602,7 @@ public static class LegacyImportText
 
     private static void AddAutoBroadcastSummary(
         string targetPath,
+        HashSet<string> copiedTargets,
         HashSet<string> failedTargets,
         List<FirstRunSummaryItem> transferred,
         List<FirstRunSummaryItem> attention)
@@ -594,8 +613,8 @@ public static class LegacyImportText
             return;
         }
 
-        var appSettings = ReadJson<AppSettings>(ResolveTargetFile(targetPath, "settings/settings.json", "settings.json"));
-        var hasLifecycle = ResolveTargetFile(targetPath, "settings/platform-lifecycle.json", "platform-lifecycle.json") is not null;
+        var appSettings = ReadJson<AppSettings>(ResolveCopiedTargetFile(targetPath, copiedTargets, "settings/settings.json", "settings.json"));
+        var hasLifecycle = ResolveCopiedTargetFile(targetPath, copiedTargets, "settings/platform-lifecycle.json", "platform-lifecycle.json") is not null;
 
         if (appSettings is null && !hasLifecycle)
         {
@@ -618,6 +637,7 @@ public static class LegacyImportText
 
     private static void AddPhrasesAndRanksSummary(
         string targetPath,
+        HashSet<string> copiedTargets,
         HashSet<string> failedTargets,
         List<FirstRunSummaryItem> transferred,
         List<FirstRunSummaryItem> attention)
@@ -628,8 +648,8 @@ public static class LegacyImportText
             return;
         }
 
-        var appSettings = ReadJson<AppSettings>(ResolveTargetFile(targetPath, "settings/settings.json", "settings.json"));
-        var commands = ReadJson<CommandSettings>(ResolveTargetFile(targetPath, "settings/commands.json", "commands.json"));
+        var appSettings = ReadJson<AppSettings>(ResolveCopiedTargetFile(targetPath, copiedTargets, "settings/settings.json", "settings.json"));
+        var commands = ReadJson<CommandSettings>(ResolveCopiedTargetFile(targetPath, copiedTargets, "settings/commands.json", "commands.json"));
 
         if (appSettings is null && commands is null)
         {
@@ -658,6 +678,7 @@ public static class LegacyImportText
 
     private static void AddStatisticsSummary(
         string targetPath,
+        HashSet<string> copiedTargets,
         HashSet<string> failedTargets,
         List<FirstRunSummaryItem> transferred,
         List<FirstRunSummaryItem> attention)
@@ -668,9 +689,9 @@ public static class LegacyImportText
             return;
         }
 
-        var viewersCount = CountViewers(targetPath);
-        var sessionsCount = CountSessions(targetPath);
-        var botNode = ReadJsonNode(ResolveTargetFile(targetPath, "bot_statistics.json"));
+        var viewersCount = CountViewers(targetPath, copiedTargets);
+        var sessionsCount = CountSessions(targetPath, copiedTargets);
+        var botNode = ReadJsonNode(ResolveCopiedTargetFile(targetPath, copiedTargets, "bot_statistics.json"));
         var messagesProcessed = ReadUInt64Property(botNode, "totalMessagesProcessed");
 
         var parts = new List<string>();
@@ -695,7 +716,7 @@ public static class LegacyImportText
             return;
         }
 
-        var hasAnyStatsFile = ResolveTargetFile(targetPath, "users_statistics.json", "user_statistics_catalog.json", "stream_sessions.json", "broadcasts.json", "bot_statistics.json") is not null;
+        var hasAnyStatsFile = ResolveCopiedTargetFile(targetPath, copiedTargets, "users_statistics.json", "user_statistics_catalog.json", "stream_sessions.json", "broadcasts.json", "bot_statistics.json") is not null;
         if (hasAnyStatsFile)
         {
             transferred.Add(new("Статистика зрителей и сессий", "Файлы статистики перенесены"));
@@ -706,9 +727,9 @@ public static class LegacyImportText
         }
     }
 
-    private static int CountViewers(string targetPath)
+    private static int CountViewers(string targetPath, HashSet<string> copiedTargets)
     {
-        var catalog = ReadJsonNode(ResolveTargetFile(targetPath, "user_statistics_catalog.json"));
+        var catalog = ReadJsonNode(ResolveCopiedTargetFile(targetPath, copiedTargets, "user_statistics_catalog.json"));
         if (GetJsonProperty(catalog, "accounts") is { } accounts)
         {
             var count = CountJsonItems(accounts);
@@ -719,25 +740,25 @@ public static class LegacyImportText
         }
 
         var total = 0;
-        var twitchUsers = ReadJsonNode(ResolveTargetFile(targetPath, "users_statistics.json"));
+        var twitchUsers = ReadJsonNode(ResolveCopiedTargetFile(targetPath, copiedTargets, "users_statistics.json"));
         total += CountJsonItems(twitchUsers);
 
-        var youtubeUsers = ReadJsonNode(ResolveTargetFile(targetPath, "youtube/users_statistics.json"));
+        var youtubeUsers = ReadJsonNode(ResolveCopiedTargetFile(targetPath, copiedTargets, "youtube/users_statistics.json"));
         total += CountJsonItems(youtubeUsers);
 
         return total;
     }
 
-    private static int CountSessions(string targetPath)
+    private static int CountSessions(string targetPath, HashSet<string> copiedTargets)
     {
-        var broadcasts = ReadJsonNode(ResolveTargetFile(targetPath, "broadcasts.json"));
+        var broadcasts = ReadJsonNode(ResolveCopiedTargetFile(targetPath, copiedTargets, "broadcasts.json"));
         var broadcastCount = CountJsonItems(GetJsonProperty(broadcasts, "records") ?? broadcasts);
         if (broadcastCount > 0)
         {
             return broadcastCount;
         }
 
-        var sessions = ReadJsonNode(ResolveTargetFile(targetPath, "stream_sessions.json"));
+        var sessions = ReadJsonNode(ResolveCopiedTargetFile(targetPath, copiedTargets, "stream_sessions.json"));
         return CountJsonItems(GetJsonProperty(sessions, "sessions") ?? sessions);
     }
 
@@ -807,15 +828,28 @@ public static class LegacyImportText
         return path.Replace('\\', '/').Trim('/');
     }
 
-    private static string? ResolveTargetFile(string targetPath, params string[] relativeCandidates)
+    private static string? ResolveCopiedTargetFile(
+        string targetPath,
+        HashSet<string> copiedTargets,
+        params string[] relativeCandidates)
     {
-        if (string.IsNullOrWhiteSpace(targetPath))
+        if (string.IsNullOrWhiteSpace(targetPath) || copiedTargets.Count == 0)
         {
             return null;
         }
 
+        const string settingsPrefix = "settings/";
         foreach (var candidate in relativeCandidates)
         {
+            var normalized = NormalizeRelativePath(candidate);
+            var wasCopied = copiedTargets.Contains(normalized)
+                || (normalized.StartsWith(settingsPrefix, StringComparison.OrdinalIgnoreCase)
+                    && copiedTargets.Contains(normalized[settingsPrefix.Length..]));
+            if (!wasCopied)
+            {
+                continue;
+            }
+
             var full = Path.Combine(targetPath, candidate.Replace('/', Path.DirectorySeparatorChar));
             if (File.Exists(full))
             {

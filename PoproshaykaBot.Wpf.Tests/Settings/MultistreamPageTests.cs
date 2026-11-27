@@ -26,6 +26,7 @@ using PoproshaykaBot.Core.Update;
 using PoproshaykaBot.Core.YouTube.Auth;
 using PoproshaykaBot.Wpf.Bootstrap;
 using PoproshaykaBot.Wpf.Infrastructure;
+using PoproshaykaBot.Wpf.Infrastructure.Platforms;
 using PoproshaykaBot.Wpf.Tests.Support;
 using PoproshaykaBot.Wpf.ViewModels;
 using PoproshaykaBot.Wpf.ViewModels.Dialogs;
@@ -709,6 +710,306 @@ public sealed class MultistreamPageTests
         }
     }
 
+    [Test]
+    public async Task Switching_unconfigured_to_no_step_platform_then_configured_notifies_green_step_summaries()
+    {
+        var data = Directory.CreateTempSubdirectory("poproshayka-multistream-b1-");
+        try
+        {
+            var registry = new ChatPlatformRegistry(
+            [
+                new FakePlatform(StreamingPlatform.Twitch, "Twitch"),
+                new FakePlatform(StreamingPlatform.VkLive, "VK Видео Live"),
+                new FakePlatform(StreamingPlatform.YouTube, "YouTube"),
+            ]);
+            var gate = new SettingsWriteGate();
+            var bus = new InMemoryEventBus(NullLogger<InMemoryEventBus>.Instance);
+            var catalog = new ChannelCatalogStore(filePath: Path.Combine(data.FullName, "channels.json"), gate: gate);
+            var accounts = new AccountsStore(filePath: Path.Combine(data.FullName, "accounts.json"), gate: gate);
+            var ytSettingsStore = new YouTubeSettingsStore(filePath: Path.Combine(data.FullName, "youtube.json"), gate: gate);
+            var ytAccountsStore = new YouTubeAccountsStore(filePath: Path.Combine(data.FullName, "youtube-accounts.json"), gate: gate);
+            var manager = new SettingsManager(NullLogger<SettingsManager>.Instance, Path.Combine(data.FullName, "settings.json"), gate);
+            var server = new KestrelHttpServer(null!, manager, [], NullLogger<KestrelHttpServer>.Instance, NullLoggerFactory.Instance);
+            var dispatcher = new ManualUiDispatcher();
+            var dialogs = DispatchProxy.Create<IDialogService, InertProxy>();
+
+            ytSettingsStore.Save(new() { Enabled = true, ClientId = "yt-client" });
+            ytAccountsStore.SaveAll(
+                "yt-secret",
+                new YouTubeAccountSettings { ChannelId = "UC_BOT", ChannelTitle = "BotYT", AccessToken = "tok", RefreshToken = "ref", AccessTokenExpiresAt = DateTimeOffset.UtcNow.AddDays(30) },
+                new());
+
+            var oauth = new OAuthSettingsViewModel(
+                DispatchProxy.Create<ITwitchOAuthService, InertProxy>(),
+                accounts, dialogs, DispatchProxy.Create<IShellLauncher, InertProxy>(),
+                DispatchProxy.Create<IEmbeddedTwitchAuthDialog, InertProxy>(),
+                dispatcher, TimeProvider.System, NullLoggerFactory.Instance);
+            var ytVm = new YouTubeSettingsSectionViewModel(
+                DispatchProxy.Create<IYouTubeOAuthService, InertProxy>(),
+                DispatchProxy.Create<IShellLauncher, InertProxy>(),
+                dialogs, dispatcher, TimeProvider.System, NullLoggerFactory.Instance);
+            var editor = new ChannelCatalogSettingsSectionViewModel(catalog, platformRegistry: registry);
+            var groups = new ChannelGroupsSettingsSectionViewModel(catalog, new UserStatisticsRepository(NullLogger<UserStatisticsRepository>.Instance));
+            var platformAccounts = new PlatformAccountsSectionViewModel(
+                catalog, accounts, ytAccountsStore,
+                youtubeOAuth: DispatchProxy.Create<IYouTubeOAuthService, InertProxy>(),
+                youtubeSettingsStore: ytSettingsStore,
+                shellLauncher: DispatchProxy.Create<IShellLauncher, InertProxy>(),
+                dialogService: dialogs,
+                platformRegistry: registry);
+
+            using var settings = new SettingsPageViewModel(
+                [
+                    new TwitchConnectionSettingsContributor(oauth, accounts, manager, NullLogger<TwitchConnectionSettingsContributor>.Instance),
+                    new YouTubeConnectionSettingsContributor(ytVm, ytSettingsStore, ytAccountsStore),
+                    new ChannelsSettingsSectionContributor(editor, groups, catalog),
+                ],
+                manager, gate, server, bus, NullLogger<SettingsPageViewModel>.Instance, dialogs, new MemorySettings(),
+                platformRegistry: registry);
+            await using var connection = new BotConnectionManager(new AppHost([], NullLogger<AppHost>.Instance), [], null, bus, NullLogger<BotConnectionManager>.Instance);
+            using var status = new MultistreamTileViewModel(registry, catalog, connection, new PlatformAuthRegistry([]),
+                [], bus, dispatcher, ytSettingsStore);
+            var page = new MultistreamPageViewModel(settings, status, [new YouTubeMultistreamPlatformControls(settings)], platformAccounts, ytSettingsStore, catalog);
+            page.OnEnter();
+
+            Assert.Multiple(() =>
+            {
+                Assert.That(page.SelectedPlatform, Is.EqualTo(StreamingPlatform.Twitch));
+                Assert.That(page.IsStep1Complete, Is.False);
+                Assert.That(page.IsStep2Complete, Is.False);
+            });
+
+            page.SelectPlatformCommand.Execute(page.Cards.Single(c => c.Status.Platform == StreamingPlatform.VkLive));
+            Assert.Multiple(() =>
+            {
+                Assert.That(page.HasStep1, Is.False);
+                Assert.That(page.HasStep2, Is.False);
+                Assert.That(page.IsStep1CollapsedSummaryVisible, Is.False);
+                Assert.That(page.IsStep2CollapsedSummaryVisible, Is.False);
+            });
+
+            var notified = new List<string?>();
+            page.PropertyChanged += (_, e) => notified.Add(e.PropertyName);
+
+            page.SelectPlatformCommand.Execute(page.Cards.Single(c => c.Status.Platform == StreamingPlatform.YouTube));
+
+            Assert.Multiple(() =>
+            {
+                Assert.That(page.SelectedPlatform, Is.EqualTo(StreamingPlatform.YouTube));
+                Assert.That(page.IsStep1CollapsedSummaryVisible, Is.True);
+                Assert.That(page.IsStep2CollapsedSummaryVisible, Is.True);
+                Assert.That(notified, Does.Contain(nameof(MultistreamPageViewModel.IsStep1CollapsedSummaryVisible)));
+                Assert.That(notified, Does.Contain(nameof(MultistreamPageViewModel.IsStep2CollapsedSummaryVisible)));
+                Assert.That(notified, Does.Contain(nameof(MultistreamPageViewModel.IsStep1BodyVisible)));
+                Assert.That(notified, Does.Contain(nameof(MultistreamPageViewModel.IsStep2BodyVisible)));
+            });
+        }
+        finally
+        {
+            data.Delete(recursive: true);
+        }
+    }
+
+    [Test]
+    public async Task Quota_budget_error_blocks_step1_and_exposes_reason_in_step2_and_step3()
+    {
+        var data = Directory.CreateTempSubdirectory("poproshayka-multistream-b2-");
+        try
+        {
+            var registry = new ChatPlatformRegistry([new FakePlatform(StreamingPlatform.YouTube, "YouTube")]);
+            var gate = new SettingsWriteGate();
+            var bus = new InMemoryEventBus(NullLogger<InMemoryEventBus>.Instance);
+            var catalog = new ChannelCatalogStore(filePath: Path.Combine(data.FullName, "channels.json"), gate: gate);
+            var accounts = new AccountsStore(filePath: Path.Combine(data.FullName, "accounts.json"), gate: gate);
+            var ytSettingsStore = new YouTubeSettingsStore(filePath: Path.Combine(data.FullName, "youtube.json"), gate: gate);
+            var ytAccountsStore = new YouTubeAccountsStore(filePath: Path.Combine(data.FullName, "youtube-accounts.json"), gate: gate);
+            var manager = new SettingsManager(NullLogger<SettingsManager>.Instance, Path.Combine(data.FullName, "settings.json"), gate);
+            var server = new KestrelHttpServer(null!, manager, [], NullLogger<KestrelHttpServer>.Instance, NullLoggerFactory.Instance);
+            var dispatcher = new ManualUiDispatcher();
+            var dialogs = DispatchProxy.Create<IDialogService, InertProxy>();
+
+            ytSettingsStore.Save(new() { Enabled = true, ClientId = "yt-client" });
+            ytAccountsStore.SaveAll("yt-secret", new(), new());
+
+            var ytVm = new YouTubeSettingsSectionViewModel(
+                DispatchProxy.Create<IYouTubeOAuthService, InertProxy>(),
+                DispatchProxy.Create<IShellLauncher, InertProxy>(),
+                dialogs, dispatcher, TimeProvider.System, NullLoggerFactory.Instance);
+            var editor = new ChannelCatalogSettingsSectionViewModel(catalog, platformRegistry: registry);
+            var groups = new ChannelGroupsSettingsSectionViewModel(catalog, new UserStatisticsRepository(NullLogger<UserStatisticsRepository>.Instance));
+            var platformAccounts = new PlatformAccountsSectionViewModel(
+                catalog, accounts, ytAccountsStore,
+                youtubeOAuth: DispatchProxy.Create<IYouTubeOAuthService, InertProxy>(),
+                youtubeSettingsStore: ytSettingsStore,
+                shellLauncher: DispatchProxy.Create<IShellLauncher, InertProxy>(),
+                dialogService: dialogs,
+                platformRegistry: registry);
+
+            using var settings = new SettingsPageViewModel(
+                [
+                    new YouTubeConnectionSettingsContributor(ytVm, ytSettingsStore, ytAccountsStore),
+                    new ChannelsSettingsSectionContributor(editor, groups, catalog),
+                ],
+                manager, gate, server, bus, NullLogger<SettingsPageViewModel>.Instance, dialogs, new MemorySettings(),
+                platformRegistry: registry);
+            await using var connection = new BotConnectionManager(new AppHost([], NullLogger<AppHost>.Instance), [], null, bus, NullLogger<BotConnectionManager>.Instance);
+            using var status = new MultistreamTileViewModel(registry, catalog, connection, new PlatformAuthRegistry([]),
+                [], bus, dispatcher, ytSettingsStore);
+            var page = new MultistreamPageViewModel(settings, status, [new YouTubeMultistreamPlatformControls(settings)], platformAccounts, ytSettingsStore, catalog);
+            page.OnEnter();
+
+            Assert.Multiple(() =>
+            {
+                Assert.That(page.IsStep1Complete, Is.True);
+                Assert.That(platformAccounts.Step1DependencyNotice, Is.Null);
+            });
+
+            ytVm.DailyQuotaBudgetText = "0";
+
+            Assert.Multiple(() =>
+            {
+                Assert.That(ytVm.HasQuotaBudgetError, Is.True);
+                Assert.That(page.IsStep1Complete, Is.False);
+                Assert.That(page.IsStep2Complete, Is.False);
+                Assert.That(platformAccounts.HasStep1DependencyNotice, Is.True);
+                Assert.That(platformAccounts.Step1DependencyNotice, Does.Contain("бюджет квоты"));
+                Assert.That(editor.StepDependencyNotice, Does.Contain("бюджет квоты"));
+            });
+        }
+        finally
+        {
+            data.Delete(recursive: true);
+        }
+    }
+
+    [Test]
+    public async Task OpenPlatform_revealing_incomplete_step2_auto_collapses_after_sign_in()
+    {
+        var data = Directory.CreateTempSubdirectory("poproshayka-multistream-b3-");
+        try
+        {
+            var registry = new ChatPlatformRegistry([new FakePlatform(StreamingPlatform.YouTube, "YouTube")]);
+            var gate = new SettingsWriteGate();
+            var bus = new InMemoryEventBus(NullLogger<InMemoryEventBus>.Instance);
+            var catalog = new ChannelCatalogStore(filePath: Path.Combine(data.FullName, "channels.json"), gate: gate);
+            var accounts = new AccountsStore(filePath: Path.Combine(data.FullName, "accounts.json"), gate: gate);
+            var ytSettingsStore = new YouTubeSettingsStore(filePath: Path.Combine(data.FullName, "youtube.json"), gate: gate);
+            var ytAccountsStore = new YouTubeAccountsStore(filePath: Path.Combine(data.FullName, "youtube-accounts.json"), gate: gate);
+            var manager = new SettingsManager(NullLogger<SettingsManager>.Instance, Path.Combine(data.FullName, "settings.json"), gate);
+            var server = new KestrelHttpServer(null!, manager, [], NullLogger<KestrelHttpServer>.Instance, NullLoggerFactory.Instance);
+            var dispatcher = new ManualUiDispatcher();
+            var dialogs = DispatchProxy.Create<IDialogService, InertProxy>();
+
+            ytSettingsStore.Save(new() { Enabled = true, ClientId = "yt-client" });
+            ytAccountsStore.SaveAll("yt-secret", new(), new());
+
+            var ytVm = new YouTubeSettingsSectionViewModel(
+                DispatchProxy.Create<IYouTubeOAuthService, InertProxy>(),
+                DispatchProxy.Create<IShellLauncher, InertProxy>(),
+                dialogs, dispatcher, TimeProvider.System, NullLoggerFactory.Instance);
+            var editor = new ChannelCatalogSettingsSectionViewModel(catalog, platformRegistry: registry);
+            var groups = new ChannelGroupsSettingsSectionViewModel(catalog, new UserStatisticsRepository(NullLogger<UserStatisticsRepository>.Instance));
+            var login = new StubPlatformAccountLogin(
+                StreamingPlatform.YouTube,
+                () =>
+                {
+                    ytAccountsStore.SaveAll(
+                        "yt-secret",
+                        new YouTubeAccountSettings { ChannelId = "UC_BOT", ChannelTitle = "BotYT", AccessToken = "tok", RefreshToken = "ref", AccessTokenExpiresAt = DateTimeOffset.UtcNow.AddDays(30) },
+                        new());
+                    return new(
+                        "Вход выполнен",
+                        StatusSeverity.Success,
+                        [new AuthContextSummary(AuthContextIds.Default, PlatformAuthRole.Bot, "BotYT", "UC_BOT", "BotYT", true, true)]);
+                });
+            var platformAccounts = new PlatformAccountsSectionViewModel(
+                catalog, accounts, ytAccountsStore,
+                youtubeSettingsStore: ytSettingsStore,
+                shellLauncher: DispatchProxy.Create<IShellLauncher, InertProxy>(),
+                dialogService: dialogs,
+                accountLogins: [login],
+                platformRegistry: registry);
+
+            using var settings = new SettingsPageViewModel(
+                [
+                    new YouTubeConnectionSettingsContributor(ytVm, ytSettingsStore, ytAccountsStore),
+                    new ChannelsSettingsSectionContributor(editor, groups, catalog),
+                ],
+                manager, gate, server, bus, NullLogger<SettingsPageViewModel>.Instance, dialogs, new MemorySettings(),
+                platformRegistry: registry);
+            await using var connection = new BotConnectionManager(new AppHost([], NullLogger<AppHost>.Instance), [], null, bus, NullLogger<BotConnectionManager>.Instance);
+            using var status = new MultistreamTileViewModel(registry, catalog, connection, new PlatformAuthRegistry([]),
+                [], bus, dispatcher, ytSettingsStore);
+            var page = new MultistreamPageViewModel(settings, status, [new YouTubeMultistreamPlatformControls(settings)], platformAccounts, ytSettingsStore, catalog);
+            page.OnEnter();
+
+            page.OpenPlatform(StreamingPlatform.YouTube);
+            Assert.Multiple(() =>
+            {
+                Assert.That(page.IsStep1Complete, Is.True);
+                Assert.That(page.IsStep2Complete, Is.False);
+                Assert.That(page.IsStep2Expanded, Is.True);
+                Assert.That(page.IsStep2UserExpanded, Is.False);
+                Assert.That(page.TakeSectionRequest(), Is.EqualTo(MultistreamSection.Accounts));
+            });
+
+            await platformAccounts.AuthorizeBotCommand.ExecuteAsync(null);
+
+            Assert.Multiple(() =>
+            {
+                Assert.That(page.IsStep2Complete, Is.True);
+                Assert.That(page.IsStep2Expanded, Is.False);
+                Assert.That(page.IsStep2CollapsedSummaryVisible, Is.True);
+            });
+        }
+        finally
+        {
+            data.Delete(recursive: true);
+        }
+    }
+
+    [Test]
+    public async Task Add_youtube_channel_without_matching_broadcaster_leaves_broadcaster_unassigned()
+    {
+        var data = Directory.CreateTempSubdirectory("poproshayka-multistream-b4-");
+        try
+        {
+            var registry = new ChatPlatformRegistry([new FakePlatform(StreamingPlatform.YouTube, "YouTube")]);
+            var catalog = new ChannelCatalogStore(filePath: Path.Combine(data.FullName, "channels.json"));
+            var ytAccountsStore = new YouTubeAccountsStore(filePath: Path.Combine(data.FullName, "youtube-accounts.json"));
+            ytAccountsStore.SaveAll(
+                "secret",
+                new YouTubeAccountSettings { ChannelId = "UC_BOT", ChannelTitle = "BotYT", AccessToken = "tok", RefreshToken = "ref", AccessTokenExpiresAt = DateTimeOffset.UtcNow.AddDays(30) },
+                new YouTubeAccountSettings { ChannelId = "UC_MAIN", ChannelTitle = "OwnerYT", AccessToken = "tok2", RefreshToken = "ref2", AccessTokenExpiresAt = DateTimeOffset.UtcNow.AddDays(30) });
+
+            var adapter = new MultiChannelFakeAdapter(
+                StreamingPlatform.YouTube,
+                ytAccountsStore,
+                resolve: (raw, _, _) => Task.FromResult<ResolvedChannelIdentity?>(
+                    new(new(StreamingPlatform.YouTube, "UC_OTHER"), raw, "@other", "https://youtube.com/@other")));
+            var editor = new ChannelCatalogSettingsSectionViewModel(catalog, [adapter], youtubeAccountsStore: ytAccountsStore, platformRegistry: registry)
+            {
+                SelectedPlatform = StreamingPlatform.YouTube,
+            };
+            editor.Load();
+
+            editor.NewChannelInput = "@other";
+            await editor.AddChannelCommand.ExecuteAsync(null);
+
+            var added = editor.SelectedChannel!;
+            Assert.Multiple(() =>
+            {
+                Assert.That(added.ChannelId, Is.EqualTo("UC_OTHER"));
+                Assert.That(added.Roles[0].AccountId, Is.EqualTo("UC_BOT"), "Роль бота должна безопасно автоподставляться");
+                Assert.That(added.Roles[1].AccountId, Is.Null.Or.Empty, "Чужой аккаунт стримера не должен подставляться в другой канал");
+            });
+        }
+        finally
+        {
+            data.Delete(recursive: true);
+        }
+    }
+
     public sealed class CapturingDialogService : IDialogService
     {
         public IDialogViewModel? LastDialog { get; private set; }
@@ -782,5 +1083,18 @@ public sealed class MultistreamPageTests
         public StreamInfo? CurrentStream => null;
         public StreamStatusSnapshot GetSnapshot() => new(CurrentStatus, null, null);
         public Task RefreshLiveSnapshotAsync() => throw new NotSupportedException();
+    }
+
+    private sealed class StubPlatformAccountLogin(
+        StreamingPlatform platform,
+        Func<PlatformAccountLoginResult> authorize) : IPlatformAccountLogin
+    {
+        public StreamingPlatform Platform => platform;
+        public bool CanAuthorize => true;
+        public bool SupportsEmbeddedBrowser => false;
+        public bool SupportsWebChatSignIn => false;
+        public PlatformOAuthMethodDescriptor OAuthMethod { get; } = new("Встроенное окно", "Войти через окно", false, false);
+        public Task<PlatformAccountLoginResult> AuthorizeAsync(PlatformAccountLoginRequest request, CancellationToken cancellationToken = default) =>
+            Task.FromResult(authorize());
     }
 }

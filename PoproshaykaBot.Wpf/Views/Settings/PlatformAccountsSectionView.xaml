@@ -127,19 +127,25 @@
                         Margin="0,0,0,10"
                         AutomationProperties.AutomationId="PlatformAccountsStep1DependencyBanner"
                         Visibility="{Binding HasStep1DependencyNotice, Converter={StaticResource BoolToVisibility}}">
-                    <StackPanel Orientation="Horizontal">
-                        <iconPacks:PackIconLucide Kind="{x:Static iconPacks:PackIconLucideKind.TriangleAlert}"
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <iconPacks:PackIconLucide Grid.Column="0"
+                                                  Kind="{x:Static iconPacks:PackIconLucideKind.TriangleAlert}"
                                                   Width="15"
                                                   Height="15"
                                                   Foreground="{DynamicResource State.WarningText}"
-                                                  VerticalAlignment="Center"
-                                                  Margin="0,0,8,0" />
-                        <TextBlock Text="{Binding Step1DependencyNotice}"
+                                                  VerticalAlignment="Top"
+                                                  Margin="0,2,8,0" />
+                        <TextBlock Grid.Column="1"
+                                   Text="{Binding Step1DependencyNotice}"
                                    Foreground="{DynamicResource State.WarningText}"
                                    FontSize="{DynamicResource Font.Size.S}"
                                    TextWrapping="Wrap"
                                    VerticalAlignment="Center" />
-                    </StackPanel>
+                    </Grid>
                 </Border>
 
                 <WrapPanel Margin="0,0,0,10"

@@ -122,41 +122,11 @@ public sealed partial class SettingsPageViewModel : ObservableObject, IPageHeade
     internal (OAuthSettingsViewModel? Twitch, YouTubeSettingsSectionViewModel? YouTube) GetCredentialDrafts() =>
         (_twitchCredentials, _youtubeCredentials);
 
-    internal (bool Ready, string? Summary, string? MissingReason) EvaluateStep1Readiness(StreamingPlatform platform)
+    internal Step1ReadinessResult EvaluateStep1Readiness(StreamingPlatform platform)
     {
         if (platform == StreamingPlatform.Twitch && _twitchCredentials is not null)
         {
-            List<string> missing = [];
-            if (string.IsNullOrWhiteSpace(_twitchCredentials.ClientId))
-            {
-                missing.Add("Client ID");
-            }
-
-            if (string.IsNullOrWhiteSpace(_twitchCredentials.ClientSecret))
-            {
-                missing.Add("Client Secret");
-            }
-
-            if (OAuthSettingsViewModel.ValidateRedirectUri(_twitchCredentials.RedirectUri, new(_twitchCredentials))
-                != System.ComponentModel.DataAnnotations.ValidationResult.Success)
-            {
-                missing.Add("Redirect URI");
-            }
-
-            if (missing.Count > 0)
-            {
-                return (false, null, $"Заполните и сохраните Шаг 1 («Доступ площадки») выше: не хватает {string.Join(", ", missing)}.");
-            }
-
-            var saved = _settingsManager.Current.Twitch;
-            if (_twitchCredentials.ClientId.Trim() != saved.ClientId
-                || _twitchCredentials.ClientSecret.Trim() != saved.ClientSecret
-                || _twitchCredentials.RedirectUri.Trim() != saved.RedirectUri)
-            {
-                return (false, null, "Сохраните изменения в Шаге 1 («Доступ площадки») выше.");
-            }
-
-            return (true, "Ключи приложения и Redirect URI настроены", null);
+            return PlatformStep1Readiness.EvaluateTwitch(_twitchCredentials, _settingsManager);
         }
 
         if (platform == StreamingPlatform.YouTube
@@ -166,7 +136,7 @@ public sealed partial class SettingsPageViewModel : ObservableObject, IPageHeade
             return ytContributor.EvaluateStep1Readiness();
         }
 
-        return (true, null, null);
+        return new(true, null, null);
     }
 
     public T GetSectionContent<T>() where T : class =>

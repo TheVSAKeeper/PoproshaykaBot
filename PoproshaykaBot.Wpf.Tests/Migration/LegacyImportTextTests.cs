@@ -294,8 +294,68 @@ public class LegacyImportTextTests
             {
                 Assert.That(partialSummary.IsPartial, Is.True);
                 Assert.That(partialSummary.Headline, Does.Contain("частично"));
+                Assert.That(partialSummary.TransferredItems.Select(static i => i.Title), Is.EqualTo(new[]
+                {
+                    "Оверлей и локальный порт",
+                    "Авто-рассылка",
+                    "Фразы и ранги",
+                }));
+                Assert.That(partialSummary.TransferredItems[0].Detail, Is.EqualTo("Локальный порт веб-сервера 8095"));
+                Assert.That(partialSummary.TransferredItems[2].Detail, Does.Not.Contain("команд"));
+                Assert.That(partialSummary.AttentionItems.Any(static i => i.Title == "Профили эфира" && !i.IsWarning), Is.True);
                 Assert.That(partialSummary.AttentionItems.Any(static i => i.Title == "OBS и аудиоисточники" && i.IsWarning), Is.True);
+                Assert.That(partialSummary.AttentionItems.Any(static i => i.Title == "Статистика зрителей и сессий" && !i.IsWarning), Is.True);
                 Assert.That(partialSummary.AttentionItems.Any(static i => i.Title == "Вход в Twitch" && i.IsWarning), Is.True);
+            }
+        }
+        finally
+        {
+            Directory.Delete(targetDir, recursive: true);
+        }
+    }
+
+    [Test]
+    public void BuildFirstRunSummary_SplitsOverlayAndPortBlock_WhenOneFileFailsAndOtherSucceeds()
+    {
+        var targetDir = Path.Combine(Path.GetTempPath(), "pb-summary-split-" + Guid.NewGuid().ToString("N"));
+        var settingsDir = Path.Combine(targetDir, "settings");
+        Directory.CreateDirectory(settingsDir);
+        try
+        {
+            File.WriteAllText(Path.Combine(settingsDir, "settings.json"), """{"twitch":{"httpServerPort":8095}}""");
+            File.WriteAllText(Path.Combine(settingsDir, "obs-chat.json"), """{"fontSize":16}""");
+
+            var obsChatFailedResult = new LegacyImportResult
+            {
+                SourcePath = @"C:\old",
+                TargetPath = targetDir,
+                CopiedFiles = ["settings/settings.json"],
+                SkippedFiles = [],
+                Failures = [new("settings/obs-chat.json", "locked")],
+            };
+
+            var obsChatFailedSummary = LegacyImportText.BuildFirstRunSummary(obsChatFailedResult, twitchEnabled: true, twitchBotRequired: false);
+
+            var settingsFailedResult = new LegacyImportResult
+            {
+                SourcePath = @"C:\old",
+                TargetPath = targetDir,
+                CopiedFiles = ["settings/obs-chat.json"],
+                SkippedFiles = [],
+                Failures = [new("settings/settings.json", "locked")],
+            };
+
+            var settingsFailedSummary = LegacyImportText.BuildFirstRunSummary(settingsFailedResult, twitchEnabled: true, twitchBotRequired: false);
+
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(obsChatFailedSummary.TransferredItems.Single(static i => i.Title == "Оверлей и локальный порт").Detail,
+                    Is.EqualTo("Локальный порт веб-сервера 8095"));
+                Assert.That(obsChatFailedSummary.AttentionItems.Any(static i => i.Title == "Оформление чата OBS" && i.IsWarning), Is.True);
+
+                Assert.That(settingsFailedSummary.TransferredItems.Single(static i => i.Title == "Оверлей и локальный порт").Detail,
+                    Is.EqualTo("Оформление чата для OBS"));
+                Assert.That(settingsFailedSummary.AttentionItems.Any(static i => i.Title == "Локальный порт веб-сервера" && i.IsWarning), Is.True);
             }
         }
         finally

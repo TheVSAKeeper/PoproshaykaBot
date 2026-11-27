@@ -542,6 +542,50 @@ public sealed class MultistreamLayoutTests
         });
     }
 
+    [TestCase(764, 540, 1.0, Description = "compact 1.0")]
+    [TestCase(1020, 700, 1.6, Description = "1280x800 scale 1.6")]
+    public async Task Dependency_warning_banners_wrap_within_container_width_on_narrow_columns(
+        double width, double height, double scale)
+    {
+        ApplyScale(scale);
+        await using var harness = CreateHarness();
+        var view = new MultistreamPageView { DataContext = harness.Page };
+        var host = HostWithMainWindowFont(view);
+        ArrangeWithResponsivePass(host, view, new(width, height));
+
+        var detailScroll = (ScrollViewer)view.FindName("DetailScroll")!;
+        var step2Banner = Descendants<Border>(detailScroll)
+            .First(b => System.Windows.Automation.AutomationProperties.GetAutomationId(b) == "PlatformAccountsStep1DependencyBanner");
+        var step3Banner = Descendants<Border>(detailScroll)
+            .First(b => System.Windows.Automation.AutomationProperties.GetAutomationId(b) == "ChannelCatalogStepDependencyBanner");
+
+        Assert.Multiple(() =>
+        {
+            AssertBannerTextFitsInsideContainer(step2Banner, detailScroll, "Шаг 2", width, height, scale);
+            AssertBannerTextFitsInsideContainer(step3Banner, detailScroll, "Шаг 3", width, height, scale);
+        });
+    }
+
+    private static void AssertBannerTextFitsInsideContainer(
+        Border banner,
+        ScrollViewer detailScroll,
+        string stepName,
+        double width,
+        double height,
+        double scale)
+    {
+        Assert.That(IsEffectivelyVisible(banner), Is.True, $"Баннер зависимости {stepName} должен быть виден");
+        var warningText = Descendants<TextBlock>(banner).Single(IsEffectivelyVisible);
+        var bannerInnerRight = banner.ActualWidth - banner.Padding.Right - banner.BorderThickness.Right;
+        var textBoundsInBanner = warningText.TransformToAncestor(banner).TransformBounds(new(warningText.RenderSize));
+        var textBoundsInScroll = warningText.TransformToAncestor(detailScroll).TransformBounds(new(warningText.RenderSize));
+
+        Assert.That(textBoundsInBanner.Right, Is.LessThanOrEqualTo(bannerInnerRight + 0.5),
+            $"Текст предупреждения {stepName} вылез за баннер при {width}x{height} @ {scale}: Right={textBoundsInBanner.Right:F1}, InnerRight={bannerInnerRight:F1}");
+        Assert.That(textBoundsInScroll.Right, Is.LessThanOrEqualTo(detailScroll.ViewportWidth + 0.5),
+            $"Текст предупреждения {stepName} обрезан справа при {width}x{height} @ {scale}: Right={textBoundsInScroll.Right:F1}, Viewport={detailScroll.ViewportWidth:F1}");
+    }
+
     private LayoutHarness CreateHarness(params IPlatformChannelMonitor[] monitors)
     {
         var twitch = new StubPlatform(StreamingPlatform.Twitch, "Twitch");

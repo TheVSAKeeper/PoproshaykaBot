@@ -7,9 +7,8 @@
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              mc:Ignorable="d"
              d:DataContext="{d:DesignInstance vm:FirstRunStartViewModel}"
-             MinWidth="500"
-             MaxWidth="640"
-             Width="600">
+             MaxWidth="600"
+             HorizontalAlignment="Stretch">
     <Grid>
         <Grid.RowDefinitions>
             <RowDefinition Height="*" />
@@ -243,6 +242,7 @@
                             <StackPanel Grid.Column="1">
                                 <TextBlock Text="Что нового"
                                            FontWeight="SemiBold"
+                                           TextWrapping="Wrap"
                                            Foreground="{DynamicResource State.InfoText}" />
                                 <TextBlock Text="Появилась поддержка YouTube и два встроенных чата рядом – чат Twitch и чат YouTube работают бок о бок в одном окне панели."
                                            Foreground="{DynamicResource Fg.Primary}"
@@ -278,13 +278,14 @@
                             Style="{StaticResource Button.Secondary}"
                             Command="{Binding StartFreshCommand}"
                             AutomationProperties.Name="Начать с нуля"
-                            Margin="0,0,8,0"
+                            Margin="0,0,8,4"
                             MinWidth="130" />
                     <Button x:Name="ImportChoiceButton"
                             Content="{Binding PrimaryImportButtonText}"
                             Style="{StaticResource Button.Primary}"
                             Command="{Binding ImportCommand}"
                             AutomationProperties.Name="Перенести данные из старой версии"
+                            Margin="0,0,0,4"
                             MinWidth="220" />
                 </WrapPanel>
 
@@ -295,13 +296,14 @@
                             Style="{StaticResource Button.Secondary}"
                             Command="{Binding StartFreshCommand}"
                             AutomationProperties.Name="Начать с нуля"
-                            Margin="0,0,8,0"
+                            Margin="0,0,8,4"
                             MinWidth="130" />
                     <Button x:Name="PickOtherFolderInvalidButton"
                             Content="Выбрать другую папку"
                             Style="{StaticResource Button.Primary}"
                             Command="{Binding PickFolderCommand}"
                             AutomationProperties.Name="Выбрать другую папку"
+                            Margin="0,0,0,4"
                             MinWidth="180" />
                 </WrapPanel>
 
@@ -312,13 +314,14 @@
                             Style="{StaticResource Button.Secondary}"
                             Command="{Binding OpenDashboardCommand}"
                             AutomationProperties.Name="Открыть панель"
-                            Margin="0,0,8,0"
+                            Margin="0,0,8,4"
                             MinWidth="140" />
                     <Button x:Name="ConnectYouTubeSummaryButton"
                             Content="Подключить YouTube"
                             Style="{StaticResource Button.Primary}"
                             Command="{Binding ConnectYouTubeCommand}"
                             AutomationProperties.Name="Подключить YouTube"
+                            Margin="0,0,0,4"
                             MinWidth="170" />
                 </WrapPanel>
             </StackPanel>

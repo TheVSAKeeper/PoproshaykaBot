@@ -63,18 +63,13 @@ public class OnboardingBannerTests
     [Test]
     public void Кнопка_баннера_вызывает_переход_к_настройке_каналов()
     {
-        var callbackCount = 0;
         var eventCount = 0;
-        using var banner = CreateBanner(() => callbackCount++);
+        using var banner = CreateBanner();
         banner.ConfigureRequested += (_, _) => eventCount++;
 
         banner.ConfigureCommand.Execute(null);
 
-        Assert.Multiple(() =>
-        {
-            Assert.That(callbackCount, Is.EqualTo(1));
-            Assert.That(eventCount, Is.EqualTo(1));
-        });
+        Assert.That(eventCount, Is.EqualTo(1));
     }
 
     [TestCase(false, false, false, true)]
@@ -110,13 +105,13 @@ public class OnboardingBannerTests
         Assert.That(shouldShow, Is.EqualTo(expectedShow));
     }
 
-    private OnboardingBannerViewModel CreateBanner(Action? onConfigure = null)
+    private OnboardingBannerViewModel CreateBanner()
     {
         var settings = new SettingsManager(NullLogger<SettingsManager>.Instance, Path.Combine(_directory, "settings.json"));
         var accounts = new AccountsStore(filePath: Path.Combine(_directory, "accounts.json"));
         var checklist = new OnboardingChecklist(settings, accounts);
         var bus = new InMemoryEventBus(NullLogger<InMemoryEventBus>.Instance);
 
-        return new(checklist, bus, onConfigure);
+        return new(checklist, bus);
     }
 }

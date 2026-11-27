@@ -50,6 +50,11 @@ public partial class FirstRunStartWindow : Window
 
     private void OnLocationChanged(object? sender, EventArgs e)
     {
+        if (App.IsHeadless)
+        {
+            return;
+        }
+
         ApplyWorkArea(IntPtr.Zero, VisualTreeHelper.GetDpi(this));
     }
 
@@ -81,7 +86,7 @@ public partial class FirstRunStartWindow : Window
 
     private void ScheduleFit()
     {
-        if (_fitScheduled)
+        if (App.IsHeadless || _fitScheduled)
         {
             return;
         }
@@ -93,7 +98,7 @@ public partial class FirstRunStartWindow : Window
     private void FitInsideWorkArea()
     {
         _fitScheduled = false;
-        if (!IsVisible)
+        if (App.IsHeadless || !IsVisible)
         {
             return;
         }

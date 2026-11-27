@@ -126,46 +126,8 @@ public sealed class YouTubeConnectionSettingsContributor : ISettingsSectionContr
         return Task.FromResult(new SettingsSectionSaveOutcome(written, events));
     }
 
-    internal (bool Ready, string? Summary, string? MissingReason) EvaluateStep1Readiness()
-    {
-        List<string> missing = [];
-        if (!_youTube.Enabled)
-        {
-            missing.Add("включить YouTube");
-        }
-
-        if (string.IsNullOrWhiteSpace(_youTube.ClientId))
-        {
-            missing.Add("указать Client ID");
-        }
-
-        if (string.IsNullOrWhiteSpace(_youTube.ClientSecret))
-        {
-            missing.Add("указать Client Secret");
-        }
-
-        if (_youTube.HasQuotaBudgetError)
-        {
-            missing.Add("исправить бюджет квоты");
-        }
-
-        if (missing.Count > 0)
-        {
-            return (false, null, $"Заполните и сохраните Шаг 1 («Доступ площадки») выше: нужно {string.Join(", ", missing)}.");
-        }
-
-        var saved = _settingsStore.Load();
-        var savedSecret = _accountsStore.LoadClientSecret();
-        if (!saved.Enabled
-            || saved.Enabled != _youTube.Enabled
-            || _youTube.ClientId.Trim() != saved.ClientId
-            || _youTube.ClientSecret.Trim() != savedSecret)
-        {
-            return (false, null, "Сохраните изменения в Шаге 1 («Доступ площадки») выше.");
-        }
-
-        return (true, "YouTube включён, ключи Google-проекта сохранены", null);
-    }
+    internal Step1ReadinessResult EvaluateStep1Readiness() =>
+        PlatformStep1Readiness.EvaluateYouTube(_youTube, _settingsStore, _accountsStore);
 
     public void Dispose()
     {
