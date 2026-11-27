@@ -694,7 +694,17 @@ public sealed partial class ObsInfoTileViewModel : DashboardTileViewModel, IDisp
                 var snapshot = audioSources.FirstOrDefault(source =>
                     string.Equals(source.Name, meter.SourceName, StringComparison.OrdinalIgnoreCase));
                 return IsMicrophoneCandidate(meter.SourceName, snapshot?.Kind);
-            }) ?? (AudioSources.Count > 0 ? AudioSources[0] : null);
+            });
+
+            if (selected is null)
+            {
+                selected = ForegroundMicrophone is not null && string.IsNullOrEmpty(ForegroundMicrophone.SourceName)
+                    ? ForegroundMicrophone
+                    : new ObsSourceMeterViewModel(string.Empty);
+                selected.Found = false;
+                selected.Muted = false;
+                selected.ShowUnidentified();
+            }
         }
 
         ForegroundMicrophone = selected;
@@ -738,7 +748,7 @@ public sealed partial class ObsInfoTileViewModel : DashboardTileViewModel, IDisp
 
         var configured = _settings.GetDashboardSourceNames();
         var micCandidate = configured.FirstOrDefault(name => IsMicrophoneCandidate(name, null));
-        return micCandidate ?? (configured.Count > 0 ? configured[0] : null) ?? "Микрофон";
+        return micCandidate ?? "Микрофон";
     }
 
     private void EnsureRows(IReadOnlyList<string> orderedNames)
@@ -826,7 +836,10 @@ public sealed partial class ObsInfoTileViewModel : DashboardTileViewModel, IDisp
             mic.Muted = false;
             if (!AudioSources.Contains(mic))
             {
-                mic.ShowReconnecting(mic.DisplayName);
+                var label = string.IsNullOrEmpty(mic.SourceName)
+                    ? ResolveDefaultMicrophonePlaceholderName()
+                    : mic.DisplayName;
+                mic.ShowReconnecting(label);
             }
         }
         else

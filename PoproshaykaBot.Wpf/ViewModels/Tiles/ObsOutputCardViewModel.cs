@@ -68,12 +68,13 @@ public sealed partial class ObsOutputCardViewModel : ObservableObject, IDisposab
         ObsOutputCardKind kind,
         ObsIntegrationService obsIntegration,
         ILogger logger,
-        IUiDispatcher? uiDispatcher = null)
+        IUiDispatcher? uiDispatcher = null,
+        TimeProvider? timeProvider = null)
     {
         Kind = kind;
         _obsIntegration = obsIntegration;
         _logger = logger;
-        _stopConfirmation = new(uiDispatcher, OnStopConfirmationChanged);
+        _stopConfirmation = new(uiDispatcher, OnStopConfirmationChanged, timeProvider: timeProvider);
     }
 
     // TODO: Active/Paused подсвечены статично токенами State.*, без пульсации точки и анимированной обводки –

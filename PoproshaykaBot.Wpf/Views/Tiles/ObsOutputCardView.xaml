@@ -181,10 +181,6 @@
                         ToolTip="{Binding PrimaryButtonToolTip}"
                         AutomationProperties.Name="{Binding PrimaryButtonAutomationName}"
                         Command="{Binding InvokePrimaryCommand}">
-                    <Button.InputBindings>
-                        <KeyBinding Key="Escape"
-                                    Command="{Binding CancelStopConfirmationCommand}" />
-                    </Button.InputBindings>
                     <Button.Style>
                         <Style TargetType="Button"
                                BasedOn="{StaticResource Button.Secondary}">

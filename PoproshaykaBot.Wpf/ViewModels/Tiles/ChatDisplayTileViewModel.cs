@@ -302,13 +302,16 @@ public sealed partial class ChatDisplayTileViewModel : DashboardTileViewModel, I
 
     partial void OnSelectedModeChanged(ChatDisplayMode value)
     {
-        if (value.IsSplit)
+        if (!_isGalleryPreview && value.IsSplit)
         {
             _lastSplitLayout = value.Layout;
         }
 
         RefreshChat();
-        _uiSettings?.SetValue(SettingsKeys.ChatTileDisplayMode, value.SettingsValue);
+        if (!_isGalleryPreview)
+        {
+            _uiSettings?.SetValue(SettingsKeys.ChatTileDisplayMode, value.SettingsValue);
+        }
     }
 
     private void OnActiveChannelChanged(ActiveChannelChanged @event)
@@ -317,6 +320,11 @@ public sealed partial class ChatDisplayTileViewModel : DashboardTileViewModel, I
         {
             ClearYouTubeEndedState(@event.NewChannel.ChannelId);
             ClearYouTubeEndedState(@event.NewDisplayName);
+            foreach (var key in GetActiveYouTubeKeys(_platformRegistry?.Find(StreamingPlatform.YouTube)))
+            {
+                ClearYouTubeEndedState(key);
+            }
+
             if (!string.IsNullOrWhiteSpace(_lastYouTubeChannelKey))
             {
                 _youtubeLiveSeenKeys.Remove(_lastYouTubeChannelKey);
@@ -354,10 +362,12 @@ public sealed partial class ChatDisplayTileViewModel : DashboardTileViewModel, I
         }
         else
         {
-            var currentKey = ResolveYouTubeChannelKey(_platformRegistry?.Find(StreamingPlatform.YouTube));
-            if (!string.IsNullOrWhiteSpace(currentKey) && _youtubeLiveSeenKeys.Contains(currentKey))
+            var activeKeys = GetActiveYouTubeKeys(_platformRegistry?.Find(StreamingPlatform.YouTube))
+                .Where(_youtubeLiveSeenKeys.Contains)
+                .ToArray();
+            foreach (var key in activeKeys)
             {
-                MarkYouTubeEnded(currentKey, null);
+                MarkYouTubeEnded(key, null);
             }
         }
 
@@ -366,7 +376,7 @@ public sealed partial class ChatDisplayTileViewModel : DashboardTileViewModel, I
 
     private void MarkYouTubeLive(string? channel, string? channelId)
     {
-        foreach (var key in EnumerateYouTubeKeys(channel, channelId))
+        foreach (var key in EnumerateEventYouTubeKeys(channel, channelId))
         {
             _youtubeLiveSeenKeys.Add(key);
             _youtubeEndedKeys.Remove(key);
@@ -375,7 +385,7 @@ public sealed partial class ChatDisplayTileViewModel : DashboardTileViewModel, I
 
     private void MarkYouTubeEnded(string? channel, string? channelId)
     {
-        foreach (var key in EnumerateYouTubeKeys(channel, channelId))
+        foreach (var key in EnumerateEventYouTubeKeys(channel, channelId))
         {
             _youtubeLiveSeenKeys.Remove(key);
             _youtubeEndedKeys.Add(key);
@@ -390,7 +400,7 @@ public sealed partial class ChatDisplayTileViewModel : DashboardTileViewModel, I
         }
     }
 
-    private IEnumerable<string> EnumerateYouTubeKeys(string? channel, string? channelId)
+    private static IEnumerable<string> EnumerateEventYouTubeKeys(string? channel, string? channelId)
     {
         if (!string.IsNullOrWhiteSpace(channel))
         {
@@ -401,11 +411,34 @@ public sealed partial class ChatDisplayTileViewModel : DashboardTileViewModel, I
         {
             yield return channelId.Trim();
         }
+    }
 
-        var currentKey = ResolveYouTubeChannelKey(_platformRegistry?.Find(StreamingPlatform.YouTube));
-        if (!string.IsNullOrWhiteSpace(currentKey))
+    private IEnumerable<string> GetActiveYouTubeKeys(IChatPlatform? platform)
+    {
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        var primaryKey = ResolveYouTubeChannelKey(platform);
+        if (!string.IsNullOrWhiteSpace(primaryKey) && seen.Add(primaryKey))
         {
-            yield return currentKey;
+            yield return primaryKey;
+        }
+
+        if (_channelCatalogStore?.GetActiveChannel(StreamingPlatform.YouTube) is { } active)
+        {
+            if (!string.IsNullOrWhiteSpace(active.ChannelId) && seen.Add(active.ChannelId.Trim()))
+            {
+                yield return active.ChannelId.Trim();
+            }
+
+            if (!string.IsNullOrWhiteSpace(active.Handle) && seen.Add(active.Handle.Trim()))
+            {
+                yield return active.Handle.Trim();
+            }
+
+            if (!string.IsNullOrWhiteSpace(active.DisplayName) && seen.Add(active.DisplayName.Trim()))
+            {
+                yield return active.DisplayName.Trim();
+            }
         }
     }
 
@@ -521,25 +554,35 @@ public sealed partial class ChatDisplayTileViewModel : DashboardTileViewModel, I
         {
             channelDisplayName = isUnconfiguredPlatform ? null : ResolveChannelDisplayName(platform, stream);
             var channelKey = ResolveYouTubeChannelKey(platform);
+            var activeKeys = GetActiveYouTubeKeys(platform).ToArray();
             if (!string.Equals(_lastYouTubeChannelKey, channelKey, StringComparison.OrdinalIgnoreCase))
             {
-                if (stream is null && !string.IsNullOrWhiteSpace(channelKey))
+                if (stream is null)
                 {
-                    _youtubeEndedKeys.Remove(channelKey);
+                    foreach (var key in activeKeys)
+                    {
+                        _youtubeEndedKeys.Remove(key);
+                    }
                 }
 
                 _lastYouTubeChannelKey = channelKey;
             }
 
-            if (stream is not null && !string.IsNullOrWhiteSpace(channelKey))
+            if (stream is not null)
             {
-                _youtubeLiveSeenKeys.Add(channelKey);
-                _youtubeEndedKeys.Remove(channelKey);
+                foreach (var key in activeKeys)
+                {
+                    _youtubeLiveSeenKeys.Add(key);
+                    _youtubeEndedKeys.Remove(key);
+                }
             }
-            else if (stream is null && !string.IsNullOrWhiteSpace(channelKey) && _youtubeLiveSeenKeys.Contains(channelKey))
+            else if (activeKeys.Any(_youtubeLiveSeenKeys.Contains))
             {
-                _youtubeLiveSeenKeys.Remove(channelKey);
-                _youtubeEndedKeys.Add(channelKey);
+                foreach (var key in activeKeys)
+                {
+                    _youtubeLiveSeenKeys.Remove(key);
+                    _youtubeEndedKeys.Add(key);
+                }
             }
 
             if (isUnconfiguredPlatform)
@@ -549,23 +592,11 @@ public sealed partial class ChatDisplayTileViewModel : DashboardTileViewModel, I
                 heading = $"{platform.DisplayName} не подключён";
                 description = $"Подключите {platform.DisplayName}, чтобы видеть второй встроенный чат рядом с Twitch в одном окне.";
             }
-            else if (!string.IsNullOrWhiteSpace(channelKey) && _youtubeEndedKeys.Contains(channelKey))
-            {
-                fallbackTone = ChatFallbackTone.Ended;
-                fallbackIcon = PackIconLucideKind.Radio;
-                heading = "Эфир завершён / не в сети";
-                description = !string.IsNullOrWhiteSpace(channelDisplayName)
-                    ? $"Эфир на канале «{channelDisplayName}» завершён. Переключите канал YouTube перед следующим сегментом или запустите новый эфир в OBS."
-                    : "Эфир на текущем канале завершён. Переключите канал YouTube перед следующим сегментом или запустите новый эфир в OBS.";
-            }
             else
             {
-                fallbackTone = ChatFallbackTone.Waiting;
-                fallbackIcon = PackIconLucideKind.Clock;
-                heading = !string.IsNullOrWhiteSpace(channelDisplayName)
-                    ? $"Ожидание эфира на {channelDisplayName}"
-                    : "Ожидание эфира на YouTube";
-                description = "Чат подключится автоматически, когда вы запустите эфир в OBS.";
+                (fallbackTone, fallbackIcon, heading, description) = DescribeYouTubeFallbackState(
+                    activeKeys.Any(_youtubeEndedKeys.Contains),
+                    channelDisplayName);
             }
         }
         else
@@ -683,13 +714,9 @@ public sealed partial class ChatDisplayTileViewModel : DashboardTileViewModel, I
             {
                 var channelLabel = string.IsNullOrWhiteSpace(youtubeChannelName) ? "Образовательный канал" : youtubeChannelName.Trim();
                 var external = new Uri("https://www.youtube.com/@channel");
-                var (heading, description, icon) = fallbackTone == ChatFallbackTone.Ended
-                    ? ("Эфир завершён / не в сети",
-                        $"Эфир на канале «{channelLabel}» завершён. Переключите канал YouTube перед следующим сегментом или запустите новый эфир в OBS.",
-                        PackIconLucideKind.Radio)
-                    : ($"Ожидание эфира на {channelLabel}",
-                        "Чат подключится автоматически, когда вы запустите эфир в OBS.",
-                        PackIconLucideKind.Clock);
+                var (resolvedTone, icon, heading, description) = DescribeYouTubeFallbackState(
+                    fallbackTone == ChatFallbackTone.Ended,
+                    channelLabel);
 
                 SecondaryChat.SetTarget(
                     StreamingPlatform.YouTube,
@@ -701,7 +728,7 @@ public sealed partial class ChatDisplayTileViewModel : DashboardTileViewModel, I
                     unavailableHeading: heading,
                     unavailableDescription: description,
                     channelName: channelLabel,
-                    fallbackTone: fallbackTone,
+                    fallbackTone: resolvedTone,
                     fallbackIcon: icon);
             }
         }
@@ -716,9 +743,35 @@ public sealed partial class ChatDisplayTileViewModel : DashboardTileViewModel, I
 
     internal void EndGalleryPreview(ChatDisplayMode previousMode)
     {
-        _isGalleryPreview = false;
         SelectedMode = previousMode;
+        _isGalleryPreview = false;
         RefreshChat();
+    }
+
+    private static (ChatFallbackTone Tone, PackIconLucideKind Icon, string Heading, string Description) DescribeYouTubeFallbackState(
+        bool isEnded,
+        string? channelDisplayName)
+    {
+        var trimmedName = string.IsNullOrWhiteSpace(channelDisplayName) ? null : channelDisplayName.Trim();
+
+        if (isEnded)
+        {
+            return (
+                ChatFallbackTone.Ended,
+                PackIconLucideKind.Radio,
+                "Эфир завершён / не в сети",
+                trimmedName is not null
+                    ? $"Эфир на канале «{trimmedName}» завершён. Переключите канал YouTube перед следующим сегментом или запустите новый эфир в OBS."
+                    : "Эфир на текущем канале завершён. Переключите канал YouTube перед следующим сегментом или запустите новый эфир в OBS.");
+        }
+
+        return (
+            ChatFallbackTone.Waiting,
+            PackIconLucideKind.Clock,
+            trimmedName is not null
+                ? $"Ожидание эфира на {trimmedName}"
+                : "Ожидание эфира на YouTube",
+            "Чат подключится автоматически, когда вы запустите эфир в OBS.");
     }
 
     [RelayCommand]

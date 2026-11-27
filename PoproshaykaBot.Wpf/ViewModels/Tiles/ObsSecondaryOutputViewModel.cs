@@ -65,7 +65,8 @@ public sealed partial class ObsSecondaryOutputViewModel : ObservableObject, IDis
     public ObsSecondaryOutputViewModel(
         ObsSecondaryOutputSnapshot snapshot,
         Func<ObsSecondaryOutputViewModel, Task> toggleAction,
-        IUiDispatcher? uiDispatcher = null)
+        IUiDispatcher? uiDispatcher = null,
+        TimeProvider? timeProvider = null)
     {
         ArgumentNullException.ThrowIfNull(snapshot);
         ArgumentNullException.ThrowIfNull(toggleAction);
@@ -74,7 +75,7 @@ public sealed partial class ObsSecondaryOutputViewModel : ObservableObject, IDis
         OutputId = snapshot.OutputId;
         Vendor = snapshot.Vendor;
         _toggleAction = toggleAction;
-        _stopConfirmation = new(uiDispatcher, OnStopConfirmationChanged);
+        _stopConfirmation = new(uiDispatcher, OnStopConfirmationChanged, timeProvider: timeProvider);
 
         ApplySnapshot(snapshot);
     }

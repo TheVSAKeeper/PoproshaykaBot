@@ -1,4 +1,5 @@
-﻿using PoproshaykaBot.Core.Settings.Ui;
+﻿using PoproshaykaBot.Core.Dashboard;
+using PoproshaykaBot.Core.Settings.Ui;
 
 namespace PoproshaykaBot.Wpf.Infrastructure.Dashboard;
 
@@ -22,26 +23,6 @@ public static class DashboardLayoutPresets
     public const string ChatOverlayPreviewTypeId = "chat-overlay-preview";
     public const string MultiplatformChatTypeId = "multiplatform-chat";
     public const string MultistreamTypeId = "multistream";
-
-    private static readonly HashSet<string> CompactVisibleTypes = new(StringComparer.Ordinal)
-    {
-        StreamChannelsTypeId,
-        BroadcastProfilesTypeId,
-        ObsInfoTypeId,
-        TwitchChatTypeId,
-    };
-
-    private static readonly HashSet<string> WideVisibleTypes = new(StringComparer.Ordinal)
-    {
-        StreamInfoTypeId,
-        BroadcastStatusTypeId,
-        BroadcastProfilesTypeId,
-        ObsInfoTypeId,
-        ChatOverlayPreviewTypeId,
-        TwitchChatTypeId,
-        MultiplatformChatTypeId,
-        MultistreamTypeId,
-    };
 
     public static string GetDisplayName(DashboardLayoutPreset preset) => preset switch
     {
@@ -141,22 +122,106 @@ public static class DashboardLayoutPresets
             return DashboardLayoutPreset.Compact;
         }
 
-        var visible = layout.Tiles
-            .Where(tile => tile.IsVisible && (knownTypeIds is null || knownTypeIds.Contains(tile.TypeId)))
-            .Select(static tile => tile.TypeId)
-            .ToHashSet(StringComparer.Ordinal);
-
-        if (layout.ColumnCount == 2 && visible.SetEquals(CompactVisibleTypes))
+        if (MatchesPreset(layout, CreateCompact(), knownTypeIds))
         {
             return DashboardLayoutPreset.Compact;
         }
 
-        if (layout.ColumnCount == 4 && visible.SetEquals(WideVisibleTypes))
+        if (MatchesPreset(layout, CreateWide(), knownTypeIds))
         {
             return DashboardLayoutPreset.Wide;
         }
 
         return DashboardLayoutPreset.Custom;
+    }
+
+    private static bool MatchesPreset(
+        DashboardLayoutSettings layout,
+        DashboardLayoutSettings template,
+        IReadOnlySet<string>? knownTypeIds)
+    {
+        if (layout.ColumnCount != template.ColumnCount || layout.RowCount != template.RowCount)
+        {
+            return false;
+        }
+
+        var actualByTypeId = new Dictionary<string, DashboardTileSettings>(StringComparer.Ordinal);
+        foreach (var tile in layout.Tiles)
+        {
+            if (!tile.IsVisible || (knownTypeIds is not null && !knownTypeIds.Contains(tile.TypeId)))
+            {
+                continue;
+            }
+
+            if (!actualByTypeId.TryAdd(tile.TypeId, tile))
+            {
+                return false;
+            }
+        }
+
+        var expectedVisible = template.Tiles.Where(static tile => tile.IsVisible).ToArray();
+        if (actualByTypeId.Count != expectedVisible.Length)
+        {
+            return false;
+        }
+
+        foreach (var expected in expectedVisible)
+        {
+            if (!actualByTypeId.TryGetValue(expected.TypeId, out var actual)
+                || actual.Row != expected.Row
+                || actual.Column != expected.Column
+                || actual.ColumnSpan != expected.ColumnSpan
+                || actual.RowSpan != expected.RowSpan)
+            {
+                return false;
+            }
+        }
+
+        if (layout.Root is null)
+        {
+            return true;
+        }
+
+        var templateRoot = DashboardLayoutTree.TryBuild(template.Tiles, template.ColumnCount, template.RowCount);
+        return templateRoot is not null && MatchesRootWeights(layout.Root, templateRoot);
+    }
+
+    private static bool MatchesRootWeights(DashboardPane actual, DashboardPane expected)
+    {
+        switch (actual, expected)
+        {
+            case (TilePane actualTile, TilePane expectedTile):
+                return string.Equals(actualTile.TypeId, expectedTile.TypeId, StringComparison.Ordinal);
+
+            case (SplitPane actualSplit, SplitPane expectedSplit):
+                if (actualSplit.Orientation != expectedSplit.Orientation
+                    || actualSplit.Children.Count != expectedSplit.Children.Count)
+                {
+                    return false;
+                }
+
+                for (var index = 0; index < actualSplit.Children.Count; index++)
+                {
+                    var actualChild = actualSplit.Children[index];
+                    var expectedChild = expectedSplit.Children[index];
+                    if (actualChild.Weight is { } actualWeight
+                        && (expectedChild.Weight is not { } expectedWeight
+                            || Math.Abs(actualWeight - expectedWeight) > 1e-4))
+                    {
+                        return false;
+                    }
+
+                    if (!MatchesRootWeights(actualChild.Pane, expectedChild.Pane))
+                    {
+                        return false;
+                    }
+                }
+
+                return true;
+
+            default:
+                return false;
+        }
     }
 
     private static void AddTile(

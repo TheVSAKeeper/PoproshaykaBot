@@ -156,7 +156,7 @@
                                Visibility="{Binding ShowStaticYouTubeChannel, Converter={StaticResource BoolToVisibility}}" />
 
                     <Button Grid.Column="1"
-                            Content="Настроить YouTube"
+                            Content="{Binding YouTubeSetupButtonText}"
                             Style="{StaticResource Button.Primary}"
                             MinHeight="26"
                             Padding="10,2"

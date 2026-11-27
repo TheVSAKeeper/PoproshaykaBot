@@ -5,13 +5,17 @@ using Microsoft.Extensions.Logging.Abstractions;
 using PoproshaykaBot.Core.Broadcast.Profiles;
 using PoproshaykaBot.Core.Chat;
 using PoproshaykaBot.Core.Chat.Commands;
+using PoproshaykaBot.Core.Dashboard;
 using PoproshaykaBot.Core.Infrastructure;
 using PoproshaykaBot.Core.Infrastructure.Events;
+using PoproshaykaBot.Core.Infrastructure.Hosting;
 using PoproshaykaBot.Core.Platforms;
+using PoproshaykaBot.Core.Server;
 using PoproshaykaBot.Core.Settings;
 using PoproshaykaBot.Core.Settings.Stores;
 using PoproshaykaBot.Core.Settings.Ui;
 using PoproshaykaBot.Core.Statistics;
+using PoproshaykaBot.Core.Update;
 using PoproshaykaBot.Core.Users;
 using PoproshaykaBot.Wpf.Bootstrap;
 using PoproshaykaBot.Wpf.Infrastructure;
@@ -452,6 +456,185 @@ public class CompactLayoutTests
             Assert.That(presetLeft, Is.GreaterThanOrEqualTo(titleRight - 0.5),
                 $"Переключатель пресета ({presetLeft:F1}) не должен наезжать на название приложения ({titleRight:F1}) при width={width}, scale={scale}");
         });
+    }
+
+    [Test]
+    public async Task Escape_отменяет_вооружённое_отключение_бота_без_фокуса_на_кнопке_и_не_глотается_в_обычном_состоянии()
+    {
+        var dir = Directory.CreateTempSubdirectory("poproshayka-main-esc-");
+        try
+        {
+            var bus = new InMemoryEventBus(NullLogger<InMemoryEventBus>.Instance);
+            var gate = new SettingsWriteGate();
+            var settingsManager = new SettingsManager(NullLogger<SettingsManager>.Instance, Path.Combine(dir.FullName, "settings.json"), gate);
+            var server = new KestrelHttpServer(null!, settingsManager, [], NullLogger<KestrelHttpServer>.Instance, NullLoggerFactory.Instance);
+            var uiSettings = new MemorySettings();
+            var dispatcher = new ManualUiDispatcher();
+            var connection = new BotConnectionManager(new PoproshaykaBot.Core.Infrastructure.Hosting.AppHost([], NullLogger<PoproshaykaBot.Core.Infrastructure.Hosting.AppHost>.Instance), [], null, bus, NullLogger<BotConnectionManager>.Instance);
+            var accounts = new AccountsStore(filePath: Path.Combine(dir.FullName, "accounts.json"));
+            var settingsPage = new SettingsPageViewModel([], settingsManager, gate, server, bus, NullLogger<SettingsPageViewModel>.Instance, System.Reflection.DispatchProxy.Create<IDialogService, SettingsNavigationSaveTests.InertProxy>(), uiSettings);
+            var layoutStore = new DashboardLayoutStore(filePath: Path.Combine(dir.FullName, "layout.json"));
+            using var overview = new DashboardViewModel([], new DashboardLayoutCoordinator(layoutStore), TimeProvider.System);
+            var history = new BroadcastHistoryStore(null, Path.Combine(dir.FullName, "broadcasts.json"), Path.Combine(dir.FullName, "sessions.json"));
+            var boxArt = new PoproshaykaBot.Wpf.Infrastructure.GameBoxArtProvider(new FakeBoxArtCache(), NullLogger<PoproshaykaBot.Wpf.Infrastructure.GameBoxArtProvider>.Instance);
+            using var historyPage = new StreamHistoryPageViewModel(history, new UserStatisticsRepository(NullLogger<UserStatisticsRepository>.Instance), uiSettings, boxArt, bus);
+            var windows = System.Reflection.DispatchProxy.Create<IMainWindowController, SettingsNavigationSaveTests.InertProxy>();
+            var dialogs = System.Reflection.DispatchProxy.Create<IDialogService, SettingsNavigationSaveTests.InertProxy>();
+            var shellLauncher = System.Reflection.DispatchProxy.Create<KeepShell.Services.Platform.IShellLauncher, SettingsNavigationSaveTests.InertProxy>();
+            var update = new UpdateBannerViewModel(
+                System.Reflection.DispatchProxy.Create<KeepShell.Updates.IUpdateCoordinator, SettingsNavigationSaveTests.InertProxy>(),
+                System.Reflection.DispatchProxy.Create<IUpdateEnvironment, SettingsNavigationSaveTests.InertProxy>(),
+                dialogs,
+                NullLogger<UpdateBannerViewModel>.Instance,
+                dispatcher,
+                shellLauncher,
+                windows);
+            using var onboarding = new OnboardingBannerViewModel(new PoproshaykaBot.Core.Settings.Onboarding.OnboardingChecklist(settingsManager, accounts), bus);
+            var debug = new DebugBannerViewModel(new PoproshaykaBot.Core.Debugging.TargetChannelProvider(settingsManager, new DebugChannelStore(filePath: Path.Combine(dir.FullName, "debug.json")), PoproshaykaBot.Core.Debugging.DebugChannelOverride.None));
+            var preferences = new ShellPreferences(uiSettings);
+            using var shell = new ShellViewModel(
+                new KeepShell.ViewModels.ModalHostViewModel(dispatcher),
+                overview,
+                settingsPage,
+                null!,
+                historyPage,
+                null!,
+                null!,
+                null!,
+                null!,
+                preferences,
+                connection,
+                bus,
+                NullLogger<ShellViewModel>.Instance,
+                dialogs,
+                update,
+                onboarding,
+                debug,
+                null!,
+                null!,
+                uiSettings,
+                dispatcher,
+                new FakeUnsavedChangesPrompt(),
+                windows);
+
+            var window = new MainWindow(shell, uiSettings, layoutStore);
+            var source = new System.Windows.Interop.HwndSource(new System.Windows.Interop.HwndSourceParameters("test") { Width = 100, Height = 100 });
+            try
+            {
+                await bus.PublishAsync(new PoproshaykaBot.Core.Infrastructure.Events.Lifecycle.BotLifecyclePhaseChanged(PoproshaykaBot.Core.Infrastructure.Events.Lifecycle.BotLifecyclePhase.Connected));
+
+                var unarmedArgs = new System.Windows.Input.KeyEventArgs(System.Windows.Input.Keyboard.PrimaryDevice, source, 0, System.Windows.Input.Key.Escape)
+                {
+                    RoutedEvent = UIElement.PreviewKeyDownEvent,
+                };
+                window.RaiseEvent(unarmedArgs);
+                Assert.That(unarmedArgs.Handled, Is.False);
+
+                await shell.ToggleConnectCommand.ExecuteAsync(null);
+                Assert.That(shell.IsDisconnectConfirmationArmed, Is.True);
+
+                var armedArgs = new System.Windows.Input.KeyEventArgs(System.Windows.Input.Keyboard.PrimaryDevice, source, 0, System.Windows.Input.Key.Escape)
+                {
+                    RoutedEvent = UIElement.PreviewKeyDownEvent,
+                };
+                window.RaiseEvent(armedArgs);
+
+                Assert.Multiple(() =>
+                {
+                    Assert.That(armedArgs.Handled, Is.True);
+                    Assert.That(shell.IsDisconnectConfirmationArmed, Is.False);
+                });
+            }
+            finally
+            {
+                source.Dispose();
+                await connection.DisposeAsync();
+                settingsPage.Dispose();
+                update.Dispose();
+            }
+        }
+        finally
+        {
+            Directory.Delete(dir.FullName, recursive: true);
+        }
+    }
+
+    [Test]
+    public void Escape_в_карточках_OBS_не_глотается_без_активного_подтверждения_и_отменяет_при_подтверждении()
+    {
+        var dispatcher = new ManualUiDispatcher();
+        var obsClient = new InertObsClient();
+        var settingsManager = new SettingsManager(NullLogger<SettingsManager>.Instance, Path.Combine(_directory, "obs-esc-settings.json"));
+        using var integration = new PoproshaykaBot.Core.Obs.ObsIntegrationService(obsClient, settingsManager, NullLogger<PoproshaykaBot.Core.Obs.ObsIntegrationService>.Instance);
+
+        using var cardVm = new PoproshaykaBot.Wpf.ViewModels.Tiles.ObsOutputCardViewModel(
+            PoproshaykaBot.Wpf.ViewModels.Tiles.ObsOutputCardKind.Stream,
+            integration,
+            NullLogger.Instance,
+            dispatcher);
+        cardVm.ApplySnapshot(active: true, paused: false, "00:01:00.000", null);
+        var cardView = new PoproshaykaBot.Wpf.Views.Tiles.ObsOutputCardView { DataContext = cardVm };
+
+        var secondaryVm = new PoproshaykaBot.Wpf.ViewModels.Tiles.ObsSecondaryOutputViewModel(
+            new PoproshaykaBot.Core.Obs.ObsSecondaryOutputSnapshot(
+                "YouTube", "yt", "rtmp_output", PoproshaykaBot.Core.Obs.ObsMultistreamVendor.AitumMultistream,
+                IsActive: true, IsReconnecting: false, "00:01:00.000", 100, 1024, 0, 0, 1000, CanControl: true, IsVertical: false),
+            _ => Task.CompletedTask,
+            dispatcher);
+        var secondaryView = new PoproshaykaBot.Wpf.Views.Tiles.ObsSecondaryOutputView { DataContext = secondaryVm };
+
+        using var source = new System.Windows.Interop.HwndSource(new System.Windows.Interop.HwndSourceParameters("obs-test") { Width = 100, Height = 100 });
+        try
+        {
+            var cardUnarmed = new System.Windows.Input.KeyEventArgs(System.Windows.Input.Keyboard.PrimaryDevice, source, 0, System.Windows.Input.Key.Escape)
+            {
+                RoutedEvent = UIElement.PreviewKeyDownEvent,
+            };
+            cardView.RaiseEvent(cardUnarmed);
+            Assert.That(cardUnarmed.Handled, Is.False);
+
+            cardVm.InvokePrimaryCommand.Execute(null);
+            Assert.That(cardVm.IsStopConfirmationArmed, Is.True);
+            var cardArmed = new System.Windows.Input.KeyEventArgs(System.Windows.Input.Keyboard.PrimaryDevice, source, 0, System.Windows.Input.Key.Escape)
+            {
+                RoutedEvent = UIElement.PreviewKeyDownEvent,
+            };
+            cardView.RaiseEvent(cardArmed);
+            Assert.That(cardArmed.Handled, Is.True);
+            Assert.That(cardVm.IsStopConfirmationArmed, Is.False);
+
+            var secondaryUnarmed = new System.Windows.Input.KeyEventArgs(System.Windows.Input.Keyboard.PrimaryDevice, source, 0, System.Windows.Input.Key.Escape)
+            {
+                RoutedEvent = UIElement.PreviewKeyDownEvent,
+            };
+            secondaryView.RaiseEvent(secondaryUnarmed);
+            Assert.That(secondaryUnarmed.Handled, Is.False);
+
+            secondaryVm.ToggleCommand.Execute(null);
+            Assert.That(secondaryVm.IsStopConfirmationArmed, Is.True);
+            var secondaryArmed = new System.Windows.Input.KeyEventArgs(System.Windows.Input.Keyboard.PrimaryDevice, source, 0, System.Windows.Input.Key.Escape)
+            {
+                RoutedEvent = UIElement.PreviewKeyDownEvent,
+            };
+            secondaryView.RaiseEvent(secondaryArmed);
+            Assert.That(secondaryArmed.Handled, Is.True);
+            Assert.That(secondaryVm.IsStopConfirmationArmed, Is.False);
+        }
+        finally
+        {
+            secondaryVm.Dispose();
+        }
+    }
+
+    private sealed class InertObsClient : PoproshaykaBot.Core.Obs.IObsWebSocketClient
+    {
+        public event EventHandler<PoproshaykaBot.Core.Obs.ObsWebSocketEventArgs>? EventReceived { add { } remove { } }
+        public bool IsConnected => false;
+        public DateTimeOffset? LastExchangeAt => null;
+        public Task<PoproshaykaBot.Core.Obs.ObsConnectionSnapshot> ConnectAsync(PoproshaykaBot.Core.Obs.ObsConnectionOptions options, CancellationToken cancellationToken) => Task.FromResult(new PoproshaykaBot.Core.Obs.ObsConnectionSnapshot(false, null, null, null));
+        public Task DisconnectAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+        public Task<System.Text.Json.JsonElement?> SendRequestAsync(string requestType, object? requestData, CancellationToken cancellationToken) => Task.FromResult<System.Text.Json.JsonElement?>(null);
+        public ValueTask DisposeAsync() => ValueTask.CompletedTask;
     }
 
     private UserStatisticsPageViewModel CreateUsersPage(int count)

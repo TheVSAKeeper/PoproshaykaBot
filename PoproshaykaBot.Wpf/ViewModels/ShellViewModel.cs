@@ -144,7 +144,8 @@ public sealed partial class ShellViewModel : ShellViewModelBase, IDisposable
         ToastHostViewModel? toasts = null,
         BotPageViewModel? botPage = null,
         BotMessagingNavigation? botMessagingNavigation = null,
-        AutoBroadcastIndicatorViewModel? autoBroadcastIndicator = null)
+        AutoBroadcastIndicatorViewModel? autoBroadcastIndicator = null,
+        TimeProvider? timeProvider = null)
         : base(modal)
     {
         _unsavedChangesPrompt = unsavedChangesPrompt;
@@ -179,7 +180,7 @@ public sealed partial class ShellViewModel : ShellViewModelBase, IDisposable
         _chatHistory = chatHistory;
         _uiSettings = uiSettings;
         _uiDispatcher = uiDispatcher;
-        _disconnectConfirmation = new(uiDispatcher, OnDisconnectConfirmationChanged);
+        _disconnectConfirmation = new(uiDispatcher, OnDisconnectConfirmationChanged, timeProvider: timeProvider);
         _uiSettings.WriteFailed += OnUiSettingsWriteFailed;
         _settingsSection = new("Настройки", PackIconLucideKind.Settings, settingsPage, key: SectionKeys.Settings);
 

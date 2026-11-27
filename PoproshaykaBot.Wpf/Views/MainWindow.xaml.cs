@@ -4,6 +4,7 @@ using PoproshaykaBot.Wpf.Infrastructure;
 using PoproshaykaBot.Wpf.ViewModels;
 using System.ComponentModel;
 using System.Windows;
+using System.Windows.Input;
 
 namespace PoproshaykaBot.Wpf.Views;
 
@@ -28,6 +29,7 @@ public partial class MainWindow : Window
         WindowChromeTheming.Attach(this);
 
         Closing += OnClosing;
+        PreviewKeyDown += OnPreviewKeyDown;
 
         ImportWinFormsPlacement(layoutStore);
 
@@ -101,6 +103,15 @@ public partial class MainWindow : Window
         finally
         {
             _closingInProgress = false;
+        }
+    }
+
+    private void OnPreviewKeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key == Key.Escape && _viewModel.IsDisconnectConfirmationArmed)
+        {
+            _viewModel.CancelDisconnectConfirmationCommand.Execute(null);
+            e.Handled = true;
         }
     }
 }

@@ -209,6 +209,7 @@ public sealed class SettingsNavigationSaveTests
             Assert.That(shell.Phase, Is.EqualTo(BotLifecyclePhase.Connected), "Первый клик не должен отключать бота.");
             Assert.That(shell.IsDisconnectConfirmationArmed, Is.True);
             Assert.That(shell.ConnectButtonText, Is.EqualTo("Точно отключить?"));
+            Assert.That(harness.Connection.StopCalls, Is.Zero);
         });
 
         foreach (var timer in harness.Dispatcher.Timers)
@@ -221,6 +222,7 @@ public sealed class SettingsNavigationSaveTests
             Assert.That(shell.Phase, Is.EqualTo(BotLifecyclePhase.Connected));
             Assert.That(shell.IsDisconnectConfirmationArmed, Is.False);
             Assert.That(shell.ConnectButtonText, Is.EqualTo("Отключить бота"));
+            Assert.That(harness.Connection.StopCalls, Is.Zero);
         });
 
         await shell.ToggleConnectCommand.ExecuteAsync(null);
@@ -230,24 +232,42 @@ public sealed class SettingsNavigationSaveTests
         {
             Assert.That(shell.Phase, Is.EqualTo(BotLifecyclePhase.Connected));
             Assert.That(shell.IsDisconnectConfirmationArmed, Is.False);
+            Assert.That(harness.Connection.StopCalls, Is.Zero);
         });
 
         await shell.ToggleConnectCommand.ExecuteAsync(null);
         Assert.That(shell.IsDisconnectConfirmationArmed, Is.True);
         await harness.Bus.PublishAsync(new BotLifecyclePhaseChanged(BotLifecyclePhase.Idle));
-        Assert.That(shell.IsDisconnectConfirmationArmed, Is.False);
+        Assert.Multiple(() =>
+        {
+            Assert.That(shell.IsDisconnectConfirmationArmed, Is.False);
+            Assert.That(harness.Connection.StopCalls, Is.Zero);
+        });
 
         await harness.Bus.PublishAsync(new BotLifecyclePhaseChanged(BotLifecyclePhase.Connected));
         await shell.ToggleConnectCommand.ExecuteAsync(null);
         Assert.That(shell.IsDisconnectConfirmationArmed, Is.True);
+        harness.Time.Advance(TimeSpan.FromSeconds(3.1));
         await shell.ToggleConnectCommand.ExecuteAsync(null);
-        Assert.That(shell.IsDisconnectConfirmationArmed, Is.False);
+        Assert.Multiple(() =>
+        {
+            Assert.That(shell.IsDisconnectConfirmationArmed, Is.True, "Просроченный клик без тика таймера не должен отключать бота.");
+            Assert.That(harness.Connection.StopCalls, Is.Zero);
+        });
+
+        harness.Time.Advance(TimeSpan.FromSeconds(1));
+        await shell.ToggleConnectCommand.ExecuteAsync(null);
+        Assert.Multiple(() =>
+        {
+            Assert.That(shell.IsDisconnectConfirmationArmed, Is.False);
+            Assert.That(harness.Connection.StopCalls, Is.EqualTo(1));
+        });
     }
 
     private sealed class Harness : IAsyncDisposable
     {
         private readonly DirectoryInfo _root = Directory.CreateTempSubdirectory("poproshayka-settings-navigation-");
-        private readonly BotConnectionManager _connection;
+        private readonly BotConnectionManager _innerConnection;
         private readonly DashboardViewModel _overview;
         private readonly StreamHistoryPageViewModel _history;
         private readonly MultistreamTileViewModel _tile;
@@ -266,6 +286,7 @@ public sealed class SettingsNavigationSaveTests
             var windows = DispatchProxy.Create<IMainWindowController, InertProxy>();
             var dialogs = DispatchProxy.Create<IDialogService, InertProxy>();
             Dispatcher = new ManualUiDispatcher();
+            Time = new ManualTimeProvider();
             var dispatcher = Dispatcher;
             var accounts = new AccountsStore(filePath: Path.Combine(_root.FullName, "accounts.json"));
             var catalog = new ChannelCatalogStore(filePath: Path.Combine(_root.FullName, "channels.json"));
@@ -275,8 +296,9 @@ public sealed class SettingsNavigationSaveTests
             var youtubePlatform = new StubPlatform(StreamingPlatform.YouTube, "YouTube", isEnabled: false);
             var twitchPlatform = new StubPlatform(StreamingPlatform.Twitch, "Twitch", isEnabled: true);
             var registry = new ChatPlatformRegistry([twitchPlatform, youtubePlatform]);
-            _connection = new(new AppHost([], NullLogger<AppHost>.Instance), [], null, bus, NullLogger<BotConnectionManager>.Instance);
-            _tile = new(registry, catalog, _connection, new PlatformAuthRegistry([]), [], bus, dispatcher, youtube);
+            _innerConnection = new(new AppHost([], NullLogger<AppHost>.Instance), [], null, bus, NullLogger<BotConnectionManager>.Instance);
+            Connection = new(_innerConnection);
+            _tile = new(registry, catalog, _innerConnection, new PlatformAuthRegistry([]), [], bus, dispatcher, youtube);
             _chatTile = new(
                 manager,
                 new TargetChannelProvider(manager, new DebugChannelStore(filePath: Path.Combine(_root.FullName, "debug-chat.json")), DebugChannelOverride.None),
@@ -308,12 +330,14 @@ public sealed class SettingsNavigationSaveTests
                 new DebugChannelStore(filePath: Path.Combine(_root.FullName, "debug.json")), DebugChannelOverride.None));
             var preferences = new ShellPreferences(store) { LastPage = SectionKeys.Settings };
             Shell = new(new ModalHostViewModel(dispatcher), _overview, Settings, null!, _history, null!, null!, null!, null!,
-                preferences, _connection, bus, NullLogger<ShellViewModel>.Instance, dialogs, _update, _onboarding, debug,
-                null!, null!, store, dispatcher, Prompt, windows, multistreamPage: Multistream);
+                preferences, Connection, bus, NullLogger<ShellViewModel>.Instance, dialogs, _update, _onboarding, debug,
+                null!, null!, store, dispatcher, Prompt, windows, multistreamPage: Multistream, timeProvider: Time);
         }
 
         public InMemoryEventBus Bus { get; }
         public ManualUiDispatcher Dispatcher { get; }
+        public ManualTimeProvider Time { get; }
+        public RecordingBotConnectionController Connection { get; }
         public PendingContributor Contributor { get; } = new();
         public FakeUnsavedChangesPrompt Prompt { get; } = new();
         public SettingsPageViewModel Settings { get; }
@@ -331,8 +355,34 @@ public sealed class SettingsNavigationSaveTests
             _chatTile.Dispose();
             _tile.Dispose();
             Settings.Dispose();
-            await _connection.DisposeAsync();
+            await _innerConnection.DisposeAsync();
             _root.Delete(recursive: true);
+        }
+    }
+
+    private sealed class RecordingBotConnectionController(BotConnectionManager inner) : IBotConnectionController
+    {
+        public int StopCalls { get; private set; }
+        public bool IsBusy => inner.IsBusy;
+        public BotLifecyclePhase CurrentPhase => inner.CurrentPhase;
+        public bool IsPlatformBusy(StreamingPlatform platform) => inner.IsPlatformBusy(platform);
+        public BotLifecyclePhase GetPhase(StreamingPlatform platform) => inner.GetPhase(platform);
+        public void StartConnection() => inner.StartConnection();
+        public void StartConnection(StreamingPlatform platform) => inner.StartConnection(platform);
+        public void CancelConnection() => inner.CancelConnection();
+        public void CancelConnection(StreamingPlatform platform) => inner.CancelConnection(platform);
+        public Task WaitForConnectionAsync() => inner.WaitForConnectionAsync();
+        public Task WaitForConnectionAsync(StreamingPlatform platform) => inner.WaitForConnectionAsync(platform);
+        public Task StopAsync(BotStopMode mode = BotStopMode.Graceful)
+        {
+            StopCalls++;
+            return inner.StopAsync(mode);
+        }
+
+        public Task StopAsync(StreamingPlatform platform, BotStopMode mode = BotStopMode.Graceful)
+        {
+            StopCalls++;
+            return inner.StopAsync(platform, mode);
         }
     }
 

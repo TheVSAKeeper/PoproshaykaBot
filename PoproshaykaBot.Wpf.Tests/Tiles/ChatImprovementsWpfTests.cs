@@ -13,8 +13,10 @@ using PoproshaykaBot.Core.Settings;
 using PoproshaykaBot.Core.Settings.Chat;
 using PoproshaykaBot.Core.Settings.Stores;
 using PoproshaykaBot.Core.Streaming;
+using PoproshaykaBot.Core.Streaming.Switching;
 using PoproshaykaBot.Core.Twitch.Chat;
 using PoproshaykaBot.Core.YouTube.Auth;
+using PoproshaykaBot.Wpf.Bootstrap;
 using PoproshaykaBot.Wpf.Infrastructure;
 using PoproshaykaBot.Wpf.ViewModels.Settings;
 using PoproshaykaBot.Wpf.ViewModels.Tiles;
@@ -405,6 +407,132 @@ internal sealed class ChatImprovementsWpfTests
         Assert.That(tile.PrimaryChat.ChannelName, Is.EqualTo("Игровой канал"));
     }
 
+    [Test]
+    public async Task DelayedStreamWentOfflineForPreviousYouTubeChannel_DoesNotMarkNewChannelEnded()
+    {
+        var bus = new InMemoryEventBus(NullLogger<InMemoryEventBus>.Instance);
+        var settings = new SettingsManager(NullLogger<SettingsManager>.Instance, Path.Combine(_tempDir, "settings-yt-delay.json"));
+        var displayStore = new ChatDisplayStore(NullLogger<ChatDisplayStore>.Instance, _tempDir);
+        var catalog = new ChannelCatalogStore(filePath: Path.Combine(_tempDir, "channels-delay.json"));
+        catalog.Mutate(s =>
+        {
+            s.Channels.Add(new() { Platform = StreamingPlatform.YouTube, ChannelId = "UC_OLD", DisplayName = "Старый канал", Handle = "@old", IsConfigured = true });
+            s.Channels.Add(new() { Platform = StreamingPlatform.YouTube, ChannelId = "UC_NEW", DisplayName = "Новый канал", Handle = "@new", IsConfigured = true });
+            s.Platforms.Add(new() { Platform = StreamingPlatform.YouTube, ActiveChannelId = "UC_OLD" });
+        });
+
+        var streamStatus = new MutableStreamStatus { CurrentStatus = StreamStatus.Unknown };
+        var ytPlatform = new StubYouTubePlatform(streamStatus, new StubAccountMessenger(), catalog);
+        var registry = new ChatPlatformRegistry([ytPlatform]);
+
+        using var tile = new ChatDisplayTileViewModel(
+            settings,
+            new StubTargetChannelProvider(),
+            NullLogger<ChatDisplayTileViewModel>.Instance,
+            new StubShellLauncher(),
+            new StubDialogService(),
+            bus,
+            displayStore,
+            platformRegistry: registry,
+            channelCatalogStore: catalog);
+
+        catalog.Mutate(s => s.Platforms[0].ActiveChannelId = "UC_NEW");
+        await bus.PublishAsync(new Core.Infrastructure.Events.Streaming.ActiveChannelChanged(
+            StreamingPlatform.YouTube,
+            new(StreamingPlatform.YouTube, "UC_OLD"),
+            new(StreamingPlatform.YouTube, "UC_NEW"),
+            "Новый канал",
+            ChannelSwitchMode.Manual));
+
+        Assert.That(tile.PrimaryChat.FallbackTone, Is.EqualTo(ChatFallbackTone.Waiting));
+
+        await bus.PublishAsync(new Core.Infrastructure.Events.Streaming.StreamWentOffline(
+            StreamingPlatform.YouTube,
+            "@old",
+            ChannelId: "UC_OLD"));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(tile.PrimaryChat.FallbackTone, Is.EqualTo(ChatFallbackTone.Waiting));
+            Assert.That(tile.PrimaryChat.FallbackHeading, Does.StartWith("Ожидание эфира"));
+        }
+
+        await bus.PublishAsync(new Core.Infrastructure.Events.Streaming.StreamWentOffline(
+            StreamingPlatform.YouTube,
+            "@new",
+            ChannelId: "UC_NEW"));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(tile.PrimaryChat.FallbackTone, Is.EqualTo(ChatFallbackTone.Ended));
+            Assert.That(tile.PrimaryChat.FallbackHeading, Is.EqualTo("Эфир завершён / не в сети"));
+        }
+    }
+
+    [Test]
+    public void GalleryPreview_DoesNotPersistDisplayMode_AndSharesFallbackTextWithLivePane()
+    {
+        var bus = new InMemoryEventBus(NullLogger<InMemoryEventBus>.Instance);
+        var settings = new SettingsManager(NullLogger<SettingsManager>.Instance, Path.Combine(_tempDir, "settings-gallery-preview.json"));
+        var displayStore = new ChatDisplayStore(NullLogger<ChatDisplayStore>.Instance, _tempDir);
+        var uiSettings = new KeepShell.Testing.MemorySettings();
+        var catalog = new ChannelCatalogStore(filePath: Path.Combine(_tempDir, "channels-preview.json"));
+        catalog.Mutate(s =>
+        {
+            s.Channels.Add(new() { Platform = StreamingPlatform.YouTube, ChannelId = "UC_EDU", DisplayName = "Образовательный канал", Handle = "@educator", IsConfigured = true });
+            s.Platforms.Add(new() { Platform = StreamingPlatform.YouTube, ActiveChannelId = "UC_EDU" });
+        });
+
+        var twitchPlatform = new StubPlatform(StreamingPlatform.Twitch, "Twitch");
+        var ytPlatform = new StubYouTubePlatform(new MutableStreamStatus { CurrentStatus = StreamStatus.Unknown }, new StubAccountMessenger(), catalog);
+        var registry = new ChatPlatformRegistry([twitchPlatform, ytPlatform]);
+
+        using var tile = new ChatDisplayTileViewModel(
+            settings,
+            new StubTargetChannelProvider(),
+            NullLogger<ChatDisplayTileViewModel>.Instance,
+            new StubShellLauncher(),
+            new StubDialogService(),
+            bus,
+            displayStore,
+            platformRegistry: registry,
+            uiSettings: uiSettings,
+            channelCatalogStore: catalog);
+
+        var singleMode = tile.Modes.Single(static m => m.Platform == StreamingPlatform.Twitch && m.Layout == ChatDisplayLayout.Single);
+        tile.SelectModeCommand.Execute(singleMode);
+        Assert.That(uiSettings.GetStringValue(SettingsKeys.ChatTileDisplayMode), Is.EqualTo(singleMode.SettingsValue));
+
+        var previous = tile.BeginGalleryPreview(ChatDisplayLayout.Columns, "Образовательный канал", ChatFallbackTone.Waiting);
+        var previewHeading = tile.SecondaryChat.FallbackHeading;
+        var previewDesc = tile.SecondaryChat.FallbackDescription;
+        var previewIcon = tile.SecondaryChat.FallbackIcon;
+        tile.EndGalleryPreview(previous);
+
+        var columnsMode = tile.Modes.Single(static m => m.Platform == StreamingPlatform.YouTube && m.Layout == ChatDisplayLayout.Columns);
+        tile.SelectModeCommand.Execute(columnsMode);
+        var liveWaitingHeading = tile.SecondaryChat.FallbackHeading;
+        var liveWaitingDesc = tile.SecondaryChat.FallbackDescription;
+        var liveWaitingIcon = tile.SecondaryChat.FallbackIcon;
+
+        tile.SelectModeCommand.Execute(singleMode);
+        uiSettings.SetValue(SettingsKeys.ChatTileDisplayMode, singleMode.SettingsValue);
+
+        var prev2 = tile.BeginGalleryPreview(ChatDisplayLayout.Columns, "Образовательный канал", ChatFallbackTone.Waiting);
+        Assert.That(uiSettings.GetStringValue(SettingsKeys.ChatTileDisplayMode), Is.EqualTo(singleMode.SettingsValue),
+            "Предпросмотр галереи не должен перезаписывать настройку режима чата.");
+        tile.EndGalleryPreview(prev2);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(tile.SelectedMode, Is.EqualTo(singleMode));
+            Assert.That(uiSettings.GetStringValue(SettingsKeys.ChatTileDisplayMode), Is.EqualTo(singleMode.SettingsValue));
+            Assert.That(previewHeading, Is.EqualTo(liveWaitingHeading));
+            Assert.That(previewDesc, Is.EqualTo(liveWaitingDesc));
+            Assert.That(previewIcon, Is.EqualTo(liveWaitingIcon));
+        }
+    }
+
     private sealed class DenyAccountMessenger : IChatAccountMessenger
     {
         public bool CanSendAs(ChatSenderAccount account) => false;
@@ -441,6 +569,25 @@ internal sealed class ChatImprovementsWpfTests
         public StreamInfo CurrentStream { get; } = new() { Id = "video-1", Title = "Live" };
         public StreamStatusSnapshot GetSnapshot() => throw new NotSupportedException();
         public Task RefreshLiveSnapshotAsync() => Task.CompletedTask;
+    }
+
+    private sealed class MutableStreamStatus : IStreamStatus
+    {
+        public StreamStatus CurrentStatus { get; set; } = StreamStatus.Offline;
+        public StreamInfo? CurrentStream { get; set; }
+        public StreamStatusSnapshot GetSnapshot() => new(CurrentStatus, CurrentStream, null);
+        public Task RefreshLiveSnapshotAsync() => Task.CompletedTask;
+    }
+
+    private sealed class StubPlatform(StreamingPlatform id, string displayName) : IChatPlatform
+    {
+        public StreamingPlatform Id => id;
+        public string DisplayName => displayName;
+        public PlatformCapabilities Capabilities => PlatformCapabilities.None;
+        public bool IsEnabled => true;
+        public bool IsConnected => true;
+        public IStreamStatus StreamStatus { get; } = new MutableStreamStatus();
+        public IPlatformMessenger Messenger => throw new NotSupportedException();
     }
 
     private sealed class StubYouTubePlatform(

@@ -202,7 +202,7 @@ public sealed class StreamAndChannelsTileTests
             Assert.That(vm.Title, Is.EqualTo("Профили эфира"));
 
             await vm.Items[0].ApplyCommand.ExecuteAsync(null);
-            await bus.PublishAsync(new BroadcastProfileApplyFailed(profile, "Сбой Twitch"));
+            PumpDispatcher();
 
             Assert.Multiple(() =>
             {
@@ -213,7 +213,7 @@ public sealed class StreamAndChannelsTileTests
 
             applier.ShouldFail = false;
             await vm.RetryLastApplyCommand.ExecuteAsync(null);
-            await bus.PublishAsync(new BroadcastProfileApplied(profile));
+            PumpDispatcher();
 
             Assert.Multiple(() =>
             {
@@ -226,6 +226,115 @@ public sealed class StreamAndChannelsTileTests
         {
             Directory.Delete(dir.FullName, recursive: true);
         }
+    }
+
+    [Test]
+    public async Task Повтор_после_ошибки_патча_метаданных_повторяет_патч_а_не_ранее_применённый_профиль()
+    {
+        var dir = Directory.CreateTempSubdirectory("poproshayka-patch-retry-");
+        try
+        {
+            var bus = new InMemoryEventBus(NullLogger<InMemoryEventBus>.Instance);
+            var profilesStore = new BroadcastProfilesStore(null, Path.Combine(dir.FullName, "profiles.json"));
+            var profile = new BroadcastProfile { Name = "Вечерний", Title = "Играем" };
+            var applier = new EventPublishingApplier(bus) { ShouldFail = false };
+            var manager = new BroadcastProfilesManager(profilesStore, applier, bus, TimeProvider.System, NullLogger<BroadcastProfilesManager>.Instance);
+            manager.Upsert(profile, [StreamingPlatform.Twitch]);
+
+            var twitch = new StubPlatform(StreamingPlatform.Twitch, "Twitch", PlatformCapabilities.ChannelMetadataEdit, true, true, new MutableStreamStatus(), "streamer");
+            var registry = new StubPlatformRegistry(twitch);
+
+            var services = new ServiceCollection().BuildServiceProvider();
+            using var vm = new BroadcastProfilesTileViewModel(
+                manager,
+                profilesStore,
+                twitch.StreamStatus,
+                applier,
+                new InertChannelsApi(),
+                new StaticBroadcasterId(),
+                new InertDialogService(),
+                services.GetRequiredService<IServiceScopeFactory>(),
+                bus,
+                registry);
+
+            await vm.Items[0].ApplyCommand.ExecuteAsync(null);
+            PumpDispatcher();
+            Assert.That(applier.ApplyCount, Is.EqualTo(1));
+            Assert.That(vm.CanRetryLastApply, Is.False);
+
+            applier.ShouldFail = true;
+            await applier.ApplyPatchAsync("Новый заголовок", "42", "Новая игра", CancellationToken.None);
+            PumpDispatcher();
+
+            Assert.Multiple(() =>
+            {
+                Assert.That(vm.IsStatusError, Is.True);
+                Assert.That(vm.CanRetryLastApply, Is.True);
+                Assert.That(applier.PatchCount, Is.EqualTo(1));
+            });
+
+            applier.ShouldFail = false;
+            await vm.RetryLastApplyCommand.ExecuteAsync(null);
+            PumpDispatcher();
+
+            Assert.Multiple(() =>
+            {
+                Assert.That(applier.ApplyCount, Is.EqualTo(1), "Повтор сбойного патча не должен заново применять ранее успешный профиль.");
+                Assert.That(applier.PatchCount, Is.EqualTo(2));
+                Assert.That(applier.LastPatchTitle, Is.EqualTo("Новый заголовок"));
+                Assert.That(vm.IsStatusError, Is.False);
+                Assert.That(vm.CanRetryLastApply, Is.False);
+            });
+        }
+        finally
+        {
+            Directory.Delete(dir.FullName, recursive: true);
+        }
+    }
+
+    [Test]
+    public void При_выключенном_YouTube_с_настроенным_каналом_показывает_что_площадка_выключена()
+    {
+        var dir = Directory.CreateTempSubdirectory("poproshayka-yt-disabled-");
+        try
+        {
+            var bus = new InMemoryEventBus(NullLogger<InMemoryEventBus>.Instance);
+            var catalog = new ChannelCatalogStore(filePath: Path.Combine(dir.FullName, "channels.json"));
+            Assert.That(catalog.Mutate(s =>
+            {
+                s.Channels.Add(new() { Platform = StreamingPlatform.YouTube, ChannelId = "UC-1", DisplayName = "Основной", IsConfigured = true });
+            }), Is.True);
+
+            var twitch = new StubPlatform(StreamingPlatform.Twitch, "Twitch", PlatformCapabilities.ChannelMetadataEdit, true, true, new MutableStreamStatus(), "streamer");
+            var youtube = new StubPlatform(StreamingPlatform.YouTube, "YouTube", PlatformCapabilities.None, isEnabled: false, isConnected: false, new MutableStreamStatus(), "UC-1");
+            var registry = new StubPlatformRegistry(twitch, youtube);
+
+            using var tile = new StreamAndChannelsTileViewModel(
+                registry,
+                catalog,
+                bus,
+                NullLogger<StreamAndChannelsTileViewModel>.Instance,
+                new ManualUiDispatcher(),
+                new InertShellLauncher());
+
+            Assert.Multiple(() =>
+            {
+                Assert.That(tile.YouTubeStatusText, Is.EqualTo("Площадка YouTube выключена"));
+                Assert.That(tile.ShowYouTubeSetupButton, Is.True);
+                Assert.That(tile.YouTubeSetupButtonText, Is.EqualTo("Включить YouTube"));
+            });
+        }
+        finally
+        {
+            Directory.Delete(dir.FullName, recursive: true);
+        }
+    }
+
+    private static void PumpDispatcher()
+    {
+        System.Windows.Threading.Dispatcher.CurrentDispatcher.Invoke(
+            System.Windows.Threading.DispatcherPriority.Background,
+            static () => { });
     }
 
     private static IEnumerable<T> FindVisualChildren<T>(DependencyObject root) where T : DependencyObject
@@ -295,6 +404,34 @@ public sealed class StreamAndChannelsTileTests
         {
             ApplyCount++;
             return Task.FromResult(!ShouldFail);
+        }
+    }
+
+    private sealed class EventPublishingApplier(IEventBus bus) : IChannelInformationApplier
+    {
+        public bool ShouldFail { get; set; }
+        public int ApplyCount { get; private set; }
+        public int PatchCount { get; private set; }
+        public string? LastPatchTitle { get; private set; }
+
+        public Task<bool> ApplyAsync(BroadcastProfile profile, CancellationToken cancellationToken)
+        {
+            ApplyCount++;
+            return Task.FromResult(!ShouldFail);
+        }
+
+        public async Task<bool> ApplyPatchAsync(string? title, string? gameId, string? gameName, CancellationToken cancellationToken)
+        {
+            PatchCount++;
+            LastPatchTitle = title;
+            if (ShouldFail)
+            {
+                await bus.PublishAsync(new ChannelInformationPatchFailed(title, gameId, gameName, "Сбой патча"), cancellationToken);
+                return false;
+            }
+
+            await bus.PublishAsync(new ChannelInformationPatched(title, gameId, gameName), cancellationToken);
+            return true;
         }
     }
 

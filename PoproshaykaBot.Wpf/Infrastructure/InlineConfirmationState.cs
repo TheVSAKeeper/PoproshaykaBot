@@ -8,13 +8,22 @@ public sealed class InlineConfirmationState : IDisposable
 
     private readonly IUiTimer? _timer;
     private readonly Action? _onChanged;
+    private readonly TimeProvider _timeProvider;
+    private readonly TimeSpan _timeout;
+    private long? _armedTimestamp;
 
-    public InlineConfirmationState(IUiDispatcher? uiDispatcher, Action? onChanged = null, TimeSpan? timeout = null)
+    public InlineConfirmationState(
+        IUiDispatcher? uiDispatcher,
+        Action? onChanged = null,
+        TimeSpan? timeout = null,
+        TimeProvider? timeProvider = null)
     {
         _onChanged = onChanged;
+        _timeProvider = timeProvider ?? TimeProvider.System;
+        _timeout = timeout ?? DefaultTimeout;
         if (uiDispatcher is not null)
         {
-            _timer = uiDispatcher.CreateTimer(timeout ?? DefaultTimeout, OnTimerTick);
+            _timer = uiDispatcher.CreateTimer(_timeout, OnTimerTick);
         }
     }
 
@@ -22,6 +31,7 @@ public sealed class InlineConfirmationState : IDisposable
 
     public void Arm()
     {
+        _armedTimestamp = _timeProvider.GetTimestamp();
         if (IsArmed)
         {
             _timer?.Stop();
@@ -37,6 +47,7 @@ public sealed class InlineConfirmationState : IDisposable
     public void Disarm()
     {
         _timer?.Stop();
+        _armedTimestamp = null;
         if (!IsArmed)
         {
             return;
@@ -50,6 +61,13 @@ public sealed class InlineConfirmationState : IDisposable
     {
         if (IsArmed)
         {
+            if (_armedTimestamp is { } armedAt && _timeProvider.GetElapsedTime(armedAt) >= _timeout)
+            {
+                Disarm();
+                Arm();
+                return false;
+            }
+
             Disarm();
             return true;
         }

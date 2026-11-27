@@ -118,6 +118,9 @@ public sealed partial class StreamAndChannelsTileViewModel : DashboardTileViewMo
     private bool _showYouTubeSetupButton;
 
     [ObservableProperty]
+    private string _youTubeSetupButtonText = "Настроить YouTube";
+
+    [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasYouTubeSwitchError))]
     private string? _youTubeSwitchErrorText;
 
@@ -622,12 +625,23 @@ public sealed partial class StreamAndChannelsTileViewModel : DashboardTileViewMo
 
         OnPropertyChanged(nameof(ShowStaticYouTubeChannel));
 
-        if (!isYouTubeEnabled || YouTubeChannels.Count == 0)
+        if (YouTubeChannels.Count == 0)
         {
+            YouTubeSetupButtonText = "Настроить YouTube";
             YouTubeStatusText = "Канал YouTube не настроен";
             YouTubeStatusSeverity = StatusSeverity.Info;
             return;
         }
+
+        if (!isYouTubeEnabled)
+        {
+            YouTubeSetupButtonText = "Включить YouTube";
+            YouTubeStatusText = "Площадка YouTube выключена";
+            YouTubeStatusSeverity = StatusSeverity.Info;
+            return;
+        }
+
+        YouTubeSetupButtonText = "Настроить YouTube";
 
         _monitorsByPlatform.TryGetValue(StreamingPlatform.YouTube, out var ytMonitor);
         var ytSnapshot = active is not null && ytMonitor is not null

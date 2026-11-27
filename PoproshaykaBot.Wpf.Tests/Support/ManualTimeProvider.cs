@@ -6,6 +6,10 @@ internal sealed class ManualTimeProvider : TimeProvider
 
     private DateTimeOffset _now = new(2026, 9, 2, 12, 0, 0, TimeSpan.Zero);
 
+    public override long TimestampFrequency => TimeSpan.TicksPerSecond;
+
+    public override long GetTimestamp() => _now.UtcTicks;
+
     public override DateTimeOffset GetUtcNow()
     {
         return _now;

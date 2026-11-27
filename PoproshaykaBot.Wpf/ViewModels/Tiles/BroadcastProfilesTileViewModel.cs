@@ -39,9 +39,11 @@ public sealed partial class BroadcastProfilesTileViewModel : DashboardTileViewMo
     private readonly ILogger<BroadcastProfilesTileViewModel>? _logger;
     private readonly List<IDisposable> _subs = [];
 
+    private sealed record FailedPatchRetry(string? Title, string? GameId, string? GameName);
+
     private Guid? _activeProfileId;
     private Guid? _applyingProfileId;
-    private Guid? _lastAttemptedProfileId;
+    private FailedPatchRetry? _failedPatch;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasProfiles))]
@@ -71,9 +73,9 @@ public sealed partial class BroadcastProfilesTileViewModel : DashboardTileViewMo
     public bool HasProfiles => Items.Count > 0;
 
     public bool CanRetryLastApply =>
-        LastFailedProfileId.HasValue
-        && !_applyingProfileId.HasValue
-        && Items.Any(item => item.Profile.Id == LastFailedProfileId.Value);
+        !_applyingProfileId.HasValue
+        && (_failedPatch is not null
+            || (LastFailedProfileId.HasValue && Items.Any(item => item.Profile.Id == LastFailedProfileId.Value)));
 
     public override PackIconLucideKind Icon => PackIconLucideKind.ListChecks;
 
@@ -113,12 +115,14 @@ public sealed partial class BroadcastProfilesTileViewModel : DashboardTileViewMo
         _subs.Add(bus.SubscribeOnUi<BroadcastProfileApplyFailed>(OnProfileApplyFailed));
         _subs.Add(bus.SubscribeOnUi<ChannelInformationPatched>(_ =>
         {
+            _failedPatch = null;
             LastFailedProfileId = null;
             ClearInFlightStates("✓ Применено", false);
         }));
         _subs.Add(bus.SubscribeOnUi<ChannelInformationPatchFailed>(e =>
         {
-            LastFailedProfileId = _lastAttemptedProfileId ?? _activeProfileId;
+            LastFailedProfileId = null;
+            _failedPatch = new(e.Title, e.GameId, e.GameName);
             ClearInFlightStates($"✗ {e.ErrorMessage}", true);
         }));
         _subs.Add(bus.SubscribeOnUi<StreamWentOnline>(_ => ReloadItems()));
@@ -437,6 +441,26 @@ public sealed partial class BroadcastProfilesTileViewModel : DashboardTileViewMo
     [RelayCommand(CanExecute = nameof(CanRetryLastApply))]
     private async Task RetryLastApplyAsync()
     {
+        if (_failedPatch is { } patch)
+        {
+            _failedPatch = null;
+            NotifyRetryChanged();
+            ShowStatus("Применяются метаданные…", false);
+            try
+            {
+                await _applier.ApplyPatchAsync(patch.Title, patch.GameId, patch.GameName, CancellationToken.None);
+            }
+            catch (Exception ex)
+            {
+                _logger?.BroadcastProfileApplyFailed(ex);
+                _failedPatch = patch;
+                NotifyRetryChanged();
+                ShowStatus($"✗ {ex.Message}", true);
+            }
+
+            return;
+        }
+
         if (!LastFailedProfileId.HasValue)
         {
             return;
@@ -451,7 +475,7 @@ public sealed partial class BroadcastProfilesTileViewModel : DashboardTileViewMo
 
     private async Task ApplyProfileAsync(BroadcastProfileItemViewModel item)
     {
-        _lastAttemptedProfileId = item.Profile.Id;
+        _failedPatch = null;
         LastFailedProfileId = null;
         ShowStatus($"Применяется «{item.Profile.Name}»…", false);
         try
@@ -511,7 +535,7 @@ public sealed partial class BroadcastProfilesTileViewModel : DashboardTileViewMo
 
     private void OnProfileApplying(BroadcastProfileApplying @event)
     {
-        _lastAttemptedProfileId = @event.Profile.Id;
+        _failedPatch = null;
         LastFailedProfileId = null;
         SetApplyInFlight(@event.Profile.Id, true);
         ShowStatus($"Применяется «{@event.Profile.Name}»…", false);
@@ -520,6 +544,7 @@ public sealed partial class BroadcastProfilesTileViewModel : DashboardTileViewMo
     private void OnProfileApplied(BroadcastProfileApplied @event)
     {
         _activeProfileId = @event.Profile.Id;
+        _failedPatch = null;
         if (BroadcastProfileApplySummary.IsPartial(@event.PlatformResults))
         {
             LastFailedProfileId = @event.Profile.Id;
@@ -540,6 +565,7 @@ public sealed partial class BroadcastProfilesTileViewModel : DashboardTileViewMo
 
     private void OnProfileApplyFailed(BroadcastProfileApplyFailed @event)
     {
+        _failedPatch = null;
         LastFailedProfileId = @event.Profile.Id;
         ClearInFlightStates($"✗ {@event.ErrorMessage}", true);
     }
@@ -581,6 +607,13 @@ public sealed partial class BroadcastProfilesTileViewModel : DashboardTileViewMo
         RefreshHeaderStatus();
 
         ShowStatus(message, isError, isWarning);
+        NotifyRetryChanged();
+    }
+
+    private void NotifyRetryChanged()
+    {
+        OnPropertyChanged(nameof(CanRetryLastApply));
+        RetryLastApplyCommand.NotifyCanExecuteChanged();
     }
 
     private void ShowStatus(string message, bool isError, bool isWarning = false)

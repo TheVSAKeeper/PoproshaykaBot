@@ -25,7 +25,6 @@ public sealed partial class DashboardViewModel : ObservableObject, IDisposable
     private readonly TimeProvider _time;
     private readonly ILogger<DashboardEditSession>? _sessionLogger;
     private readonly ModalHostViewModel? _modal;
-    private readonly ShellPreferences? _preferences;
     private readonly HashSet<DashboardTileViewModel> _observed = [];
     private DashboardEditSession? _session;
     private DashboardLayoutSettings? _layout;
@@ -40,14 +39,12 @@ public sealed partial class DashboardViewModel : ObservableObject, IDisposable
         DashboardLayoutCoordinator coordinator,
         TimeProvider time,
         ILogger<DashboardEditSession>? sessionLogger = null,
-        ModalHostViewModel? modal = null,
-        ShellPreferences? preferences = null)
+        ModalHostViewModel? modal = null)
     {
         _coordinator = coordinator;
         _time = time;
         _sessionLogger = sessionLogger;
         _modal = modal;
-        _preferences = preferences;
         _tilesByTypeId = new(StringComparer.Ordinal);
 
         foreach (var tile in tiles)
@@ -161,11 +158,6 @@ public sealed partial class DashboardViewModel : ObservableObject, IDisposable
             ClearFixedWeights(target);
             return target;
         });
-
-        if (_preferences is not null)
-        {
-            _preferences.DashboardPreset = preset;
-        }
 
         if (layout is not null)
         {

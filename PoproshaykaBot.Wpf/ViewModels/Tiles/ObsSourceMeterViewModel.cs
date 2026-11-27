@@ -12,6 +12,7 @@ public enum ObsSourceMeterState
     Muted = 2,
     Missing = 3,
     Reconnecting = 4,
+    Unidentified = 5,
 }
 
 public sealed partial class ObsSourceMeterViewModel : ObservableObject
@@ -65,6 +66,7 @@ public sealed partial class ObsSourceMeterViewModel : ObservableObject
         ObsSourceMeterState.Muted => "Микрофон выключен",
         ObsSourceMeterState.Missing => "Микрофон не найден в OBS",
         ObsSourceMeterState.Reconnecting => "Переподключение…",
+        ObsSourceMeterState.Unidentified => "Микрофон не определён",
         _ => "Статус неизвестен",
     };
 
@@ -109,6 +111,16 @@ public sealed partial class ObsSourceMeterViewModel : ObservableObject
         SetName(displayName);
         State = ObsSourceMeterState.Reconnecting;
         StateText = "переподключение…";
+        Level = 0D;
+    }
+
+    public void ShowUnidentified(string? displayName = null)
+    {
+        DisplayName = string.IsNullOrWhiteSpace(displayName)
+            ? "Выберите основной микрофон в настройках OBS"
+            : displayName.Trim();
+        State = ObsSourceMeterState.Unidentified;
+        StateText = string.Empty;
         Level = 0D;
     }
 

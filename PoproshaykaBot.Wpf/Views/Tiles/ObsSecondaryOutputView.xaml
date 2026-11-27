@@ -51,10 +51,6 @@
                         AutomationProperties.Name="{Binding ActionButtonAutomationName}"
                         Command="{Binding ToggleCommand}"
                         Visibility="{Binding CanControl, Converter={StaticResource BoolToVisibility}}">
-                    <Button.InputBindings>
-                        <KeyBinding Key="Escape"
-                                    Command="{Binding CancelStopConfirmationCommand}" />
-                    </Button.InputBindings>
                     <Button.Style>
                         <Style TargetType="Button"
                                BasedOn="{StaticResource Button.Secondary}">
