@@ -82,4 +82,28 @@ public class GalleryPageCaseTests
             Assert.That(SectionKeys.PageOf(SectionKeys.MultistreamReady), Is.EqualTo(SectionKeys.Multistream));
         }
     }
+
+    [Test]
+    public void Кейсы_компактного_и_широкого_пресетов_обзора_распознаются()
+    {
+        var requested = string.Join(',',
+            SectionKeys.OverviewCompact,
+            SectionKeys.OverviewCompactTrial,
+            SectionKeys.OverviewWide);
+        var arguments = GalleryHost.Parse(["--pages", requested], "gallery-out");
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(arguments.Pages, Is.EqualTo(new[]
+            {
+                SectionKeys.OverviewCompact,
+                SectionKeys.OverviewCompactTrial,
+                SectionKeys.OverviewWide,
+            }));
+            Assert.That(arguments.Unknown, Is.Empty);
+            Assert.That(SectionKeys.PageOf(SectionKeys.OverviewCompact), Is.EqualTo(SectionKeys.Overview));
+            Assert.That(SectionKeys.PageOf(SectionKeys.OverviewCompactTrial), Is.EqualTo(SectionKeys.Overview));
+            Assert.That(SectionKeys.PageOf(SectionKeys.OverviewWide), Is.EqualTo(SectionKeys.Overview));
+        }
+    }
 }

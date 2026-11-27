@@ -127,6 +127,38 @@
 
             <DockPanel DockPanel.Dock="Right"
                        LastChildFill="True"
+                       ClipToBounds="True"
+                       Margin="14,0,0,0"
+                       DataContext="{Binding AutoBroadcastIndicator}"
+                       ToolTip="{Binding Tooltip}"
+                       AutomationProperties.Name="Авто-рассылка"
+                       Visibility="{Binding IsVisible, Converter={StaticResource BoolToVisibility}, FallbackValue=Collapsed}">
+                <Border DockPanel.Dock="Left"
+                        Width="1"
+                        Margin="0,1,12,1"
+                        Background="{DynamicResource Border.Subtle}" />
+                <iconPacks:PackIconLucide DockPanel.Dock="Left"
+                                          Kind="{x:Static iconPacks:PackIconLucideKind.Megaphone}"
+                                          Width="12"
+                                          Height="12"
+                                          VerticalAlignment="Center"
+                                          Foreground="{DynamicResource Fg.Muted}" />
+                <Ellipse DockPanel.Dock="Left"
+                         Width="7"
+                         Height="7"
+                         Margin="6,0,0,0"
+                         VerticalAlignment="Center"
+                         keepshell:SeverityBrushBehavior.Fill="{Binding Severity}" />
+                <TextBlock Text="{Binding ShortText}"
+                           Margin="6,0,0,0"
+                           VerticalAlignment="Center"
+                           TextWrapping="NoWrap"
+                           TextTrimming="CharacterEllipsis"
+                           Foreground="{DynamicResource Fg.Secondary}" />
+            </DockPanel>
+
+            <DockPanel DockPanel.Dock="Right"
+                       LastChildFill="True"
                        ClipToBounds="True">
                 <Ellipse DockPanel.Dock="Left"
                          Width="8"

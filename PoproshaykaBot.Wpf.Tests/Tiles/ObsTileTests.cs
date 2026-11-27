@@ -253,6 +253,187 @@ public class ObsTileTests
         }
     }
 
+    [Test]
+    public async Task Плитка_OBS_выделяет_микрофон_сверху_без_мута_и_держит_каркас_при_обрыве()
+    {
+        var tempDir = Path.Combine(Path.GetTempPath(), $"obs-tile-resilience-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(tempDir);
+
+        try
+        {
+            var bus = new InMemoryEventBus(NullLogger<InMemoryEventBus>.Instance);
+            var store = new ObsIntegrationStore(
+                bus,
+                NullLogger<ObsIntegrationStore>.Instance,
+                Path.Combine(tempDir, "obs-integration.json"));
+            store.Save(new ObsIntegrationSettings
+            {
+                Enabled = true,
+                AutoConnect = false,
+                DashboardSourceNames = ["Звук рабочего стола", "Основной микрофон"],
+            });
+
+            var settingsManager = new SettingsManager(NullLogger<SettingsManager>.Instance, Path.Combine(tempDir, "settings.json"));
+            var client = new FakeTileObsClient();
+            using var integration = new ObsIntegrationService(client, settingsManager, NullLogger<ObsIntegrationService>.Instance);
+            var dispatcher = new ManualUiDispatcher();
+
+            using var tile = new ObsInfoTileViewModel(
+                store,
+                integration,
+                client,
+                bus,
+                NullLogger<ObsInfoTileViewModel>.Instance,
+                dispatcher);
+
+            client.EnqueueResponse("GetVersion", """{"obsVersion":"33.0.1","obsWebSocketVersion":"5.7.6"}""");
+            client.EnqueueResponse("GetCurrentProgramScene", """{"currentProgramSceneName":"Main"}""");
+            client.EnqueueResponse("GetStreamStatus", """{"outputActive":true,"outputTimecode":"00:10:00.000"}""");
+            client.EnqueueResponse("GetRecordStatus", """{"outputActive":false}""");
+            client.EnqueueResponse("GetInputList", """{"inputs":[{"inputName":"Звук рабочего стола","inputKind":"wasapi_output_capture"},{"inputName":"Основной микрофон","inputKind":"wasapi_input_capture"}]}""");
+            client.EnqueueResponse("GetInputMute", """{"inputMuted":false}""");
+            client.EnqueueResponse("GetInputVolume", """{"inputVolumeDb":-6.0,"inputVolumeMul":0.5}""");
+            client.EnqueueResponse("GetInputMute", """{"inputMuted":true}""");
+            client.EnqueueResponse("GetInputVolume", """{"inputVolumeDb":-100.0,"inputVolumeMul":0.0}""");
+            client.EnqueueVendorResponse("aitum-stream-suite", "version", code: 600);
+            client.EnqueueVendorResponse("aitum-multistream", "version", """{"responseData":{"version":"1.0.9","success":true}}""");
+            client.EnqueueVendorResponse("aitum-multistream", "get_outputs", """{"responseData":{"outputs":[{"name":"YouTube","vertical":false}],"success":true}}""");
+            client.EnqueueVendorResponse("aitum-multistream", "get_output_status", """{"responseData":{"active":true,"reconnecting":false,"success":true}}""");
+            client.EnqueueResponse("GetOutputList", """{"outputs":[]}""");
+
+            await tile.RefreshCommand.ExecuteAsync(null);
+
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(tile.ForegroundMicrophone, Is.Not.Null);
+                Assert.That(tile.ForegroundMicrophone!.SourceName, Is.EqualTo("Основной микрофон"));
+                Assert.That(tile.ForegroundMicrophone.State, Is.EqualTo(ObsSourceMeterState.Muted));
+                Assert.That(tile.ForegroundMicrophone.MicrophoneStatusText, Is.EqualTo("Микрофон выключен"));
+                Assert.That(tile.OtherAudioSources.Select(static x => x.SourceName), Is.EqualTo(new[] { "Звук рабочего стола" }));
+                Assert.That(tile.HasOutputs, Is.True);
+                Assert.That(tile.ReconnectBannerText, Is.Null);
+            }
+
+            await client.DisconnectAsync(CancellationToken.None);
+            client.FailConnect = true;
+            await tile.RefreshCommand.ExecuteAsync(null);
+
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(tile.HasOutputs, Is.True, "Каркас карточек Эфир/Запись не должен схлопываться при обрыве связи.");
+                Assert.That(tile.ReconnectBannerText, Is.EqualTo("Связь с OBS потеряна – переподключение…"));
+                Assert.That(tile.StreamCard.State, Is.EqualTo(ObsOutputCardState.Unknown));
+                Assert.That(tile.RecordCard.State, Is.EqualTo(ObsOutputCardState.Unknown));
+                Assert.That(tile.ForegroundMicrophone, Is.Not.Null);
+                Assert.That(tile.ForegroundMicrophone!.State, Is.EqualTo(ObsSourceMeterState.Reconnecting));
+                Assert.That(tile.ForegroundMicrophone.MicrophoneStatusText, Is.EqualTo("Переподключение…"));
+                Assert.That(tile.ShowSecondaryOutputs, Is.True);
+                Assert.That(tile.SecondaryOutputs, Has.Count.EqualTo(1));
+                Assert.That(tile.SecondaryOutputs[0].IsDisconnected, Is.True);
+                Assert.That(tile.SecondaryOutputs[0].ToggleCommand.CanExecute(null), Is.False);
+            }
+        }
+        finally
+        {
+            if (Directory.Exists(tempDir))
+            {
+                Directory.Delete(tempDir, recursive: true);
+            }
+        }
+    }
+
+    [Test]
+    public async Task Двухшаговое_подтверждение_защищает_стоп_эфира_записи_и_доп_выхода_от_случайного_клика()
+    {
+        var tempDir = Path.Combine(Path.GetTempPath(), $"obs-stop-guard-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(tempDir);
+
+        try
+        {
+            var client = new FakeTileObsClient();
+            await client.ConnectAsync(new("127.0.0.1", 4455, string.Empty), CancellationToken.None);
+            var settingsManager = new SettingsManager(NullLogger<SettingsManager>.Instance, Path.Combine(tempDir, "settings.json"));
+            using var integration = new ObsIntegrationService(client, settingsManager, NullLogger<ObsIntegrationService>.Instance);
+            var dispatcher = new ManualUiDispatcher();
+
+            using var streamCard = new ObsOutputCardViewModel(ObsOutputCardKind.Stream, integration, NullLogger.Instance, dispatcher);
+            streamCard.ApplySnapshot(active: true, paused: false, "00:05:00.000", null);
+
+            await streamCard.InvokePrimaryCommand.ExecuteAsync(null);
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(streamCard.IsStopConfirmationArmed, Is.True);
+                Assert.That(streamCard.PrimaryButtonText, Is.EqualTo("Точно стоп?"));
+                Assert.That(client.SentRequests.Count(static r => r.RequestType == "StopStream"), Is.Zero);
+            }
+
+            dispatcher.Timers[0].Tick();
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(streamCard.IsStopConfirmationArmed, Is.False);
+                Assert.That(streamCard.PrimaryButtonText, Is.EqualTo("■ Стоп"));
+                Assert.That(client.SentRequests.Count(static r => r.RequestType == "StopStream"), Is.Zero);
+            }
+
+            await streamCard.InvokePrimaryCommand.ExecuteAsync(null);
+            Assert.That(streamCard.IsStopConfirmationArmed, Is.True);
+            streamCard.CancelStopConfirmationCommand.Execute(null);
+            Assert.That(streamCard.IsStopConfirmationArmed, Is.False);
+            Assert.That(client.SentRequests.Count(static r => r.RequestType == "StopStream"), Is.Zero);
+
+            await streamCard.InvokePrimaryCommand.ExecuteAsync(null);
+            await streamCard.InvokePrimaryCommand.ExecuteAsync(null);
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(streamCard.IsStopConfirmationArmed, Is.False);
+                Assert.That(client.SentRequests.Count(static r => r.RequestType == "StopStream"), Is.EqualTo(1));
+            }
+
+            using var recordCard = new ObsOutputCardViewModel(ObsOutputCardKind.Record, integration, NullLogger.Instance, dispatcher);
+            recordCard.ApplySnapshot(active: true, paused: true, "00:02:00.000", null);
+            await recordCard.InvokePrimaryCommand.ExecuteAsync(null);
+            Assert.That(recordCard.IsStopConfirmationArmed, Is.True);
+            Assert.That(client.SentRequests.Count(static r => r.RequestType == "StopRecord"), Is.Zero);
+            recordCard.ApplySnapshot(active: false, paused: false, null, null);
+            Assert.That(recordCard.IsStopConfirmationArmed, Is.False);
+
+            var secondaryStopCalls = 0;
+            var secondarySnapshot = new ObsSecondaryOutputSnapshot(
+                "YouTube", "aitum_multi_output_YouTube", "rtmp_output", ObsMultistreamVendor.AitumMultistream,
+                IsActive: true, IsReconnecting: false, "00:03:00.000", 500, 1024, 0, 0, 1000, CanControl: true, IsVertical: false);
+            using var secondary = new ObsSecondaryOutputViewModel(
+                secondarySnapshot,
+                _ =>
+                {
+                    secondaryStopCalls++;
+                    return Task.CompletedTask;
+                },
+                dispatcher);
+
+            await secondary.ToggleCommand.ExecuteAsync(null);
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(secondary.IsStopConfirmationArmed, Is.True);
+                Assert.That(secondary.ActionButtonText, Is.EqualTo("Точно стоп?"));
+                Assert.That(secondaryStopCalls, Is.Zero);
+            }
+
+            await secondary.ToggleCommand.ExecuteAsync(null);
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(secondary.IsStopConfirmationArmed, Is.False);
+                Assert.That(secondaryStopCalls, Is.EqualTo(1));
+            }
+        }
+        finally
+        {
+            if (Directory.Exists(tempDir))
+            {
+                Directory.Delete(tempDir, recursive: true);
+            }
+        }
+    }
+
     private sealed class FakeTileObsClient : IObsWebSocketClient
     {
         private readonly Dictionary<string, Queue<Func<Task<JsonElement?>>>> _responses = new(StringComparer.Ordinal);
@@ -261,6 +442,8 @@ public class ObsTileTests
         public event EventHandler<ObsWebSocketEventArgs>? EventReceived;
 
         public bool IsConnected { get; private set; }
+
+        public bool FailConnect { get; set; }
 
         public DateTimeOffset? LastExchangeAt { get; private set; }
 
@@ -280,6 +463,12 @@ public class ObsTileTests
 
         public Task<ObsConnectionSnapshot> ConnectAsync(ObsConnectionOptions options, CancellationToken cancellationToken)
         {
+            if (FailConnect)
+            {
+                IsConnected = false;
+                return Task.FromResult(new ObsConnectionSnapshot(false, null, null, "Соединение прервано"));
+            }
+
             IsConnected = true;
             return Task.FromResult(new ObsConnectionSnapshot(true, "33.0.1", "5.7.6", null));
         }

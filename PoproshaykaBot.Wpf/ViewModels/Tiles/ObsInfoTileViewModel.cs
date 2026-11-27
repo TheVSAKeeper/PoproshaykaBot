@@ -23,6 +23,8 @@ public sealed partial class ObsInfoTileViewModel : DashboardTileViewModel, IDisp
 {
     private const string ConnectedStatus = "connected";
     private const string UnavailableStatus = "error";
+    private const string OffStatus = "off";
+    private static readonly string[] MicrophoneNameMarkers = ["mic", "microphone", "микрофон", "микро"];
     private const int ConnectedRefreshIntervalMs = 5000;
     private const int DisconnectedRefreshIntervalMs = 15000;
     private const int MinVolumeMeterDelayMs = 30;
@@ -71,15 +73,25 @@ public sealed partial class ObsInfoTileViewModel : DashboardTileViewModel, IDisp
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasOutputs))]
     [NotifyPropertyChangedFor(nameof(IsUnavailable))]
+    [NotifyPropertyChangedFor(nameof(IsDisabled))]
     [NotifyPropertyChangedFor(nameof(ShowSecondaryOutputs))]
-    private string _connectionStatus = "off";
+    private string _connectionStatus = OffStatus;
 
     [ObservableProperty]
     private string _connectionToolTip = "Статус подключения OBS";
 
     [ObservableProperty]
+    private string? _reconnectBannerText;
+
+    [ObservableProperty]
+    private ObsSourceMeterViewModel? _foregroundMicrophone;
+
+    [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasAudioSources))]
     private bool _audioSourcesEmpty = true;
+
+    [ObservableProperty]
+    private bool _hasOtherAudioSources;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasSecondaryOutputs))]
@@ -106,8 +118,8 @@ public sealed partial class ObsInfoTileViewModel : DashboardTileViewModel, IDisp
         _toasts = toasts;
         _preferences = preferences;
 
-        StreamCard = new(ObsOutputCardKind.Stream, obsIntegration, logger);
-        RecordCard = new(ObsOutputCardKind.Record, obsIntegration, logger);
+        StreamCard = new(ObsOutputCardKind.Stream, obsIntegration, logger, uiDispatcher);
+        RecordCard = new(ObsOutputCardKind.Record, obsIntegration, logger, uiDispatcher);
 
         HeaderActions.Add(new(MahApps.Metro.IconPacks.PackIconLucideKind.RefreshCw, RefreshCommand, toolTip: "Обновить данные OBS"));
         HeaderActions.Add(new(MahApps.Metro.IconPacks.PackIconLucideKind.RefreshCcw, RefreshChatSourcesCommand, toolTip: "Жёстко обновить чат-источники OBS (refreshnocache)"));
@@ -127,13 +139,17 @@ public sealed partial class ObsInfoTileViewModel : DashboardTileViewModel, IDisp
 
     public ObservableCollection<ObsSourceMeterViewModel> AudioSources { get; } = [];
 
+    public ObservableCollection<ObsSourceMeterViewModel> OtherAudioSources { get; } = [];
+
     public bool HasSecondaryOutputs => !SecondaryOutputsEmpty;
 
     public bool ShowSecondaryOutputs => HasOutputs && HasSecondaryOutputs;
 
     public bool HasAudioSources => !AudioSourcesEmpty;
 
-    public bool HasOutputs => string.Equals(ConnectionStatus, ConnectedStatus, StringComparison.Ordinal);
+    public bool IsDisabled => string.Equals(ConnectionStatus, OffStatus, StringComparison.Ordinal);
+
+    public bool HasOutputs => !IsDisabled;
 
     public bool IsUnavailable => string.Equals(ConnectionStatus, UnavailableStatus, StringComparison.Ordinal);
 
@@ -178,6 +194,15 @@ public sealed partial class ObsInfoTileViewModel : DashboardTileViewModel, IDisp
             }
 
             meter.ApplyLevel(target);
+        }
+
+        if (ForegroundMicrophone is { } mic && !AudioSources.Contains(mic))
+        {
+            var target = ReadRowTarget(mic.SourceName, mic.Muted, mic.Found, delayMs);
+            if (target > 0D || mic.Level > 0D)
+            {
+                mic.ApplyLevel(target);
+            }
         }
     }
 
@@ -415,6 +440,7 @@ public sealed partial class ObsInfoTileViewModel : DashboardTileViewModel, IDisp
         _volumeMeterTimer.Start();
 
         ClearRows();
+        ForegroundMicrophone = null;
         ApplyCurrentConnectionState();
     }
 
@@ -426,6 +452,7 @@ public sealed partial class ObsInfoTileViewModel : DashboardTileViewModel, IDisp
             return;
         }
 
+        ReconnectBannerText = null;
         UpdateConnectionHeader("● OBS подключён", ConnectedStatus, "OBS WebSocket подключён");
 
         SceneName = ToDisplayValue(snapshot.CurrentSceneName);
@@ -470,7 +497,7 @@ public sealed partial class ObsInfoTileViewModel : DashboardTileViewModel, IDisp
 
         foreach (var output in secondaryOutputs)
         {
-            SecondaryOutputs.Add(new(output, ToggleSecondaryOutputAsync));
+            SecondaryOutputs.Add(new(output, ToggleSecondaryOutputAsync, _uiDispatcher));
         }
 
         SecondaryOutputsEmpty = SecondaryOutputs.Count == 0;
@@ -607,26 +634,111 @@ public sealed partial class ObsInfoTileViewModel : DashboardTileViewModel, IDisp
             var snapshot = audioSources.FirstOrDefault(source =>
                 string.Equals(source.Name, meter.SourceName, StringComparison.OrdinalIgnoreCase));
 
-            if (snapshot is null)
-            {
-                meter.Found = false;
-                meter.Muted = false;
-                meter.ShowMissing(meter.SourceName);
-                continue;
-            }
+            ApplyAudioSourceState(meter, snapshot);
+        }
 
-            meter.Found = true;
-            meter.Muted = snapshot.IsMuted;
+        UpdateForegroundMicrophone(audioSources, configuredOrder);
+    }
 
-            if (snapshot.IsMuted)
+    private static void ApplyAudioSourceState(ObsSourceMeterViewModel meter, ObsAudioSourceSnapshot? snapshot)
+    {
+        if (snapshot is null)
+        {
+            meter.Found = false;
+            meter.Muted = false;
+            meter.ShowMissing(meter.SourceName);
+            return;
+        }
+
+        meter.Found = true;
+        meter.Muted = snapshot.IsMuted;
+
+        if (snapshot.IsMuted)
+        {
+            meter.ShowMuted(snapshot.Name);
+        }
+        else
+        {
+            meter.ShowActive(snapshot.Name, snapshot.VolumeDecibels);
+        }
+    }
+
+    private void UpdateForegroundMicrophone(IReadOnlyList<ObsAudioSourceSnapshot> audioSources, bool configuredOrder)
+    {
+        var preferredMicName = configuredOrder && !string.IsNullOrWhiteSpace(_settings.DashboardMicrophoneName)
+            ? _settings.DashboardMicrophoneName.Trim()
+            : null;
+
+        ObsSourceMeterViewModel? selected = null;
+        if (preferredMicName is not null)
+        {
+            selected = AudioSources.FirstOrDefault(meter =>
+                string.Equals(meter.SourceName, preferredMicName, StringComparison.OrdinalIgnoreCase));
+
+            if (selected is null)
             {
-                meter.ShowMuted(snapshot.Name);
-            }
-            else
-            {
-                meter.ShowActive(snapshot.Name, snapshot.VolumeDecibels);
+                selected = ForegroundMicrophone is not null
+                    && string.Equals(ForegroundMicrophone.SourceName, preferredMicName, StringComparison.OrdinalIgnoreCase)
+                    ? ForegroundMicrophone
+                    : new ObsSourceMeterViewModel(preferredMicName);
+
+                var micSnapshot = audioSources.FirstOrDefault(source =>
+                    string.Equals(source.Name, preferredMicName, StringComparison.OrdinalIgnoreCase));
+                ApplyAudioSourceState(selected, micSnapshot);
             }
         }
+        else
+        {
+            selected = AudioSources.FirstOrDefault(meter =>
+            {
+                var snapshot = audioSources.FirstOrDefault(source =>
+                    string.Equals(source.Name, meter.SourceName, StringComparison.OrdinalIgnoreCase));
+                return IsMicrophoneCandidate(meter.SourceName, snapshot?.Kind);
+            }) ?? (AudioSources.Count > 0 ? AudioSources[0] : null);
+        }
+
+        ForegroundMicrophone = selected;
+        SyncOtherAudioSources();
+    }
+
+    private void SyncOtherAudioSources()
+    {
+        OtherAudioSources.Clear();
+        foreach (var meter in AudioSources)
+        {
+            if (!ReferenceEquals(meter, ForegroundMicrophone))
+            {
+                OtherAudioSources.Add(meter);
+            }
+        }
+
+        HasOtherAudioSources = OtherAudioSources.Count > 0;
+    }
+
+    private static bool IsMicrophoneCandidate(string name, string? kind)
+    {
+        if (!string.IsNullOrWhiteSpace(kind)
+            && (kind.Equals("wasapi_input_capture", StringComparison.OrdinalIgnoreCase)
+                || kind.Equals("coreaudio_input_capture", StringComparison.OrdinalIgnoreCase)
+                || kind.Equals("alsa_input_capture", StringComparison.OrdinalIgnoreCase)
+                || kind.Equals("pulse_input_capture", StringComparison.OrdinalIgnoreCase)))
+        {
+            return true;
+        }
+
+        return MicrophoneNameMarkers.Any(marker => name.Contains(marker, StringComparison.OrdinalIgnoreCase));
+    }
+
+    private string ResolveDefaultMicrophonePlaceholderName()
+    {
+        if (!string.IsNullOrWhiteSpace(_settings.DashboardMicrophoneName))
+        {
+            return _settings.DashboardMicrophoneName.Trim();
+        }
+
+        var configured = _settings.GetDashboardSourceNames();
+        var micCandidate = configured.FirstOrDefault(name => IsMicrophoneCandidate(name, null));
+        return micCandidate ?? (configured.Count > 0 ? configured[0] : null) ?? "Микрофон";
     }
 
     private void EnsureRows(IReadOnlyList<string> orderedNames)
@@ -655,10 +767,17 @@ public sealed partial class ObsInfoTileViewModel : DashboardTileViewModel, IDisp
 
     private void ClearRows()
     {
+        foreach (var row in SecondaryOutputs)
+        {
+            row.Dispose();
+        }
+
         SecondaryOutputs.Clear();
         SecondaryOutputsEmpty = true;
 
         AudioSources.Clear();
+        OtherAudioSources.Clear();
+        HasOtherAudioSources = false;
         AudioSourcesEmpty = true;
 
         lock (_volumeMeterLock)
@@ -669,10 +788,12 @@ public sealed partial class ObsInfoTileViewModel : DashboardTileViewModel, IDisp
 
     private void ApplyDisabledState()
     {
-        UpdateConnectionHeader("○ OBS выкл.", "off", "OBS интеграция отключена в настройках");
+        UpdateConnectionHeader("○ OBS выкл.", OffStatus, "OBS интеграция отключена в настройках");
+        ReconnectBannerText = null;
         SceneName = "–";
         StreamCard.ApplyUnknown();
         RecordCard.ApplyUnknown();
+        ForegroundMicrophone = null;
         ClearRows();
     }
 
@@ -682,10 +803,43 @@ public sealed partial class ObsInfoTileViewModel : DashboardTileViewModel, IDisp
             UnavailableStatus,
             string.IsNullOrWhiteSpace(message) ? "OBS WebSocket не подключён" : $"OBS WebSocket не подключён: {message}");
 
+        ReconnectBannerText = "Связь с OBS потеряна – переподключение…";
         SceneName = "–";
         StreamCard.ApplyUnknown();
         RecordCard.ApplyUnknown();
-        ClearRows();
+
+        foreach (var row in SecondaryOutputs)
+        {
+            row.ApplyDisconnected();
+        }
+
+        foreach (var meter in AudioSources)
+        {
+            meter.Found = false;
+            meter.Muted = false;
+            meter.ShowReconnecting(meter.DisplayName);
+        }
+
+        if (ForegroundMicrophone is { } mic)
+        {
+            mic.Found = false;
+            mic.Muted = false;
+            if (!AudioSources.Contains(mic))
+            {
+                mic.ShowReconnecting(mic.DisplayName);
+            }
+        }
+        else
+        {
+            var placeholder = new ObsSourceMeterViewModel(ResolveDefaultMicrophonePlaceholderName());
+            placeholder.ShowReconnecting(placeholder.DisplayName);
+            ForegroundMicrophone = placeholder;
+        }
+
+        lock (_volumeMeterLock)
+        {
+            _volumeTargets.Clear();
+        }
     }
 
     private void UpdateConnectionHeader(string text, string status, string toolTip)
@@ -896,6 +1050,12 @@ public sealed partial class ObsInfoTileViewModel : DashboardTileViewModel, IDisp
         _refreshTimer.Stop();
         _volumeMeterTimer.Stop();
         _secondaryRefreshTimer.Stop();
+        StreamCard.Dispose();
+        RecordCard.Dispose();
+        foreach (var row in SecondaryOutputs)
+        {
+            row.Dispose();
+        }
 
         _obsClient.EventReceived -= OnObsEventReceived;
 

@@ -4,12 +4,14 @@ using KeepShell.Services.Modal;
 using KeepShell.Services.Platform;
 using KeepShell.Testing;
 using KeepShell.Views.Controls;
+using MahApps.Metro.IconPacks;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Web.WebView2.Wpf;
 using PoproshaykaBot.Core.Chat;
 using PoproshaykaBot.Core.Chat.Display;
 using PoproshaykaBot.Core.Debugging;
 using PoproshaykaBot.Core.Infrastructure.Events;
+using PoproshaykaBot.Core.Infrastructure.Events.Streaming;
 using PoproshaykaBot.Core.Platforms;
 using PoproshaykaBot.Core.Platforms.Auth;
 using PoproshaykaBot.Core.Settings;
@@ -246,8 +248,96 @@ public sealed class WebViewTileModalHidingTests
         using (Assert.EnterMultipleScope())
         {
             Assert.That(tile.SecondaryChat.HasFallback, Is.True);
-            Assert.That(tile.SecondaryChat.FallbackHeading, Is.EqualTo("Чат эфира недоступен"));
+            Assert.That(tile.SecondaryChat.ChannelName, Is.EqualTo("@stream"));
+            Assert.That(tile.SecondaryChat.HeaderTitle, Is.EqualTo("YouTube – @stream"));
+            Assert.That(tile.SecondaryChat.FallbackHeading, Is.EqualTo("Ожидание эфира на @stream"));
+            Assert.That(tile.SecondaryChat.FallbackTone, Is.EqualTo(ChatFallbackTone.Waiting));
+            Assert.That(tile.SecondaryChat.FallbackIcon, Is.EqualTo(PackIconLucideKind.Clock));
             Assert.That(tile.SecondaryChat.FallbackActionText, Is.EqualTo("Открыть в браузере"));
+        }
+    }
+
+    [Test]
+    public async Task Кнопки_в_один_клик_управляют_сворачиванием_YouTube_и_раскладкой_и_состояния_эфира_различаются()
+    {
+        var ytStatus = new FakeStreamStatus { CurrentStatus = StreamStatus.Offline };
+        var activeChannel = "Образовательный канал";
+        var bus = new InMemoryEventBus(NullLogger<InMemoryEventBus>.Instance);
+        var registry = new ChatPlatformRegistry([
+            new FakeChatPlatform(StreamingPlatform.Twitch, "Twitch", new FakeStreamStatus(), requiresOnlineStream: false),
+            new FakeChatPlatform(StreamingPlatform.YouTube, "YouTube", ytStatus,
+                offlineUrl: () => "https://www.youtube.com/@educator",
+                configuredChannel: () => activeChannel),
+        ]);
+
+        var tile = (ChatDisplayTileViewModel)CreateViewModel(Tile.Chat, registry, bus: bus);
+        var dashboard = new DashboardView();
+        var quickTemplate = (DataTemplate)dashboard.Resources["ChatTileQuickControlsTemplate"];
+        var quickRoot = (StackPanel)quickTemplate.LoadContent();
+        quickRoot.DataContext = tile;
+        var quickButtons = quickRoot.Children.OfType<Button>().ToArray();
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(quickButtons, Has.Length.EqualTo(2));
+            Assert.That(tile.SelectedMode.Layout, Is.EqualTo(ChatDisplayLayout.Columns));
+            Assert.That(tile.YouTubeCollapseButtonText, Is.EqualTo("Свернуть YouTube"));
+            Assert.That(tile.SplitLayoutButtonText, Is.EqualTo("Друг под другом"));
+            Assert.That(tile.SecondaryChat.FallbackTone, Is.EqualTo(ChatFallbackTone.Waiting));
+            Assert.That(tile.SecondaryChat.FallbackHeading, Is.EqualTo("Ожидание эфира на Образовательный канал"));
+        }
+
+        tile.ToggleSplitLayoutCommand.Execute(null);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(tile.SelectedMode.Layout, Is.EqualTo(ChatDisplayLayout.Rows));
+            Assert.That(tile.SplitLayoutButtonText, Is.EqualTo("Рядом"));
+        }
+
+        tile.ToggleYouTubeCollapsedCommand.Execute(null);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(tile.IsYouTubeCollapsed, Is.True);
+            Assert.That(tile.PrimaryChat.IsShown, Is.True);
+            Assert.That(tile.SecondaryChat.IsShown, Is.False);
+            Assert.That(tile.YouTubeCollapseButtonText, Is.EqualTo("Показать YouTube"));
+        }
+
+        tile.ToggleYouTubeCollapsedCommand.Execute(null);
+        Assert.That(tile.SelectedMode.Layout, Is.EqualTo(ChatDisplayLayout.Rows));
+
+        ytStatus.CurrentStatus = StreamStatus.Online;
+        await bus.PublishAsync(new StreamWentOnline(StreamingPlatform.YouTube, activeChannel, ytStatus.CurrentStream));
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(tile.SecondaryChat.HasFallback, Is.False);
+            Assert.That(tile.SecondaryChat.FallbackTone, Is.EqualTo(ChatFallbackTone.None));
+            Assert.That(tile.SecondaryChat.ChannelUri, Is.Not.Null);
+        }
+
+        ytStatus.CurrentStatus = StreamStatus.Offline;
+        await bus.PublishAsync(new StreamWentOffline(StreamingPlatform.YouTube, activeChannel));
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(tile.SecondaryChat.HasFallback, Is.True);
+            Assert.That(tile.SecondaryChat.FallbackTone, Is.EqualTo(ChatFallbackTone.Ended));
+            Assert.That(tile.SecondaryChat.FallbackIcon, Is.EqualTo(PackIconLucideKind.Radio));
+            Assert.That(tile.SecondaryChat.FallbackHeading, Is.EqualTo("Эфир завершён / не в сети"));
+        }
+
+        activeChannel = "Игровой канал";
+        await bus.PublishAsync(new ActiveChannelChanged(
+            StreamingPlatform.YouTube,
+            new ChannelKey(StreamingPlatform.YouTube, "UC1"),
+            new ChannelKey(StreamingPlatform.YouTube, "UC2"),
+            activeChannel,
+            ChannelSwitchMode.Manual));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(tile.SecondaryChat.ChannelName, Is.EqualTo("Игровой канал"));
+            Assert.That(tile.SecondaryChat.FallbackTone, Is.EqualTo(ChatFallbackTone.Waiting));
+            Assert.That(tile.SecondaryChat.FallbackHeading, Is.EqualTo("Ожидание эфира на Игровой канал"));
         }
     }
 
@@ -558,7 +648,8 @@ public sealed class WebViewTileModalHidingTests
     private DashboardTileViewModel CreateViewModel(Tile tile, IChatPlatformRegistry? platformRegistry = null,
         YouTubeSettingsStore? youtubeSettings = null, ISettingsStore? uiSettings = null,
         IEnumerable<IPlatformAccountDirectory>? accountDirectories = null,
-        PoproshaykaBot.Wpf.Infrastructure.IPlatformWebChatLoginDialog? webChatLogin = null)
+        PoproshaykaBot.Wpf.Infrastructure.IPlatformWebChatLoginDialog? webChatLogin = null,
+        IEventBus? bus = null)
     {
         var settings = new SettingsManager(NullLogger<SettingsManager>.Instance, Path.Combine(_directory.FullName, "settings.json"));
 
@@ -571,7 +662,7 @@ public sealed class WebViewTileModalHidingTests
                 NullLogger<ChatDisplayTileViewModel>.Instance,
                 new FakeShellLauncher(),
                 new FakeDialogService(),
-                new InMemoryEventBus(NullLogger<InMemoryEventBus>.Instance),
+                bus ?? new InMemoryEventBus(NullLogger<InMemoryEventBus>.Instance),
                 new ChatDisplayStore(NullLogger<ChatDisplayStore>.Instance, _directory.FullName), effectiveRegistry, youtubeSettings,
                 uiSettings: uiSettings, accountDirectories: accountDirectories, webChatLogin: webChatLogin),
             Tile.OverlayPreview => new ChatOverlayPreviewTileViewModel(settings, NullLogger<ChatOverlayPreviewTileViewModel>.Instance),

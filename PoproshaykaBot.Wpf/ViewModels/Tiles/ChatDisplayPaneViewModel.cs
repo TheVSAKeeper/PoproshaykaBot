@@ -1,6 +1,7 @@
 ﻿using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using KeepShell.Services;
+using MahApps.Metro.IconPacks;
 using PoproshaykaBot.Core.Platforms;
 using PoproshaykaBot.Core.Platforms.Auth;
 using PoproshaykaBot.Wpf.Bootstrap;
@@ -8,6 +9,15 @@ using PoproshaykaBot.Wpf.Infrastructure.Platforms;
 using System.Windows.Input;
 
 namespace PoproshaykaBot.Wpf.ViewModels.Tiles;
+
+public enum ChatFallbackTone
+{
+    None = 0,
+    Neutral = 1,
+    Waiting = 2,
+    Ended = 3,
+    Error = 4,
+}
 
 public sealed partial class ChatDisplayPaneViewModel(
     IShellLauncher shellLauncher, IChatPlatformRegistry? platformRegistry, ISettingsStore? uiSettings = null) : ObservableObject
@@ -21,11 +31,11 @@ public sealed partial class ChatDisplayPaneViewModel(
     private StreamingPlatform? _accountsPlatform;
 
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(HasAccountChoices))]
+    [NotifyPropertyChangedFor(nameof(HasAccountChoices), nameof(HasBrowserSessionControls))]
     private IReadOnlyList<ChatDisplayAccountOption> _accountChoices = [];
 
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(CanSignInBrowser), nameof(CanResetBrowserSession))]
+    [NotifyPropertyChangedFor(nameof(CanSignInBrowser), nameof(CanResetBrowserSession), nameof(HasBrowserSessionControls))]
     [NotifyCanExecuteChangedFor(nameof(SignInBrowserCommand), nameof(ResetBrowserSessionCommand))]
     private ChatDisplayAccountOption? _selectedAccount;
 
@@ -53,11 +63,28 @@ public sealed partial class ChatDisplayPaneViewModel(
     private string _fallbackDescription = string.Empty;
 
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(DisplayName), nameof(CanSignInBrowser), nameof(CanResetBrowserSession))]
+    [NotifyPropertyChangedFor(nameof(IsEndedFallback), nameof(IsWaitingFallback), nameof(IsErrorFallback))]
+    private ChatFallbackTone _fallbackTone = ChatFallbackTone.Neutral;
+
+    [ObservableProperty]
+    private PackIconLucideKind _fallbackIcon = PackIconLucideKind.MessageSquareWarning;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HeaderTitle), nameof(HasChannelName))]
+    private string? _channelName;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(DisplayName), nameof(HeaderTitle), nameof(CanSignInBrowser), nameof(CanResetBrowserSession))]
     [NotifyCanExecuteChangedFor(nameof(SignInBrowserCommand), nameof(ResetBrowserSessionCommand))]
     private StreamingPlatform _platform;
 
     public string DisplayName => PlatformVisuals.GetDisplayName(Platform, platformRegistry);
+    public bool HasChannelName => !string.IsNullOrWhiteSpace(ChannelName);
+    public string HeaderTitle => HasChannelName ? $"{DisplayName} – {ChannelName}" : DisplayName;
+    public bool IsEndedFallback => FallbackTone == ChatFallbackTone.Ended;
+    public bool IsWaitingFallback => FallbackTone == ChatFallbackTone.Waiting;
+    public bool IsErrorFallback => FallbackTone == ChatFallbackTone.Error;
+    public bool HasBrowserSessionControls => HasAccountChoices || CanSignInBrowser || CanResetBrowserSession;
     public Uri? ChannelUri { get; private set; }
     public bool SupportsClutterBlocking { get; private set; }
     public bool AppliesPreferredColorScheme { get; private set; }
@@ -86,6 +113,7 @@ public sealed partial class ChatDisplayPaneViewModel(
         _resetBrowserSession = resetBrowserSession;
         OnPropertyChanged(nameof(CanSignInBrowser));
         OnPropertyChanged(nameof(CanResetBrowserSession));
+        OnPropertyChanged(nameof(HasBrowserSessionControls));
         SignInBrowserCommand.NotifyCanExecuteChanged();
         ResetBrowserSessionCommand.NotifyCanExecuteChanged();
     }
@@ -193,13 +221,17 @@ public sealed partial class ChatDisplayPaneViewModel(
         string? unavailableHeading = null,
         string? unavailableDescription = null,
         ICommand? setupCommand = null,
-        string? setupActionText = null)
+        string? setupActionText = null,
+        string? channelName = null,
+        ChatFallbackTone fallbackTone = ChatFallbackTone.Neutral,
+        PackIconLucideKind fallbackIcon = PackIconLucideKind.MessageSquareWarning)
     {
         ExternalUri = externalUri;
         _setupCommand = setupCommand;
         _setupActionText = setupActionText;
         SupportsClutterBlocking = supportsClutterBlocking;
         AppliesPreferredColorScheme = appliesPreferredColorScheme;
+        ChannelName = string.IsNullOrWhiteSpace(channelName) ? null : channelName.Trim();
         var changed = IsShown != shown || Platform != platform || ChannelUri != channelUri;
         if (changed)
         {
@@ -217,6 +249,12 @@ public sealed partial class ChatDisplayPaneViewModel(
             {
                 FallbackHeading = unavailableHeading ?? "Чат эфира недоступен";
                 FallbackDescription = unavailableDescription ?? "Чат появится, когда у выбранного канала начнётся эфир с доступным чатом.";
+                FallbackTone = fallbackTone;
+                FallbackIcon = fallbackIcon;
+            }
+            else
+            {
+                FallbackTone = ChatFallbackTone.None;
             }
         }
 
@@ -231,6 +269,8 @@ public sealed partial class ChatDisplayPaneViewModel(
         RuntimeMissing = true;
         FallbackHeading = "Требуется Microsoft Edge WebView2 Runtime";
         FallbackDescription = "Установите его, чтобы открыть чат в приложении.";
+        FallbackTone = ChatFallbackTone.Error;
+        FallbackIcon = PackIconLucideKind.MessageSquareWarning;
     }
 
     internal void ShowGenericFallback()
@@ -240,6 +280,8 @@ public sealed partial class ChatDisplayPaneViewModel(
         FallbackHeading = $"Не удалось открыть чат {DisplayName}";
         FallbackDescription = ExternalUri is not null ? "Откройте чат в браузере или попробуйте обновить его."
             : "Попробуйте обновить чат. Подробности – в журнале.";
+        FallbackTone = ChatFallbackTone.Error;
+        FallbackIcon = PackIconLucideKind.MessageSquareWarning;
     }
 
     [RelayCommand]

@@ -173,13 +173,35 @@
                        Visibility="{Binding Meta, Converter={StaticResource NullToVisibility}}" />
 
             <WrapPanel Grid.Row="3">
-                <Button Style="{StaticResource Button.Secondary}"
-                        MinHeight="24"
+                <Button MinHeight="24"
                         Padding="8,2"
                         FontSize="{DynamicResource Font.Size.XS}"
                         Margin="0,0,6,0"
                         Content="{Binding PrimaryButtonText}"
-                        Command="{Binding InvokePrimaryCommand}" />
+                        ToolTip="{Binding PrimaryButtonToolTip}"
+                        AutomationProperties.Name="{Binding PrimaryButtonAutomationName}"
+                        Command="{Binding InvokePrimaryCommand}">
+                    <Button.InputBindings>
+                        <KeyBinding Key="Escape"
+                                    Command="{Binding CancelStopConfirmationCommand}" />
+                    </Button.InputBindings>
+                    <Button.Style>
+                        <Style TargetType="Button"
+                               BasedOn="{StaticResource Button.Secondary}">
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding IsStopConfirmationArmed}"
+                                             Value="True">
+                                    <Setter Property="Background"
+                                            Value="{DynamicResource State.ErrorStrong}" />
+                                    <Setter Property="BorderBrush"
+                                            Value="{DynamicResource State.ErrorStrong}" />
+                                    <Setter Property="Foreground"
+                                            Value="{DynamicResource Fg.OnError}" />
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </Button.Style>
+                </Button>
 
                 <Button Style="{StaticResource Button.Ghost}"
                         MinHeight="24"

@@ -57,6 +57,7 @@ public sealed partial class DashboardLayoutSectionViewModel : ObservableObject
         References =
         [
             DashboardPreviewReference.Current(RestoreWindowSize(settings, layoutStore)),
+            DashboardPreviewReference.WindowCompact,
             DashboardPreviewReference.Window1024,
             DashboardPreviewReference.Window1920,
         ];
@@ -122,6 +123,12 @@ public sealed partial class DashboardLayoutSectionViewModel : ObservableObject
     public IReadOnlyList<int> MaxHeightPresets { get; } = [100, 150, 200, 250, 300, 400, 500];
 
     public IReadOnlyList<TileMeta> AvailablePalette { get; private set; } = [];
+
+    public DashboardLayoutPreset ActivePreset { get; private set; } = DashboardLayoutPreset.Compact;
+
+    public bool IsCompactPreset => ActivePreset == DashboardLayoutPreset.Compact;
+
+    public bool IsWidePreset => ActivePreset == DashboardLayoutPreset.Wide;
 
     public TileMeta? Meta(string typeId)
     {
@@ -278,6 +285,19 @@ public sealed partial class DashboardLayoutSectionViewModel : ObservableObject
     private void ResetLayout()
     {
         _draft.ResetToDefaults();
+        Notice = string.Empty;
+        Committed();
+    }
+
+    [RelayCommand]
+    private void ApplyPreset(DashboardLayoutPreset preset)
+    {
+        if (preset == DashboardLayoutPreset.Custom)
+        {
+            return;
+        }
+
+        _draft.ResetToPreset(preset);
         Notice = string.Empty;
         Committed();
     }
@@ -444,6 +464,7 @@ public sealed partial class DashboardLayoutSectionViewModel : ObservableObject
         DashboardPaneBuilder.ApplyCollapsedStrips(Pane, Stacked);
 
         AvailablePalette = _catalog.Values.Where(meta => !IsPlaced(meta.TypeId)).ToList();
+        ActivePreset = DashboardLayoutPresets.DetectPreset(_draft.Layout, _catalog.Keys.ToHashSet(StringComparer.Ordinal));
 
         if (Pane is null)
         {
@@ -458,6 +479,9 @@ public sealed partial class DashboardLayoutSectionViewModel : ObservableObject
         OnPropertyChanged(nameof(CanUndo));
         OnPropertyChanged(nameof(CanEditTree));
         OnPropertyChanged(nameof(AvailablePalette));
+        OnPropertyChanged(nameof(ActivePreset));
+        OnPropertyChanged(nameof(IsCompactPreset));
+        OnPropertyChanged(nameof(IsWidePreset));
 
         LayoutChanged?.Invoke(this, EventArgs.Empty);
     }

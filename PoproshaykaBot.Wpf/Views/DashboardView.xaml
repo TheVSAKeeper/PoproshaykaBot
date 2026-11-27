@@ -18,7 +18,7 @@
     <UserControl.Resources>
         <DataTemplate x:Key="ChatTilePlatformSelector"
                       DataType="{x:Type tiles:ChatDisplayTileViewModel}">
-            <Grid Margin="0,0,8,0">
+            <Grid Margin="0,0,6,0">
                 <iconPacks:PackIconLucide Kind="{Binding Icon}"
                                           Width="14"
                                           Height="14"
@@ -65,6 +65,51 @@
                     </Button.ContextMenu>
                 </Button>
             </Grid>
+        </DataTemplate>
+
+        <DataTemplate x:Key="ChatTileQuickControlsTemplate"
+                      DataType="{x:Type tiles:ChatDisplayTileViewModel}">
+            <StackPanel Orientation="Horizontal"
+                        VerticalAlignment="Center"
+                        Visibility="{Binding HasMultiplePlatforms, Converter={StaticResource BoolToVisibility}}">
+                <Button Command="{Binding ToggleYouTubeCollapsedCommand}"
+                        ToolTip="{Binding YouTubeCollapseToolTip}"
+                        AutomationProperties.Name="{Binding YouTubeCollapseButtonText}"
+                        Style="{StaticResource Button.Secondary}"
+                        MinHeight="24"
+                        Padding="5,2"
+                        Margin="0,0,4,0"
+                        FontSize="{DynamicResource Font.Size.XS}">
+                    <StackPanel Orientation="Horizontal">
+                        <iconPacks:PackIconLucide Kind="{Binding YouTubeCollapseIcon}"
+                                                  Width="12"
+                                                  Height="12"
+                                                  VerticalAlignment="Center" />
+                        <TextBlock Text="{Binding YouTubeCollapseButtonText}"
+                                   Margin="4,0,0,0"
+                                   VerticalAlignment="Center"
+                                   Visibility="{Binding IsNarrowHeader, Converter={StaticResource InverseBoolToVisibility}}" />
+                    </StackPanel>
+                </Button>
+                <Button Command="{Binding ToggleSplitLayoutCommand}"
+                        ToolTip="{Binding SplitLayoutToolTip}"
+                        AutomationProperties.Name="Рядом / Друг под другом"
+                        Style="{StaticResource Button.Ghost}"
+                        MinHeight="24"
+                        Padding="5,2"
+                        FontSize="{DynamicResource Font.Size.XS}">
+                    <StackPanel Orientation="Horizontal">
+                        <iconPacks:PackIconLucide Kind="{Binding SplitLayoutIcon}"
+                                                  Width="12"
+                                                  Height="12"
+                                                  VerticalAlignment="Center" />
+                        <TextBlock Text="{Binding SplitLayoutButtonText}"
+                                   Margin="4,0,0,0"
+                                   VerticalAlignment="Center"
+                                   Visibility="{Binding IsNarrowHeader, Converter={StaticResource InverseBoolToVisibility}}" />
+                    </StackPanel>
+                </Button>
+            </StackPanel>
         </DataTemplate>
 
         <DataTemplate x:Key="DashboardTileChrome"
@@ -126,6 +171,7 @@
                             Tag="{DynamicResource Radius.M}"
                             CornerRadius="{Binding Tag, RelativeSource={RelativeSource Self}, Converter={StaticResource CornerRadiusMask}, ConverterParameter='Top,1'}"
                             Padding="12,7,8,7"
+                            SizeChanged="OnTileHeaderBarSizeChanged"
                             SnapsToDevicePixels="True">
                     <DockPanel x:Name="TileHeader"
                                LastChildFill="True">
@@ -163,6 +209,12 @@
                                 </iconPacks:PackIconLucide>
                             </Button>
                         </StackPanel>
+
+                        <ContentControl x:Name="ChatTileQuickControls"
+                                        DockPanel.Dock="Right"
+                                        VerticalAlignment="Center"
+                                        Margin="0,0,2,0"
+                                        Focusable="False" />
 
                         <ContentControl x:Name="TilePlatformSelector"
                                         DockPanel.Dock="Left"
@@ -356,6 +408,8 @@
                 <DataTrigger Binding="{Binding TypeId}" Value="twitch-chat">
                     <Setter TargetName="TilePlatformSelector" Property="Content" Value="{Binding}" />
                     <Setter TargetName="TilePlatformSelector" Property="ContentTemplate" Value="{StaticResource ChatTilePlatformSelector}" />
+                    <Setter TargetName="ChatTileQuickControls" Property="Content" Value="{Binding}" />
+                    <Setter TargetName="ChatTileQuickControls" Property="ContentTemplate" Value="{StaticResource ChatTileQuickControlsTemplate}" />
                     <Setter TargetName="TileIcon" Property="Visibility" Value="Collapsed" />
                 </DataTrigger>
 
@@ -401,6 +455,7 @@
                 <DataTrigger Binding="{Binding IsLayoutEditing}"
                              Value="True">
                     <Setter TargetName="TilePlatformSelector" Property="IsEnabled" Value="False" />
+                    <Setter TargetName="ChatTileQuickControls" Property="IsEnabled" Value="False" />
                     <Setter TargetName="TileEditCollapse"
                             Property="Visibility"
                             Value="Visible" />

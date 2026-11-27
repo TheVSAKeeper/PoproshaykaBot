@@ -408,6 +408,52 @@ public class CompactLayoutTests
         });
     }
 
+    [TestCase(940, 1.0)]
+    [TestCase(940, 1.6)]
+    [TestCase(970, 1.6)]
+    public void Шапка_с_переключателем_пресета_не_обрезает_кнопки_на_узком_окне(double width, double scale)
+    {
+        ApplyScale(scale);
+
+        var view = new TitleBarView
+        {
+            DataContext = new
+            {
+                BuildLabel = "v1.0.0",
+                BuildTooltip = "v1.0.0",
+                IsOverviewSelected = true,
+                ConnectButtonText = "Подключить бота",
+                ConnectButtonTooltip = "Управление ботом",
+                IsConnectBlockedBySetup = false,
+                Overview = new
+                {
+                    IsEditing = false,
+                    CanEdit = true,
+                    CanUndo = false,
+                    ActivePresetShortLabel = "Компакт",
+                    IsCompactPreset = true,
+                    IsWidePreset = false,
+                },
+            },
+        };
+        var host = HostWithMainWindowFont(view);
+        Arrange(host, new(width, 37));
+
+        var presetButton = (Button)view.FindName("PresetSwitcherButton")!;
+        var titleBlock = Descendants<TextBlock>(view).First(static t => t.Text == "PoproshaykaBot");
+        var presetLeft = presetButton.TranslatePoint(default, view).X;
+        var titleRight = titleBlock.TranslatePoint(new(titleBlock.ActualWidth, 0), view).X;
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(presetButton.Visibility, Is.EqualTo(Visibility.Visible));
+            Assert.That(presetButton.ActualWidth, Is.GreaterThan(0));
+            Assert.That(presetButton.ActualWidth, Is.GreaterThanOrEqualTo(presetButton.DesiredSize.Width - presetButton.Margin.Left - presetButton.Margin.Right - 0.5));
+            Assert.That(presetLeft, Is.GreaterThanOrEqualTo(titleRight - 0.5),
+                $"Переключатель пресета ({presetLeft:F1}) не должен наезжать на название приложения ({titleRight:F1}) при width={width}, scale={scale}");
+        });
+    }
+
     private UserStatisticsPageViewModel CreateUsersPage(int count)
     {
         var settingsManager = new SettingsManager(NullLogger<SettingsManager>.Instance, Path.Combine(_directory, "settings.json"));

@@ -35,6 +35,8 @@ public interface IChatPlatform
 
     string? ConfiguredChannel => null;
 
+    string? ConfiguredChannelDisplayName => ConfiguredChannel;
+
     bool UsesChannelCatalog => true;
 
     ChatConnectionStatus? CaptureChatStatus(BotLifecyclePhase phase) => null;

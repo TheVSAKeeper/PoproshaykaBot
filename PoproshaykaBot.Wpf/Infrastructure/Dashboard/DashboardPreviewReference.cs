@@ -12,7 +12,7 @@ public sealed record DashboardPreviewReference(string Label, Size Window)
 
     public static readonly Size DefaultWindow = new(1440, 800);
 
-    public static readonly Size MinWindow = new(1024, 640);
+    public static readonly Size MinWindow = new(940, 640);
 
     public Size ContentArea(bool navCollapsed)
     {
@@ -30,6 +30,8 @@ public sealed record DashboardPreviewReference(string Label, Size Window)
             Window.Height,
             scale * 100);
     }
+
+    public static DashboardPreviewReference WindowCompact { get; } = new("970 × 1050", new(970, 1050));
 
     public static DashboardPreviewReference Window1024 { get; } = new("1024 × 640", new(1024, 640));
 

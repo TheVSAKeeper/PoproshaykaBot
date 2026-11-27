@@ -214,7 +214,7 @@ public class StreamPreviewTileTests
     [Test]
     public void Раскладка_по_умолчанию_использует_четырёхколоночный_мультистрим_и_скрывает_превью_стрима()
     {
-        var layout = DashboardLayoutDefaults.Create();
+        var layout = DashboardLayoutPresets.CreateWide();
 
         DashboardLayoutReconciler.SyncRoot(layout);
 

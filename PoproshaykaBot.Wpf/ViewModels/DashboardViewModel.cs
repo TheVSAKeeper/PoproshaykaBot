@@ -25,6 +25,7 @@ public sealed partial class DashboardViewModel : ObservableObject, IDisposable
     private readonly TimeProvider _time;
     private readonly ILogger<DashboardEditSession>? _sessionLogger;
     private readonly ModalHostViewModel? _modal;
+    private readonly ShellPreferences? _preferences;
     private readonly HashSet<DashboardTileViewModel> _observed = [];
     private DashboardEditSession? _session;
     private DashboardLayoutSettings? _layout;
@@ -32,18 +33,21 @@ public sealed partial class DashboardViewModel : ObservableObject, IDisposable
     private string? _editNotice;
     private bool _suppressCollapsePersist;
     private bool _stacked;
+    private DashboardLayoutPreset _activePreset = DashboardLayoutPreset.Compact;
 
     public DashboardViewModel(
         IEnumerable<DashboardTileViewModel> tiles,
         DashboardLayoutCoordinator coordinator,
         TimeProvider time,
         ILogger<DashboardEditSession>? sessionLogger = null,
-        ModalHostViewModel? modal = null)
+        ModalHostViewModel? modal = null,
+        ShellPreferences? preferences = null)
     {
         _coordinator = coordinator;
         _time = time;
         _sessionLogger = sessionLogger;
         _modal = modal;
+        _preferences = preferences;
         _tilesByTypeId = new(StringComparer.Ordinal);
 
         foreach (var tile in tiles)
@@ -60,6 +64,11 @@ public sealed partial class DashboardViewModel : ObservableObject, IDisposable
                 multistream.ConnectionToggleRequested += OnTileConnectionToggleRequested;
                 multistream.PlatformRequested += OnTilePlatformRequested;
                 multistream.StatusReported += OnTileStatusReported;
+            }
+
+            if (tile is StreamAndChannelsTileViewModel streamAndChannels)
+            {
+                streamAndChannels.PlatformRequested += OnTilePlatformRequested;
             }
 
             if (tile is ChatDisplayTileViewModel chatDisplay)
@@ -105,6 +114,89 @@ public sealed partial class DashboardViewModel : ObservableObject, IDisposable
     public bool CanUndo => _session?.CanUndo == true;
 
     public IReadOnlyList<HiddenTile> HiddenTiles { get; private set; } = [];
+
+    public DashboardLayoutPreset ActivePreset
+    {
+        get => _activePreset;
+        private set
+        {
+            if (SetProperty(ref _activePreset, value))
+            {
+                OnPropertyChanged(nameof(IsCompactPreset));
+                OnPropertyChanged(nameof(IsWidePreset));
+                OnPropertyChanged(nameof(ActivePresetShortLabel));
+            }
+        }
+    }
+
+    public bool IsCompactPreset => ActivePreset == DashboardLayoutPreset.Compact;
+
+    public bool IsWidePreset => ActivePreset == DashboardLayoutPreset.Wide;
+
+    public string ActivePresetShortLabel => DashboardLayoutPresets.GetShortName(ActivePreset);
+
+    [RelayCommand]
+    private void ApplyPreset(DashboardLayoutPreset preset)
+    {
+        if (preset == DashboardLayoutPreset.Custom)
+        {
+            return;
+        }
+
+        if (_session is not null)
+        {
+            StopEditing();
+        }
+
+        var layout = _coordinator.Mutate(current =>
+        {
+            var template = DashboardLayoutPresets.Create(preset);
+            var target = current is { Tiles.Count: > 0 }
+                ? DashboardLayoutReconciler.ResetToDefaults(template, current)
+                : template;
+            DashboardLayoutReconciler.AppendMissingTypes(target, _tilesByTypeId.Keys);
+            target.ColumnCount = Math.Clamp(target.ColumnCount, DashboardLayoutDefaults.MinColumnCount, DashboardLayoutDefaults.MaxColumnCount);
+            target.RowCount = Math.Clamp(target.RowCount, DashboardLayoutDefaults.MinRowCount, DashboardLayoutDefaults.MaxRowCount);
+            DashboardLayoutReconciler.SyncRoot(target);
+            ClearFixedWeights(target);
+            return target;
+        });
+
+        if (_preferences is not null)
+        {
+            _preferences.DashboardPreset = preset;
+        }
+
+        if (layout is not null)
+        {
+            ApplyLayout(layout);
+        }
+    }
+
+    internal DashboardLayoutSettings? ApplyPreviewLayout(DashboardLayoutSettings previewLayout)
+    {
+        ArgumentNullException.ThrowIfNull(previewLayout);
+
+        var previous = _layout;
+        var clone = DashboardLayoutDraft.Clone(previewLayout)!;
+        DashboardLayoutReconciler.AppendMissingTypes(clone, _tilesByTypeId.Keys);
+        DashboardLayoutReconciler.SyncRoot(clone);
+        ClearFixedWeights(clone);
+        ApplyLayout(clone);
+        return previous;
+    }
+
+    internal void RestorePreviewLayout(DashboardLayoutSettings? previous)
+    {
+        if (previous is not null)
+        {
+            ApplyLayout(previous);
+        }
+        else
+        {
+            Reload();
+        }
+    }
 
     public void OnEnter()
     {
@@ -266,6 +358,11 @@ public sealed partial class DashboardViewModel : ObservableObject, IDisposable
                 multistream.ConnectionToggleRequested -= OnTileConnectionToggleRequested;
                 multistream.PlatformRequested -= OnTilePlatformRequested;
                 multistream.StatusReported -= OnTileStatusReported;
+            }
+
+            if (tile is StreamAndChannelsTileViewModel streamAndChannels)
+            {
+                streamAndChannels.PlatformRequested -= OnTilePlatformRequested;
             }
 
             if (tile is ChatDisplayTileViewModel chatDisplay)
@@ -491,6 +588,8 @@ public sealed partial class DashboardViewModel : ObservableObject, IDisposable
             .Where(tile => !tile.IsVisible && _tilesByTypeId.ContainsKey(tile.TypeId))
             .Select(tile => new HiddenTile(tile.TypeId, _tilesByTypeId[tile.TypeId].Title))
             .ToList();
+
+        ActivePreset = DashboardLayoutPresets.DetectPreset(layout, _tilesByTypeId.Keys.ToHashSet(StringComparer.Ordinal));
 
         OnPropertyChanged(nameof(HasTiles));
         OnPropertyChanged(nameof(HiddenTiles));

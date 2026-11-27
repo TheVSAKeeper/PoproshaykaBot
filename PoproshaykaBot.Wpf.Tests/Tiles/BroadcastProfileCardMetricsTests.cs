@@ -16,7 +16,7 @@ public class BroadcastProfileCardMetricsTests
     private const double CardMargin = 8;
     private const double CardInnerChrome = 10 + 10 + 1 + 1;
     private const double CardChrome = CardMargin + CardInnerChrome;
-    private const double CardHeightBudget = 96;
+    private const double CardHeightBudget = 124;
 
     private static readonly string[] Dictionaries =
     [
@@ -61,33 +61,24 @@ public class BroadcastProfileCardMetricsTests
     }
 
     [Test]
-    public void Панель_действий_в_покое_не_ловит_мышь_и_открывается_клавиатурой()
+    public void Панель_действий_видна_сразу_и_не_перекрывает_сведения()
     {
         var card = Card(out var actions);
-        var template = Template();
+        var details = (FrameworkElement)card.FindName("CardDetails");
 
         Measure(card, (BroadcastProfilesTileView.ThreeColumnsWidth / 3) - CardChrome);
 
+        var detailsBottom = details.TranslatePoint(new(0, details.ActualHeight), card).Y;
+        var actionsTop = actions.TranslatePoint(new(0, 0), card).Y;
+
         Assert.Multiple(() =>
         {
-            Assert.That(actions.Opacity, Is.EqualTo(0),
-                "В покое карточка показывает только сведения – видимая панель действий вернула бы прежнюю высоту");
-            Assert.That(actions.IsHitTestVisible, Is.False,
-                "Прозрачная панель, ловящая мышь, применила бы профиль по клику мимо неё");
-
-            foreach (var property in new[] { UIElement.IsMouseOverProperty, UIElement.IsKeyboardFocusWithinProperty })
-            {
-                var opens = template.Triggers
-                    .OfType<Trigger>()
-                    .Where(trigger => trigger.SourceName == "Card" && trigger.Property == property)
-                    .SelectMany(trigger => trigger.Setters.OfType<Setter>())
-                    .Any(setter => setter.TargetName == "CardActions"
-                                   && setter.Property == UIElement.OpacityProperty
-                                   && Equals(setter.Value, 1d));
-
-                Assert.That(opens, Is.True,
-                    $"Панель действий обязана открываться по {property.Name} карточки – иначе она недостижима мышью либо с клавиатуры");
-            }
+            Assert.That(actions.Visibility, Is.EqualTo(Visibility.Visible));
+            Assert.That(actions.Opacity, Is.EqualTo(1),
+                "Кнопка «Применить» должна быть сразу видна на карточке без наведения мыши");
+            Assert.That(actions.IsHitTestVisible, Is.True);
+            Assert.That(actionsTop, Is.GreaterThanOrEqualTo(detailsBottom - 0.5),
+                $"Панель действий ({actionsTop:F1}) не должна перекрывать сведения карточки ({detailsBottom:F1})");
         });
     }
 

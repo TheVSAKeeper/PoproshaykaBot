@@ -4,7 +4,9 @@
              xmlns:keepshell="https://schemas.keepshell.dev/wpf"
              xmlns:vm="clr-namespace:PoproshaykaBot.Wpf.ViewModels.Tiles"
              xmlns:behaviors="clr-namespace:PoproshaykaBot.Wpf.Infrastructure.Behaviors"
+             xmlns:infrastructure="clr-namespace:PoproshaykaBot.Wpf.Infrastructure"
              xmlns:controls="clr-namespace:KeepShell.Views.Controls;assembly=KeepShell"
+             xmlns:iconPacks="http://metro.mahapps.com/winfx/xaml/iconpacks"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              mc:Ignorable="d"
@@ -47,6 +49,143 @@
             </DockPanel>
         </Grid>
 
+        <Border Background="{DynamicResource State.WarningSoft}"
+                BorderBrush="{DynamicResource State.Warning}"
+                BorderThickness="1"
+                CornerRadius="{DynamicResource Radius.S}"
+                Padding="8,5"
+                Margin="0,0,0,8"
+                Visibility="{Binding ReconnectBannerText, Converter={StaticResource NullToVisibility}}">
+            <DockPanel LastChildFill="True">
+                <iconPacks:PackIconLucide DockPanel.Dock="Left"
+                                          Kind="{x:Static iconPacks:PackIconLucideKind.WifiOff}"
+                                          Width="14"
+                                          Height="14"
+                                          Margin="0,0,6,0"
+                                          VerticalAlignment="Center"
+                                          Foreground="{DynamicResource State.WarningText}" />
+                <TextBlock Text="{Binding ReconnectBannerText}"
+                           FontSize="{DynamicResource Font.Size.XS}"
+                           FontWeight="SemiBold"
+                           Foreground="{DynamicResource State.WarningText}"
+                           TextWrapping="Wrap"
+                           VerticalAlignment="Center" />
+            </DockPanel>
+        </Border>
+
+        <Border x:Name="ForegroundMicCard"
+                DataContext="{Binding ForegroundMicrophone}"
+                CornerRadius="{DynamicResource Radius.M}"
+                BorderThickness="1.5"
+                Padding="10,7"
+                Margin="0,0,0,8"
+                Visibility="{Binding Converter={StaticResource NullToVisibility}}">
+            <Border.Style>
+                <Style TargetType="Border">
+                    <Setter Property="Background" Value="{DynamicResource Bg.SurfaceAlt}" />
+                    <Setter Property="BorderBrush" Value="{DynamicResource Border.Default}" />
+                    <Style.Triggers>
+                        <DataTrigger Binding="{Binding State}" Value="Active">
+                            <Setter Property="Background" Value="{DynamicResource State.SuccessSoft}" />
+                            <Setter Property="BorderBrush" Value="{DynamicResource State.Success}" />
+                        </DataTrigger>
+                        <DataTrigger Binding="{Binding State}" Value="Muted">
+                            <Setter Property="Background" Value="{DynamicResource State.ErrorSoft}" />
+                            <Setter Property="BorderBrush" Value="{DynamicResource State.Error}" />
+                        </DataTrigger>
+                        <DataTrigger Binding="{Binding State}" Value="Missing">
+                            <Setter Property="Background" Value="{DynamicResource State.WarningSoft}" />
+                            <Setter Property="BorderBrush" Value="{DynamicResource State.Warning}" />
+                        </DataTrigger>
+                        <DataTrigger Binding="{Binding State}" Value="Reconnecting">
+                            <Setter Property="Background" Value="{DynamicResource State.WarningSoft}" />
+                            <Setter Property="BorderBrush" Value="{DynamicResource State.Warning}" />
+                        </DataTrigger>
+                    </Style.Triggers>
+                </Style>
+            </Border.Style>
+            <StackPanel>
+                <DockPanel LastChildFill="True">
+                    <iconPacks:PackIconLucide DockPanel.Dock="Left"
+                                              Kind="{Binding MicrophoneIcon}"
+                                              Width="16"
+                                              Height="16"
+                                              Margin="0,0,8,0"
+                                              VerticalAlignment="Center">
+                        <iconPacks:PackIconLucide.Style>
+                            <Style TargetType="iconPacks:PackIconLucide">
+                                <Setter Property="Foreground" Value="{DynamicResource Fg.Secondary}" />
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding State}" Value="Active">
+                                        <Setter Property="Foreground" Value="{DynamicResource State.SuccessText}" />
+                                    </DataTrigger>
+                                    <DataTrigger Binding="{Binding State}" Value="Muted">
+                                        <Setter Property="Foreground" Value="{DynamicResource State.ErrorText}" />
+                                    </DataTrigger>
+                                    <DataTrigger Binding="{Binding State}" Value="Missing">
+                                        <Setter Property="Foreground" Value="{DynamicResource State.WarningText}" />
+                                    </DataTrigger>
+                                    <DataTrigger Binding="{Binding State}" Value="Reconnecting">
+                                        <Setter Property="Foreground" Value="{DynamicResource State.WarningText}" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </iconPacks:PackIconLucide.Style>
+                    </iconPacks:PackIconLucide>
+
+                    <TextBlock DockPanel.Dock="Right"
+                               Text="{Binding StateText}"
+                               FontSize="{DynamicResource Font.Size.XS}"
+                               Margin="8,0,0,0"
+                               VerticalAlignment="Center"
+                               Visibility="{Binding ShowsLevel, Converter={StaticResource BoolToVisibility}}"
+                               Style="{StaticResource TextBlock.Subtle}" />
+
+                    <StackPanel VerticalAlignment="Center">
+                        <TextBlock Text="{Binding MicrophoneStatusText}"
+                                   FontWeight="SemiBold"
+                                   FontSize="{DynamicResource Font.Size.S}"
+                                   TextTrimming="CharacterEllipsis">
+                            <TextBlock.Style>
+                                <Style TargetType="TextBlock">
+                                    <Setter Property="Foreground" Value="{DynamicResource Fg.Primary}" />
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding State}" Value="Active">
+                                            <Setter Property="Foreground" Value="{DynamicResource State.SuccessText}" />
+                                        </DataTrigger>
+                                        <DataTrigger Binding="{Binding State}" Value="Muted">
+                                            <Setter Property="Foreground" Value="{DynamicResource State.ErrorText}" />
+                                        </DataTrigger>
+                                        <DataTrigger Binding="{Binding State}" Value="Missing">
+                                            <Setter Property="Foreground" Value="{DynamicResource State.WarningText}" />
+                                        </DataTrigger>
+                                        <DataTrigger Binding="{Binding State}" Value="Reconnecting">
+                                            <Setter Property="Foreground" Value="{DynamicResource State.WarningText}" />
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </TextBlock.Style>
+                        </TextBlock>
+                        <TextBlock Text="{Binding DisplayName}"
+                                   ToolTip="{Binding DisplayName}"
+                                   Style="{StaticResource TextBlock.Subtle}"
+                                   FontSize="{DynamicResource Font.Size.XS}"
+                                   TextTrimming="CharacterEllipsis" />
+                    </StackPanel>
+                </DockPanel>
+
+                <ProgressBar Height="5"
+                             Margin="0,5,0,0"
+                             Minimum="0"
+                             Maximum="1"
+                             Value="{Binding Level, Mode=OneWay}"
+                             Foreground="{DynamicResource Meter.Default}"
+                             Visibility="{Binding ShowsLevel, Converter={StaticResource BoolToVisibility}}"
+                             infrastructure:DataScaleBrushBehavior.MeterLevel="{Binding Level, Mode=OneWay}"
+                             infrastructure:DataScaleBrushBehavior.MeterSeverity="{Binding LevelSeverity}" />
+            </StackPanel>
+        </Border>
+
         <Grid x:Name="OutputsGrid"
               Margin="0,0,0,8"
               SizeChanged="OnOutputsSizeChanged"
@@ -85,21 +224,20 @@
             <ItemsControl ItemsSource="{Binding SecondaryOutputs}" />
         </StackPanel>
 
-        <StackPanel Visibility="{Binding IsUnavailable, Converter={StaticResource InverseBoolToVisibility}}">
+        <StackPanel Visibility="{Binding HasOtherAudioSources, Converter={StaticResource BoolToVisibility}}">
             <TextBlock Text="Аудиоисточники"
                        Style="{StaticResource TextBlock.Subtle}"
                        FontSize="{DynamicResource Font.Size.XS}"
                        Margin="0,0,0,4" />
 
-            <ItemsControl ItemsSource="{Binding AudioSources}"
-                          Visibility="{Binding HasAudioSources, Converter={StaticResource BoolToVisibility}}" />
-
-            <controls:EmptyState Icon="Mic"
-                                 IconSize="20"
-                                 Heading="Источники не найдены"
-                                 Description="Включите OBS-интеграцию и настройте аудиоисточники."
-                                 HorizontalAlignment="Stretch"
-                                 Visibility="{Binding HasAudioSources, Converter={StaticResource InverseBoolToVisibility}}" />
+            <ItemsControl ItemsSource="{Binding OtherAudioSources}" />
         </StackPanel>
+
+        <controls:EmptyState Icon="Mic"
+                             IconSize="20"
+                             Heading="Источники не найдены"
+                             Description="Включите OBS-интеграцию и настройте аудиоисточники."
+                             HorizontalAlignment="Stretch"
+                             Visibility="{Binding IsDisabled, Converter={StaticResource BoolToVisibility}}" />
     </StackPanel>
 </UserControl>

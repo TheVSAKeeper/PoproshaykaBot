@@ -110,6 +110,14 @@ public partial class DashboardView : UserControl, IView<DashboardViewModel>
         }
     }
 
+    private void OnTileHeaderBarSizeChanged(object sender, SizeChangedEventArgs e)
+    {
+        if (sender is FrameworkElement { DataContext: ChatDisplayTileViewModel chat })
+        {
+            chat.IsNarrowHeader = e.NewSize.Width > 0 && e.NewSize.Width < 480 * FontScaleManager.Current;
+        }
+    }
+
     private void OnTileStatusUpdated(object? sender, System.Windows.Data.DataTransferEventArgs e)
     {
         if (sender is not TextBlock text)

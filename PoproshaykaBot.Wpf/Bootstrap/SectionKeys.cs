@@ -19,9 +19,18 @@ public static class SectionKeys
     public const string ParamsSuffix = ":params";
     public const string ObsSuffix = ":obs";
     public const string ObsFullSuffix = ":obs-full";
+    public const string ObsMicActiveSuffix = ":obs-mic-active";
+    public const string ObsMicMutedSuffix = ":obs-mic-muted";
+    public const string ObsReconnectingSuffix = ":obs-reconnecting";
+    public const string ChatWaitingSuffix = ":chat-waiting";
+    public const string ChatEndedSuffix = ":chat-ended";
+    public const string ChatCollapsedSuffix = ":chat-collapsed";
     public const string EditSuffix = ":edit";
     public const string ReadySuffix = ":ready";
     public const string YouTubeEmptySuffix = ":youtube-empty";
+    public const string CompactSuffix = ":compact";
+    public const string CompactTrialSuffix = ":compact-trial";
+    public const string WideSuffix = ":wide";
 
     public const string UsersSelected = Users + SelectedSuffix;
     public const string StreamsSelected = Streams + SelectedSuffix;
@@ -31,8 +40,17 @@ public static class SectionKeys
     public const string CommandsParams = Commands + ParamsSuffix;
     public const string OverviewObs = Overview + ObsSuffix;
     public const string OverviewObsFull = Overview + ObsFullSuffix;
+    public const string OverviewObsMicActive = Overview + ObsMicActiveSuffix;
+    public const string OverviewObsMicMuted = Overview + ObsMicMutedSuffix;
+    public const string OverviewObsReconnecting = Overview + ObsReconnectingSuffix;
+    public const string OverviewChatWaiting = Overview + ChatWaitingSuffix;
+    public const string OverviewChatEnded = Overview + ChatEndedSuffix;
+    public const string OverviewChatCollapsed = Overview + ChatCollapsedSuffix;
     public const string OverviewEdit = Overview + EditSuffix;
     public const string OverviewYouTubeEmpty = Overview + YouTubeEmptySuffix;
+    public const string OverviewCompact = Overview + CompactSuffix;
+    public const string OverviewCompactTrial = Overview + CompactTrialSuffix;
+    public const string OverviewWide = Overview + WideSuffix;
     public const string MultistreamReady = Multistream + ReadySuffix;
 
     public static IReadOnlyList<string> All { get; } = [Overview, Multistream, Users, Streams, Bot, Logs, Diagnostics, Settings];
@@ -45,7 +63,21 @@ public static class SectionKeys
 
     public static IReadOnlyList<string> Params { get; } = [CommandsParams];
 
-    public static IReadOnlyList<string> Obs { get; } = [OverviewObs, OverviewObsFull];
+    public static IReadOnlyList<string> Obs { get; } =
+    [
+        OverviewObs,
+        OverviewObsFull,
+        OverviewObsMicActive,
+        OverviewObsMicMuted,
+        OverviewObsReconnecting,
+    ];
+
+    public static IReadOnlyList<string> Chat { get; } =
+    [
+        OverviewChatWaiting,
+        OverviewChatEnded,
+        OverviewChatCollapsed,
+    ];
 
     public static IReadOnlyList<string> Edit { get; } = [OverviewEdit];
 
@@ -96,6 +128,13 @@ public static class SectionKeys
         return Obs.Contains(key, StringComparer.OrdinalIgnoreCase);
     }
 
+    public static bool IsChatCase(string key)
+    {
+        ArgumentNullException.ThrowIfNull(key);
+
+        return Chat.Contains(key, StringComparer.OrdinalIgnoreCase);
+    }
+
     public static bool IsEditCase(string key)
     {
         ArgumentNullException.ThrowIfNull(key);
@@ -107,7 +146,13 @@ public static class SectionKeys
     {
         ArgumentNullException.ThrowIfNull(key);
 
-        if (IsObsCase(key) || IsEditCase(key) || string.Equals(key, OverviewYouTubeEmpty, StringComparison.OrdinalIgnoreCase))
+        if (IsObsCase(key)
+            || IsChatCase(key)
+            || IsEditCase(key)
+            || string.Equals(key, OverviewYouTubeEmpty, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(key, OverviewCompact, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(key, OverviewCompactTrial, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(key, OverviewWide, StringComparison.OrdinalIgnoreCase))
         {
             return Overview;
         }

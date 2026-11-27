@@ -8,6 +8,7 @@ using PoproshaykaBot.Core.Chat;
 using PoproshaykaBot.Core.Dashboard;
 using PoproshaykaBot.Core.Debugging;
 using PoproshaykaBot.Core.Infrastructure.Events;
+using PoproshaykaBot.Core.Infrastructure.Events.Lifecycle;
 using PoproshaykaBot.Core.Infrastructure.Hosting;
 using PoproshaykaBot.Core.Platforms;
 using PoproshaykaBot.Core.Platforms.Auth;
@@ -192,6 +193,57 @@ public sealed class SettingsNavigationSaveTests
         });
     }
 
+    [Test]
+    public async Task ToggleConnect_requires_two_step_confirmation_and_disarms_on_timeout_cancel_or_external_disconnect()
+    {
+        await using var harness = new Harness();
+        var shell = harness.Shell;
+
+        await harness.Bus.PublishAsync(new BotLifecyclePhaseChanged(BotLifecyclePhase.Connected));
+        Assert.That(shell.Phase, Is.EqualTo(BotLifecyclePhase.Connected));
+        Assert.That(shell.ConnectButtonText, Is.EqualTo("Отключить бота"));
+
+        await shell.ToggleConnectCommand.ExecuteAsync(null);
+        Assert.Multiple(() =>
+        {
+            Assert.That(shell.Phase, Is.EqualTo(BotLifecyclePhase.Connected), "Первый клик не должен отключать бота.");
+            Assert.That(shell.IsDisconnectConfirmationArmed, Is.True);
+            Assert.That(shell.ConnectButtonText, Is.EqualTo("Точно отключить?"));
+        });
+
+        foreach (var timer in harness.Dispatcher.Timers)
+        {
+            timer.Tick();
+        }
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(shell.Phase, Is.EqualTo(BotLifecyclePhase.Connected));
+            Assert.That(shell.IsDisconnectConfirmationArmed, Is.False);
+            Assert.That(shell.ConnectButtonText, Is.EqualTo("Отключить бота"));
+        });
+
+        await shell.ToggleConnectCommand.ExecuteAsync(null);
+        Assert.That(shell.IsDisconnectConfirmationArmed, Is.True);
+        shell.CancelDisconnectConfirmationCommand.Execute(null);
+        Assert.Multiple(() =>
+        {
+            Assert.That(shell.Phase, Is.EqualTo(BotLifecyclePhase.Connected));
+            Assert.That(shell.IsDisconnectConfirmationArmed, Is.False);
+        });
+
+        await shell.ToggleConnectCommand.ExecuteAsync(null);
+        Assert.That(shell.IsDisconnectConfirmationArmed, Is.True);
+        await harness.Bus.PublishAsync(new BotLifecyclePhaseChanged(BotLifecyclePhase.Idle));
+        Assert.That(shell.IsDisconnectConfirmationArmed, Is.False);
+
+        await harness.Bus.PublishAsync(new BotLifecyclePhaseChanged(BotLifecyclePhase.Connected));
+        await shell.ToggleConnectCommand.ExecuteAsync(null);
+        Assert.That(shell.IsDisconnectConfirmationArmed, Is.True);
+        await shell.ToggleConnectCommand.ExecuteAsync(null);
+        Assert.That(shell.IsDisconnectConfirmationArmed, Is.False);
+    }
+
     private sealed class Harness : IAsyncDisposable
     {
         private readonly DirectoryInfo _root = Directory.CreateTempSubdirectory("poproshayka-settings-navigation-");
@@ -205,14 +257,16 @@ public sealed class SettingsNavigationSaveTests
 
         public Harness()
         {
-            var bus = new InMemoryEventBus(NullLogger<InMemoryEventBus>.Instance);
+            Bus = new InMemoryEventBus(NullLogger<InMemoryEventBus>.Instance);
+            var bus = Bus;
             var gate = new SettingsWriteGate();
             var manager = new SettingsManager(NullLogger<SettingsManager>.Instance, Path.Combine(_root.FullName, "settings.json"), gate);
             var server = new KestrelHttpServer(null!, manager, [], NullLogger<KestrelHttpServer>.Instance, NullLoggerFactory.Instance);
             var store = new MemorySettings();
             var windows = DispatchProxy.Create<IMainWindowController, InertProxy>();
             var dialogs = DispatchProxy.Create<IDialogService, InertProxy>();
-            var dispatcher = new ManualUiDispatcher();
+            Dispatcher = new ManualUiDispatcher();
+            var dispatcher = Dispatcher;
             var accounts = new AccountsStore(filePath: Path.Combine(_root.FullName, "accounts.json"));
             var catalog = new ChannelCatalogStore(filePath: Path.Combine(_root.FullName, "channels.json"));
             var youtube = new YouTubeSettingsStore(filePath: Path.Combine(_root.FullName, "youtube.json"));
@@ -258,6 +312,8 @@ public sealed class SettingsNavigationSaveTests
                 null!, null!, store, dispatcher, Prompt, windows, multistreamPage: Multistream);
         }
 
+        public InMemoryEventBus Bus { get; }
+        public ManualUiDispatcher Dispatcher { get; }
         public PendingContributor Contributor { get; } = new();
         public FakeUnsavedChangesPrompt Prompt { get; } = new();
         public SettingsPageViewModel Settings { get; }

@@ -41,11 +41,17 @@ public sealed partial class BroadcastProfilesTileViewModel : DashboardTileViewMo
 
     private Guid? _activeProfileId;
     private Guid? _applyingProfileId;
+    private Guid? _lastAttemptedProfileId;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasProfiles))]
     [NotifyPropertyChangedFor(nameof(GrowsWithSpace))]
     private ObservableCollection<BroadcastProfileItemViewModel> _items = [];
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CanRetryLastApply))]
+    [NotifyCanExecuteChangedFor(nameof(RetryLastApplyCommand))]
+    private Guid? _lastFailedProfileId;
 
     [ObservableProperty]
     private string _statusMessage = string.Empty;
@@ -64,6 +70,11 @@ public sealed partial class BroadcastProfilesTileViewModel : DashboardTileViewMo
 
     public bool HasProfiles => Items.Count > 0;
 
+    public bool CanRetryLastApply =>
+        LastFailedProfileId.HasValue
+        && !_applyingProfileId.HasValue
+        && Items.Any(item => item.Profile.Id == LastFailedProfileId.Value);
+
     public override PackIconLucideKind Icon => PackIconLucideKind.ListChecks;
 
     public override bool GrowsWithSpace => HasProfiles;
@@ -80,7 +91,7 @@ public sealed partial class BroadcastProfilesTileViewModel : DashboardTileViewMo
         IEventBus bus,
         IChatPlatformRegistry platforms,
         ILogger<BroadcastProfilesTileViewModel>? logger = null)
-        : base("broadcast-profiles", "Профиль трансляции", maxWidth: 500, maxHeight: 320, minHeight: 144)
+        : base("broadcast-profiles", "Профили эфира", maxWidth: 500, maxHeight: 320, minHeight: 144)
     {
         _manager = manager;
         _profiles = profiles;
@@ -100,8 +111,16 @@ public sealed partial class BroadcastProfilesTileViewModel : DashboardTileViewMo
         _subs.Add(bus.SubscribeOnUi<BroadcastProfileApplying>(OnProfileApplying));
         _subs.Add(bus.SubscribeOnUi<BroadcastProfileApplied>(OnProfileApplied));
         _subs.Add(bus.SubscribeOnUi<BroadcastProfileApplyFailed>(OnProfileApplyFailed));
-        _subs.Add(bus.SubscribeOnUi<ChannelInformationPatched>(_ => ClearInFlightStates("✓ Применено", false)));
-        _subs.Add(bus.SubscribeOnUi<ChannelInformationPatchFailed>(e => ShowStatus($"✗ {e.ErrorMessage}", true)));
+        _subs.Add(bus.SubscribeOnUi<ChannelInformationPatched>(_ =>
+        {
+            LastFailedProfileId = null;
+            ClearInFlightStates("✓ Применено", false);
+        }));
+        _subs.Add(bus.SubscribeOnUi<ChannelInformationPatchFailed>(e =>
+        {
+            LastFailedProfileId = _lastAttemptedProfileId ?? _activeProfileId;
+            ClearInFlightStates($"✗ {e.ErrorMessage}", true);
+        }));
         _subs.Add(bus.SubscribeOnUi<StreamWentOnline>(_ => ReloadItems()));
         _subs.Add(bus.SubscribeOnUi<StreamWentOffline>(_ => ReloadItems()));
         _subs.Add(bus.SubscribeOnUi<StreamMetadataResolved>(_ => ReloadItems()));
@@ -363,6 +382,8 @@ public sealed partial class BroadcastProfilesTileViewModel : DashboardTileViewMo
         }
 
         RefreshHeaderStatus();
+        OnPropertyChanged(nameof(CanRetryLastApply));
+        RetryLastApplyCommand.NotifyCanExecuteChanged();
     }
 
     public static TileHeaderStatus? DescribeProfileStatus(IReadOnlyList<BroadcastProfileItemViewModel> items)
@@ -413,8 +434,25 @@ public sealed partial class BroadcastProfilesTileViewModel : DashboardTileViewMo
         HeaderStatus = DescribeProfileStatus(Items);
     }
 
+    [RelayCommand(CanExecute = nameof(CanRetryLastApply))]
+    private async Task RetryLastApplyAsync()
+    {
+        if (!LastFailedProfileId.HasValue)
+        {
+            return;
+        }
+
+        var item = Items.FirstOrDefault(candidate => candidate.Profile.Id == LastFailedProfileId.Value);
+        if (item is not null)
+        {
+            await ApplyProfileAsync(item);
+        }
+    }
+
     private async Task ApplyProfileAsync(BroadcastProfileItemViewModel item)
     {
+        _lastAttemptedProfileId = item.Profile.Id;
+        LastFailedProfileId = null;
         ShowStatus($"Применяется «{item.Profile.Name}»…", false);
         try
         {
@@ -423,6 +461,7 @@ public sealed partial class BroadcastProfilesTileViewModel : DashboardTileViewMo
         catch (Exception ex)
         {
             _logger?.BroadcastProfileApplyFailed(ex);
+            LastFailedProfileId = item.Profile.Id;
             SetApplyInFlight(item.Profile.Id, false);
             ShowStatus($"✗ {ex.Message}", true);
         }
@@ -472,6 +511,8 @@ public sealed partial class BroadcastProfilesTileViewModel : DashboardTileViewMo
 
     private void OnProfileApplying(BroadcastProfileApplying @event)
     {
+        _lastAttemptedProfileId = @event.Profile.Id;
+        LastFailedProfileId = null;
         SetApplyInFlight(@event.Profile.Id, true);
         ShowStatus($"Применяется «{@event.Profile.Name}»…", false);
     }
@@ -481,6 +522,7 @@ public sealed partial class BroadcastProfilesTileViewModel : DashboardTileViewMo
         _activeProfileId = @event.Profile.Id;
         if (BroadcastProfileApplySummary.IsPartial(@event.PlatformResults))
         {
+            LastFailedProfileId = @event.Profile.Id;
             var message = BroadcastProfileApplySummary.FormatPartialStatus(
                 @event.Profile.Name,
                 @event.PlatformResults!,
@@ -489,6 +531,7 @@ public sealed partial class BroadcastProfilesTileViewModel : DashboardTileViewMo
         }
         else
         {
+            LastFailedProfileId = null;
             ClearInFlightStates($"✓ Применён профиль «{@event.Profile.Name}»", isError: false, isWarning: false);
         }
 
@@ -497,6 +540,7 @@ public sealed partial class BroadcastProfilesTileViewModel : DashboardTileViewMo
 
     private void OnProfileApplyFailed(BroadcastProfileApplyFailed @event)
     {
+        LastFailedProfileId = @event.Profile.Id;
         ClearInFlightStates($"✗ {@event.ErrorMessage}", true);
     }
 
@@ -521,6 +565,8 @@ public sealed partial class BroadcastProfilesTileViewModel : DashboardTileViewMo
         }
 
         RefreshHeaderStatus();
+        OnPropertyChanged(nameof(CanRetryLastApply));
+        RetryLastApplyCommand.NotifyCanExecuteChanged();
     }
 
     private void ClearInFlightStates(string message, bool isError, bool isWarning = false)

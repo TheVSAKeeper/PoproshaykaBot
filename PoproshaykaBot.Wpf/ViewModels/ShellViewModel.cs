@@ -94,6 +94,7 @@ public sealed partial class ShellViewModel : ShellViewModelBase, IDisposable
     private readonly IMainWindowController _mainWindow;
     private readonly UpdateSettingsSectionViewModel? _updateSettings;
     private readonly IMcpConnectNotificationGate _mcpConnectNotificationGate;
+    private readonly InlineConfirmationState _disconnectConfirmation;
     private NavigationItem? _current;
     private bool _returningToPage;
     private bool _leavingPage;
@@ -104,6 +105,9 @@ public sealed partial class ShellViewModel : ShellViewModelBase, IDisposable
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(ConnectButtonText))]
+    [NotifyPropertyChangedFor(nameof(ConnectButtonTooltip))]
+    [NotifyPropertyChangedFor(nameof(ConnectButtonAutomationName))]
+    [NotifyPropertyChangedFor(nameof(IsDisconnectConfirmationArmed))]
     [NotifyPropertyChangedFor(nameof(IsConnectBlockedBySetup))]
     [NotifyCanExecuteChangedFor(nameof(ToggleConnectCommand))]
     private BotLifecyclePhase _phase;
@@ -139,7 +143,8 @@ public sealed partial class ShellViewModel : ShellViewModelBase, IDisposable
         IMcpConnectNotificationGate? mcpConnectNotificationGate = null,
         ToastHostViewModel? toasts = null,
         BotPageViewModel? botPage = null,
-        BotMessagingNavigation? botMessagingNavigation = null)
+        BotMessagingNavigation? botMessagingNavigation = null,
+        AutoBroadcastIndicatorViewModel? autoBroadcastIndicator = null)
         : base(modal)
     {
         _unsavedChangesPrompt = unsavedChangesPrompt;
@@ -161,6 +166,7 @@ public sealed partial class ShellViewModel : ShellViewModelBase, IDisposable
         ChannelSwitchBanner = channelSwitchBanner;
         DebugBanner = debugBanner;
         StreamMonitoring = streamMonitoring;
+        AutoBroadcastIndicator = autoBroadcastIndicator;
 
         Overview = overview;
         Overview.UserRequested += OnUserRequested;
@@ -173,6 +179,7 @@ public sealed partial class ShellViewModel : ShellViewModelBase, IDisposable
         _chatHistory = chatHistory;
         _uiSettings = uiSettings;
         _uiDispatcher = uiDispatcher;
+        _disconnectConfirmation = new(uiDispatcher, OnDisconnectConfirmationChanged);
         _uiSettings.WriteFailed += OnUiSettingsWriteFailed;
         _settingsSection = new("Настройки", PackIconLucideKind.Settings, settingsPage, key: SectionKeys.Settings);
 
@@ -254,6 +261,8 @@ public sealed partial class ShellViewModel : ShellViewModelBase, IDisposable
 
     public StreamMonitoringViewModel StreamMonitoring { get; }
 
+    public AutoBroadcastIndicatorViewModel? AutoBroadcastIndicator { get; }
+
     public DashboardViewModel Overview { get; }
 
 
@@ -267,13 +276,19 @@ public sealed partial class ShellViewModel : ShellViewModelBase, IDisposable
 
     public new Thickness ContentMargin => ReferenceEquals(Selected, _overviewSection) ? default : base.ContentMargin;
 
+    public bool IsDisconnectConfirmationArmed => Phase == BotLifecyclePhase.Connected && _disconnectConfirmation.IsArmed;
+
     public string ConnectButtonText => Phase switch
     {
         BotLifecyclePhase.Connecting => "Отменить",
-        BotLifecyclePhase.Connected => "Отключить бота",
+        BotLifecyclePhase.Connected => IsDisconnectConfirmationArmed ? "Точно отключить?" : "Отключить бота",
         BotLifecyclePhase.Disconnecting => "Отключение...",
         _ => "Подключить бота",
     };
+
+    public string ConnectButtonAutomationName => IsDisconnectConfirmationArmed
+        ? "Подтвердить отключение бота"
+        : ConnectButtonText;
 
     public bool IsConnectBlockedBySetup =>
         Phase is not (BotLifecyclePhase.Connecting or BotLifecyclePhase.Connected or BotLifecyclePhase.Disconnecting)
@@ -283,6 +298,11 @@ public sealed partial class ShellViewModel : ShellViewModelBase, IDisposable
     {
         get
         {
+            if (IsDisconnectConfirmationArmed)
+            {
+                return "Нажмите ещё раз в течение 3 секунд, чтобы отключить бота, или Esc для отмены";
+            }
+
             if (IsConnectBlockedBySetup)
             {
                 return $"Подключение недоступно. Не настроено: {string.Join(", ", OnboardingBanner.MissingItems)}.";
@@ -367,6 +387,7 @@ public sealed partial class ShellViewModel : ShellViewModelBase, IDisposable
     public void Dispose()
     {
         _disposed = true;
+        _disconnectConfirmation.Dispose();
         _uiSettings.WriteFailed -= OnUiSettingsWriteFailed;
         _settingsPage.SettingsSaved -= OnSettingsSaved;
         if (_botMessagingNavigation is not null)
@@ -838,6 +859,11 @@ public sealed partial class ShellViewModel : ShellViewModelBase, IDisposable
                 break;
 
             case BotLifecyclePhase.Connected:
+                if (!_disconnectConfirmation.TryConfirmOrArm())
+                {
+                    return;
+                }
+
                 _logger.BotDisconnectRequested();
 
                 try
@@ -1164,8 +1190,24 @@ public sealed partial class ShellViewModel : ShellViewModelBase, IDisposable
         };
     }
 
+    [RelayCommand]
+    private void CancelDisconnectConfirmation() => _disconnectConfirmation.Disarm();
+
+    private void OnDisconnectConfirmationChanged()
+    {
+        OnPropertyChanged(nameof(IsDisconnectConfirmationArmed));
+        OnPropertyChanged(nameof(ConnectButtonText));
+        OnPropertyChanged(nameof(ConnectButtonTooltip));
+        OnPropertyChanged(nameof(ConnectButtonAutomationName));
+    }
+
     private void ApplyPhase(BotLifecyclePhase phase)
     {
+        if (phase != BotLifecyclePhase.Connected)
+        {
+            _disconnectConfirmation.Disarm();
+        }
+
         Phase = phase;
 
         var (text, severity) = phase switch

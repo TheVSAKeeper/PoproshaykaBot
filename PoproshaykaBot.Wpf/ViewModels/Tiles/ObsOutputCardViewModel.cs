@@ -3,9 +3,11 @@ using System.Threading;
 using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using KeepShell.Services.Platform;
 using Microsoft.Extensions.Logging;
 using PoproshaykaBot.Core.Obs;
 using PoproshaykaBot.Wpf.Bootstrap;
+using PoproshaykaBot.Wpf.Infrastructure;
 
 namespace PoproshaykaBot.Wpf.ViewModels.Tiles;
 
@@ -26,12 +28,13 @@ public enum ObsOutputCardState
     Error = 5,
 }
 
-public sealed partial class ObsOutputCardViewModel : ObservableObject
+public sealed partial class ObsOutputCardViewModel : ObservableObject, IDisposable
 {
     private static readonly TimeSpan ActionTimeout = TimeSpan.FromSeconds(8);
 
     private readonly ObsIntegrationService _obsIntegration;
     private readonly ILogger _logger;
+    private readonly InlineConfirmationState _stopConfirmation;
 
     private bool _actionInFlight;
 
@@ -40,6 +43,8 @@ public sealed partial class ObsOutputCardViewModel : ObservableObject
     [NotifyPropertyChangedFor(nameof(IsRunning))]
     [NotifyPropertyChangedFor(nameof(ShowsSecondaryButton))]
     [NotifyPropertyChangedFor(nameof(PrimaryButtonText))]
+    [NotifyPropertyChangedFor(nameof(PrimaryButtonToolTip))]
+    [NotifyPropertyChangedFor(nameof(PrimaryButtonAutomationName))]
     [NotifyPropertyChangedFor(nameof(SecondaryButtonText))]
     private ObsOutputCardState _state = ObsOutputCardState.Unknown;
 
@@ -59,11 +64,16 @@ public sealed partial class ObsOutputCardViewModel : ObservableObject
     [ObservableProperty]
     private string? _healthSeverity;
 
-    public ObsOutputCardViewModel(ObsOutputCardKind kind, ObsIntegrationService obsIntegration, ILogger logger)
+    public ObsOutputCardViewModel(
+        ObsOutputCardKind kind,
+        ObsIntegrationService obsIntegration,
+        ILogger logger,
+        IUiDispatcher? uiDispatcher = null)
     {
         Kind = kind;
         _obsIntegration = obsIntegration;
         _logger = logger;
+        _stopConfirmation = new(uiDispatcher, OnStopConfirmationChanged);
     }
 
     // TODO: Active/Paused подсвечены статично токенами State.*, без пульсации точки и анимированной обводки –
@@ -75,6 +85,11 @@ public sealed partial class ObsOutputCardViewModel : ObservableObject
     public bool HasTimecode => !string.IsNullOrWhiteSpace(Timecode);
 
     public bool IsRunning => State is ObsOutputCardState.Active or ObsOutputCardState.Paused;
+
+    public bool IsStopAction => (Kind, State) is (ObsOutputCardKind.Stream, ObsOutputCardState.Active)
+        or (ObsOutputCardKind.Record, ObsOutputCardState.Active or ObsOutputCardState.Paused);
+
+    public bool IsStopConfirmationArmed => _stopConfirmation.IsArmed && IsStopAction;
 
     public bool ShowsSecondaryButton => IsRecordMode && IsRunning;
 
@@ -92,15 +107,27 @@ public sealed partial class ObsOutputCardViewModel : ObservableObject
         _ => "–",
     };
 
-    public string PrimaryButtonText => (Kind, State) switch
-    {
-        (ObsOutputCardKind.Stream, ObsOutputCardState.Idle) => "▶ Старт",
-        (ObsOutputCardKind.Stream, ObsOutputCardState.Active) => "■ Стоп",
-        (ObsOutputCardKind.Record, ObsOutputCardState.Idle) => "● Старт",
-        (ObsOutputCardKind.Record, ObsOutputCardState.Active) => "■ Стоп",
-        (ObsOutputCardKind.Record, ObsOutputCardState.Paused) => "■ Стоп",
-        _ => "–",
-    };
+    public string PrimaryButtonText => IsStopConfirmationArmed
+        ? "Точно стоп?"
+        : (Kind, State) switch
+        {
+            (ObsOutputCardKind.Stream, ObsOutputCardState.Idle) => "▶ Старт",
+            (ObsOutputCardKind.Stream, ObsOutputCardState.Active) => "■ Стоп",
+            (ObsOutputCardKind.Record, ObsOutputCardState.Idle) => "● Старт",
+            (ObsOutputCardKind.Record, ObsOutputCardState.Active) => "■ Стоп",
+            (ObsOutputCardKind.Record, ObsOutputCardState.Paused) => "■ Стоп",
+            _ => "–",
+        };
+
+    public string PrimaryButtonAutomationName => IsStopConfirmationArmed
+        ? Kind == ObsOutputCardKind.Stream ? "Подтвердить остановку эфира" : "Подтвердить остановку записи"
+        : PrimaryButtonText;
+
+    public string? PrimaryButtonToolTip => IsStopConfirmationArmed
+        ? "Нажмите ещё раз в течение 3 секунд, чтобы остановить, или Esc для отмены"
+        : IsStopAction
+            ? "Нажмите для подтверждения остановки"
+            : null;
 
     public string SecondaryButtonText => State switch
     {
@@ -163,8 +190,21 @@ public sealed partial class ObsOutputCardViewModel : ObservableObject
     private Task InvokePrimaryAsync()
     {
         var action = ResolvePrimaryAction();
-        return action is null ? Task.CompletedTask : InvokeObsActionAsync(action);
+        if (action is null)
+        {
+            return Task.CompletedTask;
+        }
+
+        if (IsStopAction && !_stopConfirmation.TryConfirmOrArm())
+        {
+            return Task.CompletedTask;
+        }
+
+        return InvokeObsActionAsync(action);
     }
+
+    [RelayCommand]
+    private void CancelStopConfirmation() => _stopConfirmation.Disarm();
 
     private bool CanInvokePrimary()
     {
@@ -224,6 +264,26 @@ public sealed partial class ObsOutputCardViewModel : ObservableObject
 
     partial void OnStateChanged(ObsOutputCardState value)
     {
+        if (!IsStopAction)
+        {
+            _stopConfirmation.Disarm();
+        }
+
+        OnPropertyChanged(nameof(IsStopAction));
+        OnPropertyChanged(nameof(IsStopConfirmationArmed));
         RaiseCommandStates();
+    }
+
+    private void OnStopConfirmationChanged()
+    {
+        OnPropertyChanged(nameof(IsStopConfirmationArmed));
+        OnPropertyChanged(nameof(PrimaryButtonText));
+        OnPropertyChanged(nameof(PrimaryButtonToolTip));
+        OnPropertyChanged(nameof(PrimaryButtonAutomationName));
+    }
+
+    public void Dispose()
+    {
+        _stopConfirmation.Dispose();
     }
 }

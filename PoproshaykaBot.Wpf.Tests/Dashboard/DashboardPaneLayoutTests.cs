@@ -2009,6 +2009,7 @@ public class DashboardPaneLayoutTests
     {
         DashboardTileViewModel[] tiles =
         [
+            new FakeTile("stream-channels", sizesToContent: true, maxWidth: 420, maxHeight: 340, minHeight: 194),
             new FakeTile("stream-info", sizesToContent: true, maxWidth: 420, maxHeight: 320, minHeight: 194),
             new FakeTile("broadcast-status", sizesToContent: true, maxWidth: 360, minHeight: 160),
             new FakeTile("broadcast-profiles", maxWidth: 500, maxHeight: 320, minHeight: 144),
@@ -2021,19 +2022,26 @@ public class DashboardPaneLayoutTests
             new FakeTile("multistream", grows: true, maxWidth: 500, minWidth: 280, minHeight: 324),
         ];
 
-        using var dashboard = CreateDashboard(DashboardLayoutDefaults.Create(), tiles);
+        using var compact = CreateDashboard(DashboardLayoutDefaults.Create(), tiles);
+        using var wide = CreateDashboard(DashboardLayoutPresets.CreateWide(), tiles);
 
         var defaultContentWidth = DashboardPreviewReference.DefaultWindow.Width - DashboardPreviewReference.NavWidthExpanded;
-        var compactContentWidth = DashboardPreviewReference.MinWindow.Width - DashboardPreviewReference.NavWidthExpanded;
+        var minWindowContentWidth = DashboardPreviewReference.MinWindow.Width - DashboardPreviewReference.NavWidthExpanded;
+        var compact970ContentWidth = DashboardPreviewReference.WindowCompact.Window.Width - DashboardPreviewReference.NavWidthExpanded;
 
         Assert.Multiple(() =>
         {
-            Assert.That(dashboard.Pane, Is.Not.Null);
-            Assert.That(dashboard.Pane!.MinWidth(DashboardPaneSurface.ScaledStarBandMinWidth), Is.EqualTo(1180));
-            Assert.That(DashboardPaneSurface.ShouldStack(defaultContentWidth, dashboard.Pane), Is.False,
-                "Раскладка по умолчанию должна помещаться в стартовое окно с раскрытым рейлом без перехода в стопку.");
-            Assert.That(DashboardPaneSurface.ShouldStack(compactContentWidth, dashboard.Pane), Is.True,
-                "На минимальной ширине 1024 четырёхколоночная раскладка уходит в стопку.");
+            Assert.That(compact.Pane, Is.Not.Null);
+            Assert.That(compact.Pane!.MinWidth(DashboardPaneSurface.ScaledStarBandMinWidth), Is.LessThanOrEqualTo(540));
+            Assert.That(DashboardPaneSurface.ShouldStack(compact970ContentWidth, compact.Pane), Is.False,
+                "Компактный пресет обязан помещаться в 970×1050 с раскрытым рейлом без перехода в стопку.");
+
+            Assert.That(wide.Pane, Is.Not.Null);
+            Assert.That(wide.Pane!.MinWidth(DashboardPaneSurface.ScaledStarBandMinWidth), Is.EqualTo(1180));
+            Assert.That(DashboardPaneSurface.ShouldStack(defaultContentWidth, wide.Pane), Is.False,
+                "Широкий пресет должен помещаться в стартовое окно с раскрытым рейлом без перехода в стопку.");
+            Assert.That(DashboardPaneSurface.ShouldStack(minWindowContentWidth, wide.Pane), Is.True,
+                "На минимальной ширине окна четырёхколоночный широкий пресет уходит в стопку.");
         });
     }
 

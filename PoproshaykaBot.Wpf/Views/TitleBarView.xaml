@@ -4,6 +4,7 @@
              xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework"
              xmlns:keepshell="https://schemas.keepshell.dev/wpf"
              xmlns:vm="clr-namespace:PoproshaykaBot.Wpf.ViewModels"
+             xmlns:dash="clr-namespace:PoproshaykaBot.Wpf.Infrastructure.Dashboard"
              xmlns:iconPacks="http://metro.mahapps.com/winfx/xaml/iconpacks"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
@@ -143,6 +144,51 @@
                             AutomationProperties.Name="Сбросить раскладку панели к умолчаниям" />
                 </StackPanel>
 
+                <Button x:Name="PresetSwitcherButton"
+                        Click="OnMenuButtonClick"
+                        Width="36"
+                        VerticalAlignment="Center"
+                        Margin="0,0,8,0"
+                        ToolTip="{Binding Overview.ActivePresetShortLabel, StringFormat='Пресет панели: {0}'}"
+                        AutomationProperties.Name="Пресет панели">
+                    <Button.Style>
+                        <Style TargetType="Button"
+                               BasedOn="{StaticResource Theme.SegmentButton}">
+                            <Setter Property="Visibility"
+                                    Value="Collapsed" />
+                            <Style.Triggers>
+                                <MultiDataTrigger>
+                                    <MultiDataTrigger.Conditions>
+                                        <Condition Binding="{Binding IsOverviewSelected}"
+                                                   Value="True" />
+                                        <Condition Binding="{Binding Overview.IsEditing}"
+                                                   Value="False" />
+                                    </MultiDataTrigger.Conditions>
+                                    <Setter Property="Visibility"
+                                            Value="Visible" />
+                                </MultiDataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </Button.Style>
+                    <iconPacks:PackIconLucide Kind="{x:Static iconPacks:PackIconLucideKind.LayoutGrid}"
+                                              Width="16"
+                                              Height="16" />
+                    <Button.ContextMenu>
+                        <ContextMenu>
+                            <MenuItem Header="Компактный (~970×1050)"
+                                      IsCheckable="True"
+                                      IsChecked="{Binding PlacementTarget.DataContext.Overview.IsCompactPreset, RelativeSource={RelativeSource AncestorType=ContextMenu}, Mode=OneWay}"
+                                      Command="{Binding PlacementTarget.DataContext.Overview.ApplyPresetCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                      CommandParameter="{x:Static dash:DashboardLayoutPreset.Compact}" />
+                            <MenuItem Header="Широкий"
+                                      IsCheckable="True"
+                                      IsChecked="{Binding PlacementTarget.DataContext.Overview.IsWidePreset, RelativeSource={RelativeSource AncestorType=ContextMenu}, Mode=OneWay}"
+                                      Command="{Binding PlacementTarget.DataContext.Overview.ApplyPresetCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                      CommandParameter="{x:Static dash:DashboardLayoutPreset.Wide}" />
+                        </ContextMenu>
+                    </Button.ContextMenu>
+                </Button>
+
                 <Button Command="{Binding Overview.ToggleEditCommand}"
                         VerticalAlignment="Center"
                         MinHeight="26"
@@ -188,15 +234,28 @@
                         Command="{Binding ToggleConnectCommand}"
                         ToolTip="{Binding ConnectButtonTooltip}"
                         ToolTipService.ShowOnDisabled="True"
-                        AutomationProperties.Name="{Binding ConnectButtonText}"
+                        AutomationProperties.Name="{Binding ConnectButtonAutomationName}"
                         VerticalAlignment="Center"
                         Margin="0,0,10,0"
                         MinHeight="26"
                         Padding="14,3">
+                    <Button.InputBindings>
+                        <KeyBinding Key="Escape"
+                                    Command="{Binding CancelDisconnectConfirmationCommand}" />
+                    </Button.InputBindings>
                     <Button.Style>
                         <Style TargetType="Button"
                                BasedOn="{StaticResource Button.Primary}">
                             <Style.Triggers>
+                                <DataTrigger Binding="{Binding IsDisconnectConfirmationArmed}"
+                                             Value="True">
+                                    <Setter Property="Background"
+                                            Value="{DynamicResource State.ErrorStrong}" />
+                                    <Setter Property="Foreground"
+                                            Value="{DynamicResource Fg.OnError}" />
+                                    <Setter Property="BorderBrush"
+                                            Value="{DynamicResource State.ErrorStrong}" />
+                                </DataTrigger>
                                 <DataTrigger Binding="{Binding IsConnectBlockedBySetup}"
                                              Value="True">
                                     <Setter Property="Background"

@@ -1,19 +1,24 @@
 ﻿using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using KeepShell.Services.Platform;
 using PoproshaykaBot.Core.Obs;
+using PoproshaykaBot.Wpf.Infrastructure;
 using System;
 using System.Threading.Tasks;
 
 namespace PoproshaykaBot.Wpf.ViewModels.Tiles;
 
-public sealed partial class ObsSecondaryOutputViewModel : ObservableObject
+public sealed partial class ObsSecondaryOutputViewModel : ObservableObject, IDisposable
 {
     private readonly Func<ObsSecondaryOutputViewModel, Task> _toggleAction;
+    private readonly InlineConfirmationState _stopConfirmation;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(StateText))]
     [NotifyPropertyChangedFor(nameof(StateSeverity))]
     [NotifyPropertyChangedFor(nameof(ActionButtonText))]
+    [NotifyPropertyChangedFor(nameof(ActionButtonToolTip))]
+    [NotifyPropertyChangedFor(nameof(ActionButtonAutomationName))]
     [NotifyPropertyChangedFor(nameof(BytesText))]
     [NotifyPropertyChangedFor(nameof(HasBytes))]
     private bool _isActive;
@@ -22,6 +27,12 @@ public sealed partial class ObsSecondaryOutputViewModel : ObservableObject
     [NotifyPropertyChangedFor(nameof(StateText))]
     [NotifyPropertyChangedFor(nameof(StateSeverity))]
     private bool _isReconnecting;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(StateText))]
+    [NotifyPropertyChangedFor(nameof(StateSeverity))]
+    [NotifyCanExecuteChangedFor(nameof(ToggleCommand))]
+    private bool _isDisconnected;
 
     [ObservableProperty]
     private bool _isVertical;
@@ -53,7 +64,8 @@ public sealed partial class ObsSecondaryOutputViewModel : ObservableObject
 
     public ObsSecondaryOutputViewModel(
         ObsSecondaryOutputSnapshot snapshot,
-        Func<ObsSecondaryOutputViewModel, Task> toggleAction)
+        Func<ObsSecondaryOutputViewModel, Task> toggleAction,
+        IUiDispatcher? uiDispatcher = null)
     {
         ArgumentNullException.ThrowIfNull(snapshot);
         ArgumentNullException.ThrowIfNull(toggleAction);
@@ -62,6 +74,7 @@ public sealed partial class ObsSecondaryOutputViewModel : ObservableObject
         OutputId = snapshot.OutputId;
         Vendor = snapshot.Vendor;
         _toggleAction = toggleAction;
+        _stopConfirmation = new(uiDispatcher, OnStopConfirmationChanged);
 
         ApplySnapshot(snapshot);
     }
@@ -82,27 +95,44 @@ public sealed partial class ObsSecondaryOutputViewModel : ObservableObject
 
     public bool HasHealth => !string.IsNullOrWhiteSpace(Health);
 
-    public string StateText => (IsActive, IsReconnecting) switch
+    public bool IsStopConfirmationArmed => _stopConfirmation.IsArmed && IsActive;
+
+    public string StateText => (IsActive, IsReconnecting || IsDisconnected) switch
     {
         (true, true) => "Переподключение…",
         (true, false) => "В эфире",
+        (false, true) => "Переподключение…",
         _ => "Не идёт",
     };
 
-    public string? StateSeverity => (IsActive, IsReconnecting) switch
+    public string? StateSeverity => (IsActive, IsReconnecting || IsDisconnected) switch
     {
         (true, true) => "Warning",
         (true, false) => "Success",
+        (false, true) => "Warning",
         _ => null,
     };
 
-    public string ActionButtonText => IsActive ? "■ Стоп" : "▶ Старт";
+    public string ActionButtonText => IsStopConfirmationArmed
+        ? "Точно стоп?"
+        : IsActive ? "■ Стоп" : "▶ Старт";
+
+    public string? ActionButtonToolTip => IsStopConfirmationArmed
+        ? "Нажмите ещё раз в течение 3 секунд, чтобы остановить, или Esc для отмены"
+        : IsActive
+            ? "Нажмите для подтверждения остановки доп. выхода"
+            : null;
+
+    public string ActionButtonAutomationName => IsStopConfirmationArmed
+        ? $"Подтвердить остановку {Name}"
+        : ActionButtonText;
 
     public void ApplySnapshot(ObsSecondaryOutputSnapshot snapshot)
     {
         ArgumentNullException.ThrowIfNull(snapshot);
 
         Vendor = snapshot.Vendor;
+        IsDisconnected = false;
         IsActive = snapshot.IsActive;
         IsReconnecting = snapshot.IsReconnecting;
         IsVertical = snapshot.IsVertical;
@@ -121,14 +151,20 @@ public sealed partial class ObsSecondaryOutputViewModel : ObservableObject
         Health = health?.Text;
         HealthSeverity = health?.Severity;
         IsActionInFlight = false;
+        if (!IsActive)
+        {
+            _stopConfirmation.Disarm();
+        }
     }
 
     public void ApplyActiveState(bool active)
     {
+        IsDisconnected = false;
         IsActive = active;
         IsActionInFlight = false;
         if (!active)
         {
+            _stopConfirmation.Disarm();
             IsReconnecting = false;
             Timecode = null;
             Bytes = null;
@@ -137,14 +173,42 @@ public sealed partial class ObsSecondaryOutputViewModel : ObservableObject
         }
     }
 
+    internal void ApplyDisconnected()
+    {
+        IsDisconnected = true;
+        IsActionInFlight = false;
+        _stopConfirmation.Disarm();
+    }
+
     [RelayCommand(CanExecute = nameof(CanToggle))]
     private Task ToggleAsync()
     {
+        if (IsActive && !_stopConfirmation.TryConfirmOrArm())
+        {
+            return Task.CompletedTask;
+        }
+
         return _toggleAction(this);
     }
 
+    [RelayCommand]
+    private void CancelStopConfirmation() => _stopConfirmation.Disarm();
+
     private bool CanToggle()
     {
-        return CanControl && !IsActionInFlight;
+        return CanControl && !IsActionInFlight && !IsDisconnected;
+    }
+
+    private void OnStopConfirmationChanged()
+    {
+        OnPropertyChanged(nameof(IsStopConfirmationArmed));
+        OnPropertyChanged(nameof(ActionButtonText));
+        OnPropertyChanged(nameof(ActionButtonToolTip));
+        OnPropertyChanged(nameof(ActionButtonAutomationName));
+    }
+
+    public void Dispose()
+    {
+        _stopConfirmation.Dispose();
     }
 }

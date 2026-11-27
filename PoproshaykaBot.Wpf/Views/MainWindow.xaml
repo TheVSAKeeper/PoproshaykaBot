@@ -14,7 +14,7 @@
         Height="800"
         Width="1440"
         MinHeight="640"
-        MinWidth="1024"
+        MinWidth="940"
         WindowStartupLocation="CenterScreen"
         WindowStyle="None"
         AllowsTransparency="False"

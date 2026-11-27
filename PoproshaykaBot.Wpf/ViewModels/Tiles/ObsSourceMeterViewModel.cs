@@ -1,5 +1,6 @@
 ﻿using System;
 using CommunityToolkit.Mvvm.ComponentModel;
+using MahApps.Metro.IconPacks;
 using PoproshaykaBot.Wpf.Infrastructure;
 
 namespace PoproshaykaBot.Wpf.ViewModels.Tiles;
@@ -10,6 +11,7 @@ public enum ObsSourceMeterState
     Active = 1,
     Muted = 2,
     Missing = 3,
+    Reconnecting = 4,
 }
 
 public sealed partial class ObsSourceMeterViewModel : ObservableObject
@@ -18,7 +20,14 @@ public sealed partial class ObsSourceMeterViewModel : ObservableObject
     private string _displayName = "–";
 
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(ShowsLevel))]
+    [NotifyPropertyChangedFor(
+        nameof(ShowsLevel),
+        nameof(MicrophoneStatusText),
+        nameof(MicrophoneIcon),
+        nameof(IsActiveState),
+        nameof(IsMutedState),
+        nameof(IsMissingState),
+        nameof(IsReconnectingState))]
     private ObsSourceMeterState _state;
 
     [ObservableProperty]
@@ -41,6 +50,27 @@ public sealed partial class ObsSourceMeterViewModel : ObservableObject
     public bool Found { get; set; }
 
     public bool ShowsLevel => State == ObsSourceMeterState.Active;
+
+    public bool IsActiveState => State == ObsSourceMeterState.Active;
+
+    public bool IsMutedState => State == ObsSourceMeterState.Muted;
+
+    public bool IsMissingState => State == ObsSourceMeterState.Missing;
+
+    public bool IsReconnectingState => State == ObsSourceMeterState.Reconnecting;
+
+    public string MicrophoneStatusText => State switch
+    {
+        ObsSourceMeterState.Active => "Микрофон включён",
+        ObsSourceMeterState.Muted => "Микрофон выключен",
+        ObsSourceMeterState.Missing => "Микрофон не найден в OBS",
+        ObsSourceMeterState.Reconnecting => "Переподключение…",
+        _ => "Статус неизвестен",
+    };
+
+    public PackIconLucideKind MicrophoneIcon => State is ObsSourceMeterState.Muted or ObsSourceMeterState.Missing
+        ? PackIconLucideKind.MicOff
+        : PackIconLucideKind.Mic;
 
     public string? LevelSeverity => Level switch
     {
@@ -71,6 +101,14 @@ public sealed partial class ObsSourceMeterViewModel : ObservableObject
         SetName(displayName);
         State = ObsSourceMeterState.Missing;
         StateText = "не найден в OBS";
+        Level = 0D;
+    }
+
+    public void ShowReconnecting(string displayName)
+    {
+        SetName(displayName);
+        State = ObsSourceMeterState.Reconnecting;
+        StateText = "переподключение…";
         Level = 0D;
     }
 

@@ -331,6 +331,80 @@ internal sealed class ChatImprovementsWpfTests
         Assert.That(remainingIds, Is.EqualTo(new[] { "yt-m1" }));
     }
 
+    [Test]
+    public async Task YouTubePane_DisplaysActiveChannelTitle_AndResponsiveHeaderAtCompactWidth()
+    {
+        var bus = new InMemoryEventBus(NullLogger<InMemoryEventBus>.Instance);
+        var settings = new SettingsManager(NullLogger<SettingsManager>.Instance, Path.Combine(_tempDir, "settings-yt-hdr.json"));
+        var displayStore = new ChatDisplayStore(NullLogger<ChatDisplayStore>.Instance, _tempDir);
+        var ytAccounts = new YouTubeAccountsStore(NullLogger<YouTubeAccountsStore>.Instance, Path.Combine(_tempDir, "yt-hdr-acc.json"));
+        ytAccounts.UpsertContexts(
+        [
+            (PlatformAuthRole.Bot, "yt-bot-UC1", "Мой бот", new YouTubeAccountSettings
+            {
+                AccessToken = "tok",
+                ChannelId = "UC1",
+                ChannelTitle = "Мой бот",
+            }),
+        ]);
+
+        var catalog = new ChannelCatalogStore(filePath: Path.Combine(_tempDir, "channels.json"));
+        catalog.Mutate(s =>
+        {
+            s.Channels.Add(new()
+            {
+                Platform = StreamingPlatform.YouTube,
+                ChannelId = "UC_EDU",
+                DisplayName = "Образовательный канал",
+                Handle = "@educator",
+                IsConfigured = true,
+            });
+            s.Platforms.Add(new()
+            {
+                Platform = StreamingPlatform.YouTube,
+                ActiveChannelId = "UC_EDU",
+            });
+        });
+
+        var ytPlatform = new StubYouTubePlatform(new StubStreamStatus(), new StubAccountMessenger(), catalog);
+        var registry = new ChatPlatformRegistry([ytPlatform]);
+
+        using var tile = new ChatDisplayTileViewModel(
+            settings,
+            new StubTargetChannelProvider(),
+            NullLogger<ChatDisplayTileViewModel>.Instance,
+            new StubShellLauncher(),
+            new StubDialogService(),
+            bus,
+            displayStore,
+            platformRegistry: registry,
+            accountDirectories: [ytAccounts],
+            webChatLogin: new StubWebChatLoginDialog(PlatformWebChatLoginResult.Canceled()),
+            channelCatalogStore: catalog);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(tile.PrimaryChat.ChannelName, Is.EqualTo("Образовательный канал"));
+            Assert.That(tile.PrimaryChat.HeaderTitle, Is.EqualTo("YouTube – Образовательный канал"));
+        }
+
+        catalog.Mutate(s =>
+        {
+            s.Channels.Add(new()
+            {
+                Platform = StreamingPlatform.YouTube,
+                ChannelId = "UC_GAMES",
+                DisplayName = "Игровой канал",
+                Handle = "@gamer",
+                IsConfigured = true,
+            });
+            s.Platforms[0].ActiveChannelId = "UC_GAMES";
+        });
+
+        await Task.Yield();
+        Assert.That(tile.PrimaryChat.ChannelName, Is.EqualTo("Игровой канал"));
+    }
+
     private sealed class DenyAccountMessenger : IChatAccountMessenger
     {
         public bool CanSendAs(ChatSenderAccount account) => false;
@@ -369,13 +443,18 @@ internal sealed class ChatImprovementsWpfTests
         public Task RefreshLiveSnapshotAsync() => Task.CompletedTask;
     }
 
-    private sealed class StubYouTubePlatform(IStreamStatus status, IChatAccountMessenger messenger) : IChatPlatform
+    private sealed class StubYouTubePlatform(
+        IStreamStatus status,
+        IChatAccountMessenger messenger,
+        ChannelCatalogStore? catalog = null) : IChatPlatform
     {
         public StreamingPlatform Id => StreamingPlatform.YouTube;
         public string DisplayName => "YouTube";
         public PlatformCapabilities Capabilities => PlatformCapabilities.ServerChatHistory;
         public bool IsEnabled => true;
         public bool IsConnected => true;
+        public string? ConfiguredChannel => catalog?.GetActiveChannel(Id)?.Handle;
+        public string? ConfiguredChannelDisplayName => catalog?.GetActiveChannel(Id)?.DisplayName ?? ConfiguredChannel;
         public IStreamStatus StreamStatus => status;
         public IPlatformMessenger Messenger => throw new NotSupportedException();
         public IChatAccountMessenger? AccountMessenger => messenger;

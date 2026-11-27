@@ -259,6 +259,12 @@ internal static partial class AppLog
     [LoggerMessage(EventId = 1302, Level = LogLevel.Error, Message = "Ошибка автообновления информации о стриме")]
     public static partial void StreamInfoAutoUpdateFailed(this ILogger logger, Exception? exception);
 
+    [LoggerMessage(EventId = 1303, Level = LogLevel.Error, Message = "Ошибка обновления плитки «Эфир и каналы»")]
+    public static partial void StreamAndChannelsUpdateFailed(this ILogger logger, Exception? exception);
+
+    [LoggerMessage(EventId = 1304, Level = LogLevel.Error, Message = "Ошибка автообновления плитки «Эфир и каналы»")]
+    public static partial void StreamAndChannelsAutoUpdateFailed(this ILogger logger, Exception? exception);
+
     [LoggerMessage(EventId = 1305, Level = LogLevel.Warning, Message = "Не удалось положить лог-секцию в буфер обмена")]
     public static partial void SupportClipboardCopyFailed(this ILogger logger, Exception? exception);
 

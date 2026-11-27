@@ -671,6 +671,7 @@ public partial class App : Application
         });
         services.AddSingleton<ErrorReportService>();
 
+        services.AddSingleton<DashboardTileViewModel, StreamAndChannelsTileViewModel>();
         services.AddSingleton<DashboardTileViewModel, StreamInfoTileViewModel>();
         services.AddSingleton<DashboardTileViewModel, StreamPreviewTileViewModel>();
         services.AddSingleton<DashboardTileViewModel, BroadcastStatusTileViewModel>();
@@ -737,6 +738,7 @@ public partial class App : Application
         services.AddSingleton<IPlatformAccountLogin, YouTubeAccountLogin>();
         services.AddSingleton<ILegacyImportDialog, LegacyImportDialog>();
         services.AddSingleton<StreamMonitoringViewModel>();
+        services.AddSingleton<AutoBroadcastIndicatorViewModel>();
         services.AddSingleton<IMainWindowController, MainWindowController>();
         services.AddSingleton<ShellViewModel>();
         services.AddSingleton<MainWindow>();

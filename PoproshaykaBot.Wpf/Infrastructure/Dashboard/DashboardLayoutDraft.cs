@@ -60,12 +60,17 @@ public sealed class DashboardLayoutDraft
 
     public void ResetToDefaults()
     {
+        ResetToPreset(DashboardLayoutPreset.Compact);
+    }
+
+    public void ResetToPreset(DashboardLayoutPreset preset)
+    {
         EndGridGesture();
         Remember(Clone(_layout)!);
 
         var previous = _layout;
 
-        _layout = DashboardLayoutReconciler.ResetToDefaults(DashboardLayoutDefaults.Create(), previous);
+        _layout = DashboardLayoutReconciler.ResetToDefaults(DashboardLayoutPresets.Create(preset), previous);
 
         foreach (var tile in previous.Tiles)
         {

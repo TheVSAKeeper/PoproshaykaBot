@@ -148,6 +148,50 @@ public sealed class YouTubeChatPlatform : IChatPlatform
         }
     }
 
+    public string? ConfiguredChannelDisplayName
+    {
+        get
+        {
+            if (_channelCatalogStore?.GetActiveChannel(Id) is { } activeEntry)
+            {
+                if (!string.IsNullOrWhiteSpace(activeEntry.DisplayName))
+                {
+                    return activeEntry.DisplayName.Trim();
+                }
+
+                if (!string.IsNullOrWhiteSpace(activeEntry.Handle))
+                {
+                    return activeEntry.Handle.Trim();
+                }
+
+                if (!string.IsNullOrWhiteSpace(activeEntry.ChannelId))
+                {
+                    return activeEntry.ChannelId.Trim();
+                }
+            }
+
+            var broadcastTitle = _activeBroadcastSource.CurrentBroadcast?.ChannelTitle;
+            if (!string.IsNullOrWhiteSpace(broadcastTitle))
+            {
+                return broadcastTitle.Trim();
+            }
+
+            var channel = _settingsStore.Load().Channel;
+            if (!string.IsNullOrWhiteSpace(channel))
+            {
+                return channel.Trim();
+            }
+
+            var broadcaster = _accountsStore.Load(PlatformAuthRole.Broadcaster);
+            if (!string.IsNullOrWhiteSpace(broadcaster.ChannelTitle))
+            {
+                return broadcaster.ChannelTitle.Trim();
+            }
+
+            return ConfiguredChannel;
+        }
+    }
+
     public bool AppliesPreferredColorScheme => true;
 
     public string? BuildNativeChatUrl(StreamInfo stream)

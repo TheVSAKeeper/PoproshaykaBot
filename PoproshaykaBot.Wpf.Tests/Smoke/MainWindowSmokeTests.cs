@@ -70,21 +70,21 @@ public class MainWindowSmokeTests
     [Test]
     public void MainWindow_ShouldShowDashboard_WithTiles()
     {
-        var streamTile = WaitForDescendantByName("Информация о стриме");
-        var broadcastTile = WaitForDescendantByName("Рассылка");
+        var streamChannelsTile = WaitForDescendantByName("Эфир и каналы");
+        var profilesTile = WaitForDescendantByName("Профили эфира");
 
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(streamTile, Is.Not.Null, "Заголовок тайла стрима должен быть в дереве UI");
-            Assert.That(broadcastTile, Is.Not.Null, "Заголовок тайла рассылки должен быть в дереве UI");
+            Assert.That(streamChannelsTile, Is.Not.Null, "Заголовок плитки «Эфир и каналы» должен быть в дереве UI");
+            Assert.That(profilesTile, Is.Not.Null, "Заголовок плитки «Профили эфира» должен быть в дереве UI");
         }
     }
 
     [Test]
     public void MultistreamTile_ShouldOpenTheSelectedPlatform()
     {
-        var setup = WaitForDescendant(cf => cf.ByAutomationId("MultistreamSettingsYouTube"));
-        Assert.That(setup, Is.Not.Null, "Настройка YouTube должна быть доступна из плитки на Обзоре.");
+        var setup = WaitForDescendant(cf => cf.ByAutomationId("StreamChannelsSetupYouTube"));
+        Assert.That(setup, Is.Not.Null, "Настройка YouTube должна быть доступна из плитки «Эфир и каналы» на Обзоре.");
         setup!.AsButton().Invoke();
 
         var enable = WaitForDescendant(cf => cf.ByAutomationId("MultistreamEnableYouTube"));

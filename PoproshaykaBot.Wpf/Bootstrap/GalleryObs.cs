@@ -30,7 +30,47 @@ public static class GalleryObs
             ]);
         }
 
+        if (string.Equals(key, SectionKeys.OverviewObsMicActive, StringComparison.OrdinalIgnoreCase))
+        {
+            return Create(skippedFrames: 0,
+            [
+                new("Микрофон", "wasapi_input_capture", IsMuted: false, VolumeDecibels: -4.2D, VolumeMultiplier: 0.68D),
+                new("Звук рабочего стола", "wasapi_output_capture", IsMuted: false, VolumeDecibels: -14D, VolumeMultiplier: 0.35D),
+            ]);
+        }
+
+        if (string.Equals(key, SectionKeys.OverviewObsMicMuted, StringComparison.OrdinalIgnoreCase))
+        {
+            return Create(skippedFrames: 0,
+            [
+                new("Микрофон", "wasapi_input_capture", IsMuted: true, VolumeDecibels: 0D, VolumeMultiplier: 0D),
+                new("Звук рабочего стола", "wasapi_output_capture", IsMuted: false, VolumeDecibels: -14D, VolumeMultiplier: 0.35D),
+            ]);
+        }
+
+        if (string.Equals(key, SectionKeys.OverviewObsReconnecting, StringComparison.OrdinalIgnoreCase))
+        {
+            return ObsDashboardSnapshot.Unavailable(
+                new(false, null, null, "Соединение с OBS прервано"));
+        }
+
         return null;
+    }
+
+    public static ObsDashboardSnapshot? FindSeed(string key)
+    {
+        ArgumentNullException.ThrowIfNull(key);
+
+        if (!string.Equals(key, SectionKeys.OverviewObsReconnecting, StringComparison.OrdinalIgnoreCase))
+        {
+            return null;
+        }
+
+        return Create(skippedFrames: 0,
+        [
+            new("Микрофон", "wasapi_input_capture", IsMuted: false, VolumeDecibels: -5D, VolumeMultiplier: 0.5D),
+            new("Звук рабочего стола", "wasapi_output_capture", IsMuted: false, VolumeDecibels: -14D, VolumeMultiplier: 0.35D),
+        ]);
     }
 
     private static ObsDashboardSnapshot Create(long skippedFrames, IReadOnlyList<ObsAudioSourceSnapshot> sources)

@@ -1,6 +1,8 @@
 ﻿using Microsoft.Extensions.DependencyInjection;
 using PoproshaykaBot.Core.Obs;
+using PoproshaykaBot.Core.Settings.Ui;
 using PoproshaykaBot.Core.Statistics;
+using PoproshaykaBot.Wpf.Infrastructure.Dashboard;
 using PoproshaykaBot.Wpf.ViewModels;
 using PoproshaykaBot.Wpf.ViewModels.Tiles;
 using PoproshaykaBot.Wpf.Views;
@@ -129,6 +131,11 @@ public sealed class GalleryHost : IGalleryHost
             return await CaptureObsAsync(item.Name, obs, context).ConfigureAwait(true);
         }
 
+        if (SectionKeys.IsChatCase(item.Name))
+        {
+            return await CaptureChatAsync(item.Name, context).ConfigureAwait(true);
+        }
+
         if (SectionKeys.IsEditCase(item.Name))
         {
             return await CaptureEditAsync(item.Name, context).ConfigureAwait(true);
@@ -137,6 +144,21 @@ public sealed class GalleryHost : IGalleryHost
         if (string.Equals(item.Name, SectionKeys.OverviewYouTubeEmpty, StringComparison.OrdinalIgnoreCase))
         {
             return await CaptureOverviewYouTubeEmptyAsync(item.Name, context).ConfigureAwait(true);
+        }
+
+        if (string.Equals(item.Name, SectionKeys.OverviewCompact, StringComparison.OrdinalIgnoreCase))
+        {
+            return await CaptureOverviewPresetAsync(item.Name, DashboardLayoutPresets.CreateCompact(), 970, 1050, context).ConfigureAwait(true);
+        }
+
+        if (string.Equals(item.Name, SectionKeys.OverviewCompactTrial, StringComparison.OrdinalIgnoreCase))
+        {
+            return await CaptureOverviewPresetAsync(item.Name, DashboardLayoutPresets.CreateCompactTrial(), 970, 1050, context).ConfigureAwait(true);
+        }
+
+        if (string.Equals(item.Name, SectionKeys.OverviewWide, StringComparison.OrdinalIgnoreCase))
+        {
+            return await CaptureOverviewPresetAsync(item.Name, DashboardLayoutPresets.CreateWide(), null, null, context).ConfigureAwait(true);
         }
 
         if (string.Equals(item.Name, SectionKeys.MultistreamReady, StringComparison.OrdinalIgnoreCase))
@@ -200,8 +222,15 @@ public sealed class GalleryHost : IGalleryHost
             .Concat(SectionKeys.Hidden)
             .Concat(SectionKeys.Params)
             .Concat(SectionKeys.Obs)
+            .Concat(SectionKeys.Chat)
             .Concat(SectionKeys.Edit)
-            .Concat([SectionKeys.OverviewYouTubeEmpty, SectionKeys.MultistreamReady])
+            .Concat([
+                SectionKeys.OverviewYouTubeEmpty,
+                SectionKeys.OverviewCompact,
+                SectionKeys.OverviewCompactTrial,
+                SectionKeys.OverviewWide,
+                SectionKeys.MultistreamReady,
+            ])
             .FirstOrDefault(known => string.Equals(known, requested, StringComparison.OrdinalIgnoreCase));
     }
 
@@ -347,6 +376,11 @@ public sealed class GalleryHost : IGalleryHost
 
         var tile = _services.GetServices<DashboardTileViewModel>().OfType<ObsInfoTileViewModel>().Single();
 
+        if (GalleryObs.FindSeed(name) is { } seed)
+        {
+            tile.BeginPreview(seed);
+        }
+
         tile.BeginPreview(snapshot);
 
         try
@@ -358,6 +392,34 @@ public sealed class GalleryHost : IGalleryHost
         finally
         {
             tile.EndPreview();
+
+            await context.SettleAsync().ConfigureAwait(true);
+        }
+    }
+
+    private async Task<GalleryShot> CaptureChatAsync(string name, GalleryContext context)
+    {
+        Navigate(SectionKeys.Overview);
+
+        var chat = _services.GetServices<DashboardTileViewModel>().OfType<ChatDisplayTileViewModel>().Single();
+        var (layout, tone) = name.ToLowerInvariant() switch
+        {
+            var key when key == SectionKeys.OverviewChatEnded => (ChatDisplayLayout.Columns, ChatFallbackTone.Ended),
+            var key when key == SectionKeys.OverviewChatCollapsed => (ChatDisplayLayout.Single, ChatFallbackTone.None),
+            _ => (ChatDisplayLayout.Columns, ChatFallbackTone.Waiting),
+        };
+
+        var previousMode = chat.BeginGalleryPreview(layout, "Образовательный канал", tone);
+
+        try
+        {
+            await context.SettleAsync().ConfigureAwait(true);
+
+            return context.Save(ViewCapture.Slug(name));
+        }
+        finally
+        {
+            chat.EndGalleryPreview(previousMode);
 
             await context.SettleAsync().ConfigureAwait(true);
         }
@@ -384,6 +446,42 @@ public sealed class GalleryHost : IGalleryHost
         finally
         {
             chat.SelectModeCommand.Execute(previousMode);
+
+            await context.SettleAsync().ConfigureAwait(true);
+        }
+    }
+
+    private async Task<GalleryShot> CaptureOverviewPresetAsync(
+        string name,
+        DashboardLayoutSettings presetLayout,
+        double? width,
+        double? height,
+        GalleryContext context)
+    {
+        Navigate(SectionKeys.Overview);
+
+        var dashboard = _services.GetRequiredService<DashboardViewModel>();
+        var previousWidth = _window.Width;
+        var previousHeight = _window.Height;
+        var previousLayout = dashboard.ApplyPreviewLayout(presetLayout);
+
+        if (width.HasValue && height.HasValue)
+        {
+            _window.Width = width.Value;
+            _window.Height = height.Value;
+        }
+
+        try
+        {
+            await context.SettleAsync().ConfigureAwait(true);
+
+            return context.Save(ViewCapture.Slug(name));
+        }
+        finally
+        {
+            dashboard.RestorePreviewLayout(previousLayout);
+            _window.Width = previousWidth;
+            _window.Height = previousHeight;
 
             await context.SettleAsync().ConfigureAwait(true);
         }

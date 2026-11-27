@@ -6,6 +6,7 @@ public static class SettingsKeys
     public const string FontScale = "ui.shell.font_scale";
     public const string EnableToastNotifications = "ui.notifications.toast";
     public const string NavCollapsed = "ui.shell.nav_collapsed";
+    public const string DashboardPreset = "ui.dashboard.preset";
     public const string LastPage = "ui.shell.last_page";
     public const string SettingsSection = "ui.settings.section";
     public const string ChatTileDisplayMode = "ui.chat_tile.display_mode";
