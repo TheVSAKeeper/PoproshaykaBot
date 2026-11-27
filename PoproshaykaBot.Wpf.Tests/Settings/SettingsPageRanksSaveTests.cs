@@ -289,6 +289,7 @@ public class SettingsPageRanksSaveTests
                 updateEnv,
                 Dialogs,
                 new ManualUiDispatcher(),
+                DispatchProxy.Create<IShellLauncher, InertProxy>(),
                 DispatchProxy.Create<IMainWindowController, InertProxy>());
             var debugChannel = new DebugChannelSectionViewModel(DebugChannelOverride.None, debugChannelStore, null!, TimeProvider.System, NullLogger<DebugChannelSectionViewModel>.Instance);
             var mcp = new McpSettingsSectionViewModel(mcpPreferences, new(mcpPreferences, null!, null!, mcpOptions, new EmptyServiceProvider()), mcpOptions, Dialogs, null!);

@@ -1,51 +1,70 @@
 ﻿name: Release
 
 on:
-  push:
-    tags:
-      - 'v*'
+  workflow_run:
+    workflows:
+      - Tests
+    types:
+      - completed
     branches:
       - master
+  workflow_dispatch:
+    inputs:
+      force:
+        description: Выпустить, даже если релиз этой версии уже существует
+        required: false
+        type: boolean
+        default: false
+
+concurrency:
+  group: ${{ github.workflow }}
+
+env:
+  RELEASE_SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
 
 jobs:
   prepare:
+    if: >
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.head_repository.full_name == github.repository)
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     permissions:
-      contents: write
+      contents: read
     outputs:
       version: ${{ steps.version.outputs.VERSION }}
       should_release: ${{ steps.decide.outputs.should_release }}
+      sha: ${{ github.event.workflow_run.head_sha || github.sha }}
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
+          ref: ${{ env.RELEASE_SHA }}
           fetch-depth: 2
 
       - name: Extract version
         id: version
         shell: bash
         run: |
-          VERSION=$(grep -oP '(?<=<Version>).*(?=</Version>)' Directory.Build.props)
+          VERSION=$(grep -oP '(?<=<Version>).*(?=</Version>)' Directory.Build.props | head -1)
+          if [[ ! "$VERSION" =~ ^[0-9]+(\.[0-9]+){1,3}$ ]]; then
+            echo "Directory.Build.props: непригодная версия «$VERSION»"
+            exit 1
+          fi
           echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
 
-      - name: Create tag if needed
-        if: ${{ !startsWith(github.ref, 'refs/tags/') }}
+      - name: Verify changelog entry
         shell: bash
-        env:
-          GH_TOKEN: ${{ github.token }}
-          VERSION: ${{ steps.version.outputs.VERSION }}
-        run: |
-          if ! gh api "repos/${{ github.repository }}/git/refs/tags/v${VERSION}" >/dev/null 2>&1; then
-            git tag "v${VERSION}"
-            git push origin "v${VERSION}"
-          fi
+        run: bash .github/changelog-section.sh "${{ steps.version.outputs.VERSION }}" >/dev/null
 
       - name: Decide if release is needed
         id: decide
         shell: bash
         run: |
-          if [[ "${{ github.ref }}" == refs/tags/* ]]; then
+          if [[ "${{ inputs.force }}" == "true" ]]; then
             echo "should_release=true" >> $GITHUB_OUTPUT
           elif ! gh release view "v${{ steps.version.outputs.VERSION }}" >/dev/null 2>&1; then
             echo "should_release=true" >> $GITHUB_OUTPUT
@@ -57,8 +76,14 @@ jobs:
 
   build:
     needs: prepare
-    if: needs.prepare.outputs.should_release == 'true'
+    if: >
+      needs.prepare.outputs.should_release == 'true' &&
+      (github.event_name == 'workflow_dispatch' ||
+      github.event.workflow_run.head_repository.full_name == github.repository)
     runs-on: windows-2022
+    timeout-minutes: 45
+    permissions:
+      contents: read
     strategy:
       fail-fast: false
       matrix:
@@ -71,6 +96,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
+          ref: ${{ needs.prepare.outputs.sha }}
           submodules: recursive
 
       - name: Setup .NET
@@ -133,13 +159,26 @@ jobs:
           if-no-files-found: error
           retention-days: 1
 
-  release:
+  publish:
     needs: [ prepare, build ]
+    if: >
+      needs.prepare.outputs.should_release == 'true' &&
+      (github.event_name == 'workflow_dispatch' ||
+      github.event.workflow_run.head_repository.full_name == github.repository)
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     permissions:
       contents: write
+      id-token: write
+      attestations: write
 
     steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.prepare.outputs.sha }}
+          fetch-depth: 0
+
       - name: Download all artifacts
         uses: actions/download-artifact@v4
         with:
@@ -147,70 +186,85 @@ jobs:
           pattern: release-*
           merge-multiple: true
 
-      - name: Compose release body
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: |
+            artifacts/*.exe
+            artifacts/*.zip
+
+      - name: Render release body
         shell: bash
         env:
-          VERSION: ${{ needs.prepare.outputs.version }}
-          REPO: ${{ github.repository }}
           GH_TOKEN: ${{ github.token }}
         run: |
-          BASE="https://github.com/${REPO}/releases/download/v${VERSION}"
-          AUTO_NOTES=$(gh api -X POST "repos/${REPO}/releases/generate-notes" \
-            -f tag_name="v${VERSION}" \
-            --jq '.body' || echo "")
-          cat > release_body.md <<EOF
-          ## 📥 Скачать
+          VERSION="${{ needs.prepare.outputs.version }}"
+          REPO="${{ github.server_url }}/${{ github.repository }}"
+          SLUG="${{ github.repository }}"
 
-          <table>
-            <thead>
-              <tr>
-                <th align="center">Вариант</th>
-                <th align="center">x64</th>
-                <th align="center">x86 <sub>(рекомендуется)</sub></th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr>
-                <td align="center">
-                  <strong>🟢 Portable</strong><br/>
-                  <sub>не требует .NET</sub>
-                </td>
-                <td align="center">
-                  <a href="${BASE}/PoproshaykaBot-v${VERSION}-x64-portable.exe"><img src="https://img.shields.io/badge/⬇️_EXE-2ea043?style=for-the-badge" alt="Portable x64 EXE" /></a>
-                  <a href="${BASE}/PoproshaykaBot-v${VERSION}-x64-portable.zip"><img src="https://img.shields.io/badge/📦_ZIP-2ea043?style=for-the-badge" alt="Portable x64 ZIP" /></a>
-                </td>
-                <td align="center">
-                  <a href="${BASE}/PoproshaykaBot-v${VERSION}-x86-portable.exe"><img src="https://img.shields.io/badge/⬇️_EXE-2ea043?style=for-the-badge" alt="Portable x86 EXE" /></a>
-                  <a href="${BASE}/PoproshaykaBot-v${VERSION}-x86-portable.zip"><img src="https://img.shields.io/badge/📦_ZIP-2ea043?style=for-the-badge" alt="Portable x86 ZIP" /></a>
-                </td>
-              </tr>
-              <tr>
-                <td align="center">
-                  <strong>🔵 Framework-dependent</strong><br/>
-                  <sub>нужен <a href="https://dotnet.microsoft.com/download/dotnet/10.0">.NET 10 Desktop Runtime</a></sub>
-                </td>
-                <td align="center">
-                  <a href="${BASE}/PoproshaykaBot-v${VERSION}-x64.exe"><img src="https://img.shields.io/badge/⬇️_EXE-1f6feb?style=for-the-badge" alt="Framework-dependent x64 EXE" /></a>
-                  <a href="${BASE}/PoproshaykaBot-v${VERSION}-x64.zip"><img src="https://img.shields.io/badge/📦_ZIP-1f6feb?style=for-the-badge" alt="Framework-dependent x64 ZIP" /></a>
-                </td>
-                <td align="center">
-                  <a href="${BASE}/PoproshaykaBot-v${VERSION}-x86.exe"><img src="https://img.shields.io/badge/⬇️_EXE-1f6feb?style=for-the-badge" alt="Framework-dependent x86 EXE" /></a>
-                  <a href="${BASE}/PoproshaykaBot-v${VERSION}-x86.zip"><img src="https://img.shields.io/badge/📦_ZIP-1f6feb?style=for-the-badge" alt="Framework-dependent x86 ZIP" /></a>
-                </td>
-              </tr>
-            </tbody>
-          </table>
+          PREV_TAG=$(gh release list --exclude-drafts --limit 20 --json tagName --jq '.[].tagName' 2>/dev/null \
+            | grep -vx "v${VERSION}" | head -1 || true)
+          if [ -z "$PREV_TAG" ] || ! git rev-parse -q --verify "refs/tags/$PREV_TAG^{commit}" >/dev/null 2>&1; then
+            PREV_TAG=$(git tag --merged HEAD^ --sort=-v:refname 'v*' | grep -vx "v${VERSION}" | head -1 || true)
+          fi
+          PREV_VERSION="${PREV_TAG#v}"
 
+          COMMITS=$(git log --no-merges --pretty='- %s' "${PREV_TAG:+$PREV_TAG..}HEAD" || true)
+          COMMIT_COUNT=$(printf '%s' "$COMMITS" | grep -c '^- ' || true)
 
-          ---
-
-          EOF
-          printf '%s\n' "${AUTO_NOTES}" >> release_body.md
+          {
+            sed -e "s|__VERSION__|$VERSION|g" -e "s|__REPO__|$REPO|g" -e "s|__SLUG__|$SLUG|g" .github/release-body.md
+            echo
+            echo "## Изменения"
+            echo
+            bash .github/changelog-section.sh "$VERSION" "$PREV_VERSION" CHANGELOG.md
+            echo
+            echo "## Технические изменения"
+            echo
+            echo "<details>"
+            echo "<summary>Коммиты ($COMMIT_COUNT)</summary>"
+            echo
+            printf '%s\n' "$COMMITS"
+            echo
+            echo "</details>"
+            if [ -n "$PREV_TAG" ]; then
+              echo
+              echo "**Полный список:** $REPO/compare/$PREV_TAG...v$VERSION"
+            fi
+          } > release-body.rendered.md
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ needs.prepare.outputs.version }}
+          target_commitish: ${{ needs.prepare.outputs.sha }}
           name: PoproshaykaBot v${{ needs.prepare.outputs.version }}
           files: artifacts/*
-          body_path: release_body.md
+          body_path: release-body.rendered.md
+
+  status:
+    needs: [ prepare, build, publish ]
+    if: always() && needs.prepare.outputs.should_release == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      statuses: write
+
+    steps:
+      - name: Report status on commit
+        shell: bash
+        run: |
+          if [[ "${{ needs.publish.result }}" == "success" ]]; then
+            STATE=success
+            DESCRIPTION="v${{ needs.prepare.outputs.version }} опубликован"
+          else
+            STATE=failure
+            DESCRIPTION="Релиз v${{ needs.prepare.outputs.version }} не собран"
+          fi
+          gh api "repos/${{ github.repository }}/statuses/${{ needs.prepare.outputs.sha }}" \
+            -f state="$STATE" \
+            -f context=Release \
+            -f description="$DESCRIPTION" \
+            -f target_url="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+        env:
+          GH_TOKEN: ${{ github.token }}

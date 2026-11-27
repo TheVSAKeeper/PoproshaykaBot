@@ -2,6 +2,7 @@
 using KeepShell.Services.Modal;
 using KeepShell.Services.Platform;
 using KeepShell.Updates;
+using KeepShell.Updates.Wpf;
 using Microsoft.Extensions.Logging.Abstractions;
 using PoproshaykaBot.Core.Settings.Stores;
 using PoproshaykaBot.Core.Update;
@@ -196,6 +197,7 @@ public sealed class ManualUpdateCancellationTests
             environment,
             dialogs,
             new ManualUiDispatcher(),
+            new NoopShellLauncher(),
             mainWindow);
 
         var installTask = section.InstallUpdateCommand.ExecuteAsync(null);
@@ -243,6 +245,7 @@ public sealed class ManualUpdateCancellationTests
             environment,
             dialogs,
             new ManualUiDispatcher(),
+            new NoopShellLauncher(),
             mainWindow);
 
         await section.InstallUpdateCommand.ExecuteAsync(null);
@@ -252,6 +255,63 @@ public sealed class ManualUpdateCancellationTests
         section.ResetInstallState();
 
         Assert.That(section.IsBusy, Is.False);
+    }
+
+    [Test]
+    public async Task UpdateBanner_OpenNotes_ShowsStructuredDialogAndOpensGitHubWhenSelected()
+    {
+        var candidate = CreateCandidate();
+        var coordinator = new FakeCoordinator(candidate, (_, _) => Task.FromResult(true));
+        var dialogs = new RecordingDialogService(chooseAction: UpdateDetailsAction.OpenReleasePage);
+        var launcher = new NoopShellLauncher();
+
+        using var banner = new UpdateBannerViewModel(
+            coordinator,
+            CreateEnvironment(),
+            dialogs,
+            NullLogger<UpdateBannerViewModel>.Instance,
+            new ManualUiDispatcher(),
+            launcher,
+            new RecordingMainWindow());
+
+        await banner.OpenNotesCommand.ExecuteAsync(null);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(dialogs.ShownDialogs, Has.Count.EqualTo(1));
+            Assert.That(dialogs.ShownDialogs[0], Is.TypeOf<UpdateDetailsDialogViewModel>());
+            Assert.That(launcher.Opened, Is.EqualTo(new[] { candidate.NotesUrl }));
+        }
+    }
+
+    [Test]
+    public async Task UpdateSettingsSection_ShowChangelog_LoadsHistoryAndShowsDialog()
+    {
+        var coordinator = new FakeCoordinator(CreateCandidate(), (_, _) => Task.FromResult(true));
+        var store = new UpdateStore(null, Path.Combine(_directory, "update.json"));
+        var environment = CreateEnvironment();
+        var options = PoproshaykaBot.Core.Update.UpdateServiceCollectionExtensions.CreateOptions("owner/repo");
+        var dialogs = new RecordingDialogService(chooseAction: UpdateDetailsAction.Dismiss);
+
+        using var section = new UpdateSettingsSectionViewModel(
+            new UpdateStoreSettingsAdapter(store),
+            coordinator,
+            options,
+            environment,
+            dialogs,
+            new ManualUiDispatcher(),
+            new NoopShellLauncher(),
+            new RecordingMainWindow());
+
+        await section.ShowChangelogCommand.ExecuteAsync(null);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(dialogs.ShownDialogs, Has.Count.EqualTo(1));
+            var dialog = dialogs.ShownDialogs[0] as UpdateDetailsDialogViewModel;
+            Assert.That(dialog, Is.Not.Null);
+            Assert.That(dialog!.Title, Is.EqualTo("История изменений"));
+        }
     }
 
     private sealed class FakeCoordinator(
@@ -350,20 +410,49 @@ public sealed class ManualUpdateCancellationTests
 
     private sealed class NoopShellLauncher : IShellLauncher
     {
-        public bool Open(string pathOrUrl) => true;
+        public List<string> Opened { get; } = [];
+
+        public bool Open(string pathOrUrl)
+        {
+            Opened.Add(pathOrUrl);
+            return true;
+        }
 
         public bool Reveal(string path) => true;
 
         public bool Start(string executable, params string[] arguments) => true;
     }
 
-    private sealed class RecordingDialogService : IDialogService
+    private sealed class RecordingDialogService(UpdateDetailsAction chooseAction = UpdateDetailsAction.Install) : IDialogService
     {
+        public List<IDialogViewModel> ShownDialogs { get; } = [];
+
         public List<string> Infos { get; } = [];
 
         public List<string> Errors { get; } = [];
 
-        public Task<bool> ShowAsync(IDialogViewModel viewModel) => Task.FromResult(false);
+        public Task<bool> ShowAsync(IDialogViewModel viewModel)
+        {
+            ShownDialogs.Add(viewModel);
+
+            if (viewModel is UpdateDetailsDialogViewModel details)
+            {
+                switch (chooseAction)
+                {
+                    case UpdateDetailsAction.Install:
+                        details.ChoosePrimaryCommand.Execute(null);
+                        return Task.FromResult(true);
+                    case UpdateDetailsAction.OpenReleasePage:
+                        details.OpenReleasePageCommand.Execute(null);
+                        return Task.FromResult(true);
+                    default:
+                        details.DismissCommand.Execute(null);
+                        return Task.FromResult(false);
+                }
+            }
+
+            return Task.FromResult(false);
+        }
 
         public Task<bool> ReplaceAsync(IDialogViewModel viewModel) => Task.FromResult(false);
 

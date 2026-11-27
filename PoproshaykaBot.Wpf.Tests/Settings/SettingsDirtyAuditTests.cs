@@ -656,6 +656,7 @@ public sealed class SettingsDirtyAuditTests
                 updateEnv,
                 Dialogs,
                 new ManualUiDispatcher(),
+                DispatchProxy.Create<IShellLauncher, InertProxy>(),
                 DispatchProxy.Create<IMainWindowController, InertProxy>());
             DebugChannel = new(DebugChannelOverride.None, DebugChannelStore, new ChannelLiveStatusReader(DispatchProxy.Create<IHttpClientFactory, InertProxy>(), settingsManager, TimeProvider.System, NullLogger<ChannelLiveStatusReader>.Instance), TimeProvider.System, NullLogger<DebugChannelSectionViewModel>.Instance);
             Mcp = new(mcpPreferences, new(mcpPreferences, null!, null!, mcpOptions, new EmptyServiceProvider()), mcpOptions, Dialogs, DispatchProxy.Create<IClipboardService, InertProxy>());

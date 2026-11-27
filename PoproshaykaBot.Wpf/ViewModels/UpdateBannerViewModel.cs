@@ -12,7 +12,10 @@ public sealed class UpdateBannerViewModel : UpdateBannerViewModelBase
     private readonly IUpdateEnvironment _environment;
     private readonly IDialogService _dialogService;
     private readonly ILogger<UpdateBannerViewModel> _logger;
+    private readonly IShellLauncher _launcher;
     private readonly IMainWindowController _mainWindow;
+
+    private bool _skipNextConfirm;
 
     public UpdateBannerViewModel(
         IUpdateCoordinator coordinator,
@@ -27,6 +30,7 @@ public sealed class UpdateBannerViewModel : UpdateBannerViewModelBase
         _environment = environment;
         _dialogService = dialogService;
         _logger = logger;
+        _launcher = launcher;
         _mainWindow = mainWindow;
     }
 
@@ -43,16 +47,83 @@ public sealed class UpdateBannerViewModel : UpdateBannerViewModelBase
         }
     }
 
-    protected override Task<bool> ConfirmDownloadAsync(UpdateCandidate candidate, CancellationToken cancellationToken)
+    protected override async Task ShowNotesAsync(UpdateCandidate candidate, CancellationToken cancellationToken)
     {
-        var confirmed = _dialogService.Confirm(
-            "Установка обновления",
-            $"Загрузить и установить версию {candidate.Version}?\n\nПриложение перезапустится автоматически.");
-        return Task.FromResult(confirmed);
+        var isReady = Stage == UpdateStage.ReadyToApply && Coordinator.Pending is not null;
+        var dialog = UpdateDetailsDialogViewModel.ForCandidate(
+            candidate,
+            _environment.CurrentVersion,
+            UpdateDeliveryMode.SingleFileSwap,
+            isReady);
+
+        if (!await _dialogService.ShowAsync(dialog).ConfigureAwait(true))
+        {
+            return;
+        }
+
+        if (dialog.ChosenAction == UpdateDetailsAction.OpenReleasePage)
+        {
+            _launcher.Open(candidate.NotesUrl);
+            return;
+        }
+
+        if (dialog.ChosenAction != UpdateDetailsAction.Install)
+        {
+            return;
+        }
+
+        _skipNextConfirm = true;
+
+        try
+        {
+            if (isReady)
+            {
+                await ApplyCommand.ExecuteAsync(null).ConfigureAwait(true);
+            }
+            else
+            {
+                await DownloadCommand.ExecuteAsync(null).ConfigureAwait(true);
+            }
+        }
+        finally
+        {
+            _skipNextConfirm = false;
+        }
+    }
+
+    protected override async Task<bool> ConfirmDownloadAsync(UpdateCandidate candidate, CancellationToken cancellationToken)
+    {
+        if (_skipNextConfirm)
+        {
+            return true;
+        }
+
+        var dialog = UpdateDetailsDialogViewModel.ForCandidate(
+            candidate,
+            _environment.CurrentVersion,
+            UpdateDeliveryMode.SingleFileSwap);
+
+        if (!await _dialogService.ShowAsync(dialog).ConfigureAwait(true))
+        {
+            return false;
+        }
+
+        if (dialog.ChosenAction == UpdateDetailsAction.OpenReleasePage)
+        {
+            _launcher.Open(candidate.NotesUrl);
+            return false;
+        }
+
+        return dialog.ChosenAction == UpdateDetailsAction.Install;
     }
 
     protected override Task<bool> ConfirmApplyAsync(PendingUpdate pending, CancellationToken cancellationToken)
     {
+        if (_skipNextConfirm)
+        {
+            return Task.FromResult(true);
+        }
+
         var confirmed = _dialogService.Confirm(
             "Установка обновления",
             $"Установить загруженную версию {pending.Version} сейчас?\n\nПриложение перезапустится автоматически.");

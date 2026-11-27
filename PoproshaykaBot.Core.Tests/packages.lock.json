@@ -318,7 +318,7 @@
         "dependencies": {
           "Google.Protobuf": "[3.36.2, )",
           "Grpc.Net.Client": "[2.85.0, )",
-          "KeepShell.Updates": "[0.1.341, )",
+          "KeepShell.Updates": "[0.1.343, )",
           "Serilog": "[4.4.0, )",
           "Serilog.Extensions.Logging": "[10.0.0, )",
           "System.Drawing.Common": "[8.0.10, )"
@@ -342,9 +342,9 @@
       },
       "KeepShell.Updates": {
         "type": "CentralTransitive",
-        "requested": "[0.1.341, )",
-        "resolved": "0.1.341",
-        "contentHash": "6lPrv2KE2YXrZV9Vaj5CenbpaOPusOHMmpONZ2n0KWEaVtmOy89VDDhAiAwSyFJUAZcoZMvBKWvx8N0oYyZ1mg==",
+        "requested": "[0.1.343, )",
+        "resolved": "0.1.343",
+        "contentHash": "+YGdojk0PzNMDJPWyb6+kfN67zWGXa4QCf9Ki4otB4qN2Iz+RF7Qq+0/FnjgWZn6Brhm3zjp+hAxn9oukcAWZg==",
         "dependencies": {
           "Microsoft.Extensions.Http": "10.0.15",
           "Microsoft.Extensions.Logging.Abstractions": "10.0.15"

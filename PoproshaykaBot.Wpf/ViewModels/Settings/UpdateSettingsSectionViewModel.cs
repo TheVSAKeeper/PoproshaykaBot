@@ -12,6 +12,7 @@ namespace PoproshaykaBot.Wpf.ViewModels.Settings;
 public sealed partial class UpdateSettingsSectionViewModel : UpdateSettingsSectionViewModelBase
 {
     private readonly IDialogService _dialogService;
+    private readonly IShellLauncher _launcher;
     private readonly IMainWindowController _mainWindow;
     private readonly Lock _installLock = new();
     private readonly CancellationTokenSource _closeCts = new();
@@ -26,8 +27,13 @@ public sealed partial class UpdateSettingsSectionViewModel : UpdateSettingsSecti
 
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(InstallUpdateCommand))]
+    [NotifyCanExecuteChangedFor(nameof(ShowChangelogCommand))]
     [NotifyPropertyChangedFor(nameof(CanCheckNow))]
     private bool _isBusy;
+
+    [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(ShowChangelogCommand))]
+    private bool _isLoadingChangelog;
 
     [ObservableProperty]
     private double _downloadProgress;
@@ -54,10 +60,12 @@ public sealed partial class UpdateSettingsSectionViewModel : UpdateSettingsSecti
         IUpdateEnvironment environment,
         IDialogService dialogService,
         IUiDispatcher uiDispatcher,
+        IShellLauncher launcher,
         IMainWindowController mainWindow)
         : base(updateSettings, coordinator, options, environment, uiDispatcher)
     {
         _dialogService = dialogService;
+        _launcher = launcher;
         _mainWindow = mainWindow;
 
         _autoInstall = ApplyMode == UpdateApplyMode.Automatic;
@@ -214,6 +222,48 @@ public sealed partial class UpdateSettingsSectionViewModel : UpdateSettingsSecti
     [RelayCommand]
     private void DecreaseInterval() => CheckIntervalHours = Math.Max(1, CheckIntervalHours - 1);
 
+    [RelayCommand(CanExecute = nameof(CanShowChangelog))]
+    private async Task ShowChangelogAsync(CancellationToken cancellationToken)
+    {
+        if (IsLoadingChangelog)
+        {
+            return;
+        }
+
+        IsLoadingChangelog = true;
+
+        try
+        {
+            var entries = await Coordinator.LoadChangelogAsync(cancellationToken).ConfigureAwait(true);
+            var slug = UpdateRepository.Resolve(RepositoryOverride, DefaultRepository);
+            var releasesUrl = $"https://github.com/{slug}/releases";
+            var dialog = UpdateDetailsDialogViewModel.ForHistory(entries, releasesUrl);
+
+            if (await _dialogService.ShowAsync(dialog).ConfigureAwait(true)
+                && dialog.ChosenAction == UpdateDetailsAction.OpenReleasePage)
+            {
+                _launcher.Open(releasesUrl);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        catch (UpdateException exception)
+        {
+            _dialogService.Error("История изменений", exception.Message);
+        }
+        catch (Exception)
+        {
+            _dialogService.Error("История изменений", "Не удалось загрузить историю изменений.");
+        }
+        finally
+        {
+            IsLoadingChangelog = false;
+        }
+    }
+
+    private bool CanShowChangelog() => !IsLoadingChangelog;
+
     [RelayCommand(CanExecute = nameof(CanInstall))]
     private async Task InstallUpdateAsync()
     {
@@ -229,11 +279,31 @@ public sealed partial class UpdateSettingsSectionViewModel : UpdateSettingsSecti
         var isPrepared = pending is not null
             && (candidate is null || string.Equals(pending.Version, candidate.Version.ToString(), StringComparison.Ordinal));
 
-        var question = isPrepared
-            ? $"Установить загруженную версию {versionText} сейчас?"
-            : $"Загрузить и установить версию {versionText}?";
+        if (candidate is not null)
+        {
+            var dialog = UpdateDetailsDialogViewModel.ForCandidate(
+                candidate,
+                Environment.CurrentVersion,
+                UpdateDeliveryMode.SingleFileSwap,
+                isPrepared);
 
-        if (!_dialogService.Confirm("Установка обновления", question + "\n\nПриложение перезапустится автоматически."))
+            if (!await _dialogService.ShowAsync(dialog).ConfigureAwait(true))
+            {
+                return;
+            }
+
+            if (dialog.ChosenAction == UpdateDetailsAction.OpenReleasePage)
+            {
+                _launcher.Open(candidate.NotesUrl);
+                return;
+            }
+
+            if (dialog.ChosenAction != UpdateDetailsAction.Install)
+            {
+                return;
+            }
+        }
+        else if (!_dialogService.Confirm("Установка обновления", $"Установить загруженную версию {versionText} сейчас?\n\nПриложение перезапустится автоматически."))
         {
             return;
         }

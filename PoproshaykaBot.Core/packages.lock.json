@@ -37,9 +37,9 @@
       },
       "KeepShell.Updates": {
         "type": "Direct",
-        "requested": "[0.1.341, )",
-        "resolved": "0.1.341",
-        "contentHash": "6lPrv2KE2YXrZV9Vaj5CenbpaOPusOHMmpONZ2n0KWEaVtmOy89VDDhAiAwSyFJUAZcoZMvBKWvx8N0oYyZ1mg=="
+        "requested": "[0.1.343, )",
+        "resolved": "0.1.343",
+        "contentHash": "+YGdojk0PzNMDJPWyb6+kfN67zWGXa4QCf9Ki4otB4qN2Iz+RF7Qq+0/FnjgWZn6Brhm3zjp+hAxn9oukcAWZg=="
       },
       "Meziantou.Analyzer": {
         "type": "Direct",

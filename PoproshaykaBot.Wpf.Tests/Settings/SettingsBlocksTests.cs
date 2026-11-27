@@ -402,6 +402,7 @@ public class SettingsBlocksTests
             updateEnv,
             dialogs,
             new ManualUiDispatcher(),
+            DispatchProxy.Create<IShellLauncher, InertProxy>(),
             DispatchProxy.Create<IMainWindowController, InertProxy>());
         var debugChannel = new DebugChannelSectionViewModel(DebugChannelOverride.None, debugChannelStore, null!, TimeProvider.System, NullLogger<DebugChannelSectionViewModel>.Instance);
         var channelCatalogStore = new ChannelCatalogStore(null, Path.Combine(_root, "channels.json"), gate);

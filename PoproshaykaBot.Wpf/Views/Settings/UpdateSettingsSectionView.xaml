@@ -90,18 +90,24 @@
         <StackPanel>
             <TextBlock Text="Действия"
                        Style="{StaticResource Setting.GroupHeading}" />
-            <StackPanel Orientation="Horizontal">
+            <WrapPanel>
                 <Button Content="Проверить сейчас"
                         Command="{Binding CheckNowCommand}"
                         IsEnabled="{Binding CanCheckNow}"
                         Style="{StaticResource Button.Secondary}"
                         VerticalAlignment="Center"
-                        Margin="0,0,8,0" />
+                        Margin="0,0,8,8" />
+                <Button Content="История изменений"
+                        Command="{Binding ShowChangelogCommand}"
+                        Style="{StaticResource Button.Secondary}"
+                        VerticalAlignment="Center"
+                        Margin="0,0,8,8" />
                 <Button Content="Установить обновление"
                         Command="{Binding InstallUpdateCommand}"
                         Style="{StaticResource Button.Primary}"
-                        VerticalAlignment="Center" />
-            </StackPanel>
+                        VerticalAlignment="Center"
+                        Margin="0,0,0,8" />
+            </WrapPanel>
         </StackPanel>
 
     </StackPanel>

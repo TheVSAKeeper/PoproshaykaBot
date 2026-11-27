@@ -23,6 +23,7 @@ public sealed class UpdateSettingsSectionContributor : ISettingsSectionContribut
         nameof(UpdateSettingsSectionViewModel.IsDownloading),
         nameof(UpdateSettingsSectionViewModel.IsChecking),
         nameof(UpdateSettingsSectionViewModel.IsBusy),
+        nameof(UpdateSettingsSectionViewModel.IsLoadingChangelog),
         nameof(UpdateSettingsSectionViewModel.CanCheckNow),
         nameof(UpdateSettingsSectionViewModel.DownloadProgress),
         nameof(UpdateSettingsSectionViewModel.CurrentVersionText),
