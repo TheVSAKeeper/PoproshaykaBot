@@ -10,8 +10,6 @@ using PoproshaykaBot.Wpf.Tests.Support;
 using PoproshaykaBot.Wpf.ViewModels;
 using PoproshaykaBot.Wpf.ViewModels.Settings;
 using System.IO;
-using CoreUpdateKind = PoproshaykaBot.Core.Update.UpdateKind;
-using ICoreUpdateEnvironment = PoproshaykaBot.Core.Update.IUpdateEnvironment;
 
 namespace PoproshaykaBot.Wpf.Tests.Shell;
 
@@ -48,9 +46,15 @@ public sealed class ManualUpdateCancellationTests
             string.Empty);
     }
 
-    private static ICoreUpdateEnvironment CreateEnvironment()
+    private static IUpdateEnvironment CreateEnvironment()
     {
-        return new TestEnvironment();
+        return new UpdateEnvironment(
+            UpdateKind.SingleFile,
+            selfContained: true,
+            currentVersion: Version.Parse("3.1.0.15"),
+            runtimeMajor: 10,
+            executablePath: "Bot.exe",
+            architecture: "x64");
     }
 
     [Test]
@@ -96,8 +100,7 @@ public sealed class ManualUpdateCancellationTests
         var downloadTask = banner.DownloadCommand.ExecuteAsync(null);
         await started.Task.WaitAsync(TimeSpan.FromSeconds(5));
 
-        banner.ResetInstallState();
-        Assert.That(banner.IsDownloading, Is.True, "Сброс при отмене закрытия не должен разблокировать идущую загрузку");
+        Assert.That(banner.IsDownloading, Is.True);
 
         var cancelTask = banner.CancelInstallAsync();
         await cancelled.Task.WaitAsync(TimeSpan.FromSeconds(5));
@@ -182,7 +185,7 @@ public sealed class ManualUpdateCancellationTests
 
         var store = new UpdateStore(null, Path.Combine(_directory, "update.json"));
         var environment = CreateEnvironment();
-        var options = PoproshaykaBot.Core.Update.UpdateServiceCollectionExtensions.CreateOptions(environment);
+        var options = PoproshaykaBot.Core.Update.UpdateServiceCollectionExtensions.CreateOptions("owner/repo");
         var dialogs = new RecordingDialogService();
         var mainWindow = new RecordingMainWindow();
 
@@ -191,7 +194,6 @@ public sealed class ManualUpdateCancellationTests
             coordinator,
             options,
             environment,
-            store,
             dialogs,
             new ManualUiDispatcher(),
             mainWindow);
@@ -230,7 +232,7 @@ public sealed class ManualUpdateCancellationTests
         });
         var store = new UpdateStore(null, Path.Combine(_directory, "update.json"));
         var environment = CreateEnvironment();
-        var options = PoproshaykaBot.Core.Update.UpdateServiceCollectionExtensions.CreateOptions(environment);
+        var options = PoproshaykaBot.Core.Update.UpdateServiceCollectionExtensions.CreateOptions("owner/repo");
         var dialogs = new RecordingDialogService();
         var mainWindow = new RecordingMainWindow();
 
@@ -239,7 +241,6 @@ public sealed class ManualUpdateCancellationTests
             coordinator,
             options,
             environment,
-            store,
             dialogs,
             new ManualUiDispatcher(),
             mainWindow);
@@ -345,27 +346,6 @@ public sealed class ManualUpdateCancellationTests
         public void Dismiss()
         {
         }
-    }
-
-    private sealed class TestEnvironment : ICoreUpdateEnvironment
-    {
-        public CoreUpdateKind Kind => CoreUpdateKind.Portable;
-
-        KeepShell.Updates.UpdateKind KeepShell.Updates.IUpdateEnvironment.Kind => KeepShell.Updates.UpdateKind.SingleFile;
-
-        public bool SelfContained => true;
-
-        public string Architecture => "x64";
-
-        public Version CurrentVersion { get; } = Version.Parse("3.1.0.15");
-
-        public int RuntimeMajor => 10;
-
-        public string ExecutablePath => "Bot.exe";
-
-        public string StagingDirectory => "update";
-
-        public string RepositorySlug => "owner/repo";
     }
 
     private sealed class NoopShellLauncher : IShellLauncher

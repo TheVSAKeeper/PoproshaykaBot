@@ -1,8 +1,8 @@
-﻿using Microsoft.Extensions.DependencyInjection;
+﻿using KeepShell.Updates;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using PoproshaykaBot.Core.Infrastructure.Diagnostics;
 using PoproshaykaBot.Core.Twitch.GameArt;
-using PoproshaykaBot.Core.Update;
 using System.Diagnostics;
 using System.Reflection;
 using System.Runtime.InteropServices;
@@ -64,11 +64,16 @@ public static class StartupReport
             return;
         }
 
-        if (services.GetService<IUpdateEnvironment>() is { } updateEnvironment)
+        if (services.GetService<KeepShell.Updates.IUpdateEnvironment>() is { } updateEnvironment)
         {
-            logger.LogInformation("Обновления: тип сборки {UpdateKind}, репозиторий {Repository}, архитектура {Architecture}",
+            var repository = services.GetService<KeepShell.Updates.IUpdateRepositoryProvider>()?.Slug
+                ?? services.GetService<KeepShell.Updates.UpdateOptions>()?.RepositorySlug
+                ?? "не задан";
+
+            logger.LogInformation("Обновления: тип сборки {UpdateKind} (self-contained {SelfContained}), репозиторий {Repository}, архитектура {Architecture}",
                 updateEnvironment.Kind,
-                updateEnvironment.RepositorySlug,
+                updateEnvironment.SelfContained,
+                repository,
                 updateEnvironment.Architecture);
         }
 

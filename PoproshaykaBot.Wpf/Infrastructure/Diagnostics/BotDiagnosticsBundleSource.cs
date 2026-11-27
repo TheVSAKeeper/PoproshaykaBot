@@ -1,5 +1,6 @@
 ﻿using KeepShell.Bootstrap;
 using KeepShell.Diagnostics;
+using KeepShell.Updates;
 using Microsoft.Extensions.Logging;
 using Microsoft.Web.WebView2.Core;
 using PoproshaykaBot.Core.Diagnostics;
@@ -10,7 +11,6 @@ using PoproshaykaBot.Core.Polls;
 using PoproshaykaBot.Core.Settings.Stores;
 using PoproshaykaBot.Core.Statistics;
 using PoproshaykaBot.Core.Streaming;
-using PoproshaykaBot.Core.Update;
 using PoproshaykaBot.Core.YouTube.Quota;
 using PoproshaykaBot.Wpf.Bootstrap;
 using System.Globalization;

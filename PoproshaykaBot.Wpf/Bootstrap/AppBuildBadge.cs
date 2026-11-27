@@ -1,5 +1,5 @@
 ﻿using KeepShell.Bootstrap;
-using PoproshaykaBot.Core.Update;
+using KeepShell.Updates;
 using PoproshaykaBot.Wpf.Infrastructure;
 using System.IO;
 
@@ -12,13 +12,13 @@ public static class AppBuildBadge
 
     private static readonly BuildStamp? Stamp = BuildStamp.Read(Environment.ProcessPath, AppInfo.Version);
 
-    public static BuildBadge Current { get; } = Build(Stamp, new UpdateEnvironment().Kind, ResolveFolder());
+    public static BuildBadge Current { get; } = Build(Stamp, UpdateEnvironment.FromEntryAssembly().Kind, ResolveFolder());
 
     public static string? StartupLine { get; } = Describe(Stamp);
 
     public static BuildBadge Build(BuildStamp? stamp, UpdateKind kind, string? folder)
     {
-        var noStampHint = kind is UpdateKind.Unsupported ? MissingStampHint : ReleaseHint;
+        var noStampHint = kind is UpdateKind.None ? MissingStampHint : ReleaseHint;
 
         return BuildBadge.Build(stamp, AppInfo.Version, folder, noStampHint);
     }

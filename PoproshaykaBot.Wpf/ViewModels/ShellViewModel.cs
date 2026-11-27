@@ -354,7 +354,6 @@ public sealed partial class ShellViewModel : ShellViewModelBase, IDisposable
     {
         if (_leavingPage || _settingsPage.IsSaving || !await ConfirmDirtyPagesOnCloseAsync())
         {
-            UpdateBanner.ResetInstallState();
             _updateSettings?.ResetInstallState();
 
             if (App.IsRestartRequested)

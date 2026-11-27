@@ -4,20 +4,19 @@ using KeepShell.Updates.Wpf;
 using Microsoft.Extensions.Logging;
 using PoproshaykaBot.Wpf.Bootstrap;
 using PoproshaykaBot.Wpf.Infrastructure;
-using ICoreUpdateEnvironment = PoproshaykaBot.Core.Update.IUpdateEnvironment;
 
 namespace PoproshaykaBot.Wpf.ViewModels;
 
 public sealed class UpdateBannerViewModel : UpdateBannerViewModelBase
 {
-    private readonly ICoreUpdateEnvironment _environment;
+    private readonly IUpdateEnvironment _environment;
     private readonly IDialogService _dialogService;
     private readonly ILogger<UpdateBannerViewModel> _logger;
     private readonly IMainWindowController _mainWindow;
 
     public UpdateBannerViewModel(
         IUpdateCoordinator coordinator,
-        ICoreUpdateEnvironment environment,
+        IUpdateEnvironment environment,
         IDialogService dialogService,
         ILogger<UpdateBannerViewModel> logger,
         IUiDispatcher uiDispatcher,
@@ -42,10 +41,6 @@ public sealed class UpdateBannerViewModel : UpdateBannerViewModelBase
         {
             await downloadTask.ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing | ConfigureAwaitOptions.ContinueOnCapturedContext);
         }
-    }
-
-    public void ResetInstallState()
-    {
     }
 
     protected override Task<bool> ConfirmDownloadAsync(UpdateCandidate candidate, CancellationToken cancellationToken)

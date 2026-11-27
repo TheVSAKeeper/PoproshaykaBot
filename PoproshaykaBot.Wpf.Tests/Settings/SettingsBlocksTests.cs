@@ -394,13 +394,12 @@ public class SettingsBlocksTests
         var obsChat = new ObsChatSettingsSectionViewModel(obsChatStore, settingsManager, dialogs, null!);
         var obsIntegration = new ObsIntegrationSectionViewModel(null!, settingsManager, NullLogger<ObsIntegrationSectionViewModel>.Instance, dialogs, null!);
         var polls = new PollsSettingsSectionViewModel(pollsStore, TimeProvider.System);
-        var updateEnv = new FakeUpdateEnvironment();
+        var updateEnv = new KeepShell.Updates.UpdateEnvironment(KeepShell.Updates.UpdateKind.None, false, new(1, 0), 10, "Bot.exe", "x64");
         var update = new UpdateSettingsSectionViewModel(
             new UpdateStoreSettingsAdapter(updateStore),
             new FakeUpdateCoordinator(),
-            PoproshaykaBot.Core.Update.UpdateServiceCollectionExtensions.CreateOptions(updateEnv),
+            PoproshaykaBot.Core.Update.UpdateServiceCollectionExtensions.CreateOptions("owner/repo"),
             updateEnv,
-            updateStore,
             dialogs,
             new ManualUiDispatcher(),
             DispatchProxy.Create<IMainWindowController, InertProxy>());
@@ -423,7 +422,7 @@ public class SettingsBlocksTests
             new RanksSettingsSectionContributor(new()),
             new ChannelsSettingsSectionContributor(channelCatalog, channelGroups, channelCatalogStore),
             new DashboardSettingsSectionContributor(dashboardLayout, new DashboardLayoutCoordinator(layoutStore)),
-            new UpdateSettingsSectionContributor(update, updateStore),
+            new UpdateSettingsSectionContributor(update),
             new DebugChannelSettingsSectionContributor(debugChannel, debugChannelStore),
             new McpSettingsSectionContributor(mcp),
             new AppearanceSettingsSectionContributor(new AppearanceSettingsSectionViewModel(new(uiSettings), new(uiSettings))),
@@ -510,19 +509,6 @@ public class SettingsBlocksTests
         public void Dismiss()
         {
         }
-    }
-
-    private sealed class FakeUpdateEnvironment : IUpdateEnvironment
-    {
-        public UpdateKind Kind => UpdateKind.Unsupported;
-        KeepShell.Updates.UpdateKind KeepShell.Updates.IUpdateEnvironment.Kind => KeepShell.Updates.UpdateKind.None;
-        public bool SelfContained => false;
-        public string Architecture => "x64";
-        public Version CurrentVersion { get; } = new(1, 0);
-        public int RuntimeMajor => 10;
-        public string ExecutablePath => "Bot.exe";
-        public string StagingDirectory => "update";
-        public string RepositorySlug => "owner/repo";
     }
 
     private sealed class EmptyServiceProvider : IServiceProvider

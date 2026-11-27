@@ -20,10 +20,11 @@
 
   <ItemGroup Condition="'$(PortableMode)' == 'true'">
     <AssemblyMetadata Include="PortableMode" Value="true" />
+    <AssemblyMetadata Include="KeepShellSelfContained" Value="true" />
   </ItemGroup>
 
   <ItemGroup Condition="'$(UpdatableBuild)' == 'true'">
-    <AssemblyMetadata Include="UpdatableBuild" Value="true" />
+    <AssemblyMetadata Include="KeepShellUpdateKind" Value="SingleFile" />
   </ItemGroup>
 
   <ItemGroup>

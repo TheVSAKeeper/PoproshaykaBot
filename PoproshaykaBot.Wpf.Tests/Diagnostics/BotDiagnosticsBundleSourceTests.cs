@@ -20,6 +20,7 @@ using PoproshaykaBot.Core.Statistics;
 using PoproshaykaBot.Core.Streaming;
 using PoproshaykaBot.Core.Twitch;
 using PoproshaykaBot.Core.Twitch.GameArt;
+using KeepShell.Updates;
 using PoproshaykaBot.Core.Update;
 using PoproshaykaBot.Core.Users.Avatars;
 using PoproshaykaBot.Core.YouTube.Quota;

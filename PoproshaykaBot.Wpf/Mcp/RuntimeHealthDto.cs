@@ -1,9 +1,9 @@
-﻿using PoproshaykaBot.Core.Chat.Display;
+﻿using KeepShell.Updates;
+using PoproshaykaBot.Core.Chat.Display;
 using PoproshaykaBot.Core.Infrastructure.Runtime;
 using PoproshaykaBot.Core.Polls;
 using PoproshaykaBot.Core.Settings.Stores;
 using PoproshaykaBot.Core.Statistics;
-using PoproshaykaBot.Core.Update;
 using PoproshaykaBot.Wpf.Infrastructure;
 using PoproshaykaBot.Wpf.Infrastructure.Diagnostics;
 

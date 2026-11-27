@@ -1,14 +1,13 @@
 ﻿using KeepShell.Updates;
 using Microsoft.Extensions.Logging;
 using PoproshaykaBot.Core.Infrastructure.Hosting;
-using PoproshaykaBot.Core.Settings.Stores;
 
 namespace PoproshaykaBot.Core.Update;
 
 public sealed class UpdateBackgroundService(
     IUpdateCoordinator coordinator,
     IUpdateEnvironment environment,
-    UpdateStore store,
+    IUpdateSettings settings,
     TimeProvider timeProvider,
     ILogger<UpdateBackgroundService> logger)
     : IAppLifetimeComponent, IDisposable
@@ -24,7 +23,7 @@ public sealed class UpdateBackgroundService(
 
     public Task StartAsync(CancellationToken cancellationToken)
     {
-        if (environment.Kind == UpdateKind.Unsupported)
+        if (environment.Kind == UpdateKind.None)
         {
             logger.LogInformation("Сборка не поддерживает автообновление – фоновая проверка отключена");
             return Task.CompletedTask;
@@ -74,18 +73,17 @@ public sealed class UpdateBackgroundService(
     {
         try
         {
-            logger.LogInformation("Фоновая проверка обновлений запущена: период {IntervalHours} ч, тип сборки {Kind}, обновляемая {IsUpdatable}",
-                Math.Max(1, store.Load().CheckIntervalHours),
+            logger.LogInformation("Фоновая проверка обновлений запущена: период {IntervalHours} ч, тип сборки {Kind}, self-contained {SelfContained}, обновляемая {IsUpdatable}",
+                Math.Max(1, (int)Math.Round(settings.CheckInterval.TotalHours)),
                 environment.Kind,
+                environment.SelfContained,
                 coordinator.IsUpdatable);
 
             await Task.Delay(InitialDelay, timeProvider, cancellationToken).ConfigureAwait(false);
 
             while (!cancellationToken.IsCancellationRequested)
             {
-                var settings = store.Load();
-
-                if (!settings.AutoCheckEnabled)
+                if (!settings.AutomaticCheckEnabled)
                 {
                     logger.LogInformation("Проверка обновлений пропущена: автопроверка выключена в настройках");
                 }
@@ -98,8 +96,8 @@ public sealed class UpdateBackgroundService(
                     await coordinator.CheckAsync(manual: false, cancellationToken).ConfigureAwait(false);
                 }
 
-                var hours = Math.Max(1, settings.CheckIntervalHours);
-                await Task.Delay(TimeSpan.FromHours(hours), timeProvider, cancellationToken).ConfigureAwait(false);
+                var interval = UpdateSchedule.ClampInterval(settings.CheckInterval, UpdateOptions.DefaultCheckInterval);
+                await Task.Delay(interval, timeProvider, cancellationToken).ConfigureAwait(false);
             }
         }
         catch (OperationCanceledException)

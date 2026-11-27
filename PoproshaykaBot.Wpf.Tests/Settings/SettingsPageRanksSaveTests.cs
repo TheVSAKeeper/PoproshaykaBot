@@ -27,7 +27,6 @@ using System.Reflection;
 using UpdateCandidate = KeepShell.Updates.UpdateCandidate;
 using KeepUpdateStage = KeepShell.Updates.UpdateStage;
 using KeepPendingUpdate = KeepShell.Updates.PendingUpdate;
-using CoreUpdateKind = PoproshaykaBot.Core.Update.UpdateKind;
 
 namespace PoproshaykaBot.Wpf.Tests.Settings;
 
@@ -282,13 +281,12 @@ public class SettingsPageRanksSaveTests
             var obsChat = new ObsChatSettingsSectionViewModel(obsChatStore, SettingsManager, Dialogs, null!);
             var obsIntegration = new ObsIntegrationSectionViewModel(null!, SettingsManager, NullLogger<ObsIntegrationSectionViewModel>.Instance, Dialogs, null!);
             var polls = new PollsSettingsSectionViewModel(pollsStore, TimeProvider.System);
-            var updateEnv = new FakeUpdateEnvironment();
+            var updateEnv = new KeepShell.Updates.UpdateEnvironment(KeepShell.Updates.UpdateKind.None, false, new(1, 0), 10, "Bot.exe", "x64");
             var update = new UpdateSettingsSectionViewModel(
                 new UpdateStoreSettingsAdapter(updateStore),
                 UpdateCoordinator,
-                PoproshaykaBot.Core.Update.UpdateServiceCollectionExtensions.CreateOptions(updateEnv),
+                PoproshaykaBot.Core.Update.UpdateServiceCollectionExtensions.CreateOptions("owner/repo"),
                 updateEnv,
-                updateStore,
                 Dialogs,
                 new ManualUiDispatcher(),
                 DispatchProxy.Create<IMainWindowController, InertProxy>());
@@ -306,7 +304,7 @@ public class SettingsPageRanksSaveTests
                 new StreamSettingsSectionContributor(new(), new(), polls),
                 new RanksSettingsSectionContributor(ranks),
                 new DashboardSettingsSectionContributor(dashboardLayout, new DashboardLayoutCoordinator(layoutStore)),
-                new UpdateSettingsSectionContributor(update, updateStore),
+                new UpdateSettingsSectionContributor(update),
                 new DebugChannelSettingsSectionContributor(debugChannel, debugChannelStore),
                 new McpSettingsSectionContributor(mcp),
                 new AppearanceSettingsSectionContributor(new AppearanceSettingsSectionViewModel(new(uiSettings), new(uiSettings))),
@@ -456,19 +454,6 @@ public class SettingsPageRanksSaveTests
         public void Dismiss()
         {
         }
-    }
-
-    private sealed class FakeUpdateEnvironment : IUpdateEnvironment
-    {
-        public CoreUpdateKind Kind => CoreUpdateKind.Unsupported;
-        KeepShell.Updates.UpdateKind KeepShell.Updates.IUpdateEnvironment.Kind => KeepShell.Updates.UpdateKind.None;
-        public bool SelfContained => false;
-        public string Architecture => "x64";
-        public Version CurrentVersion { get; } = new(1, 0);
-        public int RuntimeMajor => 10;
-        public string ExecutablePath => "Bot.exe";
-        public string StagingDirectory => "update";
-        public string RepositorySlug => "owner/repo";
     }
 
     private sealed class EmptyServiceProvider : IServiceProvider

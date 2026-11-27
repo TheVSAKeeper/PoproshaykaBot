@@ -6,8 +6,6 @@ using PoproshaykaBot.Core.Update;
 using System.Net.Http;
 using CoreUpdateApplyMode = PoproshaykaBot.Core.Settings.Update.UpdateApplyMode;
 using CoreUpdateSettings = PoproshaykaBot.Core.Settings.Update.UpdateSettings;
-using UpdateCoordinator = KeepShell.Updates.UpdateCoordinator;
-using UpdateKind = PoproshaykaBot.Core.Update.UpdateKind;
 
 namespace PoproshaykaBot.Core.Tests.Update;
 
@@ -40,10 +38,10 @@ public sealed class UpdateApplyModeTests
         }
     }
 
-    private static string AssetName(string version, UpdateKind kind = UpdateKind.Portable) =>
-        kind == UpdateKind.FrameworkDependent
-            ? $"PoproshaykaBot-v{version}-x64.exe"
-            : $"PoproshaykaBot-v{version}-x64-portable.exe";
+    private static string AssetName(string version, bool selfContained = true) =>
+        selfContained
+            ? $"PoproshaykaBot-v{version}-x64-portable.zip"
+            : $"PoproshaykaBot-v{version}-x64.zip";
 
     private static UpdateCandidate Candidate(string version = PreparedVersion)
     {
@@ -51,22 +49,22 @@ public sealed class UpdateApplyModeTests
         return new(
             Version.Parse(version),
             "v" + version,
-            new(KeepShell.Updates.UpdateKind.SingleFile, "x64", true, null, name, ValidSha256, 100),
+            new(UpdateKind.SingleFile, "x64", true, null, name, ValidSha256, 100),
             "https://example/download/" + name,
             "https://example/notes",
             string.Empty);
     }
 
-    private static IReleaseSource ReleaseSourceFor(string version = PreparedVersion, UpdateKind kind = UpdateKind.Portable, Action? onGetLatest = null)
+    private static IReleaseSource ReleaseSourceFor(string version = PreparedVersion, bool selfContained = true, Action? onGetLatest = null)
     {
-        var asset = AssetName(version, kind);
+        var asset = AssetName(version, selfContained);
         var source = Substitute.For<IReleaseSource>();
         List<ReleaseAsset> assets =
         [
             new(asset, "https://example/download/" + asset, 100),
             new("SHA256SUMS-x64.txt", "https://example/download/SHA256SUMS-x64.txt", 100),
         ];
-        if (kind == UpdateKind.FrameworkDependent)
+        if (!selfContained)
         {
             assets.Add(new("RUNTIME-x64.txt", "https://example/download/RUNTIME-x64.txt", 16));
         }
@@ -79,7 +77,7 @@ public sealed class UpdateApplyModeTests
             });
         source.DownloadTextAsync("https://example/download/SHA256SUMS-x64.txt", Arg.Any<CancellationToken>())
             .Returns($"{ValidSha256}  {asset}");
-        if (kind == UpdateKind.FrameworkDependent)
+        if (!selfContained)
         {
             source.DownloadTextAsync("https://example/download/RUNTIME-x64.txt", Arg.Any<CancellationToken>())
                 .Returns("net10.0-windows");
@@ -90,7 +88,7 @@ public sealed class UpdateApplyModeTests
 
     private PendingUpdate WritePending(string version = PreparedVersion, string? stagedPath = null, string? targetPath = null)
     {
-        var staged = stagedPath ?? Path.Combine(_staging, AssetName(version));
+        var staged = stagedPath ?? Path.Combine(_staging, $"PoproshaykaBot-v{version}-x64-portable.exe");
         Directory.CreateDirectory(Path.GetDirectoryName(staged)!);
         File.WriteAllText(staged, "new");
 
@@ -119,30 +117,25 @@ public sealed class UpdateApplyModeTests
         store.Save(settings);
     }
 
-    private PoproshaykaBot.Core.Update.IUpdateEnvironment CreateEnvironment(UpdateKind kind)
+    private IUpdateEnvironment CreateEnvironment(UpdateKind kind = UpdateKind.SingleFile, bool selfContained = true)
     {
-        var environment = Substitute.For<PoproshaykaBot.Core.Update.IUpdateEnvironment>();
-        environment.Kind.Returns(kind);
-        ((KeepShell.Updates.IUpdateEnvironment)environment).Kind.Returns(kind == UpdateKind.Unsupported
-            ? KeepShell.Updates.UpdateKind.None
-            : KeepShell.Updates.UpdateKind.SingleFile);
-        environment.SelfContained.Returns(kind == UpdateKind.Portable);
-        environment.CurrentVersion.Returns(Version.Parse("3.1.0.6"));
-        environment.Architecture.Returns("x64");
-        environment.RuntimeMajor.Returns(10);
-        environment.ExecutablePath.Returns(_executable);
-        environment.StagingDirectory.Returns(_staging);
-        environment.RepositorySlug.Returns("owner/repo");
-        return environment;
+        return new UpdateEnvironment(
+            kind,
+            selfContained,
+            Version.Parse("3.1.0.6"),
+            10,
+            _executable,
+            "x64");
     }
 
     private UpdateCoordinator Coordinator(
         UpdateStore store,
         IUpdateInstaller installer,
-        UpdateKind kind,
+        UpdateKind kind = UpdateKind.SingleFile,
+        bool selfContained = true,
         IReleaseSource? releaseSource = null)
     {
-        var environment = CreateEnvironment(kind);
+        var environment = CreateEnvironment(kind, selfContained);
         var checker = new UpdateChecker(
             releaseSource ?? Substitute.For<IReleaseSource>(),
             environment,
@@ -152,28 +145,29 @@ public sealed class UpdateApplyModeTests
         return new(checker, installer, new UpdateStoreSettingsAdapter(store), environment, TimeProvider.System, NullLogger<UpdateCoordinator>.Instance);
     }
 
-    [TestCase(CoreUpdateApplyMode.SilentOnExit, UpdateKind.Portable, false, true)]
-    [TestCase(CoreUpdateApplyMode.SilentOnExit, UpdateKind.FrameworkDependent, true, true)]
-    [TestCase(CoreUpdateApplyMode.SilentOnExit, UpdateKind.FrameworkDependent, false, false)]
-    [TestCase(CoreUpdateApplyMode.SilentOnExit, UpdateKind.Unsupported, true, false)]
-    [TestCase(CoreUpdateApplyMode.NotifyAndConfirm, UpdateKind.Portable, false, false)]
-    [TestCase(CoreUpdateApplyMode.NotifyAndConfirm, UpdateKind.FrameworkDependent, true, false)]
+    [TestCase(CoreUpdateApplyMode.SilentOnExit, UpdateKind.SingleFile, true, false, true)]
+    [TestCase(CoreUpdateApplyMode.SilentOnExit, UpdateKind.SingleFile, false, true, true)]
+    [TestCase(CoreUpdateApplyMode.SilentOnExit, UpdateKind.SingleFile, false, false, false)]
+    [TestCase(CoreUpdateApplyMode.SilentOnExit, UpdateKind.None, false, true, false)]
+    [TestCase(CoreUpdateApplyMode.NotifyAndConfirm, UpdateKind.SingleFile, true, false, false)]
+    [TestCase(CoreUpdateApplyMode.NotifyAndConfirm, UpdateKind.SingleFile, false, true, false)]
     public async Task CheckAsync_ManualFalse_DownloadsOnlyInAutomaticModeOnUpdatableBuild(
         CoreUpdateApplyMode mode,
         UpdateKind kind,
+        bool selfContained,
         bool allowFrameworkDependent,
         bool expectedPrepared)
     {
         var installer = Substitute.For<IUpdateInstaller>();
         installer.PrepareAsync(Arg.Any<UpdateCandidate>(), Arg.Any<IProgress<int>?>(), Arg.Any<CancellationToken>())
             .Returns(_ => Task.FromResult(WritePending()));
-        var source = ReleaseSourceFor(PreparedVersion, kind);
-        var coordinator = Coordinator(Store(mode, allowFrameworkDependent), installer, kind, source);
+        var source = ReleaseSourceFor(PreparedVersion, selfContained);
+        var coordinator = Coordinator(Store(mode, allowFrameworkDependent), installer, kind, selfContained, source);
 
         var result = await coordinator.CheckAsync(manual: false, CancellationToken.None);
 
         Assert.That(coordinator.Pending is not null, Is.EqualTo(expectedPrepared));
-        if (mode == CoreUpdateApplyMode.NotifyAndConfirm && kind == UpdateKind.Portable)
+        if (mode == CoreUpdateApplyMode.NotifyAndConfirm && kind == UpdateKind.SingleFile && selfContained)
         {
             Assert.That(result, Is.True);
             Assert.That(coordinator.Stage, Is.EqualTo(UpdateStage.Available));
@@ -189,7 +183,7 @@ public sealed class UpdateApplyModeTests
         var pending = WritePending();
         var installer = Substitute.For<IUpdateInstaller>();
         installer.ReadPending().Returns(pending);
-        var coordinator = Coordinator(Store(CoreUpdateApplyMode.NotifyAndConfirm), installer, UpdateKind.Portable, ReleaseSourceFor());
+        var coordinator = Coordinator(Store(CoreUpdateApplyMode.NotifyAndConfirm), installer, releaseSource: ReleaseSourceFor());
 
         await coordinator.CheckAsync(manual: true, CancellationToken.None);
         var prepared = await coordinator.DownloadAsync(CancellationToken.None);
@@ -210,7 +204,7 @@ public sealed class UpdateApplyModeTests
         var installer = Substitute.For<IUpdateInstaller>();
         installer.PrepareAsync(Arg.Any<UpdateCandidate>(), Arg.Any<IProgress<int>?>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromException<PendingUpdate>(new UpdateException("Нет прав на запись")));
-        var coordinator = Coordinator(Store(CoreUpdateApplyMode.SilentOnExit), installer, UpdateKind.Portable, ReleaseSourceFor());
+        var coordinator = Coordinator(Store(CoreUpdateApplyMode.SilentOnExit), installer, releaseSource: ReleaseSourceFor());
 
         var result = await coordinator.CheckAsync(manual: false, CancellationToken.None);
 
@@ -230,7 +224,7 @@ public sealed class UpdateApplyModeTests
     {
         var installer = Substitute.For<IUpdateInstaller>();
         installer.ReadPending().Returns(_ => PendingUpdateStore.Read(_staging, NullLogger.Instance));
-        var environment = CreateEnvironment(UpdateKind.Portable);
+        var environment = CreateEnvironment();
         var realInstaller = new SingleFileSwapInstaller(new UpdateDownloader(Substitute.For<IReleaseSource>()), environment);
         installer.DiscardPending(Arg.Any<Version>()).Returns(call => realInstaller.DiscardPending(call.Arg<Version>()));
 
@@ -256,7 +250,7 @@ public sealed class UpdateApplyModeTests
 
         try
         {
-            var coordinator = Coordinator(store, installer, UpdateKind.Portable, ReleaseSourceFor());
+            var coordinator = Coordinator(store, installer, releaseSource: ReleaseSourceFor());
 
             await coordinator.CheckAsync(manual: false, CancellationToken.None);
 
@@ -281,9 +275,9 @@ public sealed class UpdateApplyModeTests
     public async Task DiscardPending_ReturnsTrueOnlyWhenPendingFileIsGone(bool deleted)
     {
         WritePending();
-        var environment = CreateEnvironment(UpdateKind.Portable);
+        var environment = CreateEnvironment();
         var installer = new SingleFileSwapInstaller(new UpdateDownloader(Substitute.For<IReleaseSource>()), environment);
-        var coordinator = Coordinator(Store(CoreUpdateApplyMode.NotifyAndConfirm), installer, UpdateKind.Portable);
+        var coordinator = Coordinator(Store(CoreUpdateApplyMode.NotifyAndConfirm), installer);
         coordinator.RestorePending();
 
         FileStream? lockStream = deleted
@@ -313,7 +307,7 @@ public sealed class UpdateApplyModeTests
     [TestCase(false)]
     public void PrepareAsync_RemovesPartialDownload_OnCancellationOrFailure(bool cancelled)
     {
-        var environment = CreateEnvironment(UpdateKind.Portable);
+        var environment = CreateEnvironment();
         var source = Substitute.For<IReleaseSource>();
         source.DownloadFileAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<IProgress<int>?>(), Arg.Any<CancellationToken>())
             .Returns(call =>
@@ -334,14 +328,14 @@ public sealed class UpdateApplyModeTests
     public async Task DownloadAsync_DiscardsAlreadyPreparedVersion_WhenItIsSkipped()
     {
         WritePending();
-        var environment = CreateEnvironment(UpdateKind.Portable);
+        var environment = CreateEnvironment();
         var installer = Substitute.For<IUpdateInstaller>();
         installer.ReadPending().Returns(_ => PendingUpdateStore.Read(_staging, NullLogger.Instance));
         var realInstaller = new SingleFileSwapInstaller(new UpdateDownloader(Substitute.For<IReleaseSource>()), environment);
         installer.DiscardPending(Arg.Any<Version>()).Returns(call => realInstaller.DiscardPending(call.Arg<Version>()));
 
         var store = Store(CoreUpdateApplyMode.NotifyAndConfirm);
-        var coordinator = Coordinator(store, installer, UpdateKind.Portable, ReleaseSourceFor());
+        var coordinator = Coordinator(store, installer, releaseSource: ReleaseSourceFor());
 
         await coordinator.CheckAsync(manual: true, CancellationToken.None);
         SetStored(store, settings => settings.SkippedVersion = PreparedVersion);
@@ -359,10 +353,10 @@ public sealed class UpdateApplyModeTests
     public async Task CheckAsync_KeepsSkipMadeDuringCheck_AndDropsSkippedCandidate()
     {
         var store = Store(CoreUpdateApplyMode.SilentOnExit);
-        var source = ReleaseSourceFor(PreparedVersion, UpdateKind.Portable,
+        var source = ReleaseSourceFor(PreparedVersion, selfContained: true,
             onGetLatest: () => SetStored(store, settings => settings.SkippedVersion = PreparedVersion));
 
-        var coordinator = Coordinator(store, Substitute.For<IUpdateInstaller>(), UpdateKind.Portable, source);
+        var coordinator = Coordinator(store, Substitute.For<IUpdateInstaller>(), releaseSource: source);
 
         var found = await coordinator.CheckAsync(manual: false, CancellationToken.None);
 
@@ -380,7 +374,7 @@ public sealed class UpdateApplyModeTests
     public async Task DownloadAsync_ReturnsFalse_OnUnsupportedBuild()
     {
         var installer = Substitute.For<IUpdateInstaller>();
-        var coordinator = Coordinator(Store(CoreUpdateApplyMode.SilentOnExit), installer, UpdateKind.Unsupported);
+        var coordinator = Coordinator(Store(CoreUpdateApplyMode.SilentOnExit), installer, UpdateKind.None);
 
         var prepared = await coordinator.DownloadAsync(CancellationToken.None);
 
@@ -393,9 +387,9 @@ public sealed class UpdateApplyModeTests
     public void DiscardPending_DiscardsPreparedUpdate_OnlyOfNamedVersion(string targetVersion, bool pendingRemains)
     {
         WritePending();
-        var environment = CreateEnvironment(UpdateKind.Portable);
+        var environment = CreateEnvironment();
         var installer = new SingleFileSwapInstaller(new UpdateDownloader(Substitute.For<IReleaseSource>()), environment);
-        var coordinator = Coordinator(Store(CoreUpdateApplyMode.SilentOnExit), installer, UpdateKind.Portable);
+        var coordinator = Coordinator(Store(CoreUpdateApplyMode.SilentOnExit), installer);
         coordinator.RestorePending();
 
         coordinator.DiscardPending(Version.Parse(targetVersion));
@@ -407,7 +401,7 @@ public sealed class UpdateApplyModeTests
     public async Task Skip_DuringDownload_LeavesDiscardToTheDownload()
     {
         var installer = Substitute.For<IUpdateInstaller>();
-        var environment = CreateEnvironment(UpdateKind.Portable);
+        var environment = CreateEnvironment();
         var realInstaller = new SingleFileSwapInstaller(new UpdateDownloader(Substitute.For<IReleaseSource>()), environment);
         installer.DiscardPending(Arg.Any<Version>()).Returns(call => realInstaller.DiscardPending(call.Arg<Version>()));
         installer.ReadPending().Returns(_ => PendingUpdateStore.Read(_staging, NullLogger.Instance));
@@ -421,7 +415,7 @@ public sealed class UpdateApplyModeTests
                 return download.Task;
             });
 
-        var coordinator = Coordinator(Store(CoreUpdateApplyMode.SilentOnExit), installer, UpdateKind.Portable, ReleaseSourceFor());
+        var coordinator = Coordinator(Store(CoreUpdateApplyMode.SilentOnExit), installer, releaseSource: ReleaseSourceFor());
 
         var silent = coordinator.CheckAsync(manual: false, CancellationToken.None);
         await started.Task.WaitAsync(TimeSpan.FromSeconds(5));
@@ -447,7 +441,7 @@ public sealed class UpdateApplyModeTests
     public async Task DiscardPending_DuringAnotherVersionsFailedDownload_DiscardsPreviousPending()
     {
         var installer = Substitute.For<IUpdateInstaller>();
-        var environment = CreateEnvironment(UpdateKind.Portable);
+        var environment = CreateEnvironment();
         var realInstaller = new SingleFileSwapInstaller(new UpdateDownloader(Substitute.For<IReleaseSource>()), environment);
         installer.DiscardPending(Arg.Any<Version>()).Returns(call => realInstaller.DiscardPending(call.Arg<Version>()));
         installer.ReadPending().Returns(_ => PendingUpdateStore.Read(_staging, NullLogger.Instance));
@@ -463,7 +457,7 @@ public sealed class UpdateApplyModeTests
 
         WritePending("3.1.0.5");
         var store = Store(CoreUpdateApplyMode.NotifyAndConfirm);
-        var coordinator = Coordinator(store, installer, UpdateKind.Portable, ReleaseSourceFor("3.1.0.7"));
+        var coordinator = Coordinator(store, installer, releaseSource: ReleaseSourceFor("3.1.0.7"));
         coordinator.RestorePending();
         await coordinator.CheckAsync(manual: true, CancellationToken.None);
 
@@ -509,7 +503,7 @@ public sealed class UpdateApplyModeTests
                 return WritePending();
             });
 
-        var coordinator = Coordinator(Store(CoreUpdateApplyMode.NotifyAndConfirm), installer, UpdateKind.Portable, ReleaseSourceFor());
+        var coordinator = Coordinator(Store(CoreUpdateApplyMode.NotifyAndConfirm), installer, releaseSource: ReleaseSourceFor());
         await coordinator.CheckAsync(manual: true, CancellationToken.None);
 
         var manualDownload = coordinator.DownloadAsync(CancellationToken.None);
@@ -532,9 +526,9 @@ public sealed class UpdateApplyModeTests
         var outside = Path.Combine(_root, "outside.exe");
         File.WriteAllText(outside, "keep");
 
-        var environment = CreateEnvironment(UpdateKind.Portable);
+        var environment = CreateEnvironment();
         var installer = new SingleFileSwapInstaller(new UpdateDownloader(Substitute.For<IReleaseSource>()), environment);
-        var coordinator = Coordinator(Store(CoreUpdateApplyMode.NotifyAndConfirm), installer, UpdateKind.Portable);
+        var coordinator = Coordinator(Store(CoreUpdateApplyMode.NotifyAndConfirm), installer);
 
         WritePending(PreparedVersion, stagedPath: outside);
         coordinator.DiscardPending(Version.Parse(PreparedVersion));
@@ -542,7 +536,7 @@ public sealed class UpdateApplyModeTests
         Assert.That(File.Exists(Path.Combine(_staging, PendingUpdateStore.FileName)), Is.False);
 
         var store = Store(CoreUpdateApplyMode.SilentOnExit);
-        var coordinator2 = Coordinator(store, installer, UpdateKind.Portable);
+        var coordinator2 = Coordinator(store, installer);
         var staged = Path.Combine(_staging, "new.exe");
         WritePending(PreparedVersion, stagedPath: staged);
 
@@ -596,8 +590,8 @@ public sealed class UpdateApplyModeTests
 
         using var service = new UpdateBackgroundService(
             coordinator,
-            CreateEnvironment(UpdateKind.Portable),
-            Store(CoreUpdateApplyMode.SilentOnExit),
+            CreateEnvironment(),
+            new UpdateStoreSettingsAdapter(Store(CoreUpdateApplyMode.SilentOnExit)),
             new ShortDelaysOnlyTimeProvider(),
             NullLogger<UpdateBackgroundService>.Instance);
 

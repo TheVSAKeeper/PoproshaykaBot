@@ -118,7 +118,7 @@ jobs:
           Move-Item -Path ".\publish\portable\PoproshaykaBot-v$version-$arch-portable.exe" -Destination ".\artifacts\"
           Compress-Archive -Path ".\artifacts\PoproshaykaBot-v$version-$arch.exe" -DestinationPath ".\artifacts\PoproshaykaBot-v$version-$arch.zip"
           Compress-Archive -Path ".\artifacts\PoproshaykaBot-v$version-$arch-portable.exe" -DestinationPath ".\artifacts\PoproshaykaBot-v$version-$arch-portable.zip"
-          Get-ChildItem ".\artifacts\*.exe" | ForEach-Object {
+          Get-ChildItem ".\artifacts\*.exe", ".\artifacts\*.zip" | Sort-Object Name | ForEach-Object {
             $hash = (Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLower()
             "$hash  $($_.Name)"
           } | Set-Content ".\artifacts\SHA256SUMS-$arch.txt" -Encoding ascii
@@ -146,73 +146,6 @@ jobs:
           path: artifacts
           pattern: release-*
           merge-multiple: true
-
-      - name: Generate update manifest
-        shell: bash
-        env:
-          VERSION: ${{ needs.prepare.outputs.version }}
-        run: |
-          python3 - <<'PY'
-          import hashlib
-          import json
-          import os
-          import pathlib
-          import re
-
-          version = os.environ["VERSION"].strip()
-          if not version:
-              raise SystemExit("VERSION is empty")
-
-          artifacts_dir = pathlib.Path("artifacts")
-          pattern = re.compile(rf"^PoproshaykaBot-v{re.escape(version)}-(x64|x86)(-portable)?\.exe$")
-
-          def parse_runtime_major(arch: str) -> int:
-              runtime_file = artifacts_dir / f"RUNTIME-{arch}.txt"
-              if not runtime_file.is_file():
-                  raise SystemExit(f"Missing {runtime_file}")
-              text = runtime_file.read_text(encoding="utf-8").strip()
-              match = re.search(r"(?:Version=v|net)(\d+)", text, re.IGNORECASE)
-              if not match:
-                  raise SystemExit(f"Cannot parse .NET major version from {runtime_file}: {text!r}")
-              return int(match.group(1))
-
-          def sha256_file(path: pathlib.Path) -> str:
-              digest = hashlib.sha256()
-              with path.open("rb") as handle:
-                  for chunk in iter(lambda: handle.read(1024 * 1024), b""):
-                      digest.update(chunk)
-              return digest.hexdigest().lower()
-
-          variants = []
-          for exe in sorted(artifacts_dir.iterdir(), key=lambda p: p.name):
-              if not exe.is_file():
-                  continue
-              match = pattern.match(exe.name)
-              if not match:
-                  continue
-              arch = match.group(1)
-              self_contained = match.group(2) is not None
-              variants.append({
-                  "kind": "SingleFile",
-                  "arch": arch,
-                  "selfContained": self_contained,
-                  "runtimeMajor": None if self_contained else parse_runtime_major(arch),
-                  "asset": exe.name,
-                  "sha256": sha256_file(exe),
-                  "size": exe.stat().st_size,
-              })
-
-          if not variants:
-              raise SystemExit(f"No release executables found for version {version} in {artifacts_dir}")
-
-          manifest = {
-              "version": version,
-              "variants": variants,
-          }
-          manifest_path = artifacts_dir / "update-manifest.json"
-          manifest_path.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
-          print(f"Generated {manifest_path} with {len(variants)} variant(s)")
-          PY
 
       - name: Compose release body
         shell: bash

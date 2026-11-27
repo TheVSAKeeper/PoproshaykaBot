@@ -3,22 +3,14 @@ using CommunityToolkit.Mvvm.Input;
 using KeepShell.Services.Platform;
 using KeepShell.Updates;
 using KeepShell.Updates.Wpf;
-using PoproshaykaBot.Core.Settings.Stores;
 using PoproshaykaBot.Wpf.Infrastructure;
 using System.ComponentModel;
 using System.Globalization;
-using CoreUpdateApplyMode = PoproshaykaBot.Core.Settings.Update.UpdateApplyMode;
-using CoreUpdateKind = PoproshaykaBot.Core.Update.UpdateKind;
-using CoreUpdateSettings = PoproshaykaBot.Core.Settings.Update.UpdateSettings;
-using ICoreUpdateEnvironment = PoproshaykaBot.Core.Update.IUpdateEnvironment;
-using KeepUpdateApplyMode = KeepShell.Updates.UpdateApplyMode;
 
 namespace PoproshaykaBot.Wpf.ViewModels.Settings;
 
 public sealed partial class UpdateSettingsSectionViewModel : UpdateSettingsSectionViewModelBase
 {
-    private readonly ICoreUpdateEnvironment _coreEnvironment;
-    private readonly UpdateStore _store;
     private readonly IDialogService _dialogService;
     private readonly IMainWindowController _mainWindow;
     private readonly Lock _installLock = new();
@@ -59,88 +51,40 @@ public sealed partial class UpdateSettingsSectionViewModel : UpdateSettingsSecti
         IUpdateSettings updateSettings,
         IUpdateCoordinator coordinator,
         UpdateOptions options,
-        ICoreUpdateEnvironment environment,
-        UpdateStore store,
+        IUpdateEnvironment environment,
         IDialogService dialogService,
         IUiDispatcher uiDispatcher,
         IMainWindowController mainWindow)
         : base(updateSettings, coordinator, options, environment, uiDispatcher)
     {
-        _coreEnvironment = environment;
-        _store = store;
         _dialogService = dialogService;
         _mainWindow = mainWindow;
 
-        _autoInstall = ApplyMode == KeepUpdateApplyMode.Automatic;
-        CurrentVersionText = $"Текущая версия: {_coreEnvironment.CurrentVersion} (.NET {System.Environment.Version.Major})";
+        _autoInstall = ApplyMode == UpdateApplyMode.Automatic;
+        CurrentVersionText = $"Текущая версия: {Environment.CurrentVersion} (.NET {System.Environment.Version.Major})";
         RefreshRepositoryHint();
         RefreshStatus();
     }
 
     protected override bool AutoSave => false;
 
-    public bool CanCheckNow => !IsBusy && IsUpdatableNow();
+    public bool CanCheckNow => !IsBusy && Coordinator.IsUpdatable;
 
-    public void LoadSettings(CoreUpdateSettings settings)
+    public void Reload()
     {
-        AutomaticCheckEnabled = settings.AutoCheckEnabled;
-        CheckIntervalHours = Math.Clamp(settings.CheckIntervalHours, 1, 168);
-        AutoInstall = settings.ApplyMode == CoreUpdateApplyMode.SilentOnExit;
-        AllowFrameworkDependentUpdate = settings.AllowFrameworkDependentUpdate;
-        RepositoryOverride = settings.RepositoryOverride ?? string.Empty;
+        ReloadFromSettings();
+        AutoInstall = ApplyMode == UpdateApplyMode.Automatic;
         RefreshRepositoryHint();
         RefreshStatus();
     }
 
-    public void SaveSettings(CoreUpdateSettings settings)
+    public void Save()
     {
-        settings.AutoCheckEnabled = AutomaticCheckEnabled;
-        settings.CheckIntervalHours = Math.Clamp((int)Math.Round(CheckIntervalHours), 1, 168);
-        settings.ApplyMode = AutoInstall ? CoreUpdateApplyMode.SilentOnExit : CoreUpdateApplyMode.NotifyAndConfirm;
-        settings.AllowFrameworkDependentUpdate = AllowFrameworkDependentUpdate;
-        var slug = RepositoryOverride.Trim();
-        settings.RepositoryOverride = slug.Length == 0 ? null : slug;
-    }
-
-    public Task OnSavedAsync(CoreUpdateApplyMode previousMode)
-    {
-        if (previousMode == CoreUpdateApplyMode.SilentOnExit && !AutoInstall)
-        {
-            Coordinator.DiscardPending();
-        }
-
-        return Task.CompletedTask;
-    }
-
-    public new void Dispose()
-    {
-        base.Dispose();
-
-        bool canDisposeCts;
-
-        lock (_installLock)
-        {
-            if (_disposed)
-            {
-                return;
-            }
-
-            _disposed = true;
-            canDisposeCts = _activeInstallTask is null;
-        }
-
-        try
-        {
-            _closeCts.Cancel();
-        }
-        catch (ObjectDisposedException)
-        {
-        }
-
-        if (canDisposeCts)
-        {
-            _closeCts.Dispose();
-        }
+        ApplyToSettings();
+        OnPropertyChanged(nameof(CanCheckNow));
+        RefreshRepositoryHint();
+        RefreshStatus();
+        InstallUpdateCommand.NotifyCanExecuteChanged();
     }
 
     public void ResetInstallState()
@@ -194,6 +138,41 @@ public sealed partial class UpdateSettingsSectionViewModel : UpdateSettingsSecti
         }
     }
 
+    protected override void Dispose(bool disposing)
+    {
+        if (disposing)
+        {
+            bool canDisposeCts;
+
+            lock (_installLock)
+            {
+                if (_disposed)
+                {
+                    base.Dispose(disposing);
+                    return;
+                }
+
+                _disposed = true;
+                canDisposeCts = _activeInstallTask is null;
+            }
+
+            try
+            {
+                _closeCts.Cancel();
+            }
+            catch (ObjectDisposedException)
+            {
+            }
+
+            if (canDisposeCts)
+            {
+                _closeCts.Dispose();
+            }
+        }
+
+        base.Dispose(disposing);
+    }
+
     protected override void OnCoordinatorSynced()
     {
         DownloadProgress = IsDownloading ? Progress : 0;
@@ -209,6 +188,7 @@ public sealed partial class UpdateSettingsSectionViewModel : UpdateSettingsSecti
         switch (e.PropertyName)
         {
             case nameof(AllowFrameworkDependentUpdate):
+            case nameof(IsUpdatable):
                 OnPropertyChanged(nameof(CanCheckNow));
                 RefreshStatus();
                 InstallUpdateCommand.NotifyCanExecuteChanged();
@@ -225,7 +205,7 @@ public sealed partial class UpdateSettingsSectionViewModel : UpdateSettingsSecti
 
     partial void OnAutoInstallChanged(bool value)
     {
-        ApplyMode = value ? KeepUpdateApplyMode.Automatic : KeepUpdateApplyMode.Notify;
+        ApplyMode = value ? UpdateApplyMode.Automatic : UpdateApplyMode.Notify;
     }
 
     [RelayCommand]
@@ -356,7 +336,7 @@ public sealed partial class UpdateSettingsSectionViewModel : UpdateSettingsSecti
         }
     }
 
-    private bool CanInstall() => !IsBusy && IsUpdatableNow() && (Candidate is not null || Pending is not null);
+    private bool CanInstall() => !IsBusy && Coordinator.IsUpdatable && (Candidate is not null || Pending is not null);
 
     private bool IsDisposed()
     {
@@ -370,13 +350,6 @@ public sealed partial class UpdateSettingsSectionViewModel : UpdateSettingsSecti
     {
         IsBusy = _isInstalling || _isClosePending || IsChecking || IsDownloading;
     }
-
-    private bool IsUpdatableNow() => _coreEnvironment.Kind switch
-    {
-        CoreUpdateKind.Portable => true,
-        CoreUpdateKind.FrameworkDependent => AllowFrameworkDependentUpdate,
-        _ => false,
-    };
 
     private void RefreshRepositoryHint()
     {
@@ -401,15 +374,19 @@ public sealed partial class UpdateSettingsSectionViewModel : UpdateSettingsSecti
 
     private void RefreshStatus()
     {
-        if (_coreEnvironment.Kind == CoreUpdateKind.Unsupported)
+        if (Environment.Kind == UpdateKind.None)
         {
             (StatusText, StatusSeverity) = ("Автообновление недоступно для этой сборки (запуск из среды разработки).", StatusSeverity.None);
             return;
         }
 
-        if (!IsUpdatableNow())
+        if (!Coordinator.IsUpdatable)
         {
-            (StatusText, StatusSeverity) = ("Автообновление выключено для сборки, требующей .NET. Включите опцию ниже.", StatusSeverity.None);
+            var message = AllowFrameworkDependentUpdate
+                ? "Сохраните настройки, чтобы разрешить автообновление для сборки, требующей .NET."
+                : "Автообновление выключено для сборки, требующей .NET. Включите опцию ниже и сохраните настройки.";
+
+            (StatusText, StatusSeverity) = (message, StatusSeverity.None);
             return;
         }
 
@@ -444,13 +421,13 @@ public sealed partial class UpdateSettingsSectionViewModel : UpdateSettingsSecti
         }
         else
         {
-            (StatusText, StatusSeverity) = (FormatLastCheck(_store.Load()), StatusSeverity.None);
+            (StatusText, StatusSeverity) = (FormatLastCheck(Settings.LastCheckUtc), StatusSeverity.None);
         }
     }
 
-    private static string FormatLastCheck(CoreUpdateSettings settings)
+    private static string FormatLastCheck(DateTimeOffset? lastCheckUtc)
     {
-        if (settings.LastCheckUtc is { } lastCheck)
+        if (lastCheckUtc is { } lastCheck)
         {
             var local = lastCheck.ToLocalTime().ToString("g", CultureInfo.CurrentCulture);
             return $"Последняя проверка: {local}. Обновлений не найдено.";

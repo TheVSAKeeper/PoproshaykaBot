@@ -1,5 +1,6 @@
 ﻿using KeepShell.Bootstrap;
 using KeepShell.Diagnostics;
+using KeepShell.Updates;
 using Microsoft.Extensions.Logging;
 using Microsoft.Web.WebView2.Core;
 using PoproshaykaBot.Core.Broadcast;
@@ -24,7 +25,6 @@ using PoproshaykaBot.Core.Settings.Stores;
 using PoproshaykaBot.Core.Statistics;
 using PoproshaykaBot.Core.Streaming;
 using PoproshaykaBot.Core.Streaming.Switching;
-using PoproshaykaBot.Core.Update;
 using PoproshaykaBot.Core.YouTube.Auth;
 using PoproshaykaBot.Core.Dashboard;
 using PoproshaykaBot.Wpf.Bootstrap;
@@ -413,7 +413,7 @@ public sealed class BotAutomation(
         RuntimeHealthDto.UpdateHealthDto? updateHealth = updateCoordinator is null
             ? null
             : new(
-                updateEnvironment?.Kind ?? UpdateKind.Unsupported,
+                updateEnvironment?.Kind ?? KeepShell.Updates.UpdateKind.None,
                 updateCoordinator.IsUpdatable,
                 updateEnvironment?.CurrentVersion.ToString() ?? AppInfo.Version,
                 updateCoordinator.Candidate?.Version.ToString(),

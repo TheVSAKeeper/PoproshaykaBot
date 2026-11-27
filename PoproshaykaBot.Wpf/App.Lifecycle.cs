@@ -1,10 +1,10 @@
 ﻿using KeepShell.Diagnostics;
+using KeepShell.Updates;
 using Microsoft.Extensions.Logging;
 using PoproshaykaBot.Core.Infrastructure.Hosting;
 using PoproshaykaBot.Core.Infrastructure.Runtime;
 using PoproshaykaBot.Core.Server;
 using PoproshaykaBot.Core.Settings;
-using PoproshaykaBot.Core.Update;
 using PoproshaykaBot.Wpf.Bootstrap;
 using Serilog;
 using Serilog.Extensions.Logging;

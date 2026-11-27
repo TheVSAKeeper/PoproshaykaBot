@@ -648,13 +648,12 @@ public sealed class SettingsDirtyAuditTests
             ChannelCatalog = new(CatalogStore, [new FakeChannelAdapter(StreamingPlatform.Twitch)], platformRegistry: registry);
             ChannelGroups = new(CatalogStore, new UserStatisticsRepository(NullLogger<UserStatisticsRepository>.Instance), platformRegistry: registry);
             DashboardLayout = new(Array.Empty<DashboardTileViewModel>(), uiSettings, LayoutStore);
-            var updateEnv = new FakeUpdateEnvironment();
+            var updateEnv = new KeepShell.Updates.UpdateEnvironment(KeepShell.Updates.UpdateKind.None, false, new(1, 0), 10, "Bot.exe", "x64");
             Update = new(
                 new UpdateStoreSettingsAdapter(UpdateStore),
                 new FakeUpdateCoordinator(),
-                PoproshaykaBot.Core.Update.UpdateServiceCollectionExtensions.CreateOptions(updateEnv),
+                PoproshaykaBot.Core.Update.UpdateServiceCollectionExtensions.CreateOptions("owner/repo"),
                 updateEnv,
-                UpdateStore,
                 Dialogs,
                 new ManualUiDispatcher(),
                 DispatchProxy.Create<IMainWindowController, InertProxy>());
@@ -674,7 +673,7 @@ public sealed class SettingsDirtyAuditTests
                 new RanksSettingsSectionContributor(Ranks),
                 new ChannelsSettingsSectionContributor(ChannelCatalog, ChannelGroups, CatalogStore),
                 new DashboardSettingsSectionContributor(DashboardLayout, new DashboardLayoutCoordinator(LayoutStore)),
-                new UpdateSettingsSectionContributor(Update, UpdateStore),
+                new UpdateSettingsSectionContributor(Update),
                 new DebugChannelSettingsSectionContributor(DebugChannel, DebugChannelStore),
                 new McpSettingsSectionContributor(Mcp),
                 new AppearanceSettingsSectionContributor(Appearance),
@@ -834,19 +833,6 @@ public sealed class SettingsDirtyAuditTests
         public bool DiscardPending(Version? version = null) => false;
         public void Skip() { }
         public void Dismiss() { }
-    }
-
-    private sealed class FakeUpdateEnvironment : IUpdateEnvironment
-    {
-        public UpdateKind Kind => UpdateKind.Unsupported;
-        KeepShell.Updates.UpdateKind KeepShell.Updates.IUpdateEnvironment.Kind => KeepShell.Updates.UpdateKind.None;
-        public bool SelfContained => false;
-        public string Architecture => "x64";
-        public Version CurrentVersion { get; } = new(1, 0);
-        public int RuntimeMajor => 10;
-        public string ExecutablePath => "Bot.exe";
-        public string StagingDirectory => "update";
-        public string RepositorySlug => "owner/repo";
     }
 
     public sealed class FakeDialogService : IDialogService

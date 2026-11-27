@@ -1,5 +1,5 @@
 ﻿using KeepShell.Bootstrap;
-using PoproshaykaBot.Core.Update;
+using KeepShell.Updates;
 using PoproshaykaBot.Wpf.Bootstrap;
 
 namespace PoproshaykaBot.Wpf.Tests.Shell;
@@ -18,9 +18,9 @@ public class AppBuildBadgeTests
         0,
         TimeZoneInfo.Local.GetUtcOffset(new DateTime(2026, 9, 20, 14, 33, 0)));
 
-    [TestCase(UpdateKind.Unsupported, AppBuildBadge.MissingStampHint)]
-    [TestCase(UpdateKind.Portable, AppBuildBadge.ReleaseHint)]
-    [TestCase(UpdateKind.FrameworkDependent, AppBuildBadge.ReleaseHint)]
+    [TestCase(UpdateKind.None, AppBuildBadge.MissingStampHint)]
+    [TestCase(UpdateKind.SingleFile, AppBuildBadge.ReleaseHint)]
+    [TestCase(UpdateKind.Directory, AppBuildBadge.ReleaseHint)]
     public void Explains_a_missing_stamp_by_the_kind_of_build(UpdateKind kind, string hint)
     {
         var badge = AppBuildBadge.Build(null, kind, Folder);
@@ -33,8 +33,8 @@ public class AppBuildBadgeTests
         });
     }
 
-    [TestCase(UpdateKind.Unsupported)]
-    [TestCase(UpdateKind.Portable)]
+    [TestCase(UpdateKind.None)]
+    [TestCase(UpdateKind.SingleFile)]
     public void Keeps_the_hint_out_of_a_stamped_build(UpdateKind kind)
     {
         var badge = AppBuildBadge.Build(Stamp(), kind, Folder);
@@ -49,7 +49,7 @@ public class AppBuildBadgeTests
     [Test]
     public void Shows_version_and_short_commit_of_the_stamp()
     {
-        var badge = AppBuildBadge.Build(Stamp(), UpdateKind.Unsupported, Folder);
+        var badge = AppBuildBadge.Build(Stamp(), UpdateKind.None, Folder);
 
         Assert.Multiple(() =>
         {
@@ -63,7 +63,7 @@ public class AppBuildBadgeTests
     [Test]
     public void Marks_a_dirty_tree_in_the_value()
     {
-        var badge = AppBuildBadge.Build(Stamp(dirty: true), UpdateKind.Unsupported, Folder);
+        var badge = AppBuildBadge.Build(Stamp(dirty: true), UpdateKind.None, Folder);
 
         Assert.Multiple(() =>
         {

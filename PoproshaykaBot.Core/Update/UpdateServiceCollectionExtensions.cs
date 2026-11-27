@@ -1,36 +1,35 @@
 ﻿using KeepShell.Updates;
 using Microsoft.Extensions.DependencyInjection;
 using PoproshaykaBot.Core.Infrastructure.Hosting;
-using KeepUpdateApplyMode = KeepShell.Updates.UpdateApplyMode;
 
 namespace PoproshaykaBot.Core.Update;
 
 public static class UpdateServiceCollectionExtensions
 {
+    public const string DefaultRepositorySlug = "MaxNagibator/PoproshaykaBot";
+
     public static IServiceCollection AddSelfUpdate(this IServiceCollection services)
     {
         ArgumentNullException.ThrowIfNull(services);
 
-        var environment = new UpdateEnvironment();
-        var options = CreateOptions(environment);
+        var environment = UpdateEnvironment.FromEntryAssembly();
+        var options = CreateOptions(UpdateEnvironment.ResolveRepositorySlug(DefaultRepositorySlug));
 
-        services.AddSingleton<IUpdateEnvironment>(environment);
         services.AddSingleton<IUpdateSettings, UpdateStoreSettingsAdapter>();
-        services.AddKeepShellUpdates(environment, options);
-        services.AddSingleFileSwapInstaller();
+        services.AddKeepShellUpdates(environment, options, UpdateDeliveryMode.SingleFileSwap);
         services.AddSingleton<IAppLifetimeComponent, UpdateBackgroundService>();
 
         return services;
     }
 
-    internal static UpdateOptions CreateOptions(IUpdateEnvironment environment)
+    internal static UpdateOptions CreateOptions(string repositorySlug = DefaultRepositorySlug)
     {
         return new UpdateOptions
         {
-            RepositorySlug = environment.RepositorySlug,
+            RepositorySlug = repositorySlug,
             UserAgent = "PoproshaykaBot",
             CheckInterval = TimeSpan.FromHours(6),
-            ApplyMode = KeepUpdateApplyMode.Notify,
+            ApplyMode = UpdateApplyMode.Notify,
             Check = CreateCheckOptions(),
         };
     }
@@ -41,10 +40,10 @@ public static class UpdateServiceCollectionExtensions
         {
             AssetNaming = new AssetNamingOptions
             {
-                ProductPrefix = "PoproshaykaBot",
+                ProductPrefix = "PoproshaykaBot-v",
                 PortableMarker = "-portable",
                 IncludeArchitecture = true,
-                Extensions = [".exe"],
+                Extensions = [".zip", ".exe"],
             },
             ChecksumsAssetName = "SHA256SUMS-{arch}.txt",
             RuntimeAssetName = "RUNTIME-{arch}.txt",
