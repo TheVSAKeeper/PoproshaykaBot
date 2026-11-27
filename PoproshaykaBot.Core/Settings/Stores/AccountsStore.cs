@@ -14,14 +14,12 @@ public sealed class AccountsStore : RoleAccountsStoreBase<AccountsStore.Accounts
 
     public AccountsStore(
         ILogger<AccountsStore>? logger = null,
-        string? filePath = null,
-        SettingsWriteGate? gate = null)
+        string? filePath = null)
         : base(
-            filePath ?? AppPaths.SettingsFile("accounts.json"),
+            filePath ?? AppPaths.SettingsFile(SettingsFileNames.AccountsFileName),
             logger,
             AccountsTokenRedactor.Redact,
-            DescribeAccounts,
-            gate)
+            DescribeAccounts)
     {
         if (logger?.IsEnabled(LogLevel.Debug) == true)
         {

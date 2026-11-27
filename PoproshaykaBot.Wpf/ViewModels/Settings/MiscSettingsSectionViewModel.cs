@@ -22,7 +22,6 @@ public sealed partial class MiscSettingsSectionViewModel : ObservableObject, IDi
     private readonly IDialogService _dialogService;
     private readonly IShellLauncher _shellLauncher;
     private readonly IFilePicker _filePicker;
-    private readonly ILegacyImportDialog _legacyImportDialog;
     private readonly ILogger<MiscSettingsSectionViewModel>? _logger;
 
     public MiscSettingsSectionViewModel(
@@ -31,7 +30,6 @@ public sealed partial class MiscSettingsSectionViewModel : ObservableObject, IDi
         IDialogService dialogService,
         IShellLauncher shellLauncher,
         IFilePicker filePicker,
-        ILegacyImportDialog legacyImportDialog,
         ILogger<MiscSettingsSectionViewModel>? logger = null)
     {
         _settingsManager = settingsManager;
@@ -39,7 +37,6 @@ public sealed partial class MiscSettingsSectionViewModel : ObservableObject, IDi
         _dialogService = dialogService;
         _shellLauncher = shellLauncher;
         _filePicker = filePicker;
-        _legacyImportDialog = legacyImportDialog;
         _logger = logger;
     }
 
@@ -78,12 +75,6 @@ public sealed partial class MiscSettingsSectionViewModel : ObservableObject, IDi
         {
             _dialogService.Error("Ошибка", "Не удалось открыть папку с настройками.");
         }
-    }
-
-    [RelayCommand]
-    private void ImportLegacyData()
-    {
-        _legacyImportDialog.Show();
     }
 
     [RelayCommand]

@@ -2,13 +2,13 @@
 using PoproshaykaBot.Core.Infrastructure;
 using PoproshaykaBot.Core.Infrastructure.Persistence;
 using PoproshaykaBot.Core.Platforms;
-using PoproshaykaBot.Core.Settings.Migrations.LegacyImport;
+using PoproshaykaBot.Core.Settings;
 using PoproshaykaBot.Core.Settings.Stores;
 using System.Text.Json;
 
 namespace PoproshaykaBot.Core.Statistics;
 
-public class BroadcastHistoryStore : IExternalWriteParticipant, IFlushableHistoryStore
+public class BroadcastHistoryStore : IFlushableHistoryStore
 {
     private readonly ILogger<BroadcastHistoryStore>? _logger;
     private readonly string _broadcastsPath;
@@ -23,9 +23,6 @@ public class BroadcastHistoryStore : IExternalWriteParticipant, IFlushableHistor
     private FileReadState _projectionReadState;
     private bool _canWriteSource;
     private bool _canWriteProjection;
-    private bool _suspendedCanWriteSource;
-    private bool _suspendedCanWriteProjection;
-    private bool _invalidatedByExternalWrite;
     private bool _sourceDirty;
     private bool _projectionDirty;
 
@@ -35,8 +32,8 @@ public class BroadcastHistoryStore : IExternalWriteParticipant, IFlushableHistor
         string? streamSessionsFilePath = null)
     {
         _logger = logger;
-        _broadcastsPath = broadcastsFilePath ?? Path.Combine(AppPaths.BaseDirectory, LegacyDataCatalog.BroadcastsFileName);
-        _projectionPath = streamSessionsFilePath ?? Path.Combine(AppPaths.BaseDirectory, LegacyDataCatalog.StreamSessionsFileName);
+        _broadcastsPath = broadcastsFilePath ?? Path.Combine(AppPaths.BaseDirectory, SettingsFileNames.BroadcastsFileName);
+        _projectionPath = streamSessionsFilePath ?? Path.Combine(AppPaths.BaseDirectory, SettingsFileNames.StreamSessionsFileName);
 
         var sourceRead = ReadRawDocument<BroadcastHistoryDocument>(_broadcastsPath, "история эфиров");
         var projectionRead = ReadRawDocument<StreamSessionHistory>(_projectionPath, "проекция сессий Twitch");
@@ -151,90 +148,6 @@ public class BroadcastHistoryStore : IExternalWriteParticipant, IFlushableHistor
                 (_sourceDirty && _canWriteSource) || (_projectionDirty && _canWriteProjection),
                 _state.Broadcasts.Count,
                 recent);
-        }
-    }
-
-    IReadOnlyCollection<string> IExternalWriteParticipant.OwnedRelativePaths { get; } =
-    [
-        LegacyDataCatalog.BroadcastsFileName,
-        LegacyDataCatalog.StreamSessionsFileName,
-    ];
-
-    ValueTask<bool> IExternalWriteParticipant.InvalidateAsync(CancellationToken cancellationToken)
-    {
-        cancellationToken.ThrowIfCancellationRequested();
-        return ValueTask.FromResult(Invalidate());
-    }
-
-    ValueTask IExternalWriteParticipant.RestoreAsync(bool wasLoaded)
-    {
-        Restore(wasLoaded);
-        return ValueTask.CompletedTask;
-    }
-
-    void IExternalWriteParticipant.LatchExternalRewrite()
-    {
-        lock (_syncLock)
-        {
-            _invalidatedByExternalWrite = true;
-            _suspendedCanWriteSource = false;
-            _suspendedCanWriteProjection = false;
-            _canWriteSource = false;
-            _canWriteProjection = false;
-        }
-    }
-
-    public virtual bool Invalidate()
-    {
-        lock (_syncLock)
-        {
-            if (!_invalidatedByExternalWrite)
-            {
-                _suspendedCanWriteSource = _canWriteSource;
-                _suspendedCanWriteProjection = _canWriteProjection;
-                _invalidatedByExternalWrite = true;
-            }
-
-            var hadAny = _canWriteSource || _canWriteProjection;
-            _canWriteSource = false;
-            _canWriteProjection = false;
-
-            if (hadAny)
-            {
-                _logger?.LogInformation(
-                    "BroadcastHistoryStore: файлы истории эфиров ({SourcePath}, {ProjectionPath}) заблокированы на время внешней операции",
-                    _broadcastsPath,
-                    _projectionPath);
-            }
-
-            return hadAny;
-        }
-    }
-
-    public virtual void Restore(bool allowFutureWrites)
-    {
-        if (!allowFutureWrites)
-        {
-            return;
-        }
-
-        lock (_syncLock)
-        {
-            if (!_invalidatedByExternalWrite)
-            {
-                return;
-            }
-
-            _invalidatedByExternalWrite = false;
-            _canWriteSource = _suspendedCanWriteSource;
-            _canWriteProjection = _suspendedCanWriteProjection;
-
-            _logger?.LogInformation(
-                "BroadcastHistoryStore: права записи восстановлены (источник={CanWriteSource}, проекция={CanWriteProjection})",
-                _canWriteSource,
-                _canWriteProjection);
-
-            TryFlushLocked();
         }
     }
 
@@ -750,50 +663,7 @@ public class BroadcastHistoryStore : IExternalWriteParticipant, IFlushableHistor
 
     private bool TryCopyPreMultichannelBackup(string sourcePath)
     {
-        if (!File.Exists(sourcePath))
-        {
-            return true;
-        }
-
-        var directory = Path.GetDirectoryName(sourcePath);
-        var fileName = Path.GetFileNameWithoutExtension(sourcePath);
-        var extension = Path.GetExtension(sourcePath);
-        var backupPath = string.IsNullOrEmpty(directory)
-            ? $"{fileName}.pre-multichannel{extension}"
-            : Path.Combine(directory, $"{fileName}.pre-multichannel{extension}");
-
-        if (File.Exists(backupPath))
-        {
-            return true;
-        }
-
-        var tempBackupPath = $"{backupPath}.{Guid.NewGuid():N}.tmp";
-        try
-        {
-            File.Copy(sourcePath, tempBackupPath, overwrite: true);
-            File.Move(tempBackupPath, backupPath, overwrite: false);
-            _logger?.LogInformation("BroadcastHistoryStore: создана страховочная копия {BackupPath}", backupPath);
-            return true;
-        }
-        catch (Exception exception)
-        {
-            try
-            {
-                if (File.Exists(tempBackupPath))
-                {
-                    File.Delete(tempBackupPath);
-                }
-            }
-            catch (Exception cleanupException)
-            {
-                _logger?.LogDebug(cleanupException, "BroadcastHistoryStore: не удалось удалить временный файл копии {TempPath}", tempBackupPath);
-            }
-
-            _logger?.LogError(exception,
-                "BroadcastHistoryStore: не удалось создать страховочную копию {BackupPath}, сохранение отложено",
-                backupPath);
-            return false;
-        }
+        return JsonStoreBackup.TryCreateOneTimeBackup(sourcePath, "pre-multichannel", _logger);
     }
 
     private bool TrySaveProjectionLocked()

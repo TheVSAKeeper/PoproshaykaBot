@@ -3,7 +3,6 @@ using Microsoft.Extensions.Logging;
 using PoproshaykaBot.Core.Infrastructure;
 using PoproshaykaBot.Core.Platforms;
 using PoproshaykaBot.Core.Platforms.Auth;
-using PoproshaykaBot.Core.Settings.Migrations.LegacyImport;
 using PoproshaykaBot.Core.Twitch.Auth;
 using PoproshaykaBot.Core.YouTube.Auth;
 
@@ -30,14 +29,12 @@ public sealed class YouTubeAccountsStore : RoleAccountsStoreBase<YouTubeAccounts
 
     public YouTubeAccountsStore(
         ILogger<YouTubeAccountsStore>? logger = null,
-        string? filePath = null,
-        SettingsWriteGate? gate = null)
+        string? filePath = null)
         : base(
-            filePath ?? AppPaths.SettingsFile(LegacyDataCatalog.YouTubeAccountsFileName),
+            filePath ?? AppPaths.SettingsFile(SettingsFileNames.YouTubeAccountsFileName),
             logger,
             AccountsTokenRedactor.Redact,
-            DescribeAccounts,
-            gate)
+            DescribeAccounts)
     {
         if (logger?.IsEnabled(LogLevel.Debug) == true)
         {

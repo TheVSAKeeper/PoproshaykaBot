@@ -43,7 +43,7 @@ public sealed class ChatIngestionServiceTests
             },
         };
 
-        _settingsManager = Substitute.For<SettingsManager>(NullLogger<SettingsManager>.Instance, null, null);
+        _settingsManager = Substitute.For<SettingsManager>(NullLogger<SettingsManager>.Instance, null);
 
         _settingsManager.Current.Returns(_settings);
 

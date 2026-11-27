@@ -2,9 +2,7 @@
 using PoproshaykaBot.Core.Chat.Display;
 using PoproshaykaBot.Core.Infrastructure.Runtime;
 using PoproshaykaBot.Core.Polls;
-using PoproshaykaBot.Core.Settings.Stores;
 using PoproshaykaBot.Core.Statistics;
-using PoproshaykaBot.Wpf.Infrastructure;
 using PoproshaykaBot.Wpf.Infrastructure.Diagnostics;
 
 namespace PoproshaykaBot.Wpf.Mcp;
@@ -15,8 +13,6 @@ public sealed record RuntimeHealthDto(
     PreviousRunState? PreviousRun,
     UnobservedTaskExceptionSnapshot? UnobservedTaskExceptions,
     RuntimeHealthDto.BindingErrorsDto? BindingErrors,
-    SettingsWriteGateStatus? SettingsWriteGate,
-    UiSettingsWriteGuardStatus? UiSettingsWriteGuard,
     ChatDisplayStoreStatus? ChatDisplayStore,
     RuntimeHealthDto.UserStatisticsHealthDto? UserStatistics,
     BroadcastHistoryDiagnosticsSummary? BroadcastHistory,
@@ -72,9 +68,7 @@ public sealed record RuntimeHealthDto(
 }
 
 public sealed record SettingsSummaryDto(
-    IReadOnlyList<SettingsSummaryDto.EntryDto> Entries,
-    SettingsWriteGateStatus? SettingsWriteGate,
-    UiSettingsWriteGuardStatus? UiSettingsWriteGuard)
+    IReadOnlyList<SettingsSummaryDto.EntryDto> Entries)
 {
     public sealed record EntryDto(string Key, string Description);
 }

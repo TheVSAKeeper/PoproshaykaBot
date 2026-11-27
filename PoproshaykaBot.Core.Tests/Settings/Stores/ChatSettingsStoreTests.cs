@@ -71,33 +71,4 @@ public sealed class ChatSettingsStoreTests
             Assert.That(settingsManager.Current.Twitch.Infrastructure.ChatHistoryMaxItems, Is.EqualTo(250));
         }
     }
-
-    [Test]
-    public async Task ClosedGate_AppliesInMemoryAndFiresChanged_WithoutWritingDisk()
-    {
-        var chatPath = Path.Combine(_directory.FullName, "chat.json");
-        var gate = new SettingsWriteGate();
-        await gate.RunExternalWriteAsync(() => Task.FromResult(0), _ => ["chat.json"]);
-
-        var store = new ChatSettingsStore(null, null, chatPath, gate);
-        ChatSettings? observed = null;
-        store.Changed += updated => observed = updated;
-
-        var written = store.Save(new()
-        {
-            ShowHistoryInApp = true,
-            ShowHistoryInObs = true,
-            HistoryMaxItems = 420,
-        });
-
-        using (Assert.EnterMultipleScope())
-        {
-            Assert.That(written, Is.False);
-            Assert.That(File.Exists(chatPath), Is.False);
-            Assert.That(store.GetCurrent().ShowHistoryInApp, Is.True);
-            Assert.That(store.GetCurrent().ShowHistoryInObs, Is.True);
-            Assert.That(store.GetCurrent().HistoryMaxItems, Is.EqualTo(420));
-            Assert.That(observed?.HistoryMaxItems, Is.EqualTo(420));
-        }
-    }
 }

@@ -151,7 +151,7 @@ public sealed class MultiplatformCommandsTests
         settings.Twitch.Messages.WelcomeEnabled = false;
         settings.Twitch.Messages.FarewellEnabled = true;
         settings.Twitch.Messages.Farewell = "Пока, {username}!";
-        var settingsManager = Substitute.For<SettingsManager>(NullLogger<SettingsManager>.Instance, null, null);
+        var settingsManager = Substitute.For<SettingsManager>(NullLogger<SettingsManager>.Instance, null);
         settingsManager.Current.Returns(settings);
 
         var obsChatStore = new ObsChatStore(bus, NullLogger<ObsChatStore>.Instance, Path.Combine(_root, "obs.json"));

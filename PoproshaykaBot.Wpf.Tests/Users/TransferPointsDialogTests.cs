@@ -46,8 +46,7 @@ public sealed class TransferPointsDialogTests
     [Test]
     public async Task Dialog_preview_filters_manual_selection_and_excludes_same_target()
     {
-        var gate = new SettingsWriteGate();
-        var catalog = new ChannelCatalogStore(null, Path.Combine(_root, "channels.json"), gate);
+        var catalog = new ChannelCatalogStore(null, Path.Combine(_root, "channels.json"));
         catalog.Save(new ChannelsSettings
         {
             Channels =
@@ -139,9 +138,8 @@ public sealed class TransferPointsDialogTests
     [Test]
     public async Task Users_page_TransferPointsCommand_prefills_unattributed_slice_reloads_and_reports_status()
     {
-        var gate = new SettingsWriteGate();
-        var settingsManager = new SettingsManager(NullLogger<SettingsManager>.Instance, Path.Combine(_root, "settings.json"), gate);
-        var catalog = new ChannelCatalogStore(null, Path.Combine(_root, "channels.json"), gate);
+        var settingsManager = new SettingsManager(NullLogger<SettingsManager>.Instance, Path.Combine(_root, "settings.json"));
+        var catalog = new ChannelCatalogStore(null, Path.Combine(_root, "channels.json"));
         catalog.Save(new ChannelsSettings
         {
             Channels =

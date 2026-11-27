@@ -500,24 +500,6 @@ public sealed class SettingsDirtyAuditTests
     }
 
     [Test]
-    public async Task Closed_write_gate_on_obs_or_update_reports_not_written_notice()
-    {
-        using var harness = new AuditHarness(_root);
-        await harness.CloseGateForAsync("obs-integration.json", "update.json");
-
-        harness.ObsIntegration.Host = "127.0.0.2";
-        harness.Update.CheckIntervalHours = 24;
-
-        await harness.Page.SaveCommand.ExecuteAsync(null);
-
-        Assert.Multiple(() =>
-        {
-            Assert.That(harness.Dialogs.Infos, Has.Count.EqualTo(1));
-            Assert.That(harness.Dialogs.Infos[0], Does.Contain("не записаны"));
-        });
-    }
-
-    [Test]
     public void Composite_subscription_tracks_add_remove_replace_reset_and_unsubscribes_on_dispose()
     {
         var collection = new ObservableCollection<ObsSourceItemViewModel>
@@ -564,24 +546,22 @@ public sealed class SettingsDirtyAuditTests
 
     public sealed class AuditHarness : IDisposable
     {
-        private readonly SettingsWriteGate _gate = new();
-
         public AuditHarness(string root)
         {
-            var settingsManager = SettingsManager = new(NullLogger<SettingsManager>.Instance, Path.Combine(root, "settings.json"), _gate);
+            var settingsManager = SettingsManager = new(NullLogger<SettingsManager>.Instance, Path.Combine(root, "settings.json"));
             var bus = new InMemoryEventBus(NullLogger<InMemoryEventBus>.Instance);
-            var accountsStore = new AccountsStore(null, Path.Combine(root, "accounts.json"), _gate);
-            ObsChatStore = new(bus, null, Path.Combine(root, "obs-chat.json"), _gate);
-            ObsIntegrationStore = new(bus, null, Path.Combine(root, "obs-integration.json"), _gate);
-            ChatSettingsStore = new(settingsManager, NullLogger<ChatSettingsStore>.Instance, Path.Combine(root, "chat.json"), _gate);
-            UpdateStore = new(null, Path.Combine(root, "update.json"), _gate);
+            var accountsStore = new AccountsStore(null, Path.Combine(root, "accounts.json"));
+            ObsChatStore = new(bus, null, Path.Combine(root, "obs-chat.json"));
+            ObsIntegrationStore = new(bus, null, Path.Combine(root, "obs-integration.json"));
+            ChatSettingsStore = new(settingsManager, NullLogger<ChatSettingsStore>.Instance, Path.Combine(root, "chat.json"));
+            UpdateStore = new(null, Path.Combine(root, "update.json"));
             DebugChannelStore = new(null, Path.Combine(root, "debug-channel.json"));
-            PollsStore = new(null, Path.Combine(root, "polls.json"), _gate);
-            LayoutStore = new(null, Path.Combine(root, "dashboard-layout.json"), _gate);
-            YouTubeSettingsStore = new(null, Path.Combine(root, "youtube.json"), _gate);
-            var youTubeAccountsStore = new YouTubeAccountsStore(null, Path.Combine(root, "youtube-accounts.json"), _gate);
-            PlatformLifecycleStore = new(settingsManager, NullLogger<PlatformLifecycleSettingsStore>.Instance, Path.Combine(root, "platform-lifecycle.json"), _gate);
-            CatalogStore = new(null, Path.Combine(root, "channels.json"), _gate);
+            PollsStore = new(null, Path.Combine(root, "polls.json"));
+            LayoutStore = new(null, Path.Combine(root, "dashboard-layout.json"));
+            YouTubeSettingsStore = new(null, Path.Combine(root, "youtube.json"));
+            var youTubeAccountsStore = new YouTubeAccountsStore(null, Path.Combine(root, "youtube-accounts.json"));
+            PlatformLifecycleStore = new(settingsManager, NullLogger<PlatformLifecycleSettingsStore>.Instance, Path.Combine(root, "platform-lifecycle.json"));
+            CatalogStore = new(null, Path.Combine(root, "channels.json"));
             CatalogStore.Save(new ChannelsSettings
             {
                 Channels =
@@ -661,7 +641,7 @@ public sealed class SettingsDirtyAuditTests
             DebugChannel = new(DebugChannelOverride.None, DebugChannelStore, new ChannelLiveStatusReader(DispatchProxy.Create<IHttpClientFactory, InertProxy>(), settingsManager, TimeProvider.System, NullLogger<ChannelLiveStatusReader>.Instance), TimeProvider.System, NullLogger<DebugChannelSectionViewModel>.Instance);
             Mcp = new(mcpPreferences, new(mcpPreferences, null!, null!, mcpOptions, new EmptyServiceProvider()), mcpOptions, Dialogs, DispatchProxy.Create<IClipboardService, InertProxy>());
             Appearance = new(new(uiSettings), new(uiSettings));
-            var misc = new MiscSettingsSectionViewModel(settingsManager, null!, Dialogs, null!, null!, null!);
+            var misc = new MiscSettingsSectionViewModel(settingsManager, null!, Dialogs, null!, null!);
 
             ISettingsSectionContributor[] contributors =
             [
@@ -684,7 +664,6 @@ public sealed class SettingsDirtyAuditTests
             Page = new(
                 contributors,
                 settingsManager,
-                _gate,
                 kestrel,
                 bus,
                 NullLogger<SettingsPageViewModel>.Instance,
@@ -724,11 +703,6 @@ public sealed class SettingsDirtyAuditTests
         public DebugChannelSectionViewModel DebugChannel { get; }
         public McpSettingsSectionViewModel Mcp { get; }
         public AppearanceSettingsSectionViewModel Appearance { get; }
-
-        public Task CloseGateForAsync(params string[] fileNames)
-        {
-            return _gate.RunExternalWriteAsync(() => Task.FromResult(0), _ => fileNames);
-        }
 
         public void Dispose()
         {

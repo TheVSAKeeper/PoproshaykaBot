@@ -1,6 +1,4 @@
-﻿using PoproshaykaBot.Core.Statistics;
-
-namespace PoproshaykaBot.Core.Settings.Migrations.LegacyImport;
+﻿namespace PoproshaykaBot.Core.Settings.Migrations.LegacyImport;
 
 public sealed class LegacyImportResult
 {
@@ -28,22 +26,22 @@ public sealed class LegacyImportResult
 
     public bool HasChanges => CopiedFiles.Count > 0 || MigratedSettingsFiles.Count > 0;
 
-    public bool CopiedTwitchUserStatistics => Copied(LegacyDataCatalog.UserStatisticsFileName);
+    public bool CopiedTwitchUserStatistics => Copied(SettingsFileNames.UserStatisticsFileName);
 
-    public bool CopiedYouTubeUserStatistics => Copied($"{LegacyDataCatalog.YouTubeFolderName}/{LegacyDataCatalog.UserStatisticsFileName}");
+    public bool CopiedYouTubeUserStatistics => Copied($"{SettingsFileNames.YouTubeFolderName}/{SettingsFileNames.UserStatisticsFileName}");
 
-    public bool CopiedYouTubeQuota => Copied(LegacyDataCatalog.YouTubeQuotaFileName);
+    public bool CopiedYouTubeQuota => Copied(SettingsFileNames.YouTubeQuotaFileName);
 
     public bool CopiedStatistics => CopiedAny(LegacyDataCatalog.GetRelativePaths(LegacyDataCategory.UserStatistics))
         || CopiedAny(LegacyDataCatalog.GetRelativePaths(LegacyDataCategory.BotStatistics));
 
-    public bool CopiedStreamHistory => Copied(LegacyDataCatalog.BroadcastsFileName)
-        || Copied(LegacyDataCatalog.StreamSessionsFileName)
-        || Copied(LegacyDataCatalog.ActiveBroadcastFileName);
+    public bool CopiedStreamHistory => Copied(SettingsFileNames.BroadcastsFileName)
+        || Copied(SettingsFileNames.StreamSessionsFileName)
+        || Copied(SettingsFileNames.ActiveBroadcastFileName);
 
-    public bool CopiedPollHistory => Copied(LegacyDataCatalog.PollsHistoryFileName);
+    public bool CopiedPollHistory => Copied(SettingsFileNames.PollsHistoryFileName);
 
-    public bool CopiedChatHistory => CopiedInDirectory(LegacyDataCatalog.ChatHistoryFolderName);
+    public bool CopiedChatHistory => CopiedInDirectory(SettingsFileNames.ChatHistoryFolderName);
 
     public static bool IsChatHistoryPath(string relativePath) => LegacyDataCatalog.IsChatHistoryPath(relativePath);
 
@@ -53,14 +51,12 @@ public sealed class LegacyImportResult
     public bool CopiedSettings => CopiedSettingsFiles.Count > 0;
 
     public bool WroteApplicationSettings =>
-        RewrittenSettingsFiles.Contains(LegacyDataCatalog.SettingsFileName, StringComparer.OrdinalIgnoreCase);
+        RewrittenSettingsFiles.Contains(SettingsFileNames.SettingsFileName, StringComparer.OrdinalIgnoreCase);
 
-    public bool CopiedUiPreferences => CopiedSettingsFile(LegacyDataCatalog.UiPreferencesFileName);
+    public bool CopiedUiPreferences => CopiedSettingsFile(SettingsFileNames.UiPreferencesFileName);
 
     public IReadOnlyList<string> RewrittenSettingsFiles =>
         [.. CopiedSettingsFiles.Union(MigratedSettingsFiles, StringComparer.OrdinalIgnoreCase)];
-
-    public StatisticsExternalWrite ExternalWrite => new(CopiedFiles);
 
     private bool CopiedAny(IEnumerable<string> relativePaths)
     {

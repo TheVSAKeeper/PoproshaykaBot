@@ -8,7 +8,6 @@ public sealed class StatisticsAutoSaver : IHostedComponent, IAsyncDisposable
     private static readonly TimeSpan DefaultAutoSaveInterval = TimeSpan.FromMinutes(1);
 
     private readonly IReadOnlyList<IPeriodicStatisticsUnit> _units;
-    private readonly IReadOnlyList<IExternalWriteParticipant> _participants;
     private readonly IReadOnlyList<IFlushableHistoryStore> _flushableStores;
     private readonly ILogger<StatisticsAutoSaver> _logger;
     private readonly TimeSpan _autoSaveInterval;
@@ -24,22 +23,19 @@ public sealed class StatisticsAutoSaver : IHostedComponent, IAsyncDisposable
 
     public StatisticsAutoSaver(
         IEnumerable<IPeriodicStatisticsUnit> units,
-        IEnumerable<IExternalWriteParticipant> participants,
         IEnumerable<IFlushableHistoryStore> flushableStores,
         ILogger<StatisticsAutoSaver> logger)
-        : this(units, participants, flushableStores, logger, DefaultAutoSaveInterval)
+        : this(units, flushableStores, logger, DefaultAutoSaveInterval)
     {
     }
 
     internal StatisticsAutoSaver(
         IEnumerable<IPeriodicStatisticsUnit> units,
-        IEnumerable<IExternalWriteParticipant> participants,
         IEnumerable<IFlushableHistoryStore> flushableStores,
         ILogger<StatisticsAutoSaver> logger,
         TimeSpan autoSaveInterval)
     {
         _units = [.. units];
-        _participants = [.. participants];
         _flushableStores = [.. flushableStores];
         _logger = logger;
         _autoSaveInterval = autoSaveInterval;
@@ -126,79 +122,6 @@ public sealed class StatisticsAutoSaver : IHostedComponent, IAsyncDisposable
         {
             _logger.LogError(exception, "Ошибка при финальном сохранении статистики");
             throw new InvalidOperationException($"Ошибка остановки автосохранения статистики: {exception.Message}", exception);
-        }
-    }
-
-    public async Task<T> RunExternalWriteAsync<T>(
-        Func<T> write,
-        Func<T, StatisticsExternalWrite> rewritten,
-        CancellationToken cancellationToken = default)
-    {
-        ArgumentNullException.ThrowIfNull(write);
-        ArgumentNullException.ThrowIfNull(rewritten);
-
-        await _saveSemaphore.WaitAsync(cancellationToken).ConfigureAwait(false);
-
-        try
-        {
-            var invalidations = new (IExternalWriteParticipant Participant, bool WasLoaded)[_participants.Count];
-            var invalidatedCount = 0;
-
-            try
-            {
-                for (; invalidatedCount < _participants.Count; invalidatedCount++)
-                {
-                    var participant = _participants[invalidatedCount];
-                    invalidations[invalidatedCount] = (
-                        participant,
-                        await participant.InvalidateAsync(cancellationToken).ConfigureAwait(false));
-                }
-            }
-            catch
-            {
-                for (var i = 0; i < invalidatedCount; i++)
-                {
-                    if (invalidations[i].WasLoaded)
-                    {
-                        await invalidations[i].Participant.RestoreAsync(true).ConfigureAwait(false);
-                    }
-                }
-
-                throw;
-            }
-
-            try
-            {
-                var result = write();
-                var rewrite = rewritten(result);
-
-                foreach (var (participant, wasLoaded) in invalidations)
-                {
-                    if (wasLoaded && !rewrite.TouchesAny(participant.OwnedRelativePaths))
-                    {
-                        await participant.RestoreAsync(wasLoaded).ConfigureAwait(false);
-                    }
-                }
-
-                return result;
-            }
-            catch (Exception exception)
-            {
-                foreach (var participant in _participants)
-                {
-                    participant.LatchExternalRewrite();
-                }
-
-                _logger.LogWarning(
-                    exception,
-                    "Внешняя запись в файлы статистики оборвалась. Статистика, история стримов и история голосований этого сеанса до перезапуска сохраняться не будут: файлы могли остаться переписанными наполовину, и класть поверх них прочитанное до записи нельзя");
-
-                throw;
-            }
-        }
-        finally
-        {
-            _saveSemaphore.Release();
         }
     }
 

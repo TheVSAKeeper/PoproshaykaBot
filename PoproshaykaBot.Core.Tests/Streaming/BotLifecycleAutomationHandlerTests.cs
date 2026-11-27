@@ -36,7 +36,7 @@ public sealed class BotLifecycleAutomationHandlerTests
             },
         };
 
-        _settingsManager = Substitute.For<SettingsManager>(NullLogger<SettingsManager>.Instance, null, null);
+        _settingsManager = Substitute.For<SettingsManager>(NullLogger<SettingsManager>.Instance, null);
         _settingsManager.Current.Returns(_settings);
         _lifecycleStore = new(_settingsManager, filePath: Path.Combine(_directory.FullName, "platform-lifecycle.json"));
 

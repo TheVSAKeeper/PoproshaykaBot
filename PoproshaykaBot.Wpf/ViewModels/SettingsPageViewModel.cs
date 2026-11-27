@@ -19,7 +19,6 @@ public sealed partial class SettingsPageViewModel : ObservableObject, IPageHeade
     private readonly IReadOnlyList<ISettingsSectionContributor> _contributors;
     private readonly Dictionary<string, ISettingsSectionContributor> _contributorsByKey;
     private readonly SettingsManager _settingsManager;
-    private readonly SettingsWriteGate _settingsWriteGate;
     private readonly KestrelHttpServer _kestrelHttpServer;
     private readonly IEventBus _eventBus;
     private readonly ILogger<SettingsPageViewModel> _logger;
@@ -49,7 +48,6 @@ public sealed partial class SettingsPageViewModel : ObservableObject, IPageHeade
     public SettingsPageViewModel(
         IEnumerable<ISettingsSectionContributor> contributors,
         SettingsManager settingsManager,
-        SettingsWriteGate settingsWriteGate,
         KestrelHttpServer kestrelHttpServer,
         IEventBus eventBus,
         ILogger<SettingsPageViewModel> logger,
@@ -60,7 +58,6 @@ public sealed partial class SettingsPageViewModel : ObservableObject, IPageHeade
     {
         ArgumentNullException.ThrowIfNull(contributors);
         ArgumentNullException.ThrowIfNull(settingsManager);
-        ArgumentNullException.ThrowIfNull(settingsWriteGate);
         ArgumentNullException.ThrowIfNull(kestrelHttpServer);
         ArgumentNullException.ThrowIfNull(eventBus);
         ArgumentNullException.ThrowIfNull(logger);
@@ -70,7 +67,6 @@ public sealed partial class SettingsPageViewModel : ObservableObject, IPageHeade
         _contributors = [.. contributors.OrderBy(c => c.Order)];
         _contributorsByKey = _contributors.ToDictionary(c => c.SectionKey, StringComparer.Ordinal);
         _settingsManager = settingsManager;
-        _settingsWriteGate = settingsWriteGate;
         _kestrelHttpServer = kestrelHttpServer;
         _eventBus = eventBus;
         _logger = logger;
@@ -397,7 +393,7 @@ public sealed partial class SettingsPageViewModel : ObservableObject, IPageHeade
                 return;
             }
 
-            var saved = !written || _settingsWriteGate.HasRevoked
+            var saved = !written
                 ? NotWrittenNotice
                 : "Настройки успешно сохранены.";
 

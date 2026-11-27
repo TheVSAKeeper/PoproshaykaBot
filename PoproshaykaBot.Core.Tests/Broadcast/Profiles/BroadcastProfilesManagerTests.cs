@@ -408,38 +408,4 @@ public class BroadcastProfilesManagerTests
             Assert.That(manager.GetPlatforms(profile.Id), Is.EquivalentTo([StreamingPlatform.Twitch, StreamingPlatform.YouTube]));
         }
     }
-
-    [Test]
-    public async Task Upsert_RollsBackProfile_WhenPlatformsStoreWriteIsBlocked()
-    {
-        var gate = new SettingsWriteGate();
-        var platformsPath = Path.Combine(_tempDir, "broadcast-profile-platforms.json");
-        await gate.RunExternalWriteAsync(
-            () =>
-            {
-                File.WriteAllText(platformsPath, "{}");
-                return Task.FromResult(0);
-            },
-            static _ => ["broadcast-profile-platforms.json"]);
-
-        var platformsStore = new BroadcastProfilePlatformsStore(null, platformsPath, gate);
-        var manager = new BroadcastProfilesManager(
-            _store,
-            _applier,
-            _eventBus,
-            _clock,
-            NullLogger<BroadcastProfilesManager>.Instance,
-            platformsStore);
-
-        var profile = new BroadcastProfile { Name = "MultiFail" };
-        var written = manager.Upsert(profile, [StreamingPlatform.Twitch, StreamingPlatform.YouTube]);
-
-        using (Assert.EnterMultipleScope())
-        {
-            Assert.That(written, Is.False);
-            Assert.That(_store.Load().Profiles, Is.Empty);
-        }
-
-        await _eventBus.DidNotReceive().PublishAsync(Arg.Any<BroadcastProfilesChanged>(), Arg.Any<CancellationToken>());
-    }
 }

@@ -193,7 +193,7 @@ public class ChannelLiveStatusReaderTests
             },
         };
 
-        var settingsManager = Substitute.For<SettingsManager>(NullLogger<SettingsManager>.Instance, null, null);
+        var settingsManager = Substitute.For<SettingsManager>(NullLogger<SettingsManager>.Instance, null);
         settingsManager.Current.Returns(settings);
 
         var reader = new ChannelLiveStatusReader(factory, settingsManager, TimeProvider.System, NullLogger<ChannelLiveStatusReader>.Instance);

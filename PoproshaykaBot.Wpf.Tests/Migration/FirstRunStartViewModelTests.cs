@@ -33,24 +33,58 @@ public sealed class FirstRunStartViewModelTests
     }
 
     [Test]
-    public void StartFreshCommand_CallsDismissCallbackAndClosesWithStartFresh()
+    public void StartFreshCommand_CallsDismissCallbackWithSelectedLocationAndClosesWithStartFresh()
     {
         var dismissed = false;
+        FirstRunStorageLocation? receivedLocation = null;
         var closeResults = new List<bool>();
         var viewModel = new FirstRunStartViewModel(
             [],
             new StubFilePicker(null),
             NullLogger.Instance,
-            onStartFresh: () => dismissed = true);
+            import: (src, _, logger) => LegacyDataImporter.Import(src, _targetDir, overwrite: false, logger),
+            onStartFresh: location =>
+            {
+                dismissed = true;
+                receivedLocation = location;
+                return true;
+            });
         viewModel.RequestClose += (_, result) => closeResults.Add(result);
 
+        Assert.That(viewModel.SelectedStorageLocation, Is.EqualTo(FirstRunStorageLocation.Portable));
+        Assert.That(viewModel.IsPortableStorageSelected, Is.True);
+
+        viewModel.IsAppDataStorageSelected = true;
         viewModel.StartFreshCommand.Execute(null);
 
         using (Assert.EnterMultipleScope())
         {
             Assert.That(dismissed, Is.True);
+            Assert.That(receivedLocation, Is.EqualTo(FirstRunStorageLocation.AppData));
             Assert.That(viewModel.Outcome, Is.EqualTo(FirstRunStartOutcome.StartFresh));
             Assert.That(closeResults, Is.EqualTo(new[] { false }));
+        }
+    }
+
+    [Test]
+    public void StartFreshCommand_WhenAppDataSwitchBlocked_StaysOpenWithNotice()
+    {
+        var closeResults = new List<bool>();
+        var viewModel = new FirstRunStartViewModel(
+            [],
+            new StubFilePicker(null),
+            NullLogger.Instance,
+            import: (src, _, logger) => LegacyDataImporter.Import(src, _targetDir, overwrite: false, logger),
+            onStartFresh: _ => throw new AppDataAlreadyRunningException("Другой экземпляр уже запущен."));
+        viewModel.RequestClose += (_, result) => closeResults.Add(result);
+
+        viewModel.IsAppDataStorageSelected = true;
+        viewModel.StartFreshCommand.Execute(null);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(closeResults, Is.Empty);
+            Assert.That(viewModel.StorageErrorNotice, Does.Contain("Другой экземпляр"));
         }
     }
 
@@ -62,7 +96,12 @@ public sealed class FirstRunStartViewModelTests
         await File.WriteAllTextAsync(Path.Combine(_sourceDir, "settings.json"), """{"twitch":{"channel":"bobito"}}""");
 
         var picker = new StubFilePicker(emptyDir);
-        var viewModel = new FirstRunStartViewModel([], picker, NullLogger.Instance);
+        var viewModel = new FirstRunStartViewModel(
+            [],
+            picker,
+            NullLogger.Instance,
+            import: (src, _, logger) => LegacyDataImporter.Import(src, _targetDir, overwrite: false, logger),
+            onStartFresh: _ => true);
 
         await viewModel.PickFolderCommand.ExecuteAsync(null);
 
@@ -93,13 +132,19 @@ public sealed class FirstRunStartViewModelTests
 
         var candidate = LegacyDataScanner.Inspect(_sourceDir, NullLogger.Instance)!;
         var reloadCalled = false;
+        FirstRunStorageLocation? importedLocation = null;
 
         var viewModel = new FirstRunStartViewModel(
             [candidate],
             new StubFilePicker(null),
             NullLogger.Instance,
-            import: (src, overwrite, logger) => LegacyDataImporter.Import(src, _targetDir, overwrite, logger),
-            afterImportAsync: _ =>
+            import: (src, location, logger) =>
+            {
+                importedLocation = location;
+                return LegacyDataImporter.Import(src, _targetDir, overwrite: false, logger);
+            },
+            onStartFresh: _ => true,
+            afterImportAsync: (_, _) =>
             {
                 reloadCalled = true;
                 return Task.CompletedTask;
@@ -111,6 +156,7 @@ public sealed class FirstRunStartViewModelTests
 
         using (Assert.EnterMultipleScope())
         {
+            Assert.That(importedLocation, Is.EqualTo(FirstRunStorageLocation.Portable));
             Assert.That(reloadCalled, Is.True);
             Assert.That(viewModel.CurrentStep, Is.EqualTo(FirstRunStartStep.Summary));
             Assert.That(viewModel.IsPartialSummary, Is.False);
@@ -156,7 +202,8 @@ public sealed class FirstRunStartViewModelTests
             [candidate],
             new StubFilePicker(null),
             NullLogger.Instance,
-            import: (src, overwrite, logger) => LegacyDataImporter.Import(src, _targetDir, overwrite, logger));
+            import: (src, _, logger) => LegacyDataImporter.Import(src, _targetDir, overwrite: false, logger),
+            onStartFresh: _ => true);
 
         await viewModel.ImportCommand.ExecuteAsync(null);
 
@@ -183,8 +230,9 @@ public sealed class FirstRunStartViewModelTests
             [candidate],
             new StubFilePicker(null),
             NullLogger.Instance,
-            import: (src, overwrite, logger) => LegacyDataImporter.Import(src, _targetDir, overwrite, logger),
-            afterImportAsync: _ => throw new InvalidOperationException("reload failed"));
+            import: (src, _, logger) => LegacyDataImporter.Import(src, _targetDir, overwrite: false, logger),
+            onStartFresh: _ => true,
+            afterImportAsync: (_, _) => throw new InvalidOperationException("reload failed"));
 
         await viewModel.ImportCommand.ExecuteAsync(null);
 
@@ -192,6 +240,104 @@ public sealed class FirstRunStartViewModelTests
         {
             Assert.That(viewModel.CurrentStep, Is.EqualTo(FirstRunStartStep.Summary));
             Assert.That(viewModel.ReloadNotice, Does.Contain("перезапустите"));
+        }
+    }
+
+    [Test]
+    public async Task ImportCommand_WhenAppDataSelected_PassesAppDataLocationToImportAndAfterImport()
+    {
+        await SeedFullOldFolderAsync(_sourceDir);
+        var candidate = LegacyDataScanner.Inspect(_sourceDir, NullLogger.Instance)!;
+        FirstRunStorageLocation? importedLocation = null;
+        FirstRunStorageLocation? reloadedLocation = null;
+
+        var viewModel = new FirstRunStartViewModel(
+            [candidate],
+            new StubFilePicker(null),
+            NullLogger.Instance,
+            import: (src, location, logger) =>
+            {
+                importedLocation = location;
+                return LegacyDataImporter.Import(src, _targetDir, overwrite: false, logger);
+            },
+            onStartFresh: _ => true,
+            afterImportAsync: (_, location) =>
+            {
+                reloadedLocation = location;
+                return Task.CompletedTask;
+            });
+
+        viewModel.IsAppDataStorageSelected = true;
+        await viewModel.ImportCommand.ExecuteAsync(null);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(importedLocation, Is.EqualTo(FirstRunStorageLocation.AppData));
+            Assert.That(reloadedLocation, Is.EqualTo(FirstRunStorageLocation.AppData));
+            Assert.That(viewModel.CurrentStep, Is.EqualTo(FirstRunStartStep.Summary));
+        }
+    }
+
+    [Test]
+    public async Task ImportCommand_WhenBackupRestoreFails_ShowsBackupPathInInvalidFolderStep()
+    {
+        await File.WriteAllTextAsync(Path.Combine(_sourceDir, "settings.json"), """{"twitch":{"channel":"bobito"}}""");
+        var candidate = LegacyDataScanner.Inspect(_sourceDir, NullLogger.Instance)!;
+
+        var viewModel = new FirstRunStartViewModel(
+            [candidate],
+            new StubFilePicker(null),
+            NullLogger.Instance,
+            import: (_, _, _) => throw new AppDataBackupRestoreFailedException(@"Резервная копия осталась в C:\AppData\PoproshaykaBot.backup-20261127-120000"),
+            onStartFresh: _ => true);
+
+        await viewModel.ImportCommand.ExecuteAsync(null);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(viewModel.CurrentStep, Is.EqualTo(FirstRunStartStep.InvalidFolder));
+            Assert.That(viewModel.InvalidFolderMessage, Does.Contain("PoproshaykaBot.backup-20261127-120000"));
+        }
+    }
+
+    [Test]
+    public void RemapSourceAfterAppDataBackup_RemapsRootAndSubfolder_AndLeavesSiblingAndUnrelatedUntouched()
+    {
+        var appDataDir = Path.Combine(_root, "AppData", "PoproshaykaBot");
+        var backupDir = Path.Combine(_root, "AppData", "PoproshaykaBot.backup-20261127-120000");
+        var subfolder = Path.Combine(appDataDir, "profiles", "old");
+        var sibling = Path.Combine(_root, "AppData", "PoproshaykaBot2");
+        var unrelated = Path.Combine(_root, "OtherBot");
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(App.RemapSourceAfterAppDataBackup(appDataDir, appDataDir, backupDir), Is.EqualTo(backupDir));
+            Assert.That(App.RemapSourceAfterAppDataBackup(subfolder, appDataDir, backupDir), Is.EqualTo(Path.Combine(backupDir, "profiles", "old")));
+            Assert.That(App.RemapSourceAfterAppDataBackup(sibling, appDataDir, backupDir), Is.EqualTo(sibling));
+            Assert.That(App.RemapSourceAfterAppDataBackup(unrelated, appDataDir, backupDir), Is.EqualTo(unrelated));
+            Assert.That(App.RemapSourceAfterAppDataBackup(appDataDir, appDataDir, null), Is.EqualTo(appDataDir));
+        }
+    }
+
+    [Test]
+    public async Task TryRestoreAppDataFromBackup_RestoresOriginalFilesWhenAppDataIsCleared()
+    {
+        var appDataDir = Path.Combine(_root, "AppData", "PoproshaykaBot");
+        var backupDir = Path.Combine(_root, "AppData", "PoproshaykaBot.backup-20261127-120000");
+        Directory.CreateDirectory(appDataDir);
+        Directory.CreateDirectory(backupDir);
+        await File.WriteAllTextAsync(Path.Combine(backupDir, "settings.json"), """{"twitch":{"channel":"restored"}}""");
+
+        var restored = App.TryRestoreAppDataFromBackup(appDataDir, backupDir, NullLogger.Instance);
+
+        var content = await File.ReadAllTextAsync(Path.Combine(appDataDir, "settings.json"));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(restored, Is.True);
+            Assert.That(Directory.Exists(backupDir), Is.False);
+            Assert.That(File.Exists(Path.Combine(appDataDir, "settings.json")), Is.True);
+            Assert.That(content, Does.Contain("restored"));
         }
     }
 

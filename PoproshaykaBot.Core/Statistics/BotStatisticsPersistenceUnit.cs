@@ -8,7 +8,6 @@ internal sealed class BotStatisticsPersistenceUnit(
     StatisticsFileStore fileStore,
     ILogger<BotStatisticsPersistenceUnit> logger)
     : SingleFileStatisticsUnit<BotStatistics>(
-        LegacyDataCatalog.BotStatisticsFileName,
         "бота",
         logger)
 {

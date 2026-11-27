@@ -26,24 +26,4 @@ public sealed class UserStatisticsLoader
     {
         return _unit.EnsureLoadedAsync(cancellationToken);
     }
-
-    public ValueTask<bool> InvalidateAsync(CancellationToken cancellationToken = default)
-    {
-        return _unit.InvalidateAsync(cancellationToken);
-    }
-
-    public ValueTask<bool> InvalidateAsync(StreamingPlatform platform, CancellationToken cancellationToken = default)
-    {
-        return _unit.InvalidateAsync(cancellationToken);
-    }
-
-    public ValueTask RestoreAsync(bool wasLoaded)
-    {
-        return _unit.RestoreAsync(wasLoaded);
-    }
-
-    public ValueTask RestoreAsync(StreamingPlatform platform, bool wasLoaded)
-    {
-        return _unit.RestoreAsync(wasLoaded);
-    }
 }

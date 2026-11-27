@@ -52,8 +52,7 @@ public sealed class MultistreamPageTests
             var additional = new FakePlatform(platform, "VK Видео Live");
             IChatPlatform[] registeredPlatforms = includeTwitch ? [new FakePlatform(StreamingPlatform.Twitch, "Twitch"), additional] : [additional];
             var registry = new ChatPlatformRegistry(registeredPlatforms);
-            var gate = new SettingsWriteGate();
-            var catalog = new ChannelCatalogStore(filePath: Path.Combine(data.FullName, "channels.json"), gate: gate);
+            var catalog = new ChannelCatalogStore(filePath: Path.Combine(data.FullName, "channels.json"));
             Assert.That(catalog.Save(new()
             {
                 Channels =
@@ -64,12 +63,12 @@ public sealed class MultistreamPageTests
                 Platforms = [new() { Platform = platform, ActiveChannelId = "two" }],
             }), Is.True);
             var bus = new InMemoryEventBus(NullLogger<InMemoryEventBus>.Instance);
-            var manager = new SettingsManager(NullLogger<SettingsManager>.Instance, Path.Combine(data.FullName, "settings.json"), gate);
+            var manager = new SettingsManager(NullLogger<SettingsManager>.Instance, Path.Combine(data.FullName, "settings.json"));
             var server = new KestrelHttpServer(null!, manager, [], NullLogger<KestrelHttpServer>.Instance, NullLoggerFactory.Instance);
             var editor = new ChannelCatalogSettingsSectionViewModel(catalog);
             var groups = new ChannelGroupsSettingsSectionViewModel(catalog, new UserStatisticsRepository(NullLogger<UserStatisticsRepository>.Instance));
             using var settings = new SettingsPageViewModel([new ChannelsSettingsSectionContributor(editor, groups, catalog)],
-                manager, gate, server, bus, NullLogger<SettingsPageViewModel>.Instance,
+                manager, server, bus, NullLogger<SettingsPageViewModel>.Instance,
                 DispatchProxy.Create<IDialogService, NoDialog>(), new MemorySettings(), platformRegistry: registry);
             await using var connection = new BotConnectionManager(new AppHost([], NullLogger<AppHost>.Instance), [],
                 null, bus, NullLogger<BotConnectionManager>.Instance);
@@ -138,13 +137,12 @@ public sealed class MultistreamPageTests
             var twitch = new FakePlatform(StreamingPlatform.Twitch, "Twitch");
             var youtube = new FakePlatform(StreamingPlatform.YouTube, "YouTube", isEnabled: () => false);
             var registry = new ChatPlatformRegistry([twitch, youtube]);
-            var gate = new SettingsWriteGate();
             var bus = new InMemoryEventBus(NullLogger<InMemoryEventBus>.Instance);
-            var catalog = new ChannelCatalogStore(filePath: Path.Combine(data.FullName, "channels.json"), gate: gate);
-            var accounts = new AccountsStore(filePath: Path.Combine(data.FullName, "accounts.json"), gate: gate);
-            var ytSettingsStore = new YouTubeSettingsStore(filePath: Path.Combine(data.FullName, "youtube.json"), gate: gate);
-            var ytAccountsStore = new YouTubeAccountsStore(filePath: Path.Combine(data.FullName, "youtube-accounts.json"), gate: gate);
-            var manager = new SettingsManager(NullLogger<SettingsManager>.Instance, Path.Combine(data.FullName, "settings.json"), gate);
+            var catalog = new ChannelCatalogStore(filePath: Path.Combine(data.FullName, "channels.json"));
+            var accounts = new AccountsStore(filePath: Path.Combine(data.FullName, "accounts.json"));
+            var ytSettingsStore = new YouTubeSettingsStore(filePath: Path.Combine(data.FullName, "youtube.json"));
+            var ytAccountsStore = new YouTubeAccountsStore(filePath: Path.Combine(data.FullName, "youtube-accounts.json"));
+            var manager = new SettingsManager(NullLogger<SettingsManager>.Instance, Path.Combine(data.FullName, "settings.json"));
             var server = new KestrelHttpServer(null!, manager, [], NullLogger<KestrelHttpServer>.Instance, NullLoggerFactory.Instance);
             var dispatcher = new ManualUiDispatcher();
             var dialogs = DispatchProxy.Create<IDialogService, InertProxy>();
@@ -170,7 +168,7 @@ public sealed class MultistreamPageTests
                     new StreamSettingsSectionContributor(new(), new(), new(new(filePath: Path.Combine(data.FullName, "polls.json")), TimeProvider.System)),
                     new ChannelsSettingsSectionContributor(editor, groups, catalog),
                 ],
-                manager, gate, server, bus, NullLogger<SettingsPageViewModel>.Instance, dialogs, new MemorySettings(),
+                manager, server, bus, NullLogger<SettingsPageViewModel>.Instance, dialogs, new MemorySettings(),
                 broadcastProfiles: profilesSection, platformRegistry: registry);
 
             await using var connection = new BotConnectionManager(new AppHost([], NullLogger<AppHost>.Instance), [],
@@ -310,8 +308,7 @@ public sealed class MultistreamPageTests
                 new FakePlatform(StreamingPlatform.YouTube, "YouTube", () => ytEnabled),
             ]);
 
-            var gate = new SettingsWriteGate();
-            var manager = new SettingsManager(NullLogger<SettingsManager>.Instance, Path.Combine(data.FullName, "settings.json"), gate);
+            var manager = new SettingsManager(NullLogger<SettingsManager>.Instance, Path.Combine(data.FullName, "settings.json"));
             manager.SaveSettings(new AppSettings
             {
                 Twitch = new TwitchSettings
@@ -338,10 +335,10 @@ public sealed class MultistreamPageTests
             var basic = new BasicSettingsSectionViewModel();
             using var settings = new SettingsPageViewModel(
                 [new BasicSettingsSectionContributor(basic, new(), new(), manager, new StubTargetChannelProvider())],
-                manager, gate, server, bus, NullLogger<SettingsPageViewModel>.Instance, dialogs, store, platformRegistry: registry);
+                manager, server, bus, NullLogger<SettingsPageViewModel>.Instance, dialogs, store, platformRegistry: registry);
             await using var connection = new BotConnectionManager(new AppHost([], NullLogger<AppHost>.Instance), [], null, bus, NullLogger<BotConnectionManager>.Instance);
-            var catalog = new ChannelCatalogStore(filePath: Path.Combine(data.FullName, "channels.json"), gate: gate);
-            var ytSettings = new YouTubeSettingsStore(filePath: Path.Combine(data.FullName, "youtube.json"), gate: gate);
+            var catalog = new ChannelCatalogStore(filePath: Path.Combine(data.FullName, "channels.json"));
+            var ytSettings = new YouTubeSettingsStore(filePath: Path.Combine(data.FullName, "youtube.json"));
             using var tile = new MultistreamTileViewModel(registry, catalog, connection, new PlatformAuthRegistry([]), [], bus, dispatcher, ytSettings);
             using var overview = new DashboardViewModel([tile], new DashboardLayoutCoordinator(new DashboardLayoutStore(filePath: Path.Combine(data.FullName, "layout.json"))), TimeProvider.System);
             var history = new BroadcastHistoryStore(null, Path.Combine(data.FullName, "broadcasts.json"), Path.Combine(data.FullName, "sessions.json"));
@@ -402,20 +399,19 @@ public sealed class MultistreamPageTests
         {
             var vk = new FakePlatform(StreamingPlatform.VkLive, "VK Видео Live", () => false);
             var registry = new ChatPlatformRegistry([vk]);
-            var gate = new SettingsWriteGate();
-            var catalog = new ChannelCatalogStore(filePath: Path.Combine(data.FullName, "channels.json"), gate: gate);
+            var catalog = new ChannelCatalogStore(filePath: Path.Combine(data.FullName, "channels.json"));
             Assert.That(catalog.Save(new()
             {
                 Channels = [new() { Platform = StreamingPlatform.VkLive, ChannelId = "vk-1", DisplayName = "Канал VK", IsConfigured = true }],
                 Platforms = [new() { Platform = StreamingPlatform.VkLive, ActiveChannelId = "vk-1" }],
             }), Is.True);
             var bus = new InMemoryEventBus(NullLogger<InMemoryEventBus>.Instance);
-            var manager = new SettingsManager(NullLogger<SettingsManager>.Instance, Path.Combine(data.FullName, "settings.json"), gate);
+            var manager = new SettingsManager(NullLogger<SettingsManager>.Instance, Path.Combine(data.FullName, "settings.json"));
             var server = new KestrelHttpServer(null!, manager, [], NullLogger<KestrelHttpServer>.Instance, NullLoggerFactory.Instance);
             var editor = new ChannelCatalogSettingsSectionViewModel(catalog, platformRegistry: registry);
             var groups = new ChannelGroupsSettingsSectionViewModel(catalog, new UserStatisticsRepository(NullLogger<UserStatisticsRepository>.Instance));
             using var settings = new SettingsPageViewModel([new ChannelsSettingsSectionContributor(editor, groups, catalog)],
-                manager, gate, server, bus, NullLogger<SettingsPageViewModel>.Instance,
+                manager, server, bus, NullLogger<SettingsPageViewModel>.Instance,
                 DispatchProxy.Create<IDialogService, NoDialog>(), new MemorySettings(), platformRegistry: registry);
             await using var connection = new BotConnectionManager(new AppHost([], NullLogger<AppHost>.Instance), [], null, bus, NullLogger<BotConnectionManager>.Instance);
             using var status = new MultistreamTileViewModel(registry, catalog, connection, new PlatformAuthRegistry([]),
@@ -454,12 +450,11 @@ public sealed class MultistreamPageTests
         try
         {
             var registry = new ChatPlatformRegistry([new FakePlatform(StreamingPlatform.YouTube, "YouTube", () => false)]);
-            var gate = new SettingsWriteGate();
             var bus = new InMemoryEventBus(NullLogger<InMemoryEventBus>.Instance);
-            var catalog = new ChannelCatalogStore(filePath: Path.Combine(data.FullName, "channels.json"), gate: gate);
-            var ytSettingsStore = new YouTubeSettingsStore(filePath: Path.Combine(data.FullName, "youtube.json"), gate: gate);
-            var ytAccountsStore = new YouTubeAccountsStore(filePath: Path.Combine(data.FullName, "youtube-accounts.json"), gate: gate);
-            var manager = new SettingsManager(NullLogger<SettingsManager>.Instance, Path.Combine(data.FullName, "settings.json"), gate);
+            var catalog = new ChannelCatalogStore(filePath: Path.Combine(data.FullName, "channels.json"));
+            var ytSettingsStore = new YouTubeSettingsStore(filePath: Path.Combine(data.FullName, "youtube.json"));
+            var ytAccountsStore = new YouTubeAccountsStore(filePath: Path.Combine(data.FullName, "youtube-accounts.json"));
+            var manager = new SettingsManager(NullLogger<SettingsManager>.Instance, Path.Combine(data.FullName, "settings.json"));
             var server = new KestrelHttpServer(null!, manager, [], NullLogger<KestrelHttpServer>.Instance, NullLoggerFactory.Instance);
             var dispatcher = new ManualUiDispatcher();
             var dialogs = DispatchProxy.Create<IDialogService, InertProxy>();
@@ -475,7 +470,7 @@ public sealed class MultistreamPageTests
                     new YouTubeConnectionSettingsContributor(ytVm, ytSettingsStore, ytAccountsStore),
                     new ChannelsSettingsSectionContributor(editor, groups, catalog),
                 ],
-                manager, gate, server, bus, NullLogger<SettingsPageViewModel>.Instance, dialogs, new MemorySettings(),
+                manager, server, bus, NullLogger<SettingsPageViewModel>.Instance, dialogs, new MemorySettings(),
                 platformRegistry: registry);
 
             await using var connection = new BotConnectionManager(new AppHost([], NullLogger<AppHost>.Instance), [], null, bus, NullLogger<BotConnectionManager>.Instance);
@@ -603,13 +598,12 @@ public sealed class MultistreamPageTests
         {
             var ytEnabled = false;
             var registry = new ChatPlatformRegistry([new FakePlatform(StreamingPlatform.YouTube, "YouTube", () => ytEnabled)]);
-            var gate = new SettingsWriteGate();
             var bus = new InMemoryEventBus(NullLogger<InMemoryEventBus>.Instance);
-            var catalog = new ChannelCatalogStore(filePath: Path.Combine(data.FullName, "channels.json"), gate: gate);
-            var accounts = new AccountsStore(filePath: Path.Combine(data.FullName, "accounts.json"), gate: gate);
-            var ytSettingsStore = new YouTubeSettingsStore(filePath: Path.Combine(data.FullName, "youtube.json"), gate: gate);
-            var ytAccountsStore = new YouTubeAccountsStore(filePath: Path.Combine(data.FullName, "youtube-accounts.json"), gate: gate);
-            var manager = new SettingsManager(NullLogger<SettingsManager>.Instance, Path.Combine(data.FullName, "settings.json"), gate);
+            var catalog = new ChannelCatalogStore(filePath: Path.Combine(data.FullName, "channels.json"));
+            var accounts = new AccountsStore(filePath: Path.Combine(data.FullName, "accounts.json"));
+            var ytSettingsStore = new YouTubeSettingsStore(filePath: Path.Combine(data.FullName, "youtube.json"));
+            var ytAccountsStore = new YouTubeAccountsStore(filePath: Path.Combine(data.FullName, "youtube-accounts.json"));
+            var manager = new SettingsManager(NullLogger<SettingsManager>.Instance, Path.Combine(data.FullName, "settings.json"));
             var server = new KestrelHttpServer(null!, manager, [], NullLogger<KestrelHttpServer>.Instance, NullLoggerFactory.Instance);
             var dispatcher = new ManualUiDispatcher();
 
@@ -641,7 +635,7 @@ public sealed class MultistreamPageTests
                     new YouTubeConnectionSettingsContributor(ytVm, ytSettingsStore, ytAccountsStore),
                     new ChannelsSettingsSectionContributor(editor, groups, catalog),
                 ],
-                manager, gate, server, bus, NullLogger<SettingsPageViewModel>.Instance, dialogSpy, new MemorySettings(),
+                manager, server, bus, NullLogger<SettingsPageViewModel>.Instance, dialogSpy, new MemorySettings(),
                 platformRegistry: registry);
             await using var connection = new BotConnectionManager(new AppHost([], NullLogger<AppHost>.Instance), [], null, bus, NullLogger<BotConnectionManager>.Instance);
             using var status = new MultistreamTileViewModel(registry, catalog, connection, new PlatformAuthRegistry([]),
@@ -722,13 +716,12 @@ public sealed class MultistreamPageTests
                 new FakePlatform(StreamingPlatform.VkLive, "VK Видео Live"),
                 new FakePlatform(StreamingPlatform.YouTube, "YouTube"),
             ]);
-            var gate = new SettingsWriteGate();
             var bus = new InMemoryEventBus(NullLogger<InMemoryEventBus>.Instance);
-            var catalog = new ChannelCatalogStore(filePath: Path.Combine(data.FullName, "channels.json"), gate: gate);
-            var accounts = new AccountsStore(filePath: Path.Combine(data.FullName, "accounts.json"), gate: gate);
-            var ytSettingsStore = new YouTubeSettingsStore(filePath: Path.Combine(data.FullName, "youtube.json"), gate: gate);
-            var ytAccountsStore = new YouTubeAccountsStore(filePath: Path.Combine(data.FullName, "youtube-accounts.json"), gate: gate);
-            var manager = new SettingsManager(NullLogger<SettingsManager>.Instance, Path.Combine(data.FullName, "settings.json"), gate);
+            var catalog = new ChannelCatalogStore(filePath: Path.Combine(data.FullName, "channels.json"));
+            var accounts = new AccountsStore(filePath: Path.Combine(data.FullName, "accounts.json"));
+            var ytSettingsStore = new YouTubeSettingsStore(filePath: Path.Combine(data.FullName, "youtube.json"));
+            var ytAccountsStore = new YouTubeAccountsStore(filePath: Path.Combine(data.FullName, "youtube-accounts.json"));
+            var manager = new SettingsManager(NullLogger<SettingsManager>.Instance, Path.Combine(data.FullName, "settings.json"));
             var server = new KestrelHttpServer(null!, manager, [], NullLogger<KestrelHttpServer>.Instance, NullLoggerFactory.Instance);
             var dispatcher = new ManualUiDispatcher();
             var dialogs = DispatchProxy.Create<IDialogService, InertProxy>();
@@ -764,7 +757,7 @@ public sealed class MultistreamPageTests
                     new YouTubeConnectionSettingsContributor(ytVm, ytSettingsStore, ytAccountsStore),
                     new ChannelsSettingsSectionContributor(editor, groups, catalog),
                 ],
-                manager, gate, server, bus, NullLogger<SettingsPageViewModel>.Instance, dialogs, new MemorySettings(),
+                manager, server, bus, NullLogger<SettingsPageViewModel>.Instance, dialogs, new MemorySettings(),
                 platformRegistry: registry);
             await using var connection = new BotConnectionManager(new AppHost([], NullLogger<AppHost>.Instance), [], null, bus, NullLogger<BotConnectionManager>.Instance);
             using var status = new MultistreamTileViewModel(registry, catalog, connection, new PlatformAuthRegistry([]),
@@ -817,13 +810,12 @@ public sealed class MultistreamPageTests
         try
         {
             var registry = new ChatPlatformRegistry([new FakePlatform(StreamingPlatform.YouTube, "YouTube")]);
-            var gate = new SettingsWriteGate();
             var bus = new InMemoryEventBus(NullLogger<InMemoryEventBus>.Instance);
-            var catalog = new ChannelCatalogStore(filePath: Path.Combine(data.FullName, "channels.json"), gate: gate);
-            var accounts = new AccountsStore(filePath: Path.Combine(data.FullName, "accounts.json"), gate: gate);
-            var ytSettingsStore = new YouTubeSettingsStore(filePath: Path.Combine(data.FullName, "youtube.json"), gate: gate);
-            var ytAccountsStore = new YouTubeAccountsStore(filePath: Path.Combine(data.FullName, "youtube-accounts.json"), gate: gate);
-            var manager = new SettingsManager(NullLogger<SettingsManager>.Instance, Path.Combine(data.FullName, "settings.json"), gate);
+            var catalog = new ChannelCatalogStore(filePath: Path.Combine(data.FullName, "channels.json"));
+            var accounts = new AccountsStore(filePath: Path.Combine(data.FullName, "accounts.json"));
+            var ytSettingsStore = new YouTubeSettingsStore(filePath: Path.Combine(data.FullName, "youtube.json"));
+            var ytAccountsStore = new YouTubeAccountsStore(filePath: Path.Combine(data.FullName, "youtube-accounts.json"));
+            var manager = new SettingsManager(NullLogger<SettingsManager>.Instance, Path.Combine(data.FullName, "settings.json"));
             var server = new KestrelHttpServer(null!, manager, [], NullLogger<KestrelHttpServer>.Instance, NullLoggerFactory.Instance);
             var dispatcher = new ManualUiDispatcher();
             var dialogs = DispatchProxy.Create<IDialogService, InertProxy>();
@@ -850,7 +842,7 @@ public sealed class MultistreamPageTests
                     new YouTubeConnectionSettingsContributor(ytVm, ytSettingsStore, ytAccountsStore),
                     new ChannelsSettingsSectionContributor(editor, groups, catalog),
                 ],
-                manager, gate, server, bus, NullLogger<SettingsPageViewModel>.Instance, dialogs, new MemorySettings(),
+                manager, server, bus, NullLogger<SettingsPageViewModel>.Instance, dialogs, new MemorySettings(),
                 platformRegistry: registry);
             await using var connection = new BotConnectionManager(new AppHost([], NullLogger<AppHost>.Instance), [], null, bus, NullLogger<BotConnectionManager>.Instance);
             using var status = new MultistreamTileViewModel(registry, catalog, connection, new PlatformAuthRegistry([]),
@@ -889,13 +881,12 @@ public sealed class MultistreamPageTests
         try
         {
             var registry = new ChatPlatformRegistry([new FakePlatform(StreamingPlatform.YouTube, "YouTube")]);
-            var gate = new SettingsWriteGate();
             var bus = new InMemoryEventBus(NullLogger<InMemoryEventBus>.Instance);
-            var catalog = new ChannelCatalogStore(filePath: Path.Combine(data.FullName, "channels.json"), gate: gate);
-            var accounts = new AccountsStore(filePath: Path.Combine(data.FullName, "accounts.json"), gate: gate);
-            var ytSettingsStore = new YouTubeSettingsStore(filePath: Path.Combine(data.FullName, "youtube.json"), gate: gate);
-            var ytAccountsStore = new YouTubeAccountsStore(filePath: Path.Combine(data.FullName, "youtube-accounts.json"), gate: gate);
-            var manager = new SettingsManager(NullLogger<SettingsManager>.Instance, Path.Combine(data.FullName, "settings.json"), gate);
+            var catalog = new ChannelCatalogStore(filePath: Path.Combine(data.FullName, "channels.json"));
+            var accounts = new AccountsStore(filePath: Path.Combine(data.FullName, "accounts.json"));
+            var ytSettingsStore = new YouTubeSettingsStore(filePath: Path.Combine(data.FullName, "youtube.json"));
+            var ytAccountsStore = new YouTubeAccountsStore(filePath: Path.Combine(data.FullName, "youtube-accounts.json"));
+            var manager = new SettingsManager(NullLogger<SettingsManager>.Instance, Path.Combine(data.FullName, "settings.json"));
             var server = new KestrelHttpServer(null!, manager, [], NullLogger<KestrelHttpServer>.Instance, NullLoggerFactory.Instance);
             var dispatcher = new ManualUiDispatcher();
             var dialogs = DispatchProxy.Create<IDialogService, InertProxy>();
@@ -935,7 +926,7 @@ public sealed class MultistreamPageTests
                     new YouTubeConnectionSettingsContributor(ytVm, ytSettingsStore, ytAccountsStore),
                     new ChannelsSettingsSectionContributor(editor, groups, catalog),
                 ],
-                manager, gate, server, bus, NullLogger<SettingsPageViewModel>.Instance, dialogs, new MemorySettings(),
+                manager, server, bus, NullLogger<SettingsPageViewModel>.Instance, dialogs, new MemorySettings(),
                 platformRegistry: registry);
             await using var connection = new BotConnectionManager(new AppHost([], NullLogger<AppHost>.Instance), [], null, bus, NullLogger<BotConnectionManager>.Instance);
             using var status = new MultistreamTileViewModel(registry, catalog, connection, new PlatformAuthRegistry([]),

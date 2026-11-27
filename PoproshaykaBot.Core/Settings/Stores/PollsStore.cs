@@ -8,10 +8,10 @@ public class PollsStore
 {
     private readonly JsonStore<PollsSettings> _store;
 
-    public PollsStore(ILogger<PollsStore>? logger = null, string? filePath = null, SettingsWriteGate? gate = null)
+    public PollsStore(ILogger<PollsStore>? logger = null, string? filePath = null)
     {
-        var path = filePath ?? AppPaths.SettingsFile("polls.json");
-        _store = new(path, logger, describe: Describe, gate: gate);
+        var path = filePath ?? AppPaths.SettingsFile(SettingsFileNames.PollsFileName);
+        _store = new(path, logger, describe: Describe);
 
         if (logger?.IsEnabled(LogLevel.Debug) == true)
         {
@@ -48,6 +48,4 @@ public class PollsStore
     {
         return _store.Save(value);
     }
-
-    public bool MutatePersisted(Action<PollsSettings> mutator) => _store.Mutate(mutator, applyWhenBlocked: false);
 }

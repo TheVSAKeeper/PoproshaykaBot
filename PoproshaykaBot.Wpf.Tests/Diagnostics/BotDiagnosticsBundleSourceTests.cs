@@ -138,7 +138,6 @@ public class BotDiagnosticsBundleSourceTests
             previousRun: previousRun,
             unobservedExceptions: tracker,
             updateEnvironment: provider.GetRequiredService<IUpdateEnvironment>(),
-            settingsWriteGate: provider.GetRequiredService<SettingsWriteGate>(),
             userStatisticsLoader: userLoader,
             userStatisticsRepository: provider.GetRequiredService<UserStatisticsRepository>(),
             broadcastHistoryStore: provider.GetRequiredService<BroadcastHistoryStore>(),

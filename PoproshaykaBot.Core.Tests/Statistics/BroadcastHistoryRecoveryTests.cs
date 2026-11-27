@@ -11,30 +11,6 @@ public sealed partial class BroadcastHistoryStoreTests
 {
     private BroadcastHistoryStore Reload() => new(NullLogger<BroadcastHistoryStore>.Instance, _broadcastsPath, _sessionsPath);
 
-    [Test]
-    public void RepeatedNoOpImport_DoesNotRestoreRevokedHistoryWrites()
-    {
-        _store.TryAppend(CreateTwitchRecord("before", 10));
-        Assert.That(_store.Invalidate(), Is.True);
-        var imported = CreateTwitchRecord("imported", 42);
-        File.WriteAllText(_broadcastsPath, JsonSerializer.Serialize(new BroadcastHistoryDocument { Broadcasts = [imported] }, JsonStoreOptions.Default));
-        var source = File.ReadAllText(_broadcastsPath);
-        var projection = File.ReadAllText(_sessionsPath);
-        _store.Restore(false);
-
-        _store.Restore(_store.Invalidate());
-        Assert.That(_store.TryAppend(CreateYouTubeOnlyRecord("memory", 7)), Is.False);
-
-        using (Assert.EnterMultipleScope())
-        {
-            Assert.That(_store.CanWriteSource, Is.False);
-            Assert.That(_store.CanWriteProjection, Is.False);
-            Assert.That(File.ReadAllText(_broadcastsPath), Is.EqualTo(source));
-            Assert.That(File.ReadAllText(_sessionsPath), Is.EqualTo(projection));
-            Assert.That(Reload().Load().Broadcasts.Any(record => record.Id == imported.Id), Is.True);
-        }
-    }
-
     [TestCase(true)]
     [TestCase(false)]
     public void Reload_HiddenRecordCannotAbsorbVisibleNeighbor(bool hiddenFirst)

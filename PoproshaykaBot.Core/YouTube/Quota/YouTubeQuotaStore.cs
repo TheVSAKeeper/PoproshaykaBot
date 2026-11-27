@@ -1,7 +1,7 @@
 ﻿using Microsoft.Extensions.Logging;
 using PoproshaykaBot.Core.Infrastructure;
 using PoproshaykaBot.Core.Infrastructure.Persistence;
-using PoproshaykaBot.Core.Settings.Migrations.LegacyImport;
+using PoproshaykaBot.Core.Settings;
 using PoproshaykaBot.Core.Settings.Stores;
 using PoproshaykaBot.Core.Statistics;
 using System.Globalization;
@@ -14,9 +14,9 @@ internal sealed class YouTubeQuotaStore(
     ILogger<YouTubeQuotaStore> logger,
     string? filePath = null,
     Action<string, string>? persistFile = null)
-    : IExternalWriteParticipant, IFlushableHistoryStore, IDisposable
+    : IFlushableHistoryStore, IDisposable
 {
-    private readonly string _filePath = filePath ?? Path.Combine(AppPaths.BaseDirectory, LegacyDataCatalog.YouTubeQuotaFileName);
+    private readonly string _filePath = filePath ?? Path.Combine(AppPaths.BaseDirectory, SettingsFileNames.YouTubeQuotaFileName);
     private readonly Lock _sync = new();
     private readonly SemaphoreSlim _writeGate = new(1, 1);
 
@@ -26,7 +26,6 @@ internal sealed class YouTubeQuotaStore(
     private long _latestSnapshotSequence;
     private long _snapshotVersion;
     private bool _canPersist;
-    private bool _rewrittenExternally;
     private bool _hasUnsavedChanges;
     private bool _disposed;
 
@@ -53,8 +52,6 @@ internal sealed class YouTubeQuotaStore(
             }
         }
     }
-
-    IReadOnlyCollection<string> IExternalWriteParticipant.OwnedRelativePaths { get; } = [LegacyDataCatalog.YouTubeQuotaFileName];
 
     public YouTubeQuotaDocument EnsureLoaded()
     {
@@ -122,39 +119,6 @@ internal sealed class YouTubeQuotaStore(
         return FlushUnsavedChanges();
     }
 
-    async ValueTask<bool> IExternalWriteParticipant.InvalidateAsync(CancellationToken cancellationToken)
-    {
-        cancellationToken.ThrowIfCancellationRequested();
-
-        await _writeGate.WaitAsync(cancellationToken).ConfigureAwait(false);
-
-        try
-        {
-            EnsureLoadedUnderWriteGate();
-
-            lock (_sync)
-            {
-                if (!_canPersist)
-                {
-                    return false;
-                }
-
-                _canPersist = false;
-                _rewrittenExternally = true;
-
-                logger.LogInformation(
-                    "YouTubeQuotaStore: файл {FilePath} изменяется внешней записью, сохранение квоты приостановлено",
-                    _filePath);
-
-                return true;
-            }
-        }
-        finally
-        {
-            _writeGate.Release();
-        }
-    }
-
     private YouTubeQuotaDocument EnsureLoadedUnderWriteGate()
     {
         lock (_sync)
@@ -168,7 +132,7 @@ internal sealed class YouTubeQuotaStore(
             {
                 _readState = StatisticsLoadState.Loaded;
                 _reliability = YouTubeQuotaReliability.Reliable;
-                _canPersist = !_rewrittenExternally;
+                _canPersist = true;
                 _latestDocument = YouTubeQuotaDocument.CreateEmpty();
                 return _latestDocument.Clone();
             }
@@ -192,40 +156,9 @@ internal sealed class YouTubeQuotaStore(
 
             _readState = StatisticsLoadState.Loaded;
             _reliability = YouTubeQuotaReliability.Reliable;
-            _canPersist = !_rewrittenExternally;
+            _canPersist = true;
             _latestDocument = document;
             return _latestDocument.Clone();
-        }
-    }
-
-    ValueTask IExternalWriteParticipant.RestoreAsync(bool wasLoaded)
-    {
-        if (!wasLoaded)
-        {
-            return ValueTask.CompletedTask;
-        }
-
-        lock (_sync)
-        {
-            if (_readState == StatisticsLoadState.Abandoned)
-            {
-                return ValueTask.CompletedTask;
-            }
-
-            _canPersist = true;
-            _rewrittenExternally = false;
-        }
-
-        FlushUnsavedChanges();
-        return ValueTask.CompletedTask;
-    }
-
-    void IExternalWriteParticipant.LatchExternalRewrite()
-    {
-        lock (_sync)
-        {
-            _canPersist = false;
-            _rewrittenExternally = true;
         }
     }
 

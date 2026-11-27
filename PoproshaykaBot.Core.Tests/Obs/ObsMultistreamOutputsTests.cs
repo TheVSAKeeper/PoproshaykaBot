@@ -17,7 +17,7 @@ public sealed class ObsMultistreamOutputsTests
     public void SetUp()
     {
         _settings = new();
-        _settingsManager = Substitute.For<SettingsManager>(NullLogger<SettingsManager>.Instance, null, null);
+        _settingsManager = Substitute.For<SettingsManager>(NullLogger<SettingsManager>.Instance, null);
         _settingsManager.Current.Returns(_settings);
         _client = new();
         _service = new(_client, _settingsManager, NullLogger<ObsIntegrationService>.Instance);

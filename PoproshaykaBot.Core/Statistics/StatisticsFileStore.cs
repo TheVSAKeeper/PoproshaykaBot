@@ -4,6 +4,7 @@ using Microsoft.Extensions.Logging;
 using PoproshaykaBot.Core.Infrastructure;
 using PoproshaykaBot.Core.Infrastructure.Persistence;
 using PoproshaykaBot.Core.Platforms;
+using PoproshaykaBot.Core.Settings;
 using PoproshaykaBot.Core.Settings.Migrations.LegacyImport;
 using PoproshaykaBot.Core.Settings.Stores;
 
@@ -11,7 +12,7 @@ namespace PoproshaykaBot.Core.Statistics;
 
 public sealed class StatisticsFileStore
 {
-    internal const string CommandUsageFileName = "command-usage.json";
+    internal const string CommandUsageFileName = SettingsFileNames.CommandUsageFileName;
 
     private readonly ILogger<StatisticsFileStore> _logger;
     private readonly string _baseDirectory;
@@ -55,7 +56,7 @@ public sealed class StatisticsFileStore
         CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        var filePath = ResolvePath(LegacyDataCatalog.UserStatisticsCatalogFileName);
+        var filePath = ResolvePath(SettingsFileNames.UserStatisticsCatalogFileName);
         _logger.LogDebug("Загрузка каталога статистики пользователей из файла {FilePath}", filePath);
 
         if (!File.Exists(filePath))
@@ -83,6 +84,7 @@ public sealed class StatisticsFileStore
                     data.SchemaVersion,
                     UserStatisticsCatalogDocument.CurrentSchemaVersion,
                     filePath);
+                JsonStoreBackup.CreateBackup(filePath, "invalid", _logger);
                 return Task.FromResult(StatisticsReadResult<UserStatisticsCatalogDocument>.Failure);
             }
 
@@ -100,7 +102,7 @@ public sealed class StatisticsFileStore
         UserStatisticsCatalogDocument snapshot,
         CancellationToken cancellationToken = default)
     {
-        return SaveAsync(LegacyDataCatalog.UserStatisticsCatalogFileName, "каталога статистики пользователей", snapshot, cancellationToken);
+        return SaveAsync(SettingsFileNames.UserStatisticsCatalogFileName, "каталога статистики пользователей", snapshot, cancellationToken);
     }
 
     public async Task<StatisticsReadResult<List<UserStatistics>>> LoadUsersAsync(
@@ -133,12 +135,12 @@ public sealed class StatisticsFileStore
 
     public Task<StatisticsReadResult<BotStatistics>> LoadBotAsync(CancellationToken cancellationToken = default)
     {
-        return LoadAsync<BotStatistics>(LegacyDataCatalog.BotStatisticsFileName, "бота", cancellationToken);
+        return LoadAsync<BotStatistics>(SettingsFileNames.BotStatisticsFileName, "бота", cancellationToken);
     }
 
     public Task SaveBotAsync(BotStatistics snapshot, CancellationToken cancellationToken = default)
     {
-        return SaveAsync(LegacyDataCatalog.BotStatisticsFileName, "бота", snapshot, cancellationToken);
+        return SaveAsync(SettingsFileNames.BotStatisticsFileName, "бота", snapshot, cancellationToken);
     }
 
     public Task<StatisticsReadResult<CommandUsageData>> LoadCommandUsageAsync(CancellationToken cancellationToken = default)

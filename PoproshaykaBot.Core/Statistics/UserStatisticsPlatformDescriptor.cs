@@ -1,6 +1,6 @@
 ﻿using System.Collections.Frozen;
 using PoproshaykaBot.Core.Platforms;
-using PoproshaykaBot.Core.Settings.Migrations.LegacyImport;
+using PoproshaykaBot.Core.Settings;
 
 namespace PoproshaykaBot.Core.Statistics;
 
@@ -15,11 +15,11 @@ public static class UserStatisticsPlatformCatalog
     [
         new(
             StreamingPlatform.Twitch,
-            LegacyDataCatalog.UserStatisticsFileName,
+            SettingsFileNames.UserStatisticsFileName,
             "пользователей"),
         new(
             StreamingPlatform.YouTube,
-            $"{LegacyDataCatalog.YouTubeFolderName}/{LegacyDataCatalog.UserStatisticsFileName}",
+            $"{SettingsFileNames.YouTubeFolderName}/{SettingsFileNames.UserStatisticsFileName}",
             "пользователей YouTube"),
     ];
 

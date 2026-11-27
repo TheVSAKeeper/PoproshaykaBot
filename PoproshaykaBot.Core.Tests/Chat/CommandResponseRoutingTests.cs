@@ -98,7 +98,7 @@ public sealed class CommandResponseRoutingTests
 
         var settings = new AppSettings();
         settings.Twitch.Messages.WelcomeEnabled = false;
-        var settingsManager = Substitute.For<SettingsManager>(NullLogger<SettingsManager>.Instance, null, null);
+        var settingsManager = Substitute.For<SettingsManager>(NullLogger<SettingsManager>.Instance, null);
         settingsManager.Current.Returns(settings);
 
         var obsChatStore = new ObsChatStore(bus, NullLogger<ObsChatStore>.Instance, Path.Combine(_root, "obs.json"));

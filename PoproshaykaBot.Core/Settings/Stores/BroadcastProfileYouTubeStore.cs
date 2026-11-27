@@ -1,7 +1,6 @@
 ﻿using Microsoft.Extensions.Logging;
 using PoproshaykaBot.Core.Broadcast.Profiles;
 using PoproshaykaBot.Core.Infrastructure;
-using PoproshaykaBot.Core.Settings.Migrations.LegacyImport;
 
 namespace PoproshaykaBot.Core.Settings.Stores;
 
@@ -11,11 +10,10 @@ public class BroadcastProfileYouTubeStore
 
     public BroadcastProfileYouTubeStore(
         ILogger<BroadcastProfileYouTubeStore>? logger = null,
-        string? filePath = null,
-        SettingsWriteGate? gate = null)
+        string? filePath = null)
     {
-        var path = filePath ?? AppPaths.SettingsFile(LegacyDataCatalog.BroadcastProfileYouTubeFileName);
-        _store = new(path, logger, describe: Describe, gate: gate);
+        var path = filePath ?? AppPaths.SettingsFile(SettingsFileNames.BroadcastProfileYouTubeFileName);
+        _store = new(path, logger, describe: Describe);
 
         if (logger?.IsEnabled(LogLevel.Debug) == true)
         {

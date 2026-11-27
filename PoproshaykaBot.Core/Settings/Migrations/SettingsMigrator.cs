@@ -10,7 +10,13 @@ public static class SettingsMigrator
     private const string BotAccountKey = "botAccount";
     private const string BroadcasterAccountKey = "broadcasterAccount";
 
-    public static SettingsMigrationResult Migrate(JsonObject root, ILogger? logger = null, string? baseDirectory = null)
+    public static SettingsMigrationResult Migrate(
+        JsonObject root,
+        ILogger? logger = null,
+        string? baseDirectory = null,
+        bool overwriteExistingTargets = true,
+        Action<string>? onTargetSkipped = null,
+        Func<string, bool>? canOverwriteTarget = null)
     {
         ArgumentNullException.ThrowIfNull(root);
 
@@ -27,7 +33,16 @@ public static class SettingsMigrator
         if (baseDirectory != null)
         {
             changed |= SplitMonolithicSettings(root, (fileName, content, redact) =>
-                TryWriteSplit(Path.Combine(baseDirectory, fileName), content.ToJsonString(JsonStoreOptions.Default), fileName, splitFiles, logger, redact));
+                TryWriteSplit(
+                    Path.Combine(baseDirectory, fileName),
+                    content.ToJsonString(JsonStoreOptions.Default),
+                    fileName,
+                    splitFiles,
+                    logger,
+                    redact,
+                    overwriteExistingTargets,
+                    onTargetSkipped,
+                    canOverwriteTarget));
         }
 
         return new(changed, splitFiles);
@@ -157,12 +172,24 @@ public static class SettingsMigrator
         string targetFileName,
         List<string> splitFiles,
         ILogger? logger,
-        Func<string, string>? backupRedactor = null)
+        Func<string, string>? backupRedactor = null,
+        bool overwriteExistingTargets = true,
+        Action<string>? onTargetSkipped = null,
+        Func<string, bool>? canOverwriteTarget = null)
     {
         try
         {
             if (File.Exists(target))
             {
+                var canOverwrite = canOverwriteTarget?.Invoke(targetFileName) ?? overwriteExistingTargets;
+                if (!canOverwrite)
+                {
+                    logger?.LogInformation("Миграция настроек: целевой {TargetFileName} уже существует, перезапись пропущена",
+                        targetFileName);
+                    onTargetSkipped?.Invoke(targetFileName);
+                    return false;
+                }
+
                 JsonStoreBackup.CreateBackup(target, "pre-migration", logger, backupRedactor);
                 logger?.LogWarning("Миграция настроек: целевой {TargetFileName} уже существовал – создан бэкап перед перезаписью авторитетным источником из settings.json",
                     targetFileName);

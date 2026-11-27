@@ -122,10 +122,9 @@ public sealed class UserStatisticsChannelSlicesTests
     }
 
     [Test]
-    public async Task ChannelGroups_contributor_saves_groups_and_respects_SettingsWriteGate()
+    public async Task ChannelGroups_contributor_saves_groups()
     {
-        var gate = new SettingsWriteGate();
-        var catalog = new ChannelCatalogStore(null, Path.Combine(_root, "channels.json"), gate);
+        var catalog = new ChannelCatalogStore(null, Path.Combine(_root, "channels.json"));
         catalog.EnsureChannelKnown(TwitchMain, "tw_main");
         catalog.EnsureChannelKnown(YouTubeMain, "Канал A");
 
@@ -145,22 +144,14 @@ public sealed class UserStatisticsChannelSlicesTests
         var saved = await contributor.SaveAsync(new(), appSettingsWritten: true);
         Assert.That(saved.Written, Is.True);
         Assert.That(catalog.FindGroup("Стримы")?.Channels, Has.Count.EqualTo(1));
-
-        await gate.RunExternalWriteAsync(() => Task.FromResult(0), static _ => ["channels.json"]);
-
-        vm.NewGroupName = "Заблокированная";
-        vm.AddGroupCommand.Execute(null);
-        var blocked = await contributor.SaveAsync(new(), appSettingsWritten: true);
-        Assert.That(blocked.Written, Is.False);
     }
 
     [Test]
     public void Adjustment_default_prefers_most_recent_LastSeen_channel_and_ChannelGroups_includes_history_channels()
     {
         var time = new ManualTimeProvider();
-        var gate = new SettingsWriteGate();
-        var settingsManager = new SettingsManager(NullLogger<SettingsManager>.Instance, Path.Combine(_root, "settings-f10.json"), gate);
-        var catalog = new ChannelCatalogStore(null, Path.Combine(_root, "channels-f10.json"), gate);
+        var settingsManager = new SettingsManager(NullLogger<SettingsManager>.Instance, Path.Combine(_root, "settings-f10.json"));
+        var catalog = new ChannelCatalogStore(null, Path.Combine(_root, "channels-f10.json"));
         catalog.EnsureChannelKnown(TwitchMain, "tw_main");
         catalog.EnsureChannelKnown(YouTubeMain, "Канал A");
 
@@ -239,9 +230,8 @@ public sealed class UserStatisticsChannelSlicesTests
         UserStatisticsPageViewModel Page,
         LinkDialogStub Dialogs) CreatePage(bool seedUnattributed)
     {
-        var gate = new SettingsWriteGate();
-        var settingsManager = new SettingsManager(NullLogger<SettingsManager>.Instance, Path.Combine(_root, "settings.json"), gate);
-        var catalog = new ChannelCatalogStore(null, Path.Combine(_root, "channels.json"), gate);
+        var settingsManager = new SettingsManager(NullLogger<SettingsManager>.Instance, Path.Combine(_root, "settings.json"));
+        var catalog = new ChannelCatalogStore(null, Path.Combine(_root, "channels.json"));
         var repo = new UserStatisticsRepository(NullLogger<UserStatisticsRepository>.Instance);
         var bus = new InMemoryEventBus(NullLogger<InMemoryEventBus>.Instance);
         var linking = new AccountLinkingService(repo, bus);

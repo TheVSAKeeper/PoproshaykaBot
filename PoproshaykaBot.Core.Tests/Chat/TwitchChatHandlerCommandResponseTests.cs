@@ -96,7 +96,7 @@ public sealed class TwitchChatHandlerCommandResponseTests
         _settings = new();
         _settings.Twitch.Messages.WelcomeEnabled = false;
 
-        var settingsManager = Substitute.For<SettingsManager>(NullLogger<SettingsManager>.Instance, null, null);
+        var settingsManager = Substitute.For<SettingsManager>(NullLogger<SettingsManager>.Instance, null);
         settingsManager.Current.Returns(_settings);
 
         var obsChatStore = new ObsChatStore(_bus,

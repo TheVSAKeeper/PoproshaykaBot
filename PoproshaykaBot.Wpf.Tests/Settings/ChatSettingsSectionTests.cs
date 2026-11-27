@@ -26,7 +26,7 @@ public sealed class ChatSettingsSectionTests
     }
 
     [Test]
-    public async Task LoadEditSave_RoundTripsChatSettings_AndHonorsWriteGate()
+    public async Task LoadEditSave_RoundTripsChatSettings()
     {
         var settingsPath = Path.Combine(_directory.FullName, "settings.json");
         var chatPath = Path.Combine(_directory.FullName, "chat.json");
@@ -67,17 +67,5 @@ public sealed class ChatSettingsSectionTests
             Assert.That(reloaded.ShowHistoryInObs, Is.True);
             Assert.That(reloaded.HistoryMaxItems, Is.EqualTo(400));
         }
-
-        var closedGate = new SettingsWriteGate();
-        await closedGate.RunExternalWriteAsync(() => Task.FromResult(0), _ => ["chat.json"]);
-        var blockedDir = Path.Combine(_directory.FullName, "blocked");
-        Directory.CreateDirectory(blockedDir);
-        var blockedStore = new ChatSettingsStore(settingsManager, null, Path.Combine(blockedDir, "chat.json"), closedGate);
-        using var blockedContributor = new ChatSettingsSectionContributor(new(), blockedStore);
-        blockedContributor.Load(session);
-        blockedContributor.BeginSave(settingsManager.Current);
-        var blockedOutcome = await blockedContributor.SaveAsync(settingsManager.Current, appSettingsWritten: true);
-
-        Assert.That(blockedOutcome.Written, Is.False);
     }
 }

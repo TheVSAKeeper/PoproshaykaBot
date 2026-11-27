@@ -41,6 +41,10 @@ public class FirstRunStartSmokeTests
             cf.ByControlType(ControlType.Button).And(cf.ByName("Перенести данные из старой версии")));
         var pickFolderButton = startWindow.FindFirstDescendant(cf =>
             cf.ByControlType(ControlType.Button).And(cf.ByName("Выбрать другую папку")));
+        var portableRadio = startWindow.FindFirstDescendant(cf =>
+            cf.ByControlType(ControlType.RadioButton).And(cf.ByName("Рядом с программой (portable)")));
+        var appDataRadio = startWindow.FindFirstDescendant(cf =>
+            cf.ByControlType(ControlType.RadioButton).And(cf.ByName("В папке пользователя (%APPDATA%\\PoproshaykaBot)")));
         var startFreshButton = startWindow.FindFirstDescendant(cf =>
             cf.ByControlType(ControlType.Button).And(cf.ByName("Начать с нуля")));
 
@@ -54,6 +58,8 @@ public class FirstRunStartSmokeTests
                 "Под --ui-smoke стартовое окно должно открываться за пределами видимого экрана");
             Assert.That(importButton, Is.Not.Null);
             Assert.That(pickFolderButton, Is.Not.Null);
+            Assert.That(portableRadio, Is.Not.Null);
+            Assert.That(appDataRadio, Is.Not.Null);
             Assert.That(startFreshButton, Is.Not.Null);
         }
 

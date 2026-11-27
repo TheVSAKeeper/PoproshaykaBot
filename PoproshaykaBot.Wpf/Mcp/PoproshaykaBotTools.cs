@@ -103,7 +103,7 @@ public sealed class PoproshaykaBotTools
     }
 
     [McpServerTool(Name = "get_runtime_health")]
-    [Description("Сводка состояния рантайма и хранилищ: версия и отметка сборки, режим хранения (portable/AppData/override), признак нештатного прошлого запуска, необработанные фоновые задачи, ошибки привязок WPF, гейты записи настроек (Core и UI), статус файлов отображения чата, состояние загрузки статистики и журналов эфиров/голосований, статус автообновления, сводка раскладки дашборда, версия WebView2 Runtime и список мониторов с DPI.")]
+    [Description("Сводка состояния рантайма и хранилищ: версия и отметка сборки, режим хранения (portable/AppData/override), признак нештатного прошлого запуска, необработанные фоновые задачи, ошибки привязок WPF, статус файлов отображения чата, состояние загрузки статистики и журналов эфиров/голосований, статус автообновления, сводка раскладки дашборда, версия WebView2 Runtime и список мониторов с DPI.")]
     public static string GetRuntimeHealth(BotAutomation automation)
     {
         ArgumentNullException.ThrowIfNull(automation);
@@ -112,7 +112,7 @@ public sealed class PoproshaykaBotTools
     }
 
     [McpServerTool(Name = "get_settings_summary")]
-    [Description("Обезличенная сводка всех секций настроек через ISettingsSnapshotContributor (без секретов, паролей и токенов) плюс текущее состояние гейтов записи настроек Core и UI.")]
+    [Description("Обезличенная сводка всех секций настроек через ISettingsSnapshotContributor (без секретов, паролей и токенов).")]
     public static string GetSettingsSummary(BotAutomation automation)
     {
         ArgumentNullException.ThrowIfNull(automation);

@@ -14,7 +14,6 @@ internal sealed class JsonStore<T>
     private readonly Func<string, string>? _backupRedactor;
     private readonly Func<string, T?>? _parser;
     private readonly Func<T, string>? _describe;
-    private readonly SettingsWriteGate? _gate;
     private readonly Lock _syncLock = new();
 
     private T _state;
@@ -24,8 +23,7 @@ internal sealed class JsonStore<T>
         ILogger? logger = null,
         Func<string, string>? backupRedactor = null,
         Func<string, T?>? parser = null,
-        Func<T, string>? describe = null,
-        SettingsWriteGate? gate = null)
+        Func<T, string>? describe = null)
     {
         ArgumentException.ThrowIfNullOrEmpty(filePath);
 
@@ -34,13 +32,10 @@ internal sealed class JsonStore<T>
         _backupRedactor = backupRedactor;
         _parser = parser;
         _describe = describe;
-        _gate = gate;
         _state = ReadFile();
     }
 
     public event EventHandler<JsonStoreWriteFailedEventArgs>? WriteFailed;
-
-    internal bool IsWriteRevoked => _gate?.IsRevoked(_filePath) == true;
 
     public T Load()
     {
@@ -78,12 +73,11 @@ internal sealed class JsonStore<T>
         return false;
     }
 
-    public bool Save(T value, bool applyWhenBlocked = true, Func<T, bool>? matches = null)
+    public bool Save(T value, Func<T, bool>? matches = null)
     {
         ArgumentNullException.ThrowIfNull(value);
 
         Exception? failure;
-        bool written;
         var snapshot = JsonStoreClone.DeepClone(value);
 
         lock (_syncLock)
@@ -94,9 +88,9 @@ internal sealed class JsonStore<T>
             }
 
             var json = JsonSerializer.Serialize(snapshot, JsonStoreOptions.Default);
-            written = TryWrite(json, out failure);
+            failure = TryWrite(json);
 
-            if (failure == null && (written || applyWhenBlocked))
+            if (failure == null)
             {
                 _state = snapshot;
             }
@@ -107,18 +101,12 @@ internal sealed class JsonStore<T>
             ReportFailure(failure);
         }
 
-        if (!written)
-        {
-            LogBlocked(applyWhenBlocked);
-            return false;
-        }
-
         LogSaved(LogLevel.Information, "замена", snapshot);
 
         return true;
     }
 
-    public bool Mutate(Action<T> mutator, bool applyWhenBlocked = true)
+    public bool Mutate(Action<T> mutator)
     {
         ArgumentNullException.ThrowIfNull(mutator);
 
@@ -128,8 +116,7 @@ internal sealed class JsonStore<T>
                 return true;
             },
             _ => true,
-            out var written,
-            applyWhenBlocked);
+            out var written);
 
         return written;
     }
@@ -148,19 +135,18 @@ internal sealed class JsonStore<T>
         return MutateCore(mutator, applied => applied, out _);
     }
 
-    public (bool Applied, bool Written) MutateIfWithResult(Func<T, bool> mutator, bool applyWhenBlocked = true)
+    public (bool Applied, bool Written) MutateIfWithResult(Func<T, bool> mutator)
     {
         ArgumentNullException.ThrowIfNull(mutator);
 
-        var applied = MutateCore(mutator, static result => result, out var written, applyWhenBlocked);
+        var applied = MutateCore(mutator, static result => result, out var written);
         return (applied, written);
     }
 
-    private TResult MutateCore<TResult>(Func<T, TResult> mutator, Func<TResult, bool> shouldWrite, out bool written, bool applyWhenBlocked = true)
+    private TResult MutateCore<TResult>(Func<T, TResult> mutator, Func<TResult, bool> shouldWrite, out bool written)
     {
         TResult result;
         Exception? failure = null;
-        var blocked = false;
         T draft;
 
         written = false;
@@ -173,12 +159,12 @@ internal sealed class JsonStore<T>
             if (shouldWrite(result))
             {
                 var json = JsonSerializer.Serialize(draft, JsonStoreOptions.Default);
-                written = TryWrite(json, out failure);
-                blocked = !written && failure == null;
+                failure = TryWrite(json);
 
-                if (failure == null && (written || applyWhenBlocked))
+                if (failure == null)
                 {
                     _state = draft;
+                    written = true;
                 }
             }
         }
@@ -186,12 +172,6 @@ internal sealed class JsonStore<T>
         if (failure != null)
         {
             ReportFailure(failure);
-        }
-
-        if (blocked)
-        {
-            LogBlocked(applyWhenBlocked);
-            return result;
         }
 
         if (written)
@@ -232,54 +212,20 @@ internal sealed class JsonStore<T>
         logger.Log(level, "Сохранён {Store} ({Operation}): {Description}", typeof(T).Name, operation, description);
     }
 
-    private bool TryWrite(string json, out Exception? failure)
+    private Exception? TryWrite(string json)
     {
-        Exception? captured = null;
-
-        void Write()
+        try
         {
-            try
-            {
-                AtomicFile.Save(_filePath, json, _logger, keepBackup: _backupRedactor == null);
-            }
-            catch (Exception exception)
-            {
-                _logger?.LogError(exception,
-                    "Ошибка записи {FilePath}, в памяти осталась последняя записанная на диск версия",
-                    _filePath);
-
-                captured = exception;
-            }
+            AtomicFile.Save(_filePath, json, _logger, keepBackup: _backupRedactor == null);
+            return null;
         }
-
-        bool allowed;
-
-        if (_gate == null)
+        catch (Exception exception)
         {
-            Write();
-            allowed = true;
-        }
-        else
-        {
-            allowed = _gate.TryWrite(_filePath, Write);
-        }
-
-        failure = captured;
-
-        return allowed;
-    }
-
-    private void LogBlocked(bool appliedInMemory)
-    {
-        if (appliedInMemory)
-        {
-            _logger?.LogWarning(
-                "Файл {FilePath} не переписан: право записи снято внешней записью в него. Изменения приняты в памяти и действуют до перезапуска приложения",
+            _logger?.LogError(exception,
+                "Ошибка записи {FilePath}, в памяти осталась последняя записанная на диск версия",
                 _filePath);
-        }
-        else
-        {
-            _logger?.LogWarning("Изменения для {FilePath} отклонены: право записи снято внешней записью", _filePath);
+
+            return exception;
         }
     }
 

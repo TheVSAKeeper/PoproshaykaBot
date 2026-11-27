@@ -333,8 +333,7 @@ public class SettingsBlocksTests
 
     private SettingsPageViewModel CreateSingleContributorPageViewModel(string sectionKey, string childKey, string title)
     {
-        var gate = new SettingsWriteGate();
-        var settingsManager = new SettingsManager(NullLogger<SettingsManager>.Instance, Path.Combine(_root, $"settings-{sectionKey}.json"), gate);
+        var settingsManager = new SettingsManager(NullLogger<SettingsManager>.Instance, Path.Combine(_root, $"settings-{sectionKey}.json"));
         var bus = new InMemoryEventBus(NullLogger<InMemoryEventBus>.Instance);
         var kestrel = new KestrelHttpServer(null!, settingsManager, [], NullLogger<KestrelHttpServer>.Instance, NullLoggerFactory.Instance);
         var contributor = new StubMultiBlockContributor(sectionKey, childKey, title);
@@ -342,7 +341,6 @@ public class SettingsBlocksTests
         return new(
             [contributor],
             settingsManager,
-            gate,
             kestrel,
             bus,
             NullLogger<SettingsPageViewModel>.Instance,
@@ -352,23 +350,22 @@ public class SettingsBlocksTests
 
     private SettingsPageViewModel CreateFullPageViewModel()
     {
-        var gate = new SettingsWriteGate();
-        var settingsManager = new SettingsManager(NullLogger<SettingsManager>.Instance, Path.Combine(_root, "settings.json"), gate);
+        var settingsManager = new SettingsManager(NullLogger<SettingsManager>.Instance, Path.Combine(_root, "settings.json"));
         var bus = new InMemoryEventBus(NullLogger<InMemoryEventBus>.Instance);
         var uiSettings = new MemorySettings();
         var dialogs = DispatchProxy.Create<IDialogService, InertProxy>();
         var kestrel = new KestrelHttpServer(null!, settingsManager, [], NullLogger<KestrelHttpServer>.Instance, NullLoggerFactory.Instance);
 
-        var accountsStore = new AccountsStore(null, Path.Combine(_root, "accounts.json"), gate);
-        var youtubeSettingsStore = new YouTubeSettingsStore(null, Path.Combine(_root, "youtube.json"), gate);
-        var youtubeAccountsStore = new YouTubeAccountsStore(null, Path.Combine(_root, "youtube-accounts.json"), gate);
-        var chatSettingsStore = new ChatSettingsStore(settingsManager, null, Path.Combine(_root, "chat.json"), gate);
-        var obsChatStore = new ObsChatStore(bus, null, Path.Combine(_root, "obs-chat.json"), gate);
-        var obsIntegrationStore = new ObsIntegrationStore(bus, null, Path.Combine(_root, "obs-integration.json"), gate);
-        var updateStore = new UpdateStore(null, Path.Combine(_root, "update.json"), gate);
+        var accountsStore = new AccountsStore(null, Path.Combine(_root, "accounts.json"));
+        var youtubeSettingsStore = new YouTubeSettingsStore(null, Path.Combine(_root, "youtube.json"));
+        var youtubeAccountsStore = new YouTubeAccountsStore(null, Path.Combine(_root, "youtube-accounts.json"));
+        var chatSettingsStore = new ChatSettingsStore(settingsManager, null, Path.Combine(_root, "chat.json"));
+        var obsChatStore = new ObsChatStore(bus, null, Path.Combine(_root, "obs-chat.json"));
+        var obsIntegrationStore = new ObsIntegrationStore(bus, null, Path.Combine(_root, "obs-integration.json"));
+        var updateStore = new UpdateStore(null, Path.Combine(_root, "update.json"));
         var debugChannelStore = new DebugChannelStore(null, Path.Combine(_root, "debug-channel.json"));
-        var pollsStore = new PollsStore(null, Path.Combine(_root, "polls.json"), gate);
-        var layoutStore = new DashboardLayoutStore(null, Path.Combine(_root, "dashboard-layout.json"), gate);
+        var pollsStore = new PollsStore(null, Path.Combine(_root, "polls.json"));
+        var layoutStore = new DashboardLayoutStore(null, Path.Combine(_root, "dashboard-layout.json"));
 
         var mcpOptions = new KeepShell.Mcp.McpServerOptions { ServerName = "test", AppName = "test", AppVersion = "1.0", ShotsDirectory = Path.Combine(_root, "shots") };
         var mcpPreferences = new KeepShell.Mcp.McpPreferences(uiSettings, mcpOptions);
@@ -405,7 +402,7 @@ public class SettingsBlocksTests
             DispatchProxy.Create<IShellLauncher, InertProxy>(),
             DispatchProxy.Create<IMainWindowController, InertProxy>());
         var debugChannel = new DebugChannelSectionViewModel(DebugChannelOverride.None, debugChannelStore, null!, TimeProvider.System, NullLogger<DebugChannelSectionViewModel>.Instance);
-        var channelCatalogStore = new ChannelCatalogStore(null, Path.Combine(_root, "channels.json"), gate);
+        var channelCatalogStore = new ChannelCatalogStore(null, Path.Combine(_root, "channels.json"));
         var userStatistics = new UserStatisticsRepository(NullLogger<UserStatisticsRepository>.Instance);
         var channelCatalog = new ChannelCatalogSettingsSectionViewModel(channelCatalogStore);
         var channelGroups = new ChannelGroupsSettingsSectionViewModel(channelCatalogStore, userStatistics);
@@ -427,13 +424,12 @@ public class SettingsBlocksTests
             new DebugChannelSettingsSectionContributor(debugChannel, debugChannelStore),
             new McpSettingsSectionContributor(mcp),
             new AppearanceSettingsSectionContributor(new AppearanceSettingsSectionViewModel(new(uiSettings), new(uiSettings))),
-            new MiscSettingsSectionContributor(new(settingsManager, null!, dialogs, null!, null!, null!)),
+            new MiscSettingsSectionContributor(new(settingsManager, null!, dialogs, null!, null!)),
         ];
 
         return new(
             contributors,
             settingsManager,
-            gate,
             kestrel,
             bus,
             NullLogger<SettingsPageViewModel>.Instance,

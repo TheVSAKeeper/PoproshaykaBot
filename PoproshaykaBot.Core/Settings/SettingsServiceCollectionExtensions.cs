@@ -11,7 +11,6 @@ public static class SettingsServiceCollectionExtensions
 {
     public static IServiceCollection AddSettingsStores(this IServiceCollection services)
     {
-        services.AddSingleton<SettingsWriteGate>();
         services.AddSingleton<SettingsManager>();
         services.AddSingleton<ChatSettingsStore>();
         services.AddSingleton<PlatformLifecycleSettingsStore>();

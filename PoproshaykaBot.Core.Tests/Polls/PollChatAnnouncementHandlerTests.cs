@@ -15,7 +15,7 @@ public class PollChatAnnouncementHandlerTests
     public void SetUp()
     {
         _polls = new();
-        _pollsStore = Substitute.For<PollsStore>(NullLogger<PollsStore>.Instance, null, null);
+        _pollsStore = Substitute.For<PollsStore>(NullLogger<PollsStore>.Instance, null);
         _pollsStore.Load().Returns(_polls);
         _messenger = Substitute.For<IBroadcastMessenger>();
         _eventBus = Substitute.For<IEventBus>();

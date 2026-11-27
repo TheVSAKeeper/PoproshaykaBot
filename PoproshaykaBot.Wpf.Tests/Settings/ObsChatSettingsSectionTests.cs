@@ -129,11 +129,10 @@ public sealed class ObsChatSettingsSectionTests
     {
         var vm = CreateViewModel(out var obsChatStore, out var settingsManager);
         var bus = new InMemoryEventBus(NullLogger<InMemoryEventBus>.Instance);
-        var gate = new SettingsWriteGate();
         var dialogs = DispatchProxy.Create<IDialogService, InertProxy>();
         var kestrel = new KestrelHttpServer(null!, settingsManager, [], NullLogger<KestrelHttpServer>.Instance, NullLoggerFactory.Instance);
         var obsIntegration = new ObsIntegrationSectionViewModel(null!, settingsManager, NullLogger<ObsIntegrationSectionViewModel>.Instance, dialogs, null!);
-        var obsIntegrationStore = new ObsIntegrationStore(bus, null, Path.Combine(_directory.FullName, "obs-integration.json"), gate);
+        var obsIntegrationStore = new ObsIntegrationStore(bus, null, Path.Combine(_directory.FullName, "obs-integration.json"));
         var contributor = new ObsSettingsSectionContributor(
             obsIntegration,
             vm,
@@ -183,11 +182,10 @@ public sealed class ObsChatSettingsSectionTests
     {
         var vm = CreateViewModel(out var obsChatStore, out var settingsManager);
         var bus = new InMemoryEventBus(NullLogger<InMemoryEventBus>.Instance);
-        var gate = new SettingsWriteGate();
         var dialogs = DispatchProxy.Create<IDialogService, InertProxy>();
         var kestrel = new KestrelHttpServer(null!, settingsManager, [], NullLogger<KestrelHttpServer>.Instance, NullLoggerFactory.Instance);
         var obsIntegration = new ObsIntegrationSectionViewModel(null!, settingsManager, NullLogger<ObsIntegrationSectionViewModel>.Instance, dialogs, null!);
-        var obsIntegrationStore = new ObsIntegrationStore(bus, null, Path.Combine(_directory.FullName, "obs-integration.json"), gate);
+        var obsIntegrationStore = new ObsIntegrationStore(bus, null, Path.Combine(_directory.FullName, "obs-integration.json"));
         var contributor = new ObsSettingsSectionContributor(
             obsIntegration,
             vm,
@@ -265,9 +263,8 @@ public sealed class ObsChatSettingsSectionTests
     private ObsChatSettingsSectionViewModel CreateViewModel(out ObsChatStore obsChatStore, out SettingsManager settingsManager)
     {
         var bus = new InMemoryEventBus(NullLogger<InMemoryEventBus>.Instance);
-        var gate = new SettingsWriteGate();
-        settingsManager = new SettingsManager(NullLogger<SettingsManager>.Instance, Path.Combine(_directory.FullName, "settings.json"), gate);
-        obsChatStore = new ObsChatStore(bus, null, Path.Combine(_directory.FullName, "obs-chat.json"), gate);
+        settingsManager = new SettingsManager(NullLogger<SettingsManager>.Instance, Path.Combine(_directory.FullName, "settings.json"));
+        obsChatStore = new ObsChatStore(bus, null, Path.Combine(_directory.FullName, "obs-chat.json"));
         var dialogs = DispatchProxy.Create<IDialogService, InertProxy>();
 
         return new(obsChatStore, settingsManager, dialogs, null!);

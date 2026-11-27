@@ -3,6 +3,7 @@ using PoproshaykaBot.Core.Infrastructure;
 using PoproshaykaBot.Core.Infrastructure.Events.Chat;
 using PoproshaykaBot.Core.Infrastructure.Logging;
 using PoproshaykaBot.Core.Infrastructure.Persistence;
+using PoproshaykaBot.Core.Settings;
 using PoproshaykaBot.Core.Settings.Stores;
 using System.Text.Json;
 using System.Text.Json.Serialization.Metadata;
@@ -11,7 +12,7 @@ namespace PoproshaykaBot.Core.Chat.History;
 
 public sealed class ChatHistoryCacheStore : IChatHistoryPersistenceSink, IDisposable
 {
-    public const string CacheFolderName = "chat-history";
+    public const string CacheFolderName = SettingsFileNames.ChatHistoryFolderName;
     public const long MaxTotalCacheBytes = 32L * 1024 * 1024;
 
     private enum FileReadState
@@ -41,8 +42,6 @@ public sealed class ChatHistoryCacheStore : IChatHistoryPersistenceSink, IDispos
     private readonly Dictionary<ChatHistoryScope, ulong> _committedVersions = [];
     private readonly HashSet<ChatHistoryScope> _dirtyScopes = [];
 
-    private int _externalWriteDepth;
-    private bool _rewrittenExternally;
     private bool _disposed;
 
     public ChatHistoryCacheStore(
@@ -58,17 +57,6 @@ public sealed class ChatHistoryCacheStore : IChatHistoryPersistenceSink, IDispos
     }
 
     public string CacheDirectory => _cacheDirectory;
-
-    public bool IsWriteRevoked
-    {
-        get
-        {
-            lock (_stateLock)
-            {
-                return _externalWriteDepth > 0 || _rewrittenExternally;
-            }
-        }
-    }
 
     public static bool IsCacheFileName(string fileName)
     {
@@ -102,7 +90,7 @@ public sealed class ChatHistoryCacheStore : IChatHistoryPersistenceSink, IDispos
         bool shouldRelease;
         lock (_stateLock)
         {
-            if (_disposed || _rewrittenExternally)
+            if (_disposed)
             {
                 return;
             }
@@ -162,11 +150,6 @@ public sealed class ChatHistoryCacheStore : IChatHistoryPersistenceSink, IDispos
         _ioGate.Wait();
         try
         {
-            if (IsWriteRevoked)
-            {
-                return new(false);
-            }
-
             var allClean = true;
 
             if (clearUnloadedScopes)
@@ -282,57 +265,6 @@ public sealed class ChatHistoryCacheStore : IChatHistoryPersistenceSink, IDispos
         }
     }
 
-    public async Task<T> RunExternalWriteAsync<T>(
-        Func<Task<T>> write,
-        Func<T, bool> rewritten,
-        CancellationToken cancellationToken = default)
-    {
-        ArgumentNullException.ThrowIfNull(write);
-        ArgumentNullException.ThrowIfNull(rewritten);
-
-        await _ioGate.WaitAsync(cancellationToken).ConfigureAwait(false);
-        try
-        {
-            lock (_stateLock)
-            {
-                _externalWriteDepth++;
-            }
-
-            try
-            {
-                var result = await write().ConfigureAwait(false);
-                var wasRewritten = rewritten(result);
-
-                lock (_stateLock)
-                {
-                    _externalWriteDepth--;
-                    if (wasRewritten)
-                    {
-                        _rewrittenExternally = true;
-                        _dirtyScopes.Clear();
-                    }
-                }
-
-                return result;
-            }
-            catch (Exception exception)
-            {
-                lock (_stateLock)
-                {
-                    _externalWriteDepth--;
-                    _rewrittenExternally = true;
-                }
-
-                _logger?.ChatHistoryCacheExternalWriteAbandoned(exception);
-                throw;
-            }
-        }
-        finally
-        {
-            _ioGate.Release();
-        }
-    }
-
     internal async Task<IReadOnlyList<ChatHistoryLoaded>> LoadAndRestoreAsync(
         ChatHistoryManager manager,
         CancellationToken cancellationToken)
@@ -434,23 +366,20 @@ public sealed class ChatHistoryCacheStore : IChatHistoryPersistenceSink, IDispos
                 }
             }
 
-            if (!IsWriteRevoked)
+            foreach (var (path, scope) in filesToDelete)
             {
-                foreach (var (path, scope) in filesToDelete)
+                if (!TryDeleteFile(path, Path.GetFileName(path)))
                 {
-                    if (!TryDeleteFile(path, Path.GetFileName(path)))
-                    {
-                        MarkDirty(scope);
-                    }
+                    MarkDirty(scope);
                 }
-
-                if (scopesToRewrite.Count > 0)
-                {
-                    FlushUnderIoGate(manager, scopesToRewrite, null, cancellationToken);
-                }
-
-                EnforceSizeBudgetUnderIoGate(manager, cancellationToken);
             }
+
+            if (scopesToRewrite.Count > 0)
+            {
+                FlushUnderIoGate(manager, scopesToRewrite, null, cancellationToken);
+            }
+
+            EnforceSizeBudgetUnderIoGate(manager, cancellationToken);
 
             var totalMessages = restoredOutcomes.Sum(static outcome => outcome.AddedEntries.Count);
             if (restoredOutcomes.Count > 0)
@@ -497,27 +426,6 @@ public sealed class ChatHistoryCacheStore : IChatHistoryPersistenceSink, IDispos
         var remainingScopes = new HashSet<ChatHistoryScope>(drained);
         try
         {
-            bool rewritten;
-            bool externalActive;
-            lock (_stateLock)
-            {
-                rewritten = _rewrittenExternally;
-                externalActive = _externalWriteDepth > 0;
-            }
-
-            if (rewritten)
-            {
-                remainingScopes.Clear();
-                return;
-            }
-
-            if (externalActive)
-            {
-                RequeueScopes(drained);
-                remainingScopes.Clear();
-                return;
-            }
-
             FlushUnderIoGate(manager, drained, remainingScopes, cancellationToken);
             remainingScopes.Clear();
         }
@@ -554,7 +462,7 @@ public sealed class ChatHistoryCacheStore : IChatHistoryPersistenceSink, IDispos
                 }
             }
 
-            if (modifiedScopes.Count > 0 && !IsWriteRevoked)
+            if (modifiedScopes.Count > 0)
             {
                 FlushUnderIoGate(manager, modifiedScopes, null, cancellationToken);
             }
@@ -844,7 +752,7 @@ public sealed class ChatHistoryCacheStore : IChatHistoryPersistenceSink, IDispos
         var added = false;
         lock (_stateLock)
         {
-            if (_disposed || _rewrittenExternally)
+            if (_disposed)
             {
                 return;
             }
@@ -878,7 +786,7 @@ public sealed class ChatHistoryCacheStore : IChatHistoryPersistenceSink, IDispos
 
             var parsed = JsonSerializer.Deserialize<ChatHistoryCacheDocument>(json, SerializerOptions);
             if (parsed is null
-                || parsed.SchemaVersion <= 0
+                || parsed.SchemaVersion != ChatHistoryCacheDocument.CurrentSchemaVersion
                 || string.IsNullOrWhiteSpace(parsed.ChannelId))
             {
                 return false;

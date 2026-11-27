@@ -4,12 +4,48 @@ namespace PoproshaykaBot.Core.Settings.Stores;
 
 internal static class AccountsTokenRedactor
 {
-    private static readonly HashSet<string> SensitiveKeys = new(StringComparer.OrdinalIgnoreCase)
-    {
+    internal static readonly string[] AuthTokenKeys =
+    [
         "accessToken",
         "refreshToken",
-        "clientSecret",
-    };
+    ];
+
+    private static readonly HashSet<string> SensitiveKeys = new(
+        [.. AuthTokenKeys, "clientSecret"],
+        StringComparer.OrdinalIgnoreCase);
+
+    public static bool HasAnyToken(JsonNode? node, IReadOnlyCollection<string> keys)
+    {
+        switch (node)
+        {
+            case JsonObject obj:
+                foreach (var pair in obj)
+                {
+                    if (keys.Contains(pair.Key, StringComparer.OrdinalIgnoreCase))
+                    {
+                        if (pair.Value is JsonValue value && value.TryGetValue(out string? text) && !string.IsNullOrWhiteSpace(text))
+                        {
+                            return true;
+                        }
+
+                        continue;
+                    }
+
+                    if (HasAnyToken(pair.Value, keys))
+                    {
+                        return true;
+                    }
+                }
+
+                return false;
+
+            case JsonArray array:
+                return array.Any(item => HasAnyToken(item, keys));
+
+            default:
+                return false;
+        }
+    }
 
     public static string Redact(string raw)
     {

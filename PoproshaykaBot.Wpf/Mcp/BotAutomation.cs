@@ -54,8 +54,6 @@ public sealed class BotAutomation(
     BindingErrorSink? bindingErrors = null,
     IUpdateEnvironment? updateEnvironment = null,
     KeepShell.Updates.IUpdateCoordinator? updateCoordinator = null,
-    SettingsWriteGate? settingsWriteGate = null,
-    UiSettingsWriteGuard? uiSettingsWriteGuard = null,
     ChatDisplayStore? chatDisplayStore = null,
     UserStatisticsLoader? userStatisticsLoader = null,
     UserStatisticsRepository? userStatisticsRepository = null,
@@ -436,8 +434,6 @@ public sealed class BotAutomation(
             previousRun,
             unobservedExceptions?.Capture(),
             bindingErrorsDto,
-            settingsWriteGate?.CaptureStatus(),
-            uiSettingsWriteGuard?.CaptureStatus(),
             chatDisplayStore?.CaptureStatus(),
             userStatsHealth,
             broadcastHistoryStore?.CaptureDiagnosticsSummary(maxRecent: 0),
@@ -463,10 +459,7 @@ public sealed class BotAutomation(
             }
         }
 
-        return new(
-            entries,
-            settingsWriteGate?.CaptureStatus(),
-            uiSettingsWriteGuard?.CaptureStatus());
+        return new(entries);
     }
 
     public AccountsReadinessDto GetAccountsReadiness(bool verifyPersisted = false)

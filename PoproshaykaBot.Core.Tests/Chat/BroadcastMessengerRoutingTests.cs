@@ -56,7 +56,7 @@ public sealed class BroadcastMessengerRoutingTests
         var polls = new PollsSettings();
         polls.ChatTemplates.StartEnabled = true;
         polls.ChatTemplates.StartTemplate = "Старт: {title}";
-        var pollsStore = Substitute.For<PollsStore>(NullLogger<PollsStore>.Instance, null, null);
+        var pollsStore = Substitute.For<PollsStore>(NullLogger<PollsStore>.Instance, null);
         pollsStore.Load().Returns(polls);
 
         var bus = new InMemoryEventBus(NullLogger<InMemoryEventBus>.Instance);
@@ -99,7 +99,7 @@ public sealed class BroadcastMessengerRoutingTests
                 },
             },
         };
-        var settingsManager = Substitute.For<SettingsManager>(NullLogger<SettingsManager>.Instance, null, null);
+        var settingsManager = Substitute.For<SettingsManager>(NullLogger<SettingsManager>.Instance, null);
         settingsManager.Current.Returns(settings);
 
         var audience = new AudienceTracker(settingsManager);
@@ -166,7 +166,7 @@ public sealed class BroadcastMessengerRoutingTests
                 },
             },
         };
-        var settingsManager = Substitute.For<SettingsManager>(NullLogger<SettingsManager>.Instance, null, null);
+        var settingsManager = Substitute.For<SettingsManager>(NullLogger<SettingsManager>.Instance, null);
         settingsManager.Current.Returns(settings);
 
         await using var defaultScheduler = new BroadcastScheduler(
@@ -231,7 +231,7 @@ public sealed class BroadcastMessengerRoutingTests
                 },
             },
         };
-        var settingsManager = Substitute.For<SettingsManager>(NullLogger<SettingsManager>.Instance, null, null);
+        var settingsManager = Substitute.For<SettingsManager>(NullLogger<SettingsManager>.Instance, null);
         settingsManager.Current.Returns(settings);
 
         var bus = new InMemoryEventBus(NullLogger<InMemoryEventBus>.Instance);
@@ -394,7 +394,7 @@ public sealed class BroadcastMessengerRoutingTests
                 RewardMessage = "+{points} для {username}",
             },
         };
-        var settingsManager = Substitute.For<SettingsManager>(NullLogger<SettingsManager>.Instance, null, null);
+        var settingsManager = Substitute.For<SettingsManager>(NullLogger<SettingsManager>.Instance, null);
         settingsManager.Current.Returns(settings);
 
         var bus = new InMemoryEventBus(NullLogger<InMemoryEventBus>.Instance);

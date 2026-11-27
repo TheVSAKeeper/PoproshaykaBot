@@ -21,7 +21,6 @@ using PoproshaykaBot.Core.Platforms;
 using PoproshaykaBot.Core.Polls;
 using PoproshaykaBot.Core.Server;
 using PoproshaykaBot.Core.Settings;
-using PoproshaykaBot.Core.Settings.Migrations;
 using PoproshaykaBot.Core.Settings.Migrations.LegacyImport;
 using PoproshaykaBot.Core.Settings.Onboarding;
 using PoproshaykaBot.Core.Statistics;
@@ -260,28 +259,19 @@ public partial class App : Application
 
                     ViewLocator.InstallIntoApplication();
 
-                    if (IsHeadless)
-                    {
-                        MigrateLegacySettingsLayout();
-                    }
-                    else
-                    {
-                        await Task.Run(MigrateLegacySettingsLayout);
-                    }
-
                     if (!IsGallery)
                     {
                         (_, importCandidates, importTarget) = await ScanLegacyImportCandidatesAsync(uiSettings, IsHeadless);
                     }
                 }
 
-                using (await BeginStartupPhaseAsync(splash, "Подготовка приложения…"))
-                {
-                    _services = BuildAndInitializeServices(uiSettings, coreUiLogSink, themePackLoader);
-                }
-
                 if (_galleryArguments is not null)
                 {
+                    using (await BeginStartupPhaseAsync(splash, "Подготовка приложения…"))
+                    {
+                        _services = BuildAndInitializeServices(uiSettings, coreUiLogSink, themePackLoader);
+                    }
+
                     _services.GetRequiredService<StatisticsPreload>().Start();
                     _appLifetime = _services.GetRequiredService<AppLifetime>();
                     RunGallery(_galleryArguments, _services);
@@ -295,14 +285,20 @@ public partial class App : Application
                     splash?.Dispose();
                     splash = null;
 
-                    var (modalWait, outcome, _) = await ShowFirstRunStartWindowAsync(
+                    var (modalWait, outcome, updatedUiSettings) = await ShowFirstRunStartWindowAsync(
                         importCandidates,
                         uiSettings,
                         uiSettingsPath,
-                        themePackLoader,
-                        coreUiLogSink);
+                        themePackLoader);
+                    uiSettings = updatedUiSettings;
+                    themePackLoader = CreateThemePackLoader();
                     interactiveWait += modalWait;
                     firstRunOutcome = outcome;
+                }
+
+                using (await BeginStartupPhaseAsync(splash, "Подготовка приложения…"))
+                {
+                    _services = BuildAndInitializeServices(uiSettings, coreUiLogSink, themePackLoader);
                 }
 
                 _services.GetRequiredService<StatisticsPreload>().Start();
@@ -557,21 +553,6 @@ public partial class App : Application
             static (path, error) => HostLog.Warning(error, "Пакет темы отклонён: {Path}", path));
     }
 
-    private static void MigrateLegacySettingsLayout()
-    {
-        using var loggerFactory = new SerilogLoggerFactory(Log.Logger);
-        var logger = loggerFactory.CreateLogger(nameof(LegacySettingsLayoutMigrator));
-
-        try
-        {
-            LegacySettingsLayoutMigrator.Run(AppPaths.BaseDirectory, AppPaths.SettingsDirectory, logger);
-        }
-        catch (Exception exception)
-        {
-            HostLog.Error(exception, "Ошибка пред-миграции layout-а настроек");
-        }
-    }
-
     private static void ConfigureServices(
         IServiceCollection services,
         UiLogSink uiLogSink,
@@ -580,9 +561,7 @@ public partial class App : Application
         BindingErrorSink? bindingErrors,
         string? mcpDiscoveryFile)
     {
-        var uiSettingsGuard = new UiSettingsWriteGuard(uiSettings);
-        services.AddSingleton(uiSettingsGuard);
-        services.AddSingleton<ISettingsStore>(uiSettingsGuard);
+        services.AddSingleton(uiSettings);
 
         if (bindingErrors is not null)
         {
@@ -736,7 +715,6 @@ public partial class App : Application
         services.AddSingleton<IPlatformWebChatLoginDialog, EmbeddedPlatformChatLoginDialog>();
         services.AddSingleton<IPlatformAccountLogin, TwitchAccountLogin>();
         services.AddSingleton<IPlatformAccountLogin, YouTubeAccountLogin>();
-        services.AddSingleton<ILegacyImportDialog, LegacyImportDialog>();
         services.AddSingleton<StreamMonitoringViewModel>();
         services.AddSingleton<AutoBroadcastIndicatorViewModel>();
         services.AddSingleton<IMainWindowController, MainWindowController>();

@@ -10,18 +10,59 @@ public static class LegacyDataImporter
 {
     private const string BackupSuffix = "pre-import";
 
-    private static readonly string MonolithRelativePath =
-        Path.Combine(LegacyDataCatalog.SettingsFolderName, LegacyDataCatalog.SettingsFileName);
-
     private static readonly string[] AuthorizationFiles =
-        [LegacyDataCatalog.SettingsFileName, LegacyDataCatalog.AccountsFileName, LegacyDataCatalog.ChannelsFileName];
+        [SettingsFileNames.SettingsFileName, SettingsFileNames.AccountsFileName, SettingsFileNames.ChannelsFileName];
+
+    public static string? BackupAndClearAppData(string appDataDirectory, ILogger? logger = null)
+    {
+        return BackupAndClearAppData(appDataDirectory, logger, nowProvider: null);
+    }
+
+    internal static string? BackupAndClearAppData(string appDataDirectory, ILogger? logger, Func<DateTime>? nowProvider)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(appDataDirectory);
+
+        var fullAppData = Path.GetFullPath(appDataDirectory);
+        if (!Directory.Exists(fullAppData))
+        {
+            Directory.CreateDirectory(fullAppData);
+            return null;
+        }
+
+        if (!Directory.EnumerateFileSystemEntries(fullAppData).Any())
+        {
+            return null;
+        }
+
+        var parentDirectory = Path.GetDirectoryName(fullAppData)
+            ?? throw new InvalidOperationException($"Не удалось определить родительский каталог для {fullAppData}");
+        var folderName = Path.GetFileName(fullAppData);
+        var now = nowProvider?.Invoke() ?? DateTime.Now;
+        var backupBase = Path.Combine(parentDirectory, $"{folderName}.backup-{now:yyyyMMdd-HHmmss}");
+        var backupPath = backupBase;
+        var suffix = 2;
+
+        while (Directory.Exists(backupPath) || File.Exists(backupPath))
+        {
+            backupPath = $"{backupBase}-{suffix}";
+            suffix++;
+        }
+
+        Directory.Move(fullAppData, backupPath);
+        Directory.CreateDirectory(fullAppData);
+        logger?.LogInformation("Старые данные в {AppData} перенесены в резервную копию {BackupPath}, целевая папка очищена",
+            fullAppData,
+            backupPath);
+
+        return backupPath;
+    }
 
     public static LegacyImportResult Import(string sourcePath, bool overwrite = false, ILogger? logger = null)
     {
         return Import(sourcePath, AppPaths.BaseDirectory, overwrite, logger);
     }
 
-    internal static LegacyImportResult Import(string sourcePath, string targetBaseDirectory, bool overwrite, ILogger? logger)
+    public static LegacyImportResult Import(string sourcePath, string targetBaseDirectory, bool overwrite, ILogger? logger)
     {
         var start = Stopwatch.GetTimestamp();
         try
@@ -65,13 +106,16 @@ public static class LegacyDataImporter
             return Build(fullSource, fullTarget, copied, skipped, failures, false, false, false, [], []);
         }
 
-        var settingsDirectory = Path.Combine(fullTarget, LegacyDataCatalog.SettingsFolderName);
+        var settingsDirectory = Path.Combine(fullTarget, SettingsFileNames.SettingsFolderName);
         var sourceAuthorization = LegacyDataReader.ReadTwitchAuthorization(fullSource, logger);
         var targetAuthorizationBefore = LegacyDataReader.ReadTwitchAuthorization(fullTarget, logger);
         var inPlace = PathComparison.AreEqual(fullSource, fullTarget);
-        var snapshot = inPlace || overwrite
-            ? new Dictionary<string, byte[]>(StringComparer.OrdinalIgnoreCase)
-            : CaptureSettingsFiles(settingsDirectory, logger);
+        var preExistingSettingsFiles = inPlace || overwrite || !Directory.Exists(settingsDirectory)
+            ? null
+            : Directory.EnumerateFiles(settingsDirectory)
+                .Select(Path.GetFileName)
+                .OfType<string>()
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
         if (inPlace)
         {
@@ -86,12 +130,20 @@ public static class LegacyDataImporter
             ResetStaleUserCatalogAfterLegacyOverwrite(fullSource, fullTarget, overwrite, copied, failures, logger);
         }
 
-        var migratedSettingsFiles = new List<string>(LegacySettingsLayoutMigrator.Run(fullTarget, settingsDirectory, logger, failures.Add));
+        Func<string, bool>? canOverwriteSplitTarget = inPlace || overwrite
+            ? null
+            : fileName => preExistingSettingsFiles is null || !preExistingSettingsFiles.Contains(fileName);
 
-        if (copied.Contains(MonolithRelativePath, StringComparer.OrdinalIgnoreCase))
-        {
-            RestoreFilesTouchedBySplit(snapshot, fullTarget, migratedSettingsFiles, skipped, failures, logger);
-        }
+        var migratedSettingsFiles = new List<string>(LegacySettingsLayoutMigrator.Run(
+            fullTarget,
+            settingsDirectory,
+            logger,
+            failures.Add,
+            overwriteExistingTargets: inPlace || overwrite,
+            reportSkippedTarget: fileName => skipped.Add(new(
+                Path.Combine(SettingsFileNames.SettingsFolderName, fileName),
+                LegacyImportSkipReason.TargetExists)),
+            canOverwriteTarget: canOverwriteSplitTarget));
 
         var leftovers = CollectUnmigratedLegacyFiles(fullTarget, failures, logger);
 
@@ -198,15 +250,15 @@ public static class LegacyDataImporter
             return;
         }
 
-        var sourceCatalogPath = Path.Combine(fullSource, LegacyDataCatalog.UserStatisticsCatalogFileName);
+        var sourceCatalogPath = Path.Combine(fullSource, SettingsFileNames.UserStatisticsCatalogFileName);
         var sourceHasCatalog = File.Exists(sourceCatalogPath);
-        var copiedCatalog = copied.Contains(LegacyDataCatalog.UserStatisticsCatalogFileName, StringComparer.OrdinalIgnoreCase);
+        var copiedCatalog = copied.Contains(SettingsFileNames.UserStatisticsCatalogFileName, StringComparer.OrdinalIgnoreCase);
         var failedCatalog = failures.Any(f => string.Equals(
             LegacyDataCatalog.NormalizeRelativePath(f.RelativeTargetPath),
-            LegacyDataCatalog.UserStatisticsCatalogFileName,
+            SettingsFileNames.UserStatisticsCatalogFileName,
             StringComparison.OrdinalIgnoreCase));
         var copiedLegacyUsers = LegacyDataCatalog.GetRelativePaths(LegacyDataCategory.UserStatistics)
-            .Where(path => !string.Equals(path, LegacyDataCatalog.UserStatisticsCatalogFileName, StringComparison.OrdinalIgnoreCase))
+            .Where(path => !string.Equals(path, SettingsFileNames.UserStatisticsCatalogFileName, StringComparison.OrdinalIgnoreCase))
             .Any(path => copied.Any(c => string.Equals(LegacyDataCatalog.NormalizeRelativePath(c), path, StringComparison.OrdinalIgnoreCase)));
 
         if (sourceHasCatalog || copiedCatalog || failedCatalog || !copiedLegacyUsers)
@@ -214,15 +266,15 @@ public static class LegacyDataImporter
             return;
         }
 
-        var targetCatalogPath = Path.Combine(fullTarget, LegacyDataCatalog.UserStatisticsCatalogFileName);
+        var targetCatalogPath = Path.Combine(fullTarget, SettingsFileNames.UserStatisticsCatalogFileName);
         if (!File.Exists(targetCatalogPath))
         {
             return;
         }
 
-        if (!TryBackup(targetCatalogPath, LegacyDataCatalog.UserStatisticsCatalogFileName, logger))
+        if (!TryBackup(targetCatalogPath, SettingsFileNames.UserStatisticsCatalogFileName, logger))
         {
-            failures.Add(new(LegacyDataCatalog.UserStatisticsCatalogFileName, "Резервная копия не создана, каталог статистики оставлен без изменений"));
+            failures.Add(new(SettingsFileNames.UserStatisticsCatalogFileName, "Резервная копия не создана, каталог статистики оставлен без изменений"));
             logger?.LogError("Импорт данных: не удалось создать резервную копию {File} при импорте v1-статистики", targetCatalogPath);
             return;
         }
@@ -230,96 +282,19 @@ public static class LegacyDataImporter
         try
         {
             File.Delete(targetCatalogPath);
-            copied.Add(LegacyDataCatalog.UserStatisticsCatalogFileName);
+            copied.Add(SettingsFileNames.UserStatisticsCatalogFileName);
             logger?.LogInformation("Импорт данных: прежний каталог {File} снят после перезаписи v1-статистики для повторной миграции", targetCatalogPath);
         }
         catch (Exception exception)
         {
             logger?.LogError(exception, "Импорт данных: не удалось удалить прежний каталог {File}", targetCatalogPath);
-            failures.Add(new(LegacyDataCatalog.UserStatisticsCatalogFileName, exception.Message));
+            failures.Add(new(SettingsFileNames.UserStatisticsCatalogFileName, exception.Message));
         }
     }
 
     private static bool TryBackup(string targetPath, string fileName, ILogger? logger)
     {
-        var directory = Path.GetDirectoryName(targetPath)!;
-        var pattern = $"{Path.GetFileNameWithoutExtension(targetPath)}.{BackupSuffix}-*{Path.GetExtension(targetPath)}";
-
-        try
-        {
-            var before = Directory.GetFiles(directory, pattern).Length;
-            JsonStoreBackup.CreateBackup(targetPath, BackupSuffix, logger, ResolveRedactor(fileName));
-            return Directory.GetFiles(directory, pattern).Length > before;
-        }
-        catch (Exception exception)
-        {
-            logger?.LogError(exception, "Импорт данных: проверка резервной копии для {Target} не удалась", targetPath);
-            return false;
-        }
-    }
-
-    private static Dictionary<string, byte[]> CaptureSettingsFiles(string settingsDirectory, ILogger? logger)
-    {
-        var snapshot = new Dictionary<string, byte[]>(StringComparer.OrdinalIgnoreCase);
-
-        foreach (var name in LegacyDataCatalog.SettingsFiles)
-        {
-            var path = Path.Combine(settingsDirectory, name);
-
-            if (!File.Exists(path))
-            {
-                continue;
-            }
-
-            try
-            {
-                snapshot[path] = File.ReadAllBytes(path);
-            }
-            catch (Exception exception)
-            {
-                logger?.LogWarning(exception,
-                    "Импорт данных: не удалось запомнить прежнее содержимое {Path} – защита от перезаписи при разборе настроек не сработает",
-                    path);
-            }
-        }
-
-        return snapshot;
-    }
-
-    private static void RestoreFilesTouchedBySplit(
-        Dictionary<string, byte[]> snapshot,
-        string target,
-        List<string> migratedSettingsFiles,
-        List<LegacyImportSkip> skipped,
-        List<LegacyImportFailure> failures,
-        ILogger? logger)
-    {
-        foreach (var (path, original) in snapshot)
-        {
-            var relativePath = Path.GetRelativePath(target, path);
-            var fileName = Path.GetFileName(path);
-
-            try
-            {
-                var untouched = File.Exists(path) && File.ReadAllBytes(path).AsSpan().SequenceEqual(original);
-
-                if (!untouched)
-                {
-                    AtomicFile.Save(path, original, logger, keepBackup: !LegacyDataCatalog.CarriesTokens(fileName));
-                    skipped.Add(new(relativePath, LegacyImportSkipReason.TargetExists));
-
-                    logger?.LogWarning("Импорт данных: {File} возвращён в прежний вид – разбор перенесённого settings.json попытался его заменить, а перезапись выключена",
-                        relativePath);
-                }
-
-                migratedSettingsFiles.RemoveAll(name => string.Equals(name, fileName, StringComparison.OrdinalIgnoreCase));
-            }
-            catch (Exception exception)
-            {
-                logger?.LogError(exception, "Импорт данных: не удалось вернуть прежнее содержимое {File}", relativePath);
-                failures.Add(new(relativePath, exception.Message));
-            }
-        }
+        return JsonStoreBackup.TryCreateBackup(targetPath, BackupSuffix, logger, ResolveRedactor(fileName), out _);
     }
 
     private static IReadOnlyList<string> CollectUnmigratedLegacyFiles(
@@ -327,7 +302,7 @@ public static class LegacyDataImporter
     {
         var leftovers = LegacyDataCatalog.SettingsFiles
             .Where(name => File.Exists(Path.Combine(target, name))
-                && File.Exists(Path.Combine(target, LegacyDataCatalog.SettingsFolderName, name))
+                && File.Exists(Path.Combine(target, SettingsFileNames.SettingsFolderName, name))
                 && !failures.Any(failure => failure.DestinationWritten
                     && string.Equals(failure.RelativeTargetPath, name, StringComparison.OrdinalIgnoreCase)))
             .ToList();

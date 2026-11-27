@@ -12,18 +12,24 @@ public static class LegacySettingsLayoutMigrator
 {
     private static readonly string[] KnownSettingsFiles =
     [
-        "settings.json",
-        "accounts.json",
-        "broadcast-profiles.json",
-        "polls.json",
-        "obs-chat.json",
-        "obs-integration.json",
-        "recent-categories.json",
-        "dashboard-layout.json",
+        SettingsFileNames.SettingsFileName,
+        SettingsFileNames.AccountsFileName,
+        SettingsFileNames.BroadcastProfilesFileName,
+        SettingsFileNames.PollsFileName,
+        SettingsFileNames.ObsChatFileName,
+        SettingsFileNames.ObsIntegrationFileName,
+        SettingsFileNames.RecentCategoriesFileName,
+        SettingsFileNames.DashboardLayoutFileName,
     ];
 
     public static IReadOnlyList<string> Run(
-        string baseDirectory, string settingsDirectory, ILogger? logger = null, Action<LegacyImportFailure>? reportFailure = null)
+        string baseDirectory,
+        string settingsDirectory,
+        ILogger? logger = null,
+        Action<LegacyImportFailure>? reportFailure = null,
+        bool overwriteExistingTargets = true,
+        Action<string>? reportSkippedTarget = null,
+        Func<string, bool>? canOverwriteTarget = null)
     {
         ArgumentException.ThrowIfNullOrEmpty(baseDirectory);
         ArgumentException.ThrowIfNullOrEmpty(settingsDirectory);
@@ -40,7 +46,7 @@ public static class LegacySettingsLayoutMigrator
 
         Directory.CreateDirectory(settingsDirectory);
         var relocated = RelocateFlatLayout(baseDirectory, settingsDirectory, logger, reportFailure);
-        var split = SplitMonolithicSettings(settingsDirectory, logger, reportFailure);
+        var split = SplitMonolithicSettings(settingsDirectory, logger, reportFailure, overwriteExistingTargets, reportSkippedTarget, canOverwriteTarget);
 
         return [.. relocated.Union(split, StringComparer.OrdinalIgnoreCase)];
     }
@@ -86,7 +92,7 @@ public static class LegacySettingsLayoutMigrator
                 AtomicFile.Save(target, temporaryPath => File.Copy(legacy, temporaryPath, true), logger, keepBackup: !carriesTokens);
                 relocated.Add(fileName);
                 destinationWritten = true;
-                var backupPath = BuildLegacyBackupPath(legacy);
+                var backupPath = JsonStoreBackup.BuildTimestampedPath(legacy, "legacy");
                 File.Move(legacy, backupPath);
                 logger?.LogInformation("Legacy-файл перенесён: {Legacy} → {Target}; оригинал сохранён как {Backup}",
                     legacy,
@@ -139,19 +145,15 @@ public static class LegacySettingsLayoutMigrator
         return true;
     }
 
-    private static string BuildLegacyBackupPath(string legacyPath)
-    {
-        var directory = Path.GetDirectoryName(legacyPath)!;
-        var name = Path.GetFileNameWithoutExtension(legacyPath);
-        var extension = Path.GetExtension(legacyPath);
-        var timestamp = DateTime.Now.ToString("yyyyMMdd-HHmmss");
-        return Path.Combine(directory, $"{name}.legacy-{timestamp}{extension}");
-    }
-
     private static IReadOnlyList<string> SplitMonolithicSettings(
-        string settingsDirectory, ILogger? logger, Action<LegacyImportFailure>? reportFailure)
+        string settingsDirectory,
+        ILogger? logger,
+        Action<LegacyImportFailure>? reportFailure,
+        bool overwriteExistingTargets,
+        Action<string>? reportSkippedTarget,
+        Func<string, bool>? canOverwriteTarget)
     {
-        var settingsFile = Path.Combine(settingsDirectory, "settings.json");
+        var settingsFile = Path.Combine(settingsDirectory, SettingsFileNames.SettingsFileName);
 
         if (!File.Exists(settingsFile))
         {
@@ -169,7 +171,7 @@ public static class LegacySettingsLayoutMigrator
                 return [];
             }
 
-            migration = SettingsMigrator.Migrate(root, logger, settingsDirectory);
+            migration = SettingsMigrator.Migrate(root, logger, settingsDirectory, overwriteExistingTargets, reportSkippedTarget, canOverwriteTarget);
 
             if (!migration.Changed)
             {
@@ -180,12 +182,12 @@ public static class LegacySettingsLayoutMigrator
             AtomicFile.Save(settingsFile, root.ToJsonString(JsonStoreOptions.Default), logger, keepBackup: false);
             logger?.LogInformation("Монолитный settings.json мигрирован и разбит на отдельные файлы (директория {Directory})",
                 settingsDirectory);
-            return [LegacyDataCatalog.SettingsFileName, .. migration.SplitFiles];
+            return [SettingsFileNames.SettingsFileName, .. migration.SplitFiles];
         }
         catch (Exception exception)
         {
             logger?.LogError(exception, "Ошибка миграции монолитного settings.json в {Directory}", settingsDirectory);
-            reportFailure?.Invoke(new(LegacyDataCatalog.SettingsFileName, exception.Message));
+            reportFailure?.Invoke(new(SettingsFileNames.SettingsFileName, exception.Message));
         }
 
         return migration.SplitFiles;

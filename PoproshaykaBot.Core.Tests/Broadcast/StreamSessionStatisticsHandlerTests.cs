@@ -68,7 +68,7 @@ public sealed class StreamSessionStatisticsHandlerTests
                 },
             },
         };
-        _settingsManager = Substitute.For<SettingsManager>(NullLogger<SettingsManager>.Instance, null, null);
+        _settingsManager = Substitute.For<SettingsManager>(NullLogger<SettingsManager>.Instance, null);
         _settingsManager.Current.Returns(_settings);
 
         _timeProvider = new();

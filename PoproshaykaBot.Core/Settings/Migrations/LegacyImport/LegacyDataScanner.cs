@@ -8,29 +8,29 @@ public static class LegacyDataScanner
 {
     public static LegacyDataSummary? Inspect(string path, ILogger? logger = null)
     {
-        return Inspect(path, AppPaths.BaseDirectory, AppPaths.DefaultBaseDirectory, logger);
+        return Inspect(path, AppPaths.BaseDirectory, AppPaths.AppDataDirectory, logger);
     }
 
     public static IReadOnlyList<LegacyDataSummary> Scan(ILogger? logger = null)
     {
-        return Scan(AppPaths.BaseDirectory, AppPaths.DefaultBaseDirectory, logger);
+        return Scan(AppPaths.BaseDirectory, AppPaths.AppDataDirectory, logger);
     }
 
-    internal static IReadOnlyList<LegacyDataSummary> Scan(string currentBaseDirectory, string defaultBaseDirectory, ILogger? logger)
+    internal static IReadOnlyList<LegacyDataSummary> Scan(string currentBaseDirectory, string appDataDirectory, ILogger? logger)
     {
         ArgumentException.ThrowIfNullOrEmpty(currentBaseDirectory);
-        ArgumentException.ThrowIfNullOrEmpty(defaultBaseDirectory);
+        ArgumentException.ThrowIfNullOrEmpty(appDataDirectory);
 
         var candidates = new List<LegacyDataSummary>();
 
         if (LegacyDataCatalog.HasFlatSettingsFiles(currentBaseDirectory)
-            && Inspect(currentBaseDirectory, currentBaseDirectory, defaultBaseDirectory, logger) is { } inPlace)
+            && Inspect(currentBaseDirectory, currentBaseDirectory, appDataDirectory, logger) is { } inPlace)
         {
             candidates.Add(inPlace);
         }
 
-        if (!PathComparison.AreEqual(currentBaseDirectory, defaultBaseDirectory)
-            && Inspect(defaultBaseDirectory, currentBaseDirectory, defaultBaseDirectory, logger) is { } installed)
+        if (!PathComparison.AreEqual(currentBaseDirectory, appDataDirectory)
+            && Inspect(appDataDirectory, currentBaseDirectory, appDataDirectory, logger) is { } installed)
         {
             candidates.Add(installed);
         }
@@ -76,11 +76,11 @@ public static class LegacyDataScanner
         }
 
         var settingsRoot = LegacyDataReader.TryRead(
-            LegacyDataCatalog.ResolveSettingsFile(fullPath, LegacyDataCatalog.SettingsFileName),
+            LegacyDataCatalog.ResolveSettingsFile(fullPath, SettingsFileNames.SettingsFileName),
             logger);
 
         var accountsRoot = LegacyDataReader.TryRead(
-            LegacyDataCatalog.ResolveSettingsFile(fullPath, LegacyDataCatalog.AccountsFileName),
+            LegacyDataCatalog.ResolveSettingsFile(fullPath, SettingsFileNames.AccountsFileName),
             logger);
 
         var twitch = LegacyDataReader.Property(settingsRoot, "twitch");
@@ -90,7 +90,7 @@ public static class LegacyDataScanner
                        ?? LegacyDataReader.ReadString(twitch, "botUsername");
 
         var userStatisticsCount = 0;
-        var catalogNode = LegacyDataReader.TryRead(Path.Combine(fullPath, LegacyDataCatalog.UserStatisticsCatalogFileName), logger);
+        var catalogNode = LegacyDataReader.TryRead(Path.Combine(fullPath, SettingsFileNames.UserStatisticsCatalogFileName), logger);
         if (LegacyDataReader.Property(catalogNode, "accounts") is { } catalogAccounts)
         {
             userStatisticsCount = LegacyDataReader.CountItems(catalogAccounts);
@@ -99,7 +99,7 @@ public static class LegacyDataScanner
         {
             foreach (var relativePath in LegacyDataCatalog.GetRelativePaths(LegacyDataCategory.UserStatistics))
             {
-                if (string.Equals(relativePath, LegacyDataCatalog.UserStatisticsCatalogFileName, StringComparison.OrdinalIgnoreCase))
+                if (string.Equals(relativePath, SettingsFileNames.UserStatisticsCatalogFileName, StringComparison.OrdinalIgnoreCase))
                 {
                     continue;
                 }
@@ -110,14 +110,14 @@ public static class LegacyDataScanner
             }
         }
 
-        var botStatistics = LegacyDataReader.TryRead(Path.Combine(fullPath, LegacyDataCatalog.BotStatisticsFileName), logger);
+        var botStatistics = LegacyDataReader.TryRead(Path.Combine(fullPath, SettingsFileNames.BotStatisticsFileName), logger);
 
         return new()
         {
             SourcePath = fullPath,
             Kind = Classify(fullPath, currentBaseDirectory, defaultBaseDirectory),
-            HasMonolithicSettings = File.Exists(Path.Combine(fullPath, LegacyDataCatalog.SettingsFileName)),
-            HasSettingsDirectory = Directory.Exists(Path.Combine(fullPath, LegacyDataCatalog.SettingsFolderName)),
+            HasMonolithicSettings = File.Exists(Path.Combine(fullPath, SettingsFileNames.SettingsFileName)),
+            HasSettingsDirectory = Directory.Exists(Path.Combine(fullPath, SettingsFileNames.SettingsFolderName)),
             Channel = LegacyDataReader.ReadString(twitch, "channel"),
             BotLogin = botLogin,
             UserStatisticsCount = userStatisticsCount,
@@ -125,7 +125,7 @@ public static class LegacyDataScanner
             HasOAuthTokens = LegacyDataReader.HasTokens(accountsRoot) || LegacyDataReader.HasTokens(twitch),
             HasFlatTwitchTokens = LegacyDataReader.HasFlatTwitchTokens(twitch),
             GeneratedTargetPaths = settingsRoot is System.Text.Json.Nodes.JsonObject settings
-                ? [.. SettingsMigrator.GetSplitTargets(settings).Select(file => Path.Combine(LegacyDataCatalog.SettingsFolderName, file))]
+                ? [.. SettingsMigrator.GetSplitTargets(settings).Select(file => Path.Combine(SettingsFileNames.SettingsFolderName, file))]
                 : [],
             Files = files,
         };

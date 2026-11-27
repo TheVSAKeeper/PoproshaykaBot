@@ -289,7 +289,7 @@ public sealed class PointsTransferTests
     }
 
     [Test]
-    public async Task Service_persists_when_loaded_publishes_event_and_respects_revoked_write_permission()
+    public async Task Service_persists_when_loaded_publishes_event_and_respects_abandoned_load_state()
     {
         var graph = new StatisticsTestGraph(_directory);
         await graph.UserLoader.EnsureLoadedAsync();
@@ -309,29 +309,37 @@ public sealed class PointsTransferTests
             TwitchMain,
             PointsTransferMode.AllCounters));
 
-        var catalogPath = Path.Combine(_directory, "user_statistics_catalog.json");
-        var persistedBytesAfterFirst = await File.ReadAllTextAsync(catalogPath);
-
         Assert.That(exec1.PersistedToDisk, Is.True);
         Assert.That(published, Is.Not.Null);
         Assert.That(published!.Result.TransferredCount, Is.EqualTo(1));
 
-        await graph.UserLoader.InvalidateAsync();
-        graph.UserRepository.TrackMessage(TwitchMain, new(StreamingPlatform.Twitch, "u2"), "Bob");
+        var corruptDir = Path.Combine(_directory, "abandoned");
+        Directory.CreateDirectory(corruptDir);
+        var corruptCatalogPath = Path.Combine(corruptDir, "user_statistics_catalog.json");
+        await File.WriteAllTextAsync(corruptCatalogPath, "{broken");
 
-        var exec2 = await service.TransferAsync(new(
-            PointsTransferSource.ForChannel(TwitchMain),
+        var abandonedGraph = new StatisticsTestGraph(corruptDir);
+        await abandonedGraph.UserLoader.EnsureLoadedAsync();
+        var abandonedService = new PointsTransferService(abandonedGraph.UserRepository, bus, abandonedGraph.AutoSaver, abandonedGraph.UserLoader);
+        abandonedGraph.UserRepository.SeedPlatform(StreamingPlatform.Twitch,
+        [
+            new() { UserId = "u1", Name = "Alice", MessageCount = 5, BonusPoints = 3 },
+        ]);
+        abandonedGraph.UserRepository.TrackMessage(TwitchMain, new(StreamingPlatform.Twitch, "u2"), "Bob");
+
+        var exec2 = await abandonedService.TransferAsync(new(
+            PointsTransferSource.ForUnattributed(StreamingPlatform.Twitch),
             TwitchSecond,
             PointsTransferMode.AllCounters));
 
-        var persistedBytesAfterRevoke = await File.ReadAllTextAsync(catalogPath);
+        var diskAfterTransfer = await File.ReadAllTextAsync(corruptCatalogPath);
 
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(exec2.Result.TransferredCount, Is.EqualTo(2));
+            Assert.That(exec2.Result.TransferredCount, Is.EqualTo(1));
             Assert.That(exec2.PersistedToDisk, Is.False);
-            Assert.That(persistedBytesAfterRevoke, Is.EqualTo(persistedBytesAfterFirst));
-            Assert.That(graph.UserRepository.FindViewerById(StatisticsSlice.ForChannel(TwitchSecond), u1)?.Points, Is.EqualTo(8));
+            Assert.That(diskAfterTransfer, Is.EqualTo("{broken"));
+            Assert.That(abandonedGraph.UserRepository.FindViewerById(StatisticsSlice.ForChannel(TwitchSecond), u1)?.Points, Is.EqualTo(8));
         }
     }
 

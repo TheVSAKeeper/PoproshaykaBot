@@ -26,64 +26,41 @@ internal sealed record LegacyDataEntry(
 
 internal static class LegacyDataCatalog
 {
-    public const string SettingsFolderName = "settings";
-    public const string ChatHistoryFolderName = "chat-history";
-    public const string YouTubeFolderName = "youtube";
-    public const string SettingsFileName = "settings.json";
-    public const string ChatSettingsFileName = "chat.json";
-    public const string AccountsFileName = "accounts.json";
-    public const string ChannelsFileName = "channels.json";
-    public const string UserStatisticsCatalogFileName = "user_statistics_catalog.json";
-    public const string UserStatisticsFileName = "users_statistics.json";
-    public const string BotStatisticsFileName = "bot_statistics.json";
-    public const string CommandSettingsFileName = "commands.json";
-    public const string CommandUsageFileName = StatisticsFileStore.CommandUsageFileName;
-    public const string BroadcastsFileName = "broadcasts.json";
-    public const string ActiveBroadcastFileName = "active_broadcast.json";
-    public const string StreamSessionsFileName = "stream_sessions.json";
-    public const string BroadcastProfilePlatformsFileName = "broadcast-profile-platforms.json";
-    public const string BroadcastProfileYouTubeFileName = "broadcast-profile-youtube.json";
-    public const string YouTubeQuotaFileName = "youtube/quota.json";
-    public const string PollsHistoryFileName = "polls-history.json";
-    public const string UiPreferencesFileName = "ui-preferences.toml";
-    public const string YouTubeSettingsFileName = "youtube.json";
-    public const string YouTubeAccountsFileName = "youtube-accounts.json";
-
     private static readonly LegacyDataEntry[] Entries =
     [
-        new(UserStatisticsCatalogFileName, UserStatisticsCatalogFileName, LegacyDataCategory.UserStatistics),
+        new(SettingsFileNames.UserStatisticsCatalogFileName, SettingsFileNames.UserStatisticsCatalogFileName, LegacyDataCategory.UserStatistics),
         .. UserStatisticsPlatformCatalog.All.Select(static descriptor => new LegacyDataEntry(
-            UserStatisticsFileName,
+            SettingsFileNames.UserStatisticsFileName,
             descriptor.RelativePath,
             LegacyDataCategory.UserStatistics)),
-        new(BotStatisticsFileName, BotStatisticsFileName, LegacyDataCategory.BotStatistics),
-        new(CommandUsageFileName, CommandUsageFileName, LegacyDataCategory.BotStatistics),
-        new("quota.json", YouTubeQuotaFileName, LegacyDataCategory.YouTubeQuota),
-        new(BroadcastsFileName, BroadcastsFileName, LegacyDataCategory.StreamHistory),
-        new(ActiveBroadcastFileName, ActiveBroadcastFileName, LegacyDataCategory.StreamHistory),
-        new(StreamSessionsFileName, StreamSessionsFileName, LegacyDataCategory.StreamHistory),
-        new(PollsHistoryFileName, PollsHistoryFileName, LegacyDataCategory.PollHistory),
-        new("unknown_commands.txt", "unknown_commands.txt", LegacyDataCategory.ChatRuntime),
-        new("chat-blockers.txt", "chat-blockers.txt", LegacyDataCategory.ChatRuntime),
-        new("chat-zoom.txt", "chat-zoom.txt", LegacyDataCategory.ChatRuntime),
-        new(SettingsFileName, $"{SettingsFolderName}/{SettingsFileName}", LegacyDataCategory.Settings, true, CarriesTokens: true),
-        new(ChatSettingsFileName, $"{SettingsFolderName}/{ChatSettingsFileName}", LegacyDataCategory.Settings, true),
-        new(AccountsFileName, $"{SettingsFolderName}/{AccountsFileName}", LegacyDataCategory.Settings, true, CarriesTokens: true),
-        new("broadcast-profiles.json", $"{SettingsFolderName}/broadcast-profiles.json", LegacyDataCategory.Settings, true),
-        new(BroadcastProfilePlatformsFileName, $"{SettingsFolderName}/{BroadcastProfilePlatformsFileName}", LegacyDataCategory.Settings, true),
-        new(BroadcastProfileYouTubeFileName, $"{SettingsFolderName}/{BroadcastProfileYouTubeFileName}", LegacyDataCategory.Settings, true),
-        new(CommandSettingsFileName, $"{SettingsFolderName}/{CommandSettingsFileName}", LegacyDataCategory.Settings, true),
-        new("dashboard-layout.json", $"{SettingsFolderName}/dashboard-layout.json", LegacyDataCategory.Settings, true),
-        new("obs-chat.json", $"{SettingsFolderName}/obs-chat.json", LegacyDataCategory.Settings, true),
-        new("obs-integration.json", $"{SettingsFolderName}/obs-integration.json", LegacyDataCategory.Settings, true),
-        new("polls.json", $"{SettingsFolderName}/polls.json", LegacyDataCategory.Settings, true),
-        new("platform-lifecycle.json", $"{SettingsFolderName}/platform-lifecycle.json", LegacyDataCategory.Settings, true),
-        new("recent-categories.json", $"{SettingsFolderName}/recent-categories.json", LegacyDataCategory.Settings, true),
-        new("update.json", $"{SettingsFolderName}/update.json", LegacyDataCategory.Settings, true),
-        new(UiPreferencesFileName, $"{SettingsFolderName}/{UiPreferencesFileName}", LegacyDataCategory.UiPreferences, true),
-        new(YouTubeSettingsFileName, $"{SettingsFolderName}/{YouTubeSettingsFileName}", LegacyDataCategory.Settings, true),
-        new(YouTubeAccountsFileName, $"{SettingsFolderName}/{YouTubeAccountsFileName}", LegacyDataCategory.Settings, true, CarriesTokens: true),
-        new(ChannelsFileName, $"{SettingsFolderName}/{ChannelsFileName}", LegacyDataCategory.Settings, true),
+        new(SettingsFileNames.BotStatisticsFileName, SettingsFileNames.BotStatisticsFileName, LegacyDataCategory.BotStatistics),
+        new(SettingsFileNames.CommandUsageFileName, SettingsFileNames.CommandUsageFileName, LegacyDataCategory.BotStatistics),
+        new("quota.json", SettingsFileNames.YouTubeQuotaFileName, LegacyDataCategory.YouTubeQuota),
+        new(SettingsFileNames.BroadcastsFileName, SettingsFileNames.BroadcastsFileName, LegacyDataCategory.StreamHistory),
+        new(SettingsFileNames.ActiveBroadcastFileName, SettingsFileNames.ActiveBroadcastFileName, LegacyDataCategory.StreamHistory),
+        new(SettingsFileNames.StreamSessionsFileName, SettingsFileNames.StreamSessionsFileName, LegacyDataCategory.StreamHistory),
+        new(SettingsFileNames.PollsHistoryFileName, SettingsFileNames.PollsHistoryFileName, LegacyDataCategory.PollHistory),
+        new(SettingsFileNames.UnknownCommandsFileName, SettingsFileNames.UnknownCommandsFileName, LegacyDataCategory.ChatRuntime),
+        new(SettingsFileNames.ChatBlockersFileName, SettingsFileNames.ChatBlockersFileName, LegacyDataCategory.ChatRuntime),
+        new(SettingsFileNames.ChatZoomFileName, SettingsFileNames.ChatZoomFileName, LegacyDataCategory.ChatRuntime),
+        new(SettingsFileNames.SettingsFileName, $"{SettingsFileNames.SettingsFolderName}/{SettingsFileNames.SettingsFileName}", LegacyDataCategory.Settings, AllowFlatFallback: true, CarriesTokens: true),
+        new(SettingsFileNames.ChatSettingsFileName, $"{SettingsFileNames.SettingsFolderName}/{SettingsFileNames.ChatSettingsFileName}", LegacyDataCategory.Settings, AllowFlatFallback: true),
+        new(SettingsFileNames.AccountsFileName, $"{SettingsFileNames.SettingsFolderName}/{SettingsFileNames.AccountsFileName}", LegacyDataCategory.Settings, AllowFlatFallback: true, CarriesTokens: true),
+        new(SettingsFileNames.BroadcastProfilesFileName, $"{SettingsFileNames.SettingsFolderName}/{SettingsFileNames.BroadcastProfilesFileName}", LegacyDataCategory.Settings, AllowFlatFallback: true),
+        new(SettingsFileNames.BroadcastProfilePlatformsFileName, $"{SettingsFileNames.SettingsFolderName}/{SettingsFileNames.BroadcastProfilePlatformsFileName}", LegacyDataCategory.Settings, AllowFlatFallback: true),
+        new(SettingsFileNames.BroadcastProfileYouTubeFileName, $"{SettingsFileNames.SettingsFolderName}/{SettingsFileNames.BroadcastProfileYouTubeFileName}", LegacyDataCategory.Settings, AllowFlatFallback: true),
+        new(SettingsFileNames.CommandSettingsFileName, $"{SettingsFileNames.SettingsFolderName}/{SettingsFileNames.CommandSettingsFileName}", LegacyDataCategory.Settings, AllowFlatFallback: true),
+        new(SettingsFileNames.DashboardLayoutFileName, $"{SettingsFileNames.SettingsFolderName}/{SettingsFileNames.DashboardLayoutFileName}", LegacyDataCategory.Settings, AllowFlatFallback: true),
+        new(SettingsFileNames.ObsChatFileName, $"{SettingsFileNames.SettingsFolderName}/{SettingsFileNames.ObsChatFileName}", LegacyDataCategory.Settings, AllowFlatFallback: true),
+        new(SettingsFileNames.ObsIntegrationFileName, $"{SettingsFileNames.SettingsFolderName}/{SettingsFileNames.ObsIntegrationFileName}", LegacyDataCategory.Settings, AllowFlatFallback: true),
+        new(SettingsFileNames.PollsFileName, $"{SettingsFileNames.SettingsFolderName}/{SettingsFileNames.PollsFileName}", LegacyDataCategory.Settings, AllowFlatFallback: true),
+        new(SettingsFileNames.PlatformLifecycleFileName, $"{SettingsFileNames.SettingsFolderName}/{SettingsFileNames.PlatformLifecycleFileName}", LegacyDataCategory.Settings, AllowFlatFallback: true),
+        new(SettingsFileNames.RecentCategoriesFileName, $"{SettingsFileNames.SettingsFolderName}/{SettingsFileNames.RecentCategoriesFileName}", LegacyDataCategory.Settings, AllowFlatFallback: true),
+        new(SettingsFileNames.UpdateFileName, $"{SettingsFileNames.SettingsFolderName}/{SettingsFileNames.UpdateFileName}", LegacyDataCategory.Settings, AllowFlatFallback: true),
+        new(SettingsFileNames.UiPreferencesFileName, $"{SettingsFileNames.SettingsFolderName}/{SettingsFileNames.UiPreferencesFileName}", LegacyDataCategory.UiPreferences, AllowFlatFallback: true),
+        new(SettingsFileNames.YouTubeSettingsFileName, $"{SettingsFileNames.SettingsFolderName}/{SettingsFileNames.YouTubeSettingsFileName}", LegacyDataCategory.Settings, AllowFlatFallback: true),
+        new(SettingsFileNames.YouTubeAccountsFileName, $"{SettingsFileNames.SettingsFolderName}/{SettingsFileNames.YouTubeAccountsFileName}", LegacyDataCategory.Settings, AllowFlatFallback: true, CarriesTokens: true),
+        new(SettingsFileNames.ChannelsFileName, $"{SettingsFileNames.SettingsFolderName}/{SettingsFileNames.ChannelsFileName}", LegacyDataCategory.Settings, AllowFlatFallback: true),
     ];
 
     public static IReadOnlyList<LegacyDataEntry> AllEntries => Entries;
@@ -130,7 +107,7 @@ internal static class LegacyDataCatalog
             }
         }
 
-        var chatHistoryDirectory = Path.Combine(sourceDirectory, ChatHistoryFolderName);
+        var chatHistoryDirectory = Path.Combine(sourceDirectory, SettingsFileNames.ChatHistoryFolderName);
         if (Directory.Exists(chatHistoryDirectory))
         {
             foreach (var path in Directory.EnumerateFiles(chatHistoryDirectory).OrderBy(static p => p, StringComparer.OrdinalIgnoreCase))
@@ -141,7 +118,7 @@ internal static class LegacyDataCatalog
                     continue;
                 }
 
-                if (TryDescribe(name, path, Path.Combine(ChatHistoryFolderName, name)) is { } file)
+                if (TryDescribe(name, path, Path.Combine(SettingsFileNames.ChatHistoryFolderName, name)) is { } file)
                 {
                     files.Add(file);
                 }
@@ -153,7 +130,7 @@ internal static class LegacyDataCatalog
 
     public static bool IsChatHistoryPath(string relativePath)
     {
-        return NormalizeRelativePath(relativePath).StartsWith(ChatHistoryFolderName + "/", StringComparison.OrdinalIgnoreCase);
+        return NormalizeRelativePath(relativePath).StartsWith(SettingsFileNames.ChatHistoryFolderName + "/", StringComparison.OrdinalIgnoreCase);
     }
 
     public static string NormalizeRelativePath(string path)
@@ -163,11 +140,20 @@ internal static class LegacyDataCatalog
 
     public static string? ResolveSettingsFile(string sourceDirectory, string fileName)
     {
-        var nested = Path.Combine(sourceDirectory, SettingsFolderName, fileName);
+        var nested = Path.Combine(sourceDirectory, SettingsFileNames.SettingsFolderName, fileName);
 
         if (File.Exists(nested))
         {
             return nested;
+        }
+
+        var allowsFlatFallback = Entries.Any(entry =>
+            entry.AllowFlatFallback
+            && string.Equals(entry.FileName, fileName, StringComparison.OrdinalIgnoreCase));
+
+        if (!allowsFlatFallback)
+        {
+            return null;
         }
 
         var flat = Path.Combine(sourceDirectory, fileName);
@@ -184,7 +170,9 @@ internal static class LegacyDataCatalog
 
     public static bool HasFlatSettingsFiles(string sourceDirectory)
     {
-        return SettingsFiles.Any(name => File.Exists(Path.Combine(sourceDirectory, name)));
+        return Entries
+            .Where(static entry => entry.AllowFlatFallback)
+            .Any(entry => File.Exists(Path.Combine(sourceDirectory, entry.FileName)));
     }
 
     private static string ToNativePath(string relativePath)

@@ -32,14 +32,13 @@ public sealed class MultiChannelCatalogAndAuthTests
     [Test]
     public void Catalog_persists_Twitch_and_YouTube_channels_named_contexts_and_keeps_backups_disabled_on_token_stores()
     {
-        var gate = new SettingsWriteGate();
         var channelsPath = Path.Combine(_root, "channels.json");
         var twPath = Path.Combine(_root, "accounts.json");
         var ytPath = Path.Combine(_root, "youtube-accounts.json");
 
-        var catalog = new ChannelCatalogStore(NullLogger<ChannelCatalogStore>.Instance, channelsPath, gate);
-        var twitchAccounts = new AccountsStore(NullLogger<AccountsStore>.Instance, twPath, gate);
-        var ytAccounts = new YouTubeAccountsStore(NullLogger<YouTubeAccountsStore>.Instance, ytPath, gate);
+        var catalog = new ChannelCatalogStore(NullLogger<ChannelCatalogStore>.Instance, channelsPath);
+        var twitchAccounts = new AccountsStore(NullLogger<AccountsStore>.Instance, twPath);
+        var ytAccounts = new YouTubeAccountsStore(NullLogger<YouTubeAccountsStore>.Instance, ytPath);
 
         twitchAccounts.SaveAll(
             new() { Login = "shared_bot", UserId = "bot-1", AccessToken = "tok-bot", RefreshToken = "ref-bot" },
@@ -149,9 +148,9 @@ public sealed class MultiChannelCatalogAndAuthTests
             ];
         });
 
-        var reloadedCatalog = new ChannelCatalogStore(NullLogger<ChannelCatalogStore>.Instance, channelsPath, gate);
-        var reloadedTwitch = new AccountsStore(NullLogger<AccountsStore>.Instance, twPath, gate);
-        var reloadedYt = new YouTubeAccountsStore(NullLogger<YouTubeAccountsStore>.Instance, ytPath, gate);
+        var reloadedCatalog = new ChannelCatalogStore(NullLogger<ChannelCatalogStore>.Instance, channelsPath);
+        var reloadedTwitch = new AccountsStore(NullLogger<AccountsStore>.Instance, twPath);
+        var reloadedYt = new YouTubeAccountsStore(NullLogger<YouTubeAccountsStore>.Instance, ytPath);
 
         var channelsJson = File.ReadAllText(channelsPath);
         Assert.Multiple(() =>
@@ -179,12 +178,11 @@ public sealed class MultiChannelCatalogAndAuthTests
     [Test]
     public void Reconciler_retains_active_binding_across_startup_and_delayed_legacy_change_only_fills_empty_catalog()
     {
-        var gate = new SettingsWriteGate();
-        var catalog = new ChannelCatalogStore(NullLogger<ChannelCatalogStore>.Instance, Path.Combine(_root, "channels.json"), gate);
-        var twitchAccounts = new AccountsStore(NullLogger<AccountsStore>.Instance, Path.Combine(_root, "accounts.json"), gate);
-        var ytAccounts = new YouTubeAccountsStore(NullLogger<YouTubeAccountsStore>.Instance, Path.Combine(_root, "yt-accounts.json"), gate);
-        var ytSettings = new YouTubeSettingsStore(NullLogger<YouTubeSettingsStore>.Instance, Path.Combine(_root, "yt.json"), gate);
-        var settingsManager = Substitute.For<SettingsManager>(NullLogger<SettingsManager>.Instance, null, null);
+        var catalog = new ChannelCatalogStore(NullLogger<ChannelCatalogStore>.Instance, Path.Combine(_root, "channels.json"));
+        var twitchAccounts = new AccountsStore(NullLogger<AccountsStore>.Instance, Path.Combine(_root, "accounts.json"));
+        var ytAccounts = new YouTubeAccountsStore(NullLogger<YouTubeAccountsStore>.Instance, Path.Combine(_root, "yt-accounts.json"));
+        var ytSettings = new YouTubeSettingsStore(NullLogger<YouTubeSettingsStore>.Instance, Path.Combine(_root, "yt.json"));
+        var settingsManager = Substitute.For<SettingsManager>(NullLogger<SettingsManager>.Instance, null);
         settingsManager.Current.Returns(new AppSettings { Twitch = { Channel = "originA" } });
 
         twitchAccounts.SaveAll(

@@ -16,7 +16,7 @@ public class PollHistoryStoreTests
     public void SetUp()
     {
         _polls = new();
-        _pollsStore = Substitute.For<PollsStore>(NullLogger<PollsStore>.Instance, null, null);
+        _pollsStore = Substitute.For<PollsStore>(NullLogger<PollsStore>.Instance, null);
         _pollsStore.Load().Returns(_polls);
         _helix = Substitute.For<ITwitchHelixClient>();
         _broadcasterIdProvider = Substitute.For<IBroadcasterIdProvider>();
@@ -275,52 +275,6 @@ public class PollHistoryStoreTests
     }
 
     [Test]
-    public void Снятое_право_копит_записи_в_памяти_и_возврат_сбрасывает_их_на_диск()
-    {
-        _store.TryAdd(Entry("p0"));
-        var onDisk = File.ReadAllText(_tempFile);
-
-        var wasLoaded = _store.Invalidate();
-        var added = _store.TryAdd(Entry("p1"));
-
-        using (Assert.EnterMultipleScope())
-        {
-            Assert.That(wasLoaded, Is.True);
-            Assert.That(added, Is.True);
-            Assert.That(_store.IsLoaded, Is.False);
-            Assert.That(_store.TryFlush(), Is.False, "Без права записи повтор не пытается писать вовсе");
-            Assert.That(File.ReadAllText(_tempFile), Is.EqualTo(onDisk),
-                "Принесённую переносом историю нельзя переписывать памятью стора");
-        }
-
-        _store.Restore(wasLoaded);
-
-        Assert.That(PollIdsOnDisk(), Is.EquivalentTo(["p0", "p1"]),
-            "Возврат права сбрасывает накопленное на диск одной записью");
-    }
-
-    [Test]
-    public void Гашение_до_первого_чтения_читает_файл_и_оставляет_память_доимпортной()
-    {
-        File.WriteAllText(_tempFile, HistoryJson("p0"));
-
-        var store = Create();
-        var wasLoaded = store.Invalidate();
-
-        File.WriteAllText(_tempFile, HistoryJson("принесённый"));
-        store.TryAdd(Entry("p1"));
-
-        using (Assert.EnterMultipleScope())
-        {
-            Assert.That(wasLoaded, Is.True,
-                "Чтение ленивое, поэтому гашение само доводит его до конца – иначе стор прочитал бы уже принесённый файл");
-            Assert.That(store.GetAll().Select(entry => entry.PollId), Is.EquivalentTo(["p0", "p1"]));
-            Assert.That(PollIdsOnDisk(), Is.EquivalentTo(["принесённый"]),
-                "Принесённое вступает в силу после перезапуска, а до него файл не трогают");
-        }
-    }
-
-    [Test]
     public void Сорвавшаяся_запись_дотаскивается_ближайшим_повтором()
     {
         var store = Create();
@@ -343,11 +297,6 @@ public class PollHistoryStoreTests
             Assert.That(PollIdsOnDisk(), Is.EquivalentTo(["p1"]),
                 "Несохранённое дотаскивается повтором, а не теряется до перезапуска");
         }
-    }
-
-    private static string HistoryJson(string pollId)
-    {
-        return $$"""{"version":1,"entries":[{"pollId":"{{pollId}}","title":"T","finalStatus":1}]}""";
     }
 
     private PollHistoryStore Create(ILogger<PollHistoryStore>? logger = null)

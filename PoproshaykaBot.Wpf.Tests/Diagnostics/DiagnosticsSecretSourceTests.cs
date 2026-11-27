@@ -124,9 +124,9 @@ public class DiagnosticsSecretSourceTests
         {
             Assert.That(tokenFiles, Is.EquivalentTo(new[]
             {
-                LegacyDataCatalog.SettingsFileName,
-                LegacyDataCatalog.AccountsFileName,
-                LegacyDataCatalog.YouTubeAccountsFileName,
+                SettingsFileNames.SettingsFileName,
+                SettingsFileNames.AccountsFileName,
+                SettingsFileNames.YouTubeAccountsFileName,
             }));
 
             Assert.That(providerSources, Has.Some.EqualTo("настройки Twitch"));

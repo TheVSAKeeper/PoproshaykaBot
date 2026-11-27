@@ -30,11 +30,7 @@ internal static class JsonStoreBackup
 
         try
         {
-            var timestamp = DateTime.Now.ToString("yyyyMMdd-HHmmss");
-            var directory = Path.GetDirectoryName(filePath)!;
-            var name = Path.GetFileNameWithoutExtension(filePath);
-            var extension = Path.GetExtension(filePath);
-            var candidatePath = Path.Combine(directory, $"{name}.{suffix}-{timestamp}{extension}");
+            var candidatePath = BuildTimestampedPath(filePath, suffix);
 
             if (redactor == null)
             {
@@ -82,5 +78,60 @@ internal static class JsonStoreBackup
             logger?.LogError(exception, "Ошибка при создании бэкапа для файла {FilePath}", filePath);
             return false;
         }
+    }
+
+    public static string BuildTimestampedPath(string filePath, string suffix)
+    {
+        var timestamp = DateTime.Now.ToString("yyyyMMdd-HHmmss");
+        return BuildSuffixedPath(filePath, $"{suffix}-{timestamp}");
+    }
+
+    public static bool TryCreateOneTimeBackup(string sourcePath, string suffix, ILogger? logger = null)
+    {
+        if (!File.Exists(sourcePath))
+        {
+            return true;
+        }
+
+        var backupPath = BuildSuffixedPath(sourcePath, suffix);
+        if (File.Exists(backupPath))
+        {
+            return true;
+        }
+
+        var tempBackupPath = $"{backupPath}.{Guid.NewGuid():N}.tmp";
+        try
+        {
+            File.Copy(sourcePath, tempBackupPath, overwrite: true);
+            File.Move(tempBackupPath, backupPath, overwrite: false);
+            logger?.LogInformation("Создана страховочная копия {BackupPath}", backupPath);
+            return true;
+        }
+        catch (Exception exception)
+        {
+            try
+            {
+                if (File.Exists(tempBackupPath))
+                {
+                    File.Delete(tempBackupPath);
+                }
+            }
+            catch (Exception cleanupException)
+            {
+                logger?.LogDebug(cleanupException, "Не удалось удалить временный файл копии {TempPath}", tempBackupPath);
+            }
+
+            logger?.LogError(exception, "Не удалось создать страховочную копию {BackupPath}", backupPath);
+            return false;
+        }
+    }
+
+    private static string BuildSuffixedPath(string filePath, string suffixPart)
+    {
+        var directory = Path.GetDirectoryName(filePath);
+        var name = Path.GetFileNameWithoutExtension(filePath);
+        var extension = Path.GetExtension(filePath);
+        var fileName = $"{name}.{suffixPart}{extension}";
+        return string.IsNullOrEmpty(directory) ? fileName : Path.Combine(directory, fileName);
     }
 }

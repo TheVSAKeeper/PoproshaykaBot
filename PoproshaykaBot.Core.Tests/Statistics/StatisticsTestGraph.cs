@@ -16,7 +16,7 @@ internal sealed class StatisticsTestGraph
         BroadcastHistoryStore? broadcastHistoryStore = null,
         ActiveBroadcastStore? activeBroadcastStore = null,
         KnownChannelIdentityResolver? identityResolver = null,
-        params IExternalWriteParticipant[] extraParticipants)
+        params IFlushableHistoryStore[] extraFlushableStores)
     {
         UserRepository = userRepository ?? new UserStatisticsRepository(NullLogger<UserStatisticsRepository>.Instance);
         BotRepository = botRepository ?? new BotStatisticsRepository();
@@ -48,13 +48,12 @@ internal sealed class StatisticsTestGraph
             NullLogger<CommandUsagePersistenceUnit>.Instance);
 
         IPeriodicStatisticsUnit[] periodicUnits = [UserUnit, botUnit, commandUsageUnit];
-        IExternalWriteParticipant[] participants = [UserUnit, botUnit, commandUsageUnit, .. extraParticipants];
-        IFlushableHistoryStore[] flushableStores = [.. extraParticipants.OfType<IFlushableHistoryStore>()];
+        IFlushableHistoryStore[] flushableStores = [.. extraFlushableStores];
 
         var logger = saverLogger ?? NullLogger<StatisticsAutoSaver>.Instance;
         AutoSaver = autoSaveInterval.HasValue
-            ? new StatisticsAutoSaver(periodicUnits, participants, flushableStores, logger, autoSaveInterval.Value)
-            : new StatisticsAutoSaver(periodicUnits, participants, flushableStores, logger);
+            ? new StatisticsAutoSaver(periodicUnits, flushableStores, logger, autoSaveInterval.Value)
+            : new StatisticsAutoSaver(periodicUnits, flushableStores, logger);
     }
 
     public UserStatisticsRepository UserRepository { get; }

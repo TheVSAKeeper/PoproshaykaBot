@@ -90,7 +90,7 @@ public sealed class SharedTokenAndAccountRemovalTests
         var settings = new AppSettings();
         settings.Twitch.ClientId = "cid";
         settings.Twitch.ClientSecret = "csec";
-        var settingsManager = Substitute.For<SettingsManager>(NullLogger<SettingsManager>.Instance, null, null);
+        var settingsManager = Substitute.For<SettingsManager>(NullLogger<SettingsManager>.Instance, null);
         settingsManager.Current.Returns(settings);
 
         var store = new AccountsStore(filePath: Path.Combine(_dir.FullName, "accounts-sync.json"));
@@ -198,7 +198,7 @@ public sealed class SharedTokenAndAccountRemovalTests
         var settings = new AppSettings();
         settings.Twitch.ClientId = "cid";
         settings.Twitch.ClientSecret = "csec";
-        var settingsManager = Substitute.For<SettingsManager>(NullLogger<SettingsManager>.Instance, null, null);
+        var settingsManager = Substitute.For<SettingsManager>(NullLogger<SettingsManager>.Instance, null);
         settingsManager.Current.Returns(settings);
 
         var store = new AccountsStore(filePath: Path.Combine(_dir.FullName, "accounts-signout-race.json"));
@@ -265,69 +265,6 @@ public sealed class SharedTokenAndAccountRemovalTests
             Assert.That(store.ListAccounts(), Is.Empty);
             Assert.That(store.LoadBot().AccessToken, Is.Empty);
             Assert.That(store.LoadBot().RefreshToken, Is.Empty);
-        });
-    }
-
-    [Test]
-    public async Task RefreshTokenWithResultAsync_reports_persisted_false_when_write_gate_blocks()
-    {
-        var settings = new AppSettings();
-        settings.Twitch.ClientId = "cid";
-        settings.Twitch.ClientSecret = "csec";
-        var settingsManager = Substitute.For<SettingsManager>(NullLogger<SettingsManager>.Instance, null, null);
-        settingsManager.Current.Returns(settings);
-
-        var filePath = Path.Combine(_dir.FullName, "accounts-gated.json");
-        var gate = new SettingsWriteGate();
-        var store = new AccountsStore(filePath: filePath, gate: gate);
-        var clock = new TestTimeProvider { UtcNow = new(2026, 11, 21, 10, 0, 0, TimeSpan.Zero) };
-        string[] scopes = [.. TwitchScopes.BotRequired];
-
-        store.SaveAll(
-            new TwitchAccountSettings
-            {
-                UserId = "66",
-                Login = "gated",
-                AccessToken = "old-access",
-                RefreshToken = "refresh-v1",
-                Scopes = [.. scopes],
-                StoredScopes = [.. scopes],
-            },
-            new TwitchAccountSettings());
-        await gate.RunExternalWriteAsync(() => Task.FromResult(0), _ => [Path.GetFileName(filePath)]);
-
-        using var handler = new DelegateHttpHandler((request, _) =>
-        {
-            var uri = request.RequestUri?.AbsoluteUri ?? string.Empty;
-            if (uri.Contains("/oauth2/token", StringComparison.Ordinal))
-            {
-                var scopesJson = string.Join(",", scopes.Select(s => $"\"{s}\""));
-                var body = $"{{\"access_token\":\"new-access\",\"refresh_token\":\"refresh-v2\",\"expires_in\":14400,\"scope\":[{scopesJson}]}}";
-                return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(body, Encoding.UTF8, "application/json") });
-            }
-
-            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
-            {
-                Content = new StringContent("""{"login":"gated","user_id":"66","expires_in":14400}""", Encoding.UTF8, "application/json"),
-            });
-        });
-
-        var httpFactory = Substitute.For<IHttpClientFactory>();
-        httpFactory.CreateClient(Arg.Any<string>()).Returns(_ => new HttpClient(handler, disposeHandler: false));
-        var eventBus = Substitute.For<IEventBus>();
-        var statusReporter = new OAuthStatusReporter(NullLogger<OAuthStatusReporter>.Instance);
-        var tokenClient = new OAuthTokenClient(httpFactory, NullLogger<OAuthTokenClient>.Instance);
-        var writer = new OAuthAccountWriter(store, eventBus, statusReporter, clock, NullLogger<OAuthAccountWriter>.Instance);
-        using var flow = new OAuthFlowCoordinator(tokenClient, writer, statusReporter, store, settingsManager, NullLogger<OAuthFlowCoordinator>.Instance);
-        using var refresher = new OAuthTokenRefresher(tokenClient, writer, statusReporter, store, settingsManager, eventBus, clock, NullLogger<OAuthTokenRefresher>.Instance);
-        using var service = new TwitchOAuthService(flow, refresher, tokenClient, writer, statusReporter);
-
-        var result = await service.RefreshTokenWithResultAsync(PlatformAuthRole.Bot, AuthContextIds.Default, "cid", "csec", "refresh-v1");
-
-        Assert.Multiple(() =>
-        {
-            Assert.That(result.AccessToken, Is.EqualTo("new-access"));
-            Assert.That(result.Persisted, Is.False);
         });
     }
 

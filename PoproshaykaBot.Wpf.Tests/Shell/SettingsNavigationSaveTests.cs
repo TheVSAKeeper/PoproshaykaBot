@@ -279,8 +279,7 @@ public sealed class SettingsNavigationSaveTests
         {
             Bus = new InMemoryEventBus(NullLogger<InMemoryEventBus>.Instance);
             var bus = Bus;
-            var gate = new SettingsWriteGate();
-            var manager = new SettingsManager(NullLogger<SettingsManager>.Instance, Path.Combine(_root.FullName, "settings.json"), gate);
+            var manager = new SettingsManager(NullLogger<SettingsManager>.Instance, Path.Combine(_root.FullName, "settings.json"));
             var server = new KestrelHttpServer(null!, manager, [], NullLogger<KestrelHttpServer>.Instance, NullLoggerFactory.Instance);
             var store = new MemorySettings();
             var windows = DispatchProxy.Create<IMainWindowController, InertProxy>();
@@ -291,7 +290,7 @@ public sealed class SettingsNavigationSaveTests
             var accounts = new AccountsStore(filePath: Path.Combine(_root.FullName, "accounts.json"));
             var catalog = new ChannelCatalogStore(filePath: Path.Combine(_root.FullName, "channels.json"));
             var youtube = new YouTubeSettingsStore(filePath: Path.Combine(_root.FullName, "youtube.json"));
-            Settings = new([Contributor], manager, gate, server, bus, NullLogger<SettingsPageViewModel>.Instance, dialogs, store);
+            Settings = new([Contributor], manager, server, bus, NullLogger<SettingsPageViewModel>.Instance, dialogs, store);
 
             var youtubePlatform = new StubPlatform(StreamingPlatform.YouTube, "YouTube", isEnabled: false);
             var twitchPlatform = new StubPlatform(StreamingPlatform.Twitch, "Twitch", isEnabled: true);

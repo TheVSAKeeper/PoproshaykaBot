@@ -61,11 +61,10 @@ public sealed class MultistreamBroadcastProfileTests
     }
 
     [Test]
-    public async Task BroadcastProfileYouTubeStore_RoundTrip_EmptyRemoval_And_SettingsWriteGate()
+    public void BroadcastProfileYouTubeStore_RoundTrip_And_EmptyRemoval()
     {
         var path = Path.Combine(_tempDir, "yt-meta.json");
-        var gate = new SettingsWriteGate();
-        var store = new BroadcastProfileYouTubeStore(null, path, gate);
+        var store = new BroadcastProfileYouTubeStore(null, path);
         var profileId = Guid.NewGuid();
 
         var saved = store.SetMetadata(profileId, new BroadcastProfileYouTubeMetadata
@@ -98,23 +97,6 @@ public sealed class MultistreamBroadcastProfileTests
         {
             Assert.That(afterClear.GetMetadata(profileId), Is.Null);
             Assert.That(afterClear.Load().Profiles, Does.Not.ContainKey(profileId));
-        });
-
-        await gate.RunExternalWriteAsync(
-            () =>
-            {
-                File.WriteAllText(path, """{"profiles":{}}""");
-                return Task.FromResult(0);
-            },
-            static _ => ["yt-meta.json"]);
-
-        var blockedWrite = store.SetMetadata(profileId, new BroadcastProfileYouTubeMetadata { TitleOverride = "В памяти" });
-
-        Assert.Multiple(() =>
-        {
-            Assert.That(blockedWrite, Is.False);
-            Assert.That(store.GetMetadata(profileId)?.TitleOverride, Is.EqualTo("В памяти"));
-            Assert.That(new BroadcastProfileYouTubeStore(null, path).GetMetadata(profileId), Is.Null);
         });
     }
 
@@ -489,40 +471,6 @@ public sealed class MultistreamBroadcastProfileTests
 
         manager.Remove(profile.Id);
         Assert.That(manager.GetYouTubeMetadata(profile.Id), Is.Null);
-
-        var gate = new SettingsWriteGate();
-        var blockedYouTubePath = Path.Combine(_tempDir, "blocked-youtube.json");
-        await gate.RunExternalWriteAsync(
-            () =>
-            {
-                File.WriteAllText(blockedYouTubePath, "{}");
-                return Task.FromResult(0);
-            },
-            static _ => ["blocked-youtube.json"]);
-
-        var blockedStore = new BroadcastProfileYouTubeStore(null, blockedYouTubePath, gate);
-        var gatedManager = new BroadcastProfilesManager(
-            _profilesStore,
-            _twitchApplier,
-            _eventBus,
-            _clock,
-            NullLogger<BroadcastProfilesManager>.Instance,
-            _platformsStore,
-            blockedStore,
-            _youtubeApplier);
-
-        var rollbackProfile = new BroadcastProfile { Name = "Откат", Title = "Тест" };
-        var rollbackWritten = gatedManager.Upsert(
-            rollbackProfile,
-            [StreamingPlatform.Twitch, StreamingPlatform.YouTube],
-            new BroadcastProfileYouTubeMetadata { TitleOverride = "Не запишется" });
-
-        Assert.Multiple(() =>
-        {
-            Assert.That(rollbackWritten, Is.False);
-            Assert.That(_profilesStore.Load().Profiles, Is.Empty);
-            Assert.That(_platformsStore.Load().Profiles, Does.Not.ContainKey(rollbackProfile.Id));
-        });
     }
 
     private BroadcastProfilesManager CreateManager()

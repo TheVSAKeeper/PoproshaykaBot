@@ -19,21 +19,18 @@ public abstract class RoleAccountsStoreBase<TFile, TAccount> : IPlatformAccountD
         string filePath,
         ILogger? logger,
         Func<string, string>? redact,
-        Func<TFile, string>? describe,
-        SettingsWriteGate? gate)
+        Func<TFile, string>? describe)
     {
         ArgumentException.ThrowIfNullOrEmpty(filePath);
 
         FilePath = filePath;
         Logger = logger;
-        _store = new(filePath, logger, redact, describe: describe, gate: gate);
+        _store = new(filePath, logger, redact, describe: describe);
     }
 
     protected string FilePath { get; }
 
     protected ILogger? Logger { get; }
-
-    public bool IsWriteRevoked => _store.IsWriteRevoked;
 
     public TAccount LoadBot()
     {
@@ -372,7 +369,7 @@ public abstract class RoleAccountsStoreBase<TFile, TAccount> : IPlatformAccountD
             }
 
             return true;
-        }, applyWhenBlocked: false);
+        });
 
         if (written)
         {
@@ -695,7 +692,7 @@ public abstract class RoleAccountsStoreBase<TFile, TAccount> : IPlatformAccountD
 
     protected (bool Applied, bool Written) TryMutateFile(Func<TFile, bool> mutator)
     {
-        return _store.MutateIfWithResult(mutator, applyWhenBlocked: false);
+        return _store.MutateIfWithResult(mutator);
     }
 
     protected bool SaveFile(TFile state)

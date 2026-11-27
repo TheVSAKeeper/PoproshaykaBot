@@ -48,8 +48,7 @@ public sealed class ThirdPlatformPipelineTests
     {
         var time = new ManualTimeProvider();
         var bus = new InMemoryEventBus(NullLogger<InMemoryEventBus>.Instance);
-        var gate = new SettingsWriteGate();
-        var catalog = new ChannelCatalogStore(NullLogger<ChannelCatalogStore>.Instance, Path.Combine(_root, "channels.json"), gate);
+        var catalog = new ChannelCatalogStore(NullLogger<ChannelCatalogStore>.Instance, Path.Combine(_root, "channels.json"));
         var vkChanA = new ChannelKey(StreamingPlatform.VkLive, "vk-alpha");
         var vkChanB = new ChannelKey(StreamingPlatform.VkLive, "vk-beta");
         catalog.Mutate(s =>
@@ -81,7 +80,7 @@ public sealed class ThirdPlatformPipelineTests
 
         var settings = new AppSettings();
         settings.Twitch.Messages.WelcomeEnabled = false;
-        var settingsManager = Substitute.For<SettingsManager>(NullLogger<SettingsManager>.Instance, null, null);
+        var settingsManager = Substitute.For<SettingsManager>(NullLogger<SettingsManager>.Instance, null);
         settingsManager.Current.Returns(settings);
 
         var repo = new UserStatisticsRepository(NullLogger<UserStatisticsRepository>.Instance);
@@ -170,9 +169,9 @@ public sealed class ThirdPlatformPipelineTests
         var reconciler = new ChannelCatalogReconciler(
             catalog,
             settingsManager,
-            new AccountsStore(null, Path.Combine(_root, "tw.json"), gate),
-            new YouTubeSettingsStore(null, Path.Combine(_root, "yt.json"), gate),
-            new YouTubeAccountsStore(null, Path.Combine(_root, "ytacc.json"), gate),
+            new AccountsStore(null, Path.Combine(_root, "tw.json")),
+            new YouTubeSettingsStore(null, Path.Combine(_root, "yt.json")),
+            new YouTubeAccountsStore(null, Path.Combine(_root, "ytacc.json")),
             target,
             NullLogger<ChannelCatalogReconciler>.Instance);
         var auth = Substitute.For<IPlatformAuthService>();

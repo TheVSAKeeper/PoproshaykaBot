@@ -591,13 +591,12 @@ public sealed class MultistreamLayoutTests
         var twitch = new StubPlatform(StreamingPlatform.Twitch, "Twitch");
         var youtube = new StubPlatform(StreamingPlatform.YouTube, "YouTube");
         var registry = new ChatPlatformRegistry([twitch, youtube]);
-        var gate = new SettingsWriteGate();
         var bus = new InMemoryEventBus(NullLogger<InMemoryEventBus>.Instance);
-        var catalog = new ChannelCatalogStore(filePath: Path.Combine(_directory, "channels.json"), gate: gate);
-        var accounts = new AccountsStore(filePath: Path.Combine(_directory, "accounts.json"), gate: gate);
-        var ytSettingsStore = new YouTubeSettingsStore(filePath: Path.Combine(_directory, "youtube.json"), gate: gate);
-        var ytAccountsStore = new YouTubeAccountsStore(filePath: Path.Combine(_directory, "youtube-accounts.json"), gate: gate);
-        var manager = new SettingsManager(NullLogger<SettingsManager>.Instance, Path.Combine(_directory, "settings.json"), gate);
+        var catalog = new ChannelCatalogStore(filePath: Path.Combine(_directory, "channels.json"));
+        var accounts = new AccountsStore(filePath: Path.Combine(_directory, "accounts.json"));
+        var ytSettingsStore = new YouTubeSettingsStore(filePath: Path.Combine(_directory, "youtube.json"));
+        var ytAccountsStore = new YouTubeAccountsStore(filePath: Path.Combine(_directory, "youtube-accounts.json"));
+        var manager = new SettingsManager(NullLogger<SettingsManager>.Instance, Path.Combine(_directory, "settings.json"));
         var server = new KestrelHttpServer(null!, manager, [], NullLogger<KestrelHttpServer>.Instance, NullLoggerFactory.Instance);
         var dispatcher = new ManualUiDispatcher();
         var dialogs = DispatchProxy.Create<IDialogService, InertProxy>();
@@ -657,10 +656,10 @@ public sealed class MultistreamLayoutTests
                     new(),
                     new(registry),
                     new(new(filePath: Path.Combine(_directory, "polls.json")), TimeProvider.System),
-                    new(manager, filePath: Path.Combine(_directory, "platform-lifecycle.json"), gate: gate)),
+                    new(manager, filePath: Path.Combine(_directory, "platform-lifecycle.json"))),
                 new ChannelsSettingsSectionContributor(editor, groups, catalog),
             ],
-            manager, gate, server, bus, NullLogger<SettingsPageViewModel>.Instance, dialogs, new MemorySettings(),
+            manager, server, bus, NullLogger<SettingsPageViewModel>.Instance, dialogs, new MemorySettings(),
             broadcastProfiles: profilesSection, platformRegistry: registry);
 
         var connection = new BotConnectionManager(new AppHost([], NullLogger<AppHost>.Instance), [], null, bus, NullLogger<BotConnectionManager>.Instance);

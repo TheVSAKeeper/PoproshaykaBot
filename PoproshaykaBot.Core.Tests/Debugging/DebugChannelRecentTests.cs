@@ -170,7 +170,7 @@ public class DebugChannelRecentTests
 
     private static SettingsManager CreateSettingsManager()
     {
-        var settingsManager = Substitute.For<SettingsManager>(NullLogger<SettingsManager>.Instance, null, null);
+        var settingsManager = Substitute.For<SettingsManager>(NullLogger<SettingsManager>.Instance, null);
         settingsManager.Current.Returns(new AppSettings { Twitch = { Channel = OwnChannel } });
         return settingsManager;
     }

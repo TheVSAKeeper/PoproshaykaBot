@@ -3,24 +3,18 @@
 namespace PoproshaykaBot.Core.Statistics;
 
 internal abstract class SingleFileStatisticsUnit<TSnapshot>(
-    string relativePath,
     string displayName,
-    ILogger logger,
-    IReadOnlyCollection<string>? ownedRelativePaths = null)
-    : IPeriodicStatisticsUnit, IExternalWriteParticipant, IDisposable
+    ILogger logger)
+    : IPeriodicStatisticsUnit, IDisposable
     where TSnapshot : class
 {
     private readonly SemaphoreSlim _gate = new(1, 1);
     private int _state;
-    private bool _rewrittenExternally;
-    private bool _rewriteReported;
     private bool _disposed;
 
     public StatisticsLoadState LoadState => (StatisticsLoadState)Volatile.Read(ref _state);
 
     public bool IsLoaded => LoadState == StatisticsLoadState.Loaded;
-
-    public IReadOnlyCollection<string> OwnedRelativePaths { get; } = ownedRelativePaths ?? [relativePath];
 
     protected abstract bool HasChanges { get; }
 
@@ -82,19 +76,6 @@ internal abstract class SingleFileStatisticsUnit<TSnapshot>(
                 return;
             }
 
-            if (Volatile.Read(ref _rewrittenExternally))
-            {
-                if (!_rewriteReported)
-                {
-                    _rewriteReported = true;
-                    logger.LogInformation(
-                        "Статистика ({DisplayName}) переписана мимо приложения. До перезапуска она не перечитывается и не сохраняется, чтобы не затереть перенесённое",
-                        displayName);
-                }
-
-                return;
-            }
-
             try
             {
                 var result = await ReadAsync(cancellationToken).ConfigureAwait(false);
@@ -118,67 +99,6 @@ internal abstract class SingleFileStatisticsUnit<TSnapshot>(
                 logger.LogError(exception, "Сбой при загрузке статистики ({DisplayName})", displayName);
                 throw new InvalidOperationException($"Ошибка загрузки статистики ({displayName}): {exception.Message}", exception);
             }
-        }
-        finally
-        {
-            _gate.Release();
-        }
-    }
-
-    public async ValueTask<bool> InvalidateAsync(CancellationToken cancellationToken)
-    {
-        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
-
-        try
-        {
-            var wasLoaded = LoadState == StatisticsLoadState.Loaded;
-
-            if (wasLoaded)
-            {
-                SetState(StatisticsLoadState.Abandoned);
-                logger.LogInformation(
-                    "Статистика ({DisplayName}) больше не считается прочитанной: её файл меняют мимо приложения, накопленное в этом сеансе сохраняться не будет, а перечитывания до перезапуска не будет",
-                    displayName);
-            }
-
-            return wasLoaded;
-        }
-        finally
-        {
-            _gate.Release();
-        }
-    }
-
-    public async ValueTask RestoreAsync(bool wasLoaded)
-    {
-        if (!wasLoaded)
-        {
-            return;
-        }
-
-        await _gate.WaitAsync(CancellationToken.None).ConfigureAwait(false);
-
-        try
-        {
-            SetState(StatisticsLoadState.Loaded);
-            logger.LogInformation(
-                "Статистика ({DisplayName}) снова считается прочитанной: её файл никто не менял",
-                displayName);
-        }
-        finally
-        {
-            _gate.Release();
-        }
-    }
-
-    public void LatchExternalRewrite()
-    {
-        _gate.Wait(CancellationToken.None);
-
-        try
-        {
-            Volatile.Write(ref _rewrittenExternally, true);
-            SetState(StatisticsLoadState.Abandoned);
         }
         finally
         {

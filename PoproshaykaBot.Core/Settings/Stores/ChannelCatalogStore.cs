@@ -1,7 +1,6 @@
 ﻿using Microsoft.Extensions.Logging;
 using PoproshaykaBot.Core.Infrastructure;
 using PoproshaykaBot.Core.Platforms;
-using PoproshaykaBot.Core.Settings.Migrations.LegacyImport;
 using System.Text.Json;
 
 namespace PoproshaykaBot.Core.Settings.Stores;
@@ -12,16 +11,13 @@ public sealed class ChannelCatalogStore
 
     public ChannelCatalogStore(
         ILogger<ChannelCatalogStore>? logger = null,
-        string? filePath = null,
-        SettingsWriteGate? gate = null)
+        string? filePath = null)
     {
-        var path = filePath ?? AppPaths.SettingsFile(LegacyDataCatalog.ChannelsFileName);
-        _store = new(path, logger, describe: Describe, gate: gate);
+        var path = filePath ?? AppPaths.SettingsFile(SettingsFileNames.ChannelsFileName);
+        _store = new(path, logger, describe: Describe);
     }
 
     public event EventHandler? Changed;
-
-    public bool IsWriteRevoked => _store.IsWriteRevoked;
 
     public ChannelsSettings Load()
     {
@@ -82,7 +78,7 @@ public sealed class ChannelCatalogStore
 
             NormalizeInPlace(settings);
             return true;
-        }, applyWhenBlocked: false);
+        });
 
         if (result.Written)
         {

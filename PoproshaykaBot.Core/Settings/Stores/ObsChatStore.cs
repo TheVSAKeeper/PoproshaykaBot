@@ -18,14 +18,14 @@ public sealed class ObsChatStore
     private readonly IEventBus _eventBus;
     private readonly JsonStore<ObsChatSettings> _store;
 
-    public ObsChatStore(IEventBus eventBus, ILogger<ObsChatStore>? logger = null, string? filePath = null, SettingsWriteGate? gate = null)
+    public ObsChatStore(IEventBus eventBus, ILogger<ObsChatStore>? logger = null, string? filePath = null)
     {
         ArgumentNullException.ThrowIfNull(eventBus);
 
-        var path = filePath ?? AppPaths.SettingsFile("obs-chat.json");
+        var path = filePath ?? AppPaths.SettingsFile(SettingsFileNames.ObsChatFileName);
 
         _eventBus = eventBus;
-        _store = new(path, logger, parser: ParseFile, describe: Describe, gate: gate);
+        _store = new(path, logger, parser: ParseFile, describe: Describe);
 
         logger?.LogDebug("ObsChatStore инициализирован из {FilePath}", path);
     }

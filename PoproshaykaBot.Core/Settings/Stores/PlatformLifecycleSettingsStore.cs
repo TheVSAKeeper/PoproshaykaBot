@@ -22,14 +22,13 @@ public sealed class PlatformLifecycleSettingsStore
     public PlatformLifecycleSettingsStore(
         SettingsManager? settingsManager = null,
         ILogger<PlatformLifecycleSettingsStore>? logger = null,
-        string? filePath = null,
-        SettingsWriteGate? gate = null)
+        string? filePath = null)
     {
-        var path = filePath ?? AppPaths.SettingsFile("platform-lifecycle.json");
+        var path = filePath ?? AppPaths.SettingsFile(SettingsFileNames.PlatformLifecycleFileName);
 
         _settingsManager = settingsManager;
         _hasExplicitValue = File.Exists(path);
-        _store = new(path, logger, describe: Describe, gate: gate);
+        _store = new(path, logger, describe: Describe);
 
         logger?.LogDebug("PlatformLifecycleSettingsStore инициализирован из {FilePath}", path);
     }

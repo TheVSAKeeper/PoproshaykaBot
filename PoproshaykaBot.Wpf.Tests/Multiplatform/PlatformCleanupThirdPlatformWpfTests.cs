@@ -257,10 +257,9 @@ public sealed class PlatformCleanupThirdPlatformWpfTests
         var enablementSource = new StubEnablementSource(StreamingPlatform.VkLive, () => enabled);
         var vk = new StubChatPlatform(StreamingPlatform.VkLive, "VK Видео Live", PlatformCapabilities.None, () => enabled, StreamStatus.Offline, null, "vk-chan");
         var registry = new StubPlatformRegistry(vk);
-        var gate = new SettingsWriteGate();
         var bus = new InMemoryEventBus(NullLogger<InMemoryEventBus>.Instance);
-        var catalog = new ChannelCatalogStore(filePath: Path.Combine(_root, "channels.json"), gate: gate);
-        var manager = new SettingsManager(NullLogger<SettingsManager>.Instance, Path.Combine(_root, "settings.json"), gate);
+        var catalog = new ChannelCatalogStore(filePath: Path.Combine(_root, "channels.json"));
+        var manager = new SettingsManager(NullLogger<SettingsManager>.Instance, Path.Combine(_root, "settings.json"));
         var server = new KestrelHttpServer(null!, manager, [], NullLogger<KestrelHttpServer>.Instance, NullLoggerFactory.Instance);
         var dispatcher = new ManualUiDispatcher();
         var editor = new ChannelCatalogSettingsSectionViewModel(catalog, platformRegistry: registry);
@@ -268,7 +267,7 @@ public sealed class PlatformCleanupThirdPlatformWpfTests
 
         using var settings = new SettingsPageViewModel(
             [new ChannelsSettingsSectionContributor(editor, groups, catalog)],
-            manager, gate, server, bus, NullLogger<SettingsPageViewModel>.Instance,
+            manager, server, bus, NullLogger<SettingsPageViewModel>.Instance,
             DispatchProxy.Create<IDialogService, InertProxy>(), new MemorySettings(), platformRegistry: registry);
         await using var connection = new BotConnectionManager(new AppHost([], NullLogger<AppHost>.Instance), [], null, bus, NullLogger<BotConnectionManager>.Instance);
 

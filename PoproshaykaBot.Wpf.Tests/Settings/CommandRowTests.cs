@@ -506,34 +506,6 @@ public class CommandRowTests
     }
 
     [Test]
-    public async Task Закрытый_гейт_записи_не_выдаётся_за_сохранение()
-    {
-        var settingsPath = Path.Combine(_root, "settings.json");
-        var gate = new SettingsWriteGate();
-        var settingsManager = new SettingsManager(NullLogger<SettingsManager>.Instance, settingsPath, gate);
-
-        await gate.RunExternalWriteAsync(() => Task.FromResult(0), _ => new[] { "settings.json" });
-
-        var page = CreatePage("!", Path.Combine(_root, "commands.json"), settingsManager, new DonateCommand(settingsManager));
-
-        page.SelectedRow = page.Rows.Single();
-        page.Parameters!.Items[0].Text = "Донат идёт через СБП";
-
-        page.SaveParametersCommand.Execute(null);
-
-        Assert.Multiple(() =>
-        {
-            Assert.That(page.ParametersNoticeTone, Is.EqualTo(CommandNoticeTone.Warning),
-                "Незаписанный файл – это не успех и не отказ ввода");
-            Assert.That(page.ParametersNotice, Does.Contain("не записаны"));
-            Assert.That(File.Exists(settingsPath), Is.False, "Гейт не пустил запись на диск");
-            Assert.That(settingsManager.Current.Twitch.Messages.DonateCommandMessage,
-                Is.EqualTo("Донат идёт через СБП"),
-                "В памяти правка действует до перезапуска");
-        });
-    }
-
-    [Test]
     public void Смена_команды_с_черновиком_спрашивает_и_на_отказ_возвращает_строку()
     {
         var settingsManager = CreateSettingsManager();

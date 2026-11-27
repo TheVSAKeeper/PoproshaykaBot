@@ -1485,7 +1485,7 @@ public class YouTubeChatIngestionServiceTests
             settings.Twitch.AutoBroadcast.StreamStatusNotificationsEnabled = true;
             settings.Twitch.AutoBroadcast.StreamStartMessage = "Старт";
             settings.Twitch.AutoBroadcast.StreamStopMessage = "Стоп";
-            var settingsManager = Substitute.For<SettingsManager>(NullLogger<SettingsManager>.Instance, null, null);
+            var settingsManager = Substitute.For<SettingsManager>(NullLogger<SettingsManager>.Instance, null);
             settingsManager.Current.Returns(settings);
 
             var historyStore = new BroadcastHistoryStore(
@@ -1562,7 +1562,7 @@ public class YouTubeChatIngestionServiceTests
         var settings = new AppSettings();
         settings.Twitch.Messages.WelcomeEnabled = false;
         settings.Twitch.AutoBroadcast.StreamStatusNotificationsEnabled = false;
-        var settingsManager = Substitute.For<SettingsManager>(NullLogger<SettingsManager>.Instance, null, null);
+        var settingsManager = Substitute.For<SettingsManager>(NullLogger<SettingsManager>.Instance, null);
         settingsManager.Current.Returns(settings);
 
         var obsChatStore = new ObsChatStore(_eventBus, NullLogger<ObsChatStore>.Instance, Path.Combine(_directory, $"obs-{Guid.NewGuid():N}.json"));

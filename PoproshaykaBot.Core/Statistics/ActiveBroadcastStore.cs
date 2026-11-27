@@ -2,7 +2,7 @@
 using PoproshaykaBot.Core.Infrastructure;
 using PoproshaykaBot.Core.Infrastructure.Persistence;
 using PoproshaykaBot.Core.Platforms;
-using PoproshaykaBot.Core.Settings.Migrations.LegacyImport;
+using PoproshaykaBot.Core.Settings;
 using PoproshaykaBot.Core.Settings.Stores;
 using System.Security.Cryptography;
 using System.Text;
@@ -10,7 +10,7 @@ using System.Text.Json;
 
 namespace PoproshaykaBot.Core.Statistics;
 
-public class ActiveBroadcastStore : IExternalWriteParticipant
+public class ActiveBroadcastStore
 {
     private const string LegacyFileName = "active_session.json";
 
@@ -24,8 +24,6 @@ public class ActiveBroadcastStore : IExternalWriteParticipant
     private FileReadState _readState;
     private string? _lastSaveError;
     private bool _canWrite;
-    private bool _suspendedCanWrite;
-    private bool _invalidatedByExternalWrite;
 
     public ActiveBroadcastStore(
         BroadcastHistoryStore historyStore,
@@ -37,7 +35,7 @@ public class ActiveBroadcastStore : IExternalWriteParticipant
 
         _historyStore = historyStore;
         _logger = logger;
-        _filePath = filePath ?? Path.Combine(AppPaths.BaseDirectory, LegacyDataCatalog.ActiveBroadcastFileName);
+        _filePath = filePath ?? Path.Combine(AppPaths.BaseDirectory, SettingsFileNames.ActiveBroadcastFileName);
         _legacyFilePath = legacyFilePath ?? Path.Combine(AppPaths.BaseDirectory, LegacyFileName);
 
         var (state, loaded) = ReadDraftFile(_filePath);
@@ -112,68 +110,6 @@ public class ActiveBroadcastStore : IExternalWriteParticipant
                 draft.UpdatedAt,
                 draft.EndedAt,
                 platforms);
-        }
-    }
-
-    IReadOnlyCollection<string> IExternalWriteParticipant.OwnedRelativePaths { get; } =
-    [
-        LegacyDataCatalog.ActiveBroadcastFileName,
-    ];
-
-    ValueTask<bool> IExternalWriteParticipant.InvalidateAsync(CancellationToken cancellationToken)
-    {
-        cancellationToken.ThrowIfCancellationRequested();
-        return ValueTask.FromResult(Invalidate());
-    }
-
-    ValueTask IExternalWriteParticipant.RestoreAsync(bool wasLoaded)
-    {
-        Restore(wasLoaded);
-        return ValueTask.CompletedTask;
-    }
-
-    void IExternalWriteParticipant.LatchExternalRewrite()
-    {
-        lock (_syncLock)
-        {
-            _invalidatedByExternalWrite = true;
-            _suspendedCanWrite = false;
-            _canWrite = false;
-        }
-    }
-
-    public virtual bool Invalidate()
-    {
-        lock (_syncLock)
-        {
-            if (!_invalidatedByExternalWrite)
-            {
-                _suspendedCanWrite = _canWrite;
-                _invalidatedByExternalWrite = true;
-            }
-
-            var had = _canWrite;
-            _canWrite = false;
-            return had;
-        }
-    }
-
-    public virtual void Restore(bool allowFutureWrites)
-    {
-        if (!allowFutureWrites)
-        {
-            return;
-        }
-
-        lock (_syncLock)
-        {
-            if (!_invalidatedByExternalWrite)
-            {
-                return;
-            }
-
-            _invalidatedByExternalWrite = false;
-            _canWrite = _suspendedCanWrite;
         }
     }
 

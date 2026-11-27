@@ -22,7 +22,6 @@ public static class PollsServiceCollectionExtensions
         services.AddKeyedSingleton<IHostedComponent>(
             StreamingPlatform.Twitch,
             (sp, _) => sp.GetRequiredService<PollHistoryStore>());
-        services.AddSingleton<IExternalWriteParticipant>(sp => sp.GetRequiredService<PollHistoryStore>());
         services.AddSingleton<IFlushableHistoryStore>(sp => sp.GetRequiredService<PollHistoryStore>());
         return services;
     }

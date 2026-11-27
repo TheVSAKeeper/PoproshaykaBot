@@ -79,7 +79,63 @@
                             Style="{StaticResource Button.Secondary}"
                             Command="{Binding PickFolderCommand}"
                             AutomationProperties.Name="Выбрать другую папку"
-                            HorizontalAlignment="Left" />
+                            HorizontalAlignment="Left"
+                            Margin="0,0,0,12" />
+
+                    <Border Background="{DynamicResource Bg.Surface}"
+                            BorderBrush="{DynamicResource Border.Default}"
+                            BorderThickness="1"
+                            CornerRadius="{DynamicResource Radius.M}"
+                            Padding="14">
+                        <StackPanel>
+                            <TextBlock Text="Где хранить настройки и статистику"
+                                       FontWeight="SemiBold"
+                                       TextWrapping="Wrap"
+                                       Margin="0,0,0,8" />
+
+                            <RadioButton x:Name="PortableStorageRadioButton"
+                                         GroupName="FirstRunStorageLocation"
+                                         IsChecked="{Binding IsPortableStorageSelected, Mode=TwoWay}"
+                                         IsEnabled="{Binding CanMutate}"
+                                         AutomationProperties.Name="Рядом с программой (portable)"
+                                         Margin="0,0,0,4">
+                                <TextBlock Text="Рядом с программой (portable)"
+                                           TextWrapping="Wrap" />
+                            </RadioButton>
+                            <TextBlock Text="По умолчанию – данные хранятся рядом с программой, старая папка пользователя не меняется."
+                                       Foreground="{DynamicResource Fg.Secondary}"
+                                       FontSize="{DynamicResource Font.Size.S}"
+                                       TextWrapping="Wrap"
+                                       Margin="22,0,0,10" />
+
+                            <RadioButton x:Name="AppDataStorageRadioButton"
+                                         GroupName="FirstRunStorageLocation"
+                                         IsChecked="{Binding IsAppDataStorageSelected, Mode=TwoWay}"
+                                         IsEnabled="{Binding CanMutate}"
+                                         AutomationProperties.Name="В папке пользователя (%APPDATA%\PoproshaykaBot)"
+                                         Margin="0,0,0,4">
+                                <TextBlock Text="В папке пользователя (%APPDATA%\PoproshaykaBot)"
+                                           TextWrapping="Wrap" />
+                            </RadioButton>
+                            <TextBlock Text="Если в %APPDATA%\PoproshaykaBot уже есть файлы, перед запуском или переносом они целиком переместятся в резервную копию, а папка будет очищена."
+                                       Foreground="{DynamicResource Fg.Secondary}"
+                                       FontSize="{DynamicResource Font.Size.S}"
+                                       TextWrapping="Wrap"
+                                       Margin="22,0,0,0" />
+                        </StackPanel>
+                    </Border>
+
+                    <Border Visibility="{Binding StorageErrorNotice, Converter={StaticResource NullToVisibility}}"
+                            Background="{DynamicResource State.WarningSoft}"
+                            BorderBrush="{DynamicResource State.Warning}"
+                            BorderThickness="1"
+                            CornerRadius="{DynamicResource Radius.M}"
+                            Padding="12,8"
+                            Margin="0,12,0,0">
+                        <TextBlock Text="{Binding StorageErrorNotice}"
+                                   Foreground="{DynamicResource Fg.Primary}"
+                                   TextWrapping="Wrap" />
+                    </Border>
                 </StackPanel>
 
                 <StackPanel Visibility="{Binding IsInvalidFolderStep, Converter={StaticResource BoolToVisibility}}">

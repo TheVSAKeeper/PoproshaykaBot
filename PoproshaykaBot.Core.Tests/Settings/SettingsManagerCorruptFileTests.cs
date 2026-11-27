@@ -25,11 +25,9 @@ public sealed class SettingsManagerCorruptFileTests
         {
           "twitch": {
             "channel": "bobito217",
-            "botAccount": {
-              "login": "thebot",
-              "accessToken": "bot-secret-access",
-              "refreshToken": "bot-secret-refresh"
-            }
+            "botUsername": "thebot",
+            "accessToken": "bot-secret-access",
+            "refreshToken": "bot-secret-refresh"
           }
         }
         """;
@@ -80,9 +78,10 @@ public sealed class SettingsManagerCorruptFileTests
                 "Откатная копия монолита с токенами не переживает удавшуюся запись.");
 
             Assert.That(File.ReadAllText(_filePath), Does.Not.Contain("bot-secret-access"),
-                "Сам settings.json после разбора токенов не хранит – они уезжают в accounts.json.");
+                "Сам settings.json после разбора токенов не хранит.");
 
-            Assert.That(File.ReadAllText(Path.Combine(_directory.FullName, "accounts.json")), Does.Contain("bot-secret-access"));
+            Assert.That(File.Exists(Path.Combine(_directory.FullName, "accounts.json")), Is.False,
+                "SettingsManager.ParseFile очищает settings.json в памяти и не пишет соседние split-файлы мимо мигратора.");
         }
     }
 }

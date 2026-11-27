@@ -76,7 +76,7 @@ public sealed class ChatPipelineOrderTests
 
         var settings = new AppSettings();
         settings.Twitch.Messages.WelcomeEnabled = false;
-        var settingsManager = Substitute.For<SettingsManager>(NullLogger<SettingsManager>.Instance, null, null);
+        var settingsManager = Substitute.For<SettingsManager>(NullLogger<SettingsManager>.Instance, null);
         settingsManager.Current.Returns(settings);
 
         var obsChatStore = new ObsChatStore(bus, NullLogger<ObsChatStore>.Instance, Path.Combine(_root, "obs-chat.json"));
@@ -168,7 +168,7 @@ public sealed class ChatPipelineOrderTests
     [Test]
     public void Audience_Follows_Channel_And_Ignores_The_Closed_Origin()
     {
-        var settings = Substitute.For<SettingsManager>(NullLogger<SettingsManager>.Instance, null, null);
+        var settings = Substitute.For<SettingsManager>(NullLogger<SettingsManager>.Instance, null);
         var audience = new AudienceTracker(settings);
         var first = new ChatOrigin(new(StreamingPlatform.Twitch, "1"), "1");
         var next = new ChatOrigin(new(StreamingPlatform.Twitch, "2"), "2");

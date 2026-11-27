@@ -44,7 +44,7 @@ public sealed class FirstRunStartViewLayoutTests
     {
         ApplyScale(scale);
 
-        var vm = new FirstRunStartViewModel([], new StubFilePicker(), NullLogger.Instance);
+        var vm = FirstRunStartViewModel.CreatePreview([], new StubFilePicker(), NullLogger.Instance);
         vm.ShowGallerySummary(new FirstRunImportSummary(
             "Данные перенесены частично",
             [
@@ -86,6 +86,50 @@ public sealed class FirstRunStartViewLayoutTests
                 $"Кнопка «Подключить YouTube» обрезана справа при {width}x{height} @ {scale}: Right={connectBounds.Right:F1}");
             Assert.That(openBounds.Right, Is.LessThanOrEqualTo(width + 0.5),
                 $"Кнопка «Открыть панель» обрезана справа при {width}x{height} @ {scale}: Right={openBounds.Right:F1}");
+        });
+    }
+
+    [TestCase(460, 560, 1.0)]
+    [TestCase(520, 640, 1.6)]
+    public void FirstRunStartView_choice_storage_selector_and_buttons_stay_within_narrow_available_width(
+        double width, double height, double scale)
+    {
+        ApplyScale(scale);
+
+        var vm = FirstRunStartViewModel.CreatePreview([], new StubFilePicker(), NullLogger.Instance);
+        var view = new FirstRunStartView { DataContext = vm };
+        var host = new ContentControl { Content = view };
+        if (Application.Current?.TryFindResource("Font.Sans") is FontFamily fontFamily)
+        {
+            host.FontFamily = fontFamily;
+        }
+
+        if (Application.Current?.TryFindResource("Font.Size.M") is double fontSize)
+        {
+            host.FontSize = fontSize;
+        }
+
+        var viewport = new Size(width, height);
+        host.Measure(viewport);
+        host.Arrange(new(viewport));
+        host.UpdateLayout();
+
+        var portableRadio = (RadioButton)view.FindName("PortableStorageRadioButton")!;
+        var appDataRadio = (RadioButton)view.FindName("AppDataStorageRadioButton")!;
+        var importBtn = (Button)view.FindName("ImportChoiceButton")!;
+        var startFreshBtn = (Button)view.FindName("StartFreshChoiceButton")!;
+        var portableBounds = portableRadio.TransformToAncestor(host).TransformBounds(new(portableRadio.RenderSize));
+        var appDataBounds = appDataRadio.TransformToAncestor(host).TransformBounds(new(appDataRadio.RenderSize));
+        var importBounds = importBtn.TransformToAncestor(host).TransformBounds(new(importBtn.RenderSize));
+        var startFreshBounds = startFreshBtn.TransformToAncestor(host).TransformBounds(new(startFreshBtn.RenderSize));
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(view.ActualWidth, Is.LessThanOrEqualTo(width + 0.5));
+            Assert.That(portableBounds.Right, Is.LessThanOrEqualTo(width + 0.5));
+            Assert.That(appDataBounds.Right, Is.LessThanOrEqualTo(width + 0.5));
+            Assert.That(importBounds.Right, Is.LessThanOrEqualTo(width + 0.5));
+            Assert.That(startFreshBounds.Right, Is.LessThanOrEqualTo(width + 0.5));
         });
     }
 

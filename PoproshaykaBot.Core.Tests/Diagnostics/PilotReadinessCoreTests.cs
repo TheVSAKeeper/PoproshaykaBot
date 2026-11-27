@@ -93,9 +93,9 @@ public sealed class PilotReadinessCoreTests
 
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(files, Does.Contain(LegacyDataCatalog.CommandSettingsFileName));
-            Assert.That(files, Does.Contain(LegacyDataCatalog.CommandUsageFileName));
-            Assert.That(files, Does.Contain(LegacyDataCatalog.BroadcastProfileYouTubeFileName));
+            Assert.That(files, Does.Contain(SettingsFileNames.CommandSettingsFileName));
+            Assert.That(files, Does.Contain(SettingsFileNames.CommandUsageFileName));
+            Assert.That(files, Does.Contain(SettingsFileNames.BroadcastProfileYouTubeFileName));
         }
     }
 

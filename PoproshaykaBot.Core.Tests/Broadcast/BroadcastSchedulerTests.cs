@@ -39,7 +39,7 @@ public class BroadcastSchedulerTests
             new(TimeProvider.System),
             NullLogger<ChatSender>.Instance);
 
-        var settingsManager = Substitute.For<SettingsManager>(NullLogger<SettingsManager>.Instance, null, null);
+        var settingsManager = Substitute.For<SettingsManager>(NullLogger<SettingsManager>.Instance, null);
         settingsManager.Current.Returns(new AppSettings());
 
         _published = new(0);

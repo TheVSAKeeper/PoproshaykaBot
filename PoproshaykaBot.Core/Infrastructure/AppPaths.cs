@@ -1,30 +1,109 @@
-﻿using System.Reflection;
+﻿using PoproshaykaBot.Core.Settings;
 
 namespace PoproshaykaBot.Core.Infrastructure;
 
 public static class AppPaths
 {
     public const string BaseDirectoryEnvironmentVariable = "POPROSHAYKA_BASE_DIR";
+    public const string AppDataMarkerFileName = "appdata.flag";
 
-    private const string PortableMetadataKey = "PortableMode";
-    private const string PortableMarkerFileName = "portable.flag";
     private const string AppDataFolderName = "PoproshaykaBot";
-    private const string SettingsFolderName = "settings";
 
-    private static readonly Lazy<string?> _baseDirectoryOverride = new(ResolveBaseDirectoryOverride);
-    private static readonly Lazy<bool> _isPortable = new(ResolvePortable);
-    private static readonly Lazy<string> _baseDirectory = new(ResolveBaseDirectory);
-    private static readonly Lazy<string> _defaultBaseDirectory = new(ResolveDefaultBaseDirectory);
+    private static readonly Lock SyncLock = new();
+    private static bool _initialized;
+    private static string? _baseDirectoryOverride;
+    private static bool _isPortable;
+    private static string _defaultBaseDirectory = string.Empty;
+    private static string _baseDirectory = string.Empty;
 
-    public static bool IsPortable => _isPortable.Value;
+    public static bool IsPortable
+    {
+        get
+        {
+            EnsureInitialized();
+            lock (SyncLock)
+            {
+                return _isPortable;
+            }
+        }
+    }
 
-    public static bool IsBaseDirectoryOverridden => _baseDirectoryOverride.Value is not null;
+    public static bool IsBaseDirectoryOverridden
+    {
+        get
+        {
+            EnsureInitialized();
+            lock (SyncLock)
+            {
+                return _baseDirectoryOverride is not null;
+            }
+        }
+    }
 
-    public static string BaseDirectory => _baseDirectory.Value;
+    public static string BaseDirectory
+    {
+        get
+        {
+            EnsureInitialized();
+            lock (SyncLock)
+            {
+                return _baseDirectory;
+            }
+        }
+    }
 
-    public static string DefaultBaseDirectory => _defaultBaseDirectory.Value;
+    public static string DefaultBaseDirectory
+    {
+        get
+        {
+            EnsureInitialized();
+            lock (SyncLock)
+            {
+                return _defaultBaseDirectory;
+            }
+        }
+    }
 
-    public static string SettingsDirectory => Path.Combine(BaseDirectory, SettingsFolderName);
+    public static string AppDataDirectory =>
+        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), AppDataFolderName);
+
+    public static string ExecutableDirectory => GetExecutableDirectory();
+
+    public static string SettingsDirectory => Path.Combine(BaseDirectory, SettingsFileNames.SettingsFolderName);
+
+    public static void Refresh()
+    {
+        lock (SyncLock)
+        {
+            RefreshCore(ExecutableDirectory);
+        }
+    }
+
+    public static void SetAppDataStorageMarker(bool useAppData)
+    {
+        SetAppDataStorageMarker(useAppData, ExecutableDirectory);
+    }
+
+    internal static void SetAppDataStorageMarker(bool useAppData, string executableDirectory)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(executableDirectory);
+
+        var markerPath = Path.Combine(executableDirectory, AppDataMarkerFileName);
+        if (useAppData)
+        {
+            Directory.CreateDirectory(executableDirectory);
+            File.WriteAllText(markerPath, string.Empty);
+        }
+        else if (File.Exists(markerPath))
+        {
+            File.Delete(markerPath);
+        }
+
+        lock (SyncLock)
+        {
+            RefreshCore(executableDirectory);
+        }
+    }
 
     public static string Combine(string segment)
     {
@@ -43,7 +122,27 @@ public static class AppPaths
 
     public static string SettingsFile(string fileName)
     {
-        return Path.Combine(BaseDirectory, SettingsFolderName, fileName);
+        return Path.Combine(BaseDirectory, SettingsFileNames.SettingsFolderName, fileName);
+    }
+
+    private static void EnsureInitialized()
+    {
+        lock (SyncLock)
+        {
+            if (!_initialized)
+            {
+                RefreshCore(GetExecutableDirectory());
+            }
+        }
+    }
+
+    private static void RefreshCore(string executableDirectory)
+    {
+        _baseDirectoryOverride = ResolveBaseDirectoryOverride();
+        _isPortable = ResolvePortable(executableDirectory);
+        _defaultBaseDirectory = _isPortable ? executableDirectory : AppDataDirectory;
+        _baseDirectory = _baseDirectoryOverride ?? _defaultBaseDirectory;
+        _initialized = true;
     }
 
     private static string? ResolveBaseDirectoryOverride()
@@ -52,43 +151,9 @@ public static class AppPaths
         return string.IsNullOrWhiteSpace(raw) ? null : Path.GetFullPath(raw);
     }
 
-    private static bool ResolvePortable()
+    internal static bool ResolvePortable(string executableDirectory)
     {
-        var assembly = Assembly.GetEntryAssembly() ?? typeof(AppPaths).Assembly;
-
-        var hasMetadata = assembly
-            .GetCustomAttributes<AssemblyMetadataAttribute>()
-            .Any(a => string.Equals(a.Key, PortableMetadataKey, StringComparison.OrdinalIgnoreCase)
-                      && string.Equals(a.Value, "true", StringComparison.OrdinalIgnoreCase));
-
-        if (hasMetadata)
-        {
-            return true;
-        }
-
-        var executableDirectory = GetExecutableDirectory();
-
-        return File.Exists(Path.Combine(executableDirectory, PortableMarkerFileName));
-    }
-
-    private static string ResolveBaseDirectory()
-    {
-        if (_baseDirectoryOverride.Value is { } overridePath)
-        {
-            return overridePath;
-        }
-
-        return ResolveDefaultBaseDirectory();
-    }
-
-    private static string ResolveDefaultBaseDirectory()
-    {
-        if (IsPortable)
-        {
-            return GetExecutableDirectory();
-        }
-
-        return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), AppDataFolderName);
+        return !File.Exists(Path.Combine(executableDirectory, AppDataMarkerFileName));
     }
 
     private static string GetExecutableDirectory()

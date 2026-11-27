@@ -74,8 +74,6 @@ public static class YouTubeServiceCollectionExtensions
         services.AddSingleton<YouTubeGrpcChannelProvider>();
 
         services.AddSingleton<YouTubeQuotaStore>();
-        services.AddSingleton<IExternalWriteParticipant>(
-            static provider => provider.GetRequiredService<YouTubeQuotaStore>());
         services.AddSingleton<IFlushableHistoryStore>(
             static provider => provider.GetRequiredService<YouTubeQuotaStore>());
         services.TryAddEnumerable(ServiceDescriptor.Singleton<IAppLifetimeComponent, YouTubeQuotaLifetimeComponent>());

@@ -47,7 +47,7 @@ public sealed class UserRankServiceTests
         var settings = new AppSettings();
         settings.Ranks.Ranks = ranks;
 
-        var settingsManager = Substitute.For<SettingsManager>(NullLogger<SettingsManager>.Instance, null, null);
+        var settingsManager = Substitute.For<SettingsManager>(NullLogger<SettingsManager>.Instance, null);
         settingsManager.Current.Returns(settings);
 
         return new(settingsManager);

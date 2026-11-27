@@ -59,12 +59,6 @@ internal static partial class CoreLog
     public static partial void ChatHistoryCacheDeleteFailed(this ILogger logger, Exception exception, string fileName);
 
     [LoggerMessage(
-        EventId = 2109,
-        Level = LogLevel.Warning,
-        Message = "Внешняя запись в кэш истории чата оборвалась – запись кэша до перезапуска отключена")]
-    public static partial void ChatHistoryCacheExternalWriteAbandoned(this ILogger logger, Exception exception);
-
-    [LoggerMessage(
         EventId = 2110,
         Level = LogLevel.Information,
         Message = "Кэш истории чата восстановлен: областей {ScopeCount}, сообщений {MessageCount}")]

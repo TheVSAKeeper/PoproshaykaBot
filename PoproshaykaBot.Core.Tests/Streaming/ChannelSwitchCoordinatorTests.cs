@@ -42,8 +42,7 @@ public sealed class ChannelSwitchCoordinatorTests
 
         _time = new();
         _eventBus = new(NullLogger<InMemoryEventBus>.Instance);
-        var gate = new SettingsWriteGate();
-        _catalog = new(NullLogger<ChannelCatalogStore>.Instance, Path.Combine(_root, "channels.json"), gate);
+        _catalog = new(NullLogger<ChannelCatalogStore>.Instance, Path.Combine(_root, "channels.json"));
         SeedThreeChannels(ChannelSwitchMode.Manual);
 
         _channelRegistry = new();
@@ -64,11 +63,11 @@ public sealed class ChannelSwitchCoordinatorTests
         _connectionManager.StartConnection();
         await _connectionManager.WaitForConnectionAsync();
 
-        var settingsManager = Substitute.For<SettingsManager>(NullLogger<SettingsManager>.Instance, null, null);
+        var settingsManager = Substitute.For<SettingsManager>(NullLogger<SettingsManager>.Instance, null);
         settingsManager.Current.Returns(new AppSettings());
-        var twitchAccounts = new AccountsStore(NullLogger<AccountsStore>.Instance, Path.Combine(_root, "tw.json"), gate);
-        var ytAccounts = new YouTubeAccountsStore(NullLogger<YouTubeAccountsStore>.Instance, Path.Combine(_root, "yt-acc.json"), gate);
-        var ytSettings = new YouTubeSettingsStore(NullLogger<YouTubeSettingsStore>.Instance, Path.Combine(_root, "yt.json"), gate);
+        var twitchAccounts = new AccountsStore(NullLogger<AccountsStore>.Instance, Path.Combine(_root, "tw.json"));
+        var ytAccounts = new YouTubeAccountsStore(NullLogger<YouTubeAccountsStore>.Instance, Path.Combine(_root, "yt-acc.json"));
+        var ytSettings = new YouTubeSettingsStore(NullLogger<YouTubeSettingsStore>.Instance, Path.Combine(_root, "yt.json"));
         var targetChannel = new FakeTargetChannelProvider("OriginA");
         var reconciler = new ChannelCatalogReconciler(
             _catalog,
@@ -340,10 +339,8 @@ public sealed class ChannelSwitchCoordinatorTests
         });
     }
 
-    [TestCase(false, true)]
-    [TestCase(true, true)]
-    [TestCase(true, false)]
-    public async Task AutoDiscover_rejects_mismatched_stream_id_and_rolls_back_when_catalog_save_blocked(bool saveDraft, bool connected)
+    [Test]
+    public async Task AutoDiscover_rejects_mismatched_stream_id()
     {
         await _coordinator.SetSwitchModeAsync(StreamingPlatform.YouTube, ChannelSwitchMode.AutoDiscover);
         await PublishObservedAsync(ChanB, StreamStatus.Offline, StreamStatus.Online, "sb-first");
@@ -354,74 +351,6 @@ public sealed class ChannelSwitchCoordinatorTests
         {
             Assert.That(mismatched.Outcome, Is.EqualTo(ChannelSwitchOutcome.TargetNoLongerLive));
             Assert.That(_channelRegistry.GetBinding(StreamingPlatform.YouTube)?.Key, Is.EqualTo(ChanA));
-        });
-
-        var gate = new SettingsWriteGate();
-        var gatedPath = Path.Combine(_root, "gated-channels.json");
-        var gatedCatalog = new ChannelCatalogStore(NullLogger<ChannelCatalogStore>.Instance, gatedPath, gate);
-        gatedCatalog.Mutate(s =>
-        {
-            s.Channels =
-            [
-                new() { Platform = StreamingPlatform.YouTube, ChannelId = "UC_A", DisplayName = "Канал A", IsConfigured = true, MonitoringEnabled = true, BotAccountId = "bot-1", BotVerifiedSubjectId = "bot-1" },
-                new() { Platform = StreamingPlatform.YouTube, ChannelId = "UC_B", DisplayName = "Канал B", IsConfigured = true, MonitoringEnabled = true, BotAccountId = "bot-1", BotVerifiedSubjectId = "bot-1" },
-            ];
-            s.Platforms = [new() { Platform = StreamingPlatform.YouTube, ActiveChannelId = "UC_A", SwitchMode = ChannelSwitchMode.Manual }];
-        });
-
-        await gate.RunExternalWriteAsync(() => Task.FromResult(0), static _ => ["gated-channels.json"]);
-
-        var reg = new PlatformChannelRegistry();
-        reg.SetBinding(new(ChanA, "Канал A", AuthContextIds.Default, AuthContextIds.Default, 0));
-        var auth = Substitute.For<IPlatformAuthService>();
-        auth.Platform.Returns(StreamingPlatform.YouTube);
-        auth.GetAccessTokenAsync(Arg.Any<PlatformAuthRole>(), Arg.Any<bool>(), Arg.Any<CancellationToken>()).Returns(ValueTask.FromResult<string?>("t"));
-        auth.GetAccessTokenAsync(Arg.Any<PlatformAuthRole>(), Arg.Any<string?>(), Arg.Any<bool>(), Arg.Any<CancellationToken>()).Returns(ValueTask.FromResult<string?>("t"));
-        var target = new FakeTargetChannelProvider("Канал A");
-        var sm = Substitute.For<SettingsManager>(NullLogger<SettingsManager>.Instance, null, null);
-        sm.Current.Returns(new AppSettings());
-        var reconciler = new ChannelCatalogReconciler(
-            gatedCatalog,
-            sm,
-            new AccountsStore(null, Path.Combine(_root, "gtw.json"), gate),
-            new YouTubeSettingsStore(null, Path.Combine(_root, "gyt.json"), gate),
-            new YouTubeAccountsStore(null, Path.Combine(_root, "gyta.json"), gate),
-            target,
-            NullLogger<ChannelCatalogReconciler>.Instance);
-        using var gatedCoordinator = new ChannelSwitchCoordinator(
-            gatedCatalog,
-            reg,
-            reconciler,
-            new PlatformAuthRegistry([auth]),
-            _broadcastLifecycle,
-            [_adapter],
-            [_monitor],
-            target,
-            _eventBus,
-            _time,
-            NullLogger<ChannelSwitchCoordinator>.Instance,
-            connected ? _connectionManager : null);
-
-        _adapter.Probes[ChanB] = new(false, true, null);
-        var newTarget = new ChannelKey(StreamingPlatform.YouTube, "UC_BLOCKED_DRAFT");
-        var failures = new List<ChannelSwitchFailed>();
-        using var failureSubscription = _eventBus.Subscribe<ChannelSwitchFailed>(failures.Add);
-        var failedWrite = saveDraft
-            ? await gatedCoordinator.SwitchCatalogChannelAsync(new()
-            {
-                Platform = newTarget.Platform,
-                ChannelId = newTarget.ChannelId,
-                IsConfigured = true,
-                BotAccountId = "bot-1",
-                BotVerifiedSubjectId = "bot-1",
-            })
-            : await gatedCoordinator.SwitchActiveChannelAsync(StreamingPlatform.YouTube, ChanB);
-        Assert.Multiple(() =>
-        {
-            Assert.That(failedWrite.Outcome, Is.EqualTo(ChannelSwitchOutcome.FailedKeptPrevious));
-            Assert.That(failures.Single().KeptPreviousChat, Is.True);
-            Assert.That(gatedCatalog.GetPlatformSettings(StreamingPlatform.YouTube).ActiveChannelId, Is.EqualTo("UC_A"));
-            Assert.That(gatedCatalog.FindEntry(newTarget), Is.Null);
         });
     }
 

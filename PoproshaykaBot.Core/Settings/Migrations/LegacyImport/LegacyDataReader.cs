@@ -13,8 +13,6 @@ internal static class LegacyDataReader
 {
     private const long MaxInspectedFileBytes = 32L * 1024 * 1024;
 
-    private static readonly string[] TokenKeys = ["accessToken", "refreshToken"];
-
     public static JsonNode? TryRead(string? filePath, ILogger? logger)
     {
         if (string.IsNullOrEmpty(filePath))
@@ -91,14 +89,14 @@ internal static class LegacyDataReader
 
     public static bool HasFlatTwitchTokens(JsonNode? twitch)
     {
-        return TokenKeys.Any(key => ReadString(twitch, key) is not null);
+        return AccountsTokenRedactor.AuthTokenKeys.Any(key => ReadString(twitch, key) is not null);
     }
 
     public static (bool BotReady, bool BroadcasterReady, bool HasBroadcasterCredentials) ReadTwitchAuthorization(
         string directory, ILogger? logger)
     {
-        var accounts = ReadSettings<AccountsStore.AccountsFileDto>(directory, LegacyDataCatalog.AccountsFileName, logger);
-        var channels = ReadSettings<ChannelsSettings>(directory, LegacyDataCatalog.ChannelsFileName, logger);
+        var accounts = ReadSettings<AccountsStore.AccountsFileDto>(directory, SettingsFileNames.AccountsFileName, logger);
+        var channels = ReadSettings<ChannelsSettings>(directory, SettingsFileNames.ChannelsFileName, logger);
         var channel = channels is null ? null : ChannelCatalogStore.GetActiveChannel(channels, StreamingPlatform.Twitch);
 
         var bot = GetRoleAccount(PlatformAuthRole.Bot, accounts, channel);
@@ -150,34 +148,6 @@ internal static class LegacyDataReader
 
     public static bool HasTokens(JsonNode? node)
     {
-        switch (node)
-        {
-            case JsonObject obj:
-                foreach (var pair in obj)
-                {
-                    if (TokenKeys.Contains(pair.Key, StringComparer.OrdinalIgnoreCase))
-                    {
-                        if (pair.Value is JsonValue value && value.TryGetValue(out string? text) && !string.IsNullOrWhiteSpace(text))
-                        {
-                            return true;
-                        }
-
-                        continue;
-                    }
-
-                    if (HasTokens(pair.Value))
-                    {
-                        return true;
-                    }
-                }
-
-                return false;
-
-            case JsonArray array:
-                return array.Any(HasTokens);
-
-            default:
-                return false;
-        }
+        return AccountsTokenRedactor.HasAnyToken(node, AccountsTokenRedactor.AuthTokenKeys);
     }
 }

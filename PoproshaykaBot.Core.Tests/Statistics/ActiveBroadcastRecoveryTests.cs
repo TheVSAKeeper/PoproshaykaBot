@@ -160,28 +160,6 @@ public sealed partial class ActiveBroadcastStoreTests
         Assert.That(File.Exists(_legacyPath), Is.EqualTo(legacyChanged));
     }
 
-    [TestCase(false)]
-    [TestCase(true)]
-    public void RepeatedNoOpImport_PreservesDraftWriteRights(bool touched)
-    {
-        var draft = CompletedDraft();
-        draft.EndedAt = null;
-        var store = CreateStore();
-        Assert.That(store.TrySave(draft), Is.True);
-        Assert.That(store.Invalidate(), Is.True);
-        store.Restore(!touched);
-        var before = File.ReadAllText(_activePath);
-
-        store.Restore(store.Invalidate());
-        draft.UpdatedAt = draft.UpdatedAt.AddMinutes(1);
-        Assert.That(store.TrySave(draft), Is.EqualTo(!touched));
-        Assert.That(store.CanWrite, Is.EqualTo(!touched));
-        if (touched)
-        {
-            Assert.That(File.ReadAllText(_activePath), Is.EqualTo(before));
-        }
-    }
-
     [Test]
     public void CompletedDraft_AfterHistoryWriteButBeforeDelete_IsRecoveredOnlyOnce()
     {

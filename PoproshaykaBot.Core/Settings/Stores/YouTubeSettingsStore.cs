@@ -1,7 +1,6 @@
 ﻿using Microsoft.Extensions.Logging;
 using PoproshaykaBot.Core.Infrastructure;
 using PoproshaykaBot.Core.Platforms;
-using PoproshaykaBot.Core.Settings.Migrations.LegacyImport;
 using PoproshaykaBot.Core.YouTube;
 
 namespace PoproshaykaBot.Core.Settings.Stores;
@@ -12,11 +11,10 @@ public sealed class YouTubeSettingsStore : IPlatformEnablementSource
 
     public YouTubeSettingsStore(
         ILogger<YouTubeSettingsStore>? logger = null,
-        string? filePath = null,
-        SettingsWriteGate? gate = null)
+        string? filePath = null)
     {
-        var path = filePath ?? AppPaths.SettingsFile(LegacyDataCatalog.YouTubeSettingsFileName);
-        _store = new(path, logger, describe: Describe, gate: gate);
+        var path = filePath ?? AppPaths.SettingsFile(SettingsFileNames.YouTubeSettingsFileName);
+        _store = new(path, logger, describe: Describe);
 
         if (logger?.IsEnabled(LogLevel.Debug) == true)
         {
@@ -37,8 +35,6 @@ public sealed class YouTubeSettingsStore : IPlatformEnablementSource
     }
 
     public event Action? Changed;
-
-    public bool IsWriteRevoked => _store.IsWriteRevoked;
 
     StreamingPlatform IPlatformEnablementSource.Platform => StreamingPlatform.YouTube;
 
@@ -66,7 +62,7 @@ public sealed class YouTubeSettingsStore : IPlatformEnablementSource
     public (bool Matched, bool Written) TryReplace(YouTubeSettings expected, YouTubeSettings replacement)
     {
         var matched = false;
-        var written = _store.Save(replacement, applyWhenBlocked: false,
+        var written = _store.Save(replacement,
             matches: current => matched = JsonStoreClone.SameValues(current, expected));
         if (written)
         {

@@ -1,7 +1,7 @@
 ﻿using Microsoft.Extensions.Logging.Abstractions;
 using PoproshaykaBot.Core.Infrastructure.Persistence;
 using PoproshaykaBot.Core.Platforms.Auth;
-using PoproshaykaBot.Core.Settings.Migrations.LegacyImport;
+using PoproshaykaBot.Core.Settings;
 using PoproshaykaBot.Core.Settings.Stores;
 using PoproshaykaBot.Core.Statistics;
 using PoproshaykaBot.Core.Tests.Polls;
@@ -24,7 +24,7 @@ public class YouTubeQuotaStoreTests
     {
         _directory = Path.Combine(Path.GetTempPath(), $"yt-quota-store-{Guid.NewGuid():N}");
         Directory.CreateDirectory(Path.Combine(_directory, "youtube"));
-        _quotaPath = Path.Combine(_directory, LegacyDataCatalog.YouTubeQuotaFileName);
+        _quotaPath = Path.Combine(_directory, SettingsFileNames.YouTubeQuotaFileName);
         _settingsPath = Path.Combine(_directory, "youtube.json");
         _clock = new TestTimeProvider { UtcNow = new DateTimeOffset(2026, 11, 15, 18, 0, 0, TimeSpan.Zero) };
     }
@@ -131,63 +131,11 @@ public class YouTubeQuotaStoreTests
     }
 
     [Test]
-    public async Task External_Write_For_YouTube_Quota_Freezes_Only_QuotaStore()
-    {
-        var settingsStore = CreateSettingsStore();
-        using var store = new YouTubeQuotaStore(NullLogger<YouTubeQuotaStore>.Instance, _quotaPath);
-        var gov = new YouTubeQuotaGovernor(store, settingsStore, _clock, NullLogger<YouTubeQuotaGovernor>.Instance);
-        var graph = new StatisticsTestGraph(_directory, extraParticipants: store);
-
-        Assert.That(gov.TryReserve(PlatformAuthRole.Bot, YouTubeQuotaPriority.CriticalReadAndMonitor, 5, out var beforeImport), Is.True);
-        beforeImport.Commit();
-
-        await graph.AutoSaver.RunExternalWriteAsync(
-            () =>
-            {
-                File.WriteAllText(_quotaPath, """{"schemaVersion":1,"projects":{"proj":{"pacificDate":"2026-11-15","dailyBudget":10000,"committedUnits":900,"botCommittedUnits":900,"broadcasterCommittedUnits":0,"exhaustedByServer":false}}}""");
-                return true;
-            },
-            _ => StatisticsExternalWrite.Files(LegacyDataCatalog.YouTubeQuotaFileName));
-
-        Assert.That(gov.TryReserve(PlatformAuthRole.Bot, YouTubeQuotaPriority.CriticalReadAndMonitor, 5, out var afterImport), Is.True);
-        afterImport.Commit();
-
-        Assert.Multiple(() =>
-        {
-            Assert.That(store.CanWriteFile, Is.False);
-            Assert.That(File.ReadAllText(_quotaPath), Does.Contain("\"committedUnits\":900"));
-        });
-    }
-
-    [Test]
-    public async Task External_Write_For_Other_Files_Restores_QuotaStore_Writability()
-    {
-        var settingsStore = CreateSettingsStore();
-        using var store = new YouTubeQuotaStore(NullLogger<YouTubeQuotaStore>.Instance, _quotaPath);
-        var gov = new YouTubeQuotaGovernor(store, settingsStore, _clock, NullLogger<YouTubeQuotaGovernor>.Instance);
-        var graph = new StatisticsTestGraph(_directory, extraParticipants: store);
-
-        await graph.AutoSaver.RunExternalWriteAsync(
-            () => true,
-            _ => StatisticsExternalWrite.Files(LegacyDataCatalog.UserStatisticsFileName));
-
-        Assert.That(gov.TryReserve(PlatformAuthRole.Bot, YouTubeQuotaPriority.CriticalReadAndMonitor, 7, out var lease), Is.True);
-        lease.Commit();
-
-        Assert.Multiple(() =>
-        {
-            Assert.That(store.CanWriteFile, Is.True);
-            Assert.That(File.ReadAllText(_quotaPath), Does.Contain("\"committedUnits\": 7"));
-        });
-    }
-
-    [Test]
-    public async Task InvalidateAsync_Before_First_Read_And_Stale_SaveSnapshot_Sequence_Work_Safely()
+    public async Task Stale_SaveSnapshot_Sequence_Is_Ignored_After_Load()
     {
         await File.WriteAllTextAsync(_quotaPath, """{"schemaVersion":1,"projects":{"proj":{"pacificDate":"2026-11-15","dailyBudget":10000,"committedUnits":80,"botCommittedUnits":80,"broadcasterCommittedUnits":0,"exhaustedByServer":false}}}""");
 
         using var store = new YouTubeQuotaStore(NullLogger<YouTubeQuotaStore>.Instance, _quotaPath);
-        await ((IExternalWriteParticipant)store).InvalidateAsync(CancellationToken.None);
 
         Assert.That(store.EnsureLoaded().Projects["proj"].CommittedUnits, Is.EqualTo(80));
 

@@ -163,7 +163,7 @@ internal sealed record BotMessageRule(
             string? defaultForBlank = null, string? intervalLabel = null, Func<T, int>? getInterval = null,
             Action<T, int>? setInterval = null, int maximumInterval = int.MaxValue)
             => Build(key, group, title, trigger, targets, toggle, examples, () => select(settings.Current),
-                change => settings.MutateIfWritable(s => change(select(s))), enabled, setEnabled, text, setText,
+                change => settings.Mutate(s => change(select(s))), enabled, setEnabled, text, setText,
                 value => string.IsNullOrWhiteSpace(value) && defaultForBlank is not null ? defaultForBlank : value.Trim(),
                 defaultForBlank, intervalLabel, getInterval, setInterval, maximum: maximumInterval);
 
@@ -174,7 +174,7 @@ internal sealed record BotMessageRule(
             string? intervalLabel = null, Func<PollChatTemplatesSettings, int>? getInterval = null,
             Action<PollChatTemplatesSettings, int>? setInterval = null)
             => Build(key, poll, title, trigger, BotMessageAudience.Twitch, "Публиковать в чат", examples,
-                () => polls.Load().ChatTemplates, change => polls.MutatePersisted(s => change(s.ChatTemplates)),
+                () => polls.Load().ChatTemplates, change => polls.Mutate(s => change(s.ChatTemplates)),
                 enabled, setEnabled, text, setText, value => value, null, intervalLabel, getInterval, setInterval, 15, 3600);
     }
 

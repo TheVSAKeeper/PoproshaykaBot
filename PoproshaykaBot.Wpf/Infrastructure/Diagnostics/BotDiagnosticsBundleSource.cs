@@ -26,15 +26,13 @@ public sealed class BotDiagnosticsBundleSource(
     UnobservedTaskExceptionTracker? unobservedExceptions = null,
     BindingErrorSink? bindingErrors = null,
     IUpdateEnvironment? updateEnvironment = null,
-    SettingsWriteGate? settingsWriteGate = null,
     UserStatisticsLoader? userStatisticsLoader = null,
     UserStatisticsRepository? userStatisticsRepository = null,
     BroadcastHistoryStore? broadcastHistoryStore = null,
     ActiveBroadcastStore? activeBroadcastStore = null,
     PollHistoryStore? pollHistoryStore = null,
     Func<string?>? webView2VersionProvider = null,
-    Func<IReadOnlyList<DisplayMonitorInfo>>? displayMonitorProvider = null,
-    UiSettingsWriteGuard? uiSettingsWriteGuard = null) : IDiagnosticsBundleSource
+    Func<IReadOnlyList<DisplayMonitorInfo>>? displayMonitorProvider = null) : IDiagnosticsBundleSource
 {
     private const int MaxBindingErrorLines = 30;
     private const int MaxBindingMessageLength = 240;
@@ -198,20 +196,6 @@ public sealed class BotDiagnosticsBundleSource(
 
     private void AppendStorageHealth(StringBuilder builder)
     {
-        if (settingsWriteGate is not null)
-        {
-            builder.AppendLine($"Гейт записи настроек: {(settingsWriteGate.HasRevoked ? "есть заблокированные файлы" : "свободен")}");
-        }
-
-        if (uiSettingsWriteGuard is not null)
-        {
-            var uiGuard = uiSettingsWriteGuard.CaptureStatus();
-            var state = uiGuard.IsRevoked
-                ? "заблокирован до перезапуска"
-                : uiGuard.IsSuspended ? "приостановлен" : "свободен";
-            builder.AppendLine($"Гейт записи настроек UI: {state}, удержано ключей {uiGuard.HeldKeyCount}");
-        }
-
         if (userStatisticsLoader is not null)
         {
             var state = userStatisticsLoader.LoadState;
@@ -281,7 +265,7 @@ public sealed class BotDiagnosticsBundleSource(
             var polls = pollHistoryStore.CaptureDiagnosticsSummary();
             builder.AppendLine(
                 $"История голосований: чтение {polls.ReadState}, запись {YesNo(polls.CanPersist)}, "
-                + $"переписана снаружи {YesNo(polls.RewrittenExternally)}, несохранённых {YesNo(polls.HasUnsavedChanges)}, "
+                + $"несохранённых {YesNo(polls.HasUnsavedChanges)}, "
                 + $"записей {polls.EntryCount}");
         }
     }

@@ -88,27 +88,6 @@ public sealed class BotMessageRuleTests
         });
     }
 
-    [TestCase("settings.json", "reward")]
-    [TestCase("polls.json", "poll-start")]
-    public async Task RefusedWriteKeepsLastPersistedRuntimeValue(string fileName, string key)
-    {
-        var gate = new SettingsWriteGate();
-        var rule = CreateRules(gate).Single(item => item.Key == key);
-        var initial = rule.Read();
-        var saved = initial with { Text = "Записанный текст" };
-        Assert.That(rule.Save(initial, saved), Is.True);
-
-        await gate.RunExternalWriteAsync(() => Task.FromResult(true), _ => new[] { fileName });
-        var written = rule.Save(saved, saved with { Enabled = !saved.Enabled, Text = "Правка с отказом" });
-
-        Assert.Multiple(() =>
-        {
-            Assert.That(written, Is.False);
-            Assert.That(rule.Read(), Is.EqualTo(saved));
-            Assert.That(CreateRules().Single(item => item.Key == key).Read(), Is.EqualTo(saved));
-        });
-    }
-
     [TestCase("settings.json", "welcome")]
     [TestCase("polls.json", "poll-end")]
     public void FailedDiskWriteLeavesTheStoreAtTheLastSavedValue(string fileName, string key)
@@ -132,8 +111,8 @@ public sealed class BotMessageRuleTests
         Assert.That(CreateRules().Single(item => item.Key == key).Read().Text, Is.EqualTo(saved.Text));
     }
 
-    private IReadOnlyList<BotMessageRule> CreateRules(SettingsWriteGate? gate = null)
-        => BotMessageRule.Create(CreateSettings(gate), CreatePolls(gate));
+    private IReadOnlyList<BotMessageRule> CreateRules()
+        => BotMessageRule.Create(CreateSettings(), CreatePolls());
 
     [TestCase("punishment")]
     [TestCase("reward")]
@@ -173,9 +152,9 @@ public sealed class BotMessageRuleTests
         Assert.That(label!.StartsWith("Частичный результат", StringComparison.Ordinal), Is.EqualTo(partial));
     }
 
-    private SettingsManager CreateSettings(SettingsWriteGate? gate = null)
-        => new(NullLogger<SettingsManager>.Instance, Path.Combine(_directory.FullName, "settings.json"), gate);
+    private SettingsManager CreateSettings()
+        => new(NullLogger<SettingsManager>.Instance, Path.Combine(_directory.FullName, "settings.json"));
 
-    private PollsStore CreatePolls(SettingsWriteGate? gate = null)
-        => new(filePath: Path.Combine(_directory.FullName, "polls.json"), gate: gate);
+    private PollsStore CreatePolls()
+        => new(filePath: Path.Combine(_directory.FullName, "polls.json"));
 }

@@ -9,14 +9,8 @@ internal sealed class UserStatisticsCatalogPersistenceUnit(
     LegacyUserStatisticsMigrator migrator,
     ILogger<UserStatisticsCatalogPersistenceUnit> logger)
     : SingleFileStatisticsUnit<UserStatisticsCatalogDocument>(
-        LegacyDataCatalog.UserStatisticsCatalogFileName,
         "каталог статистики пользователей",
-        logger,
-        [
-            LegacyDataCatalog.UserStatisticsCatalogFileName,
-            LegacyDataCatalog.UserStatisticsFileName,
-            $"{LegacyDataCatalog.YouTubeFolderName}/{LegacyDataCatalog.UserStatisticsFileName}",
-        ])
+        logger)
 {
     protected override bool HasChanges => repository.HasChanges;
 

@@ -21,8 +21,6 @@ public static class StatisticsServiceCollectionExtensions
         services.AddSingleton<StatisticsFileStore>();
         services.AddSingleton<BroadcastHistoryStore>();
         services.AddSingleton<ActiveBroadcastStore>();
-        services.AddSingleton<IExternalWriteParticipant>(sp => sp.GetRequiredService<BroadcastHistoryStore>());
-        services.AddSingleton<IExternalWriteParticipant>(sp => sp.GetRequiredService<ActiveBroadcastStore>());
         services.AddSingleton<IFlushableHistoryStore>(sp => sp.GetRequiredService<BroadcastHistoryStore>());
         services.TryAddEnumerable(ServiceDescriptor.Singleton<IAppLifetimeComponent, BroadcastHistoryLifetimeComponent>());
 
@@ -40,15 +38,12 @@ public static class StatisticsServiceCollectionExtensions
 
         services.AddSingleton<UserStatisticsCatalogPersistenceUnit>();
         services.AddSingleton<IPeriodicStatisticsUnit>(sp => sp.GetRequiredService<UserStatisticsCatalogPersistenceUnit>());
-        services.AddSingleton<IExternalWriteParticipant>(sp => sp.GetRequiredService<UserStatisticsCatalogPersistenceUnit>());
 
         services.AddSingleton<BotStatisticsPersistenceUnit>();
         services.AddSingleton<IPeriodicStatisticsUnit>(sp => sp.GetRequiredService<BotStatisticsPersistenceUnit>());
-        services.AddSingleton<IExternalWriteParticipant>(sp => sp.GetRequiredService<BotStatisticsPersistenceUnit>());
 
         services.AddSingleton<CommandUsagePersistenceUnit>();
         services.AddSingleton<IPeriodicStatisticsUnit>(sp => sp.GetRequiredService<CommandUsagePersistenceUnit>());
-        services.AddSingleton<IExternalWriteParticipant>(sp => sp.GetRequiredService<CommandUsagePersistenceUnit>());
 
         services.AddSingleton(sp => new UserStatisticsLoader(sp.GetRequiredService<UserStatisticsCatalogPersistenceUnit>()));
         services.AddSingleton<IAccountLinkingService>(sp => new AccountLinkingService(

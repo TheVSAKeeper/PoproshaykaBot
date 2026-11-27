@@ -321,7 +321,7 @@ public sealed class PlatformCleanupThirdPlatformTests
     public void DiagnosticsSnapshotSource_captures_third_platform_chat_status_from_registry()
     {
         var bus = new InMemoryEventBus(NullLogger<InMemoryEventBus>.Instance);
-        var settingsManager = Substitute.For<SettingsManager>(NullLogger<SettingsManager>.Instance, null, null);
+        var settingsManager = Substitute.For<SettingsManager>(NullLogger<SettingsManager>.Instance, null);
         settingsManager.Current.Returns(new AppSettings());
 
         var eventSubClient = Substitute.For<ITwitchEventSubClient>();
@@ -347,7 +347,7 @@ public sealed class PlatformCleanupThirdPlatformTests
             fileStore,
             new LegacyUserStatisticsMigrator(fileStore, new KnownChannelIdentityResolver(), NullLogger<LegacyUserStatisticsMigrator>.Instance),
             NullLogger<UserStatisticsCatalogPersistenceUnit>.Instance);
-        var autoSaver = new StatisticsAutoSaver([userUnit], [userUnit], [], NullLogger<StatisticsAutoSaver>.Instance);
+        var autoSaver = new StatisticsAutoSaver([userUnit], [], NullLogger<StatisticsAutoSaver>.Instance);
         var obsClient = Substitute.For<IObsWebSocketClient>();
 
         var source = new DiagnosticsSnapshotSource(

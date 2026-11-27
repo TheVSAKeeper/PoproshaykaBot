@@ -44,15 +44,14 @@ public sealed class BotLifecycleAutomationSectionTests
         var lifecyclePath = Path.Combine(_directory.FullName, "platform-lifecycle.json");
         var pollsPath = Path.Combine(_directory.FullName, "polls.json");
 
-        var gate = new SettingsWriteGate();
-        var settingsManager = new SettingsManager(NullLogger<SettingsManager>.Instance, settingsPath, gate);
+        var settingsManager = new SettingsManager(NullLogger<SettingsManager>.Instance, settingsPath);
         settingsManager.Mutate(s =>
         {
             s.Twitch.BotLifecycleAutomation.AutoConnectOnStreamOnline = true;
             s.Twitch.BotLifecycleAutomation.AutoDisconnectOnStreamOffline = false;
         });
 
-        var lifecycleStore = new PlatformLifecycleSettingsStore(settingsManager, null, lifecyclePath, gate);
+        var lifecycleStore = new PlatformLifecycleSettingsStore(settingsManager, null, lifecyclePath);
         var registry = new ChatPlatformRegistry(
         [
             new StubPlatform(StreamingPlatform.Twitch, "Twitch"),
@@ -68,7 +67,7 @@ public sealed class BotLifecycleAutomationSectionTests
             lifecycleStore,
             settingsManager);
 
-        var catalogStore = new ChannelCatalogStore(filePath: Path.Combine(_directory.FullName, "channels.json"), gate: gate);
+        var catalogStore = new ChannelCatalogStore(filePath: Path.Combine(_directory.FullName, "channels.json"));
         var bus = new InMemoryEventBus(NullLogger<InMemoryEventBus>.Instance);
         var server = new KestrelHttpServer(null!, settingsManager, [], NullLogger<KestrelHttpServer>.Instance, NullLoggerFactory.Instance);
         var dialogs = DispatchProxy.Create<IDialogService, InertProxy>();
@@ -81,7 +80,6 @@ public sealed class BotLifecycleAutomationSectionTests
                     catalogStore),
             ],
             settingsManager,
-            gate,
             server,
             bus,
             NullLogger<SettingsPageViewModel>.Instance,
@@ -103,7 +101,7 @@ public sealed class BotLifecycleAutomationSectionTests
             [],
             bus,
             new ManualUiDispatcher(),
-            new YouTubeSettingsStore(filePath: Path.Combine(_directory.FullName, "youtube.json"), gate: gate));
+            new YouTubeSettingsStore(filePath: Path.Combine(_directory.FullName, "youtube.json")));
         var multistream = new MultistreamPageViewModel(settingsPage, multistreamStatus, []);
 
         var summaryBlock = multistream.LifecycleAndBroadcastBlocks.Single(b => b.Key == "stream/lifecycle");

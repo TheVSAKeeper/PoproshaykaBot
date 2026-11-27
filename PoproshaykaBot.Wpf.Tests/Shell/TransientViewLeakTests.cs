@@ -298,8 +298,7 @@ public class TransientViewLeakTests
 
     private SettingsPageViewModel CreateSettingsViewModel()
     {
-        var gate = new SettingsWriteGate();
-        var settingsManager = new SettingsManager(NullLogger<SettingsManager>.Instance, Path.Combine(_directory, "settings-page.json"), gate);
+        var settingsManager = new SettingsManager(NullLogger<SettingsManager>.Instance, Path.Combine(_directory, "settings-page.json"));
         var bus = new InMemoryEventBus(NullLogger<InMemoryEventBus>.Instance);
         var kestrel = new KestrelHttpServer(null!, settingsManager, [], NullLogger<KestrelHttpServer>.Instance, NullLoggerFactory.Instance);
         var uiSettings = new MemorySettings();
@@ -313,7 +312,6 @@ public class TransientViewLeakTests
         return new(
             contributors,
             settingsManager,
-            gate,
             kestrel,
             bus,
             NullLogger<SettingsPageViewModel>.Instance,

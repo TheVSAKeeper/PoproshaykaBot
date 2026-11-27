@@ -7,7 +7,6 @@ internal sealed class CommandUsagePersistenceUnit(
     StatisticsFileStore fileStore,
     ILogger<CommandUsagePersistenceUnit> logger)
     : SingleFileStatisticsUnit<CommandUsageData>(
-        StatisticsFileStore.CommandUsageFileName,
         "команд",
         logger)
 {

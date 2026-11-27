@@ -181,4 +181,18 @@ public sealed class LegacyDataScannerTests
             LegacyDataFixture.Delete(source);
         }
     }
+
+    [Test]
+    public void Catalog_AllowsFlatFallbackForAllSettingsFiles()
+    {
+        var flatAllowList = LegacyDataCatalog.AllEntries
+            .Where(static entry => entry.AllowFlatFallback)
+            .Select(static entry => entry.FileName)
+            .ToArray();
+
+        Assert.That(flatAllowList, Is.EquivalentTo(LegacyDataCatalog.SettingsFiles));
+
+        LegacyDataFixture.Write(_source, "quota.json", """{"used":10}""");
+        Assert.That(Inspect(_source), Is.Null);
+    }
 }

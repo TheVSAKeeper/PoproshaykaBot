@@ -11,14 +11,14 @@ public sealed class ObsIntegrationStore
     private readonly IEventBus _eventBus;
     private readonly JsonStore<ObsIntegrationSettings> _store;
 
-    public ObsIntegrationStore(IEventBus eventBus, ILogger<ObsIntegrationStore>? logger = null, string? filePath = null, SettingsWriteGate? gate = null)
+    public ObsIntegrationStore(IEventBus eventBus, ILogger<ObsIntegrationStore>? logger = null, string? filePath = null)
     {
         ArgumentNullException.ThrowIfNull(eventBus);
 
-        var path = filePath ?? AppPaths.SettingsFile("obs-integration.json");
+        var path = filePath ?? AppPaths.SettingsFile(SettingsFileNames.ObsIntegrationFileName);
 
         _eventBus = eventBus;
-        _store = new(path, logger, describe: Describe, gate: gate);
+        _store = new(path, logger, describe: Describe);
 
         logger?.LogDebug("ObsIntegrationStore инициализирован из {FilePath}", path);
     }

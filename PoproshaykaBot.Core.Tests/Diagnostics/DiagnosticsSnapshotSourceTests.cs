@@ -36,7 +36,7 @@ public sealed class DiagnosticsSnapshotSourceTests
         _memoryUsageSink = new();
 
         var bus = new InMemoryEventBus(NullLogger<InMemoryEventBus>.Instance, _metrics);
-        var settingsManager = Substitute.For<SettingsManager>(NullLogger<SettingsManager>.Instance, null, null);
+        var settingsManager = Substitute.For<SettingsManager>(NullLogger<SettingsManager>.Instance, null);
         settingsManager.Current.Returns(new AppSettings());
 
         var eventSubClient = Substitute.For<ITwitchEventSubClient>();
@@ -109,7 +109,6 @@ public sealed class DiagnosticsSnapshotSourceTests
         var commandUnit = new CommandUsagePersistenceUnit(new(TimeProvider.System), fileStore, NullLogger<CommandUsagePersistenceUnit>.Instance);
 
         _statisticsAutoSaver = new(
-            [userUnit, botUnit, commandUnit],
             [userUnit, botUnit, commandUnit],
             [],
             NullLogger<StatisticsAutoSaver>.Instance);
@@ -227,7 +226,6 @@ public sealed class DiagnosticsSnapshotSourceTests
 
         await using var failingAutoSaver = new StatisticsAutoSaver(
             [failingUnit],
-            [],
             [],
             NullLogger<StatisticsAutoSaver>.Instance);
 

@@ -15,14 +15,13 @@ public sealed class ChatSettingsStore : IChatHistorySettingsProvider
     public ChatSettingsStore(
         SettingsManager? settingsManager = null,
         ILogger<ChatSettingsStore>? logger = null,
-        string? filePath = null,
-        SettingsWriteGate? gate = null)
+        string? filePath = null)
     {
-        var path = filePath ?? AppPaths.SettingsFile("chat.json");
+        var path = filePath ?? AppPaths.SettingsFile(SettingsFileNames.ChatSettingsFileName);
 
         _settingsManager = settingsManager;
         _hasExplicitValue = File.Exists(path);
-        _store = new(path, logger, describe: Describe, gate: gate);
+        _store = new(path, logger, describe: Describe);
 
         logger?.LogDebug("ChatSettingsStore инициализирован из {FilePath}", path);
     }

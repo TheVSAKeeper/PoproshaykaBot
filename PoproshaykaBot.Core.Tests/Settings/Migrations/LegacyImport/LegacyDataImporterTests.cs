@@ -316,6 +316,94 @@ public sealed class LegacyDataImporterTests
             Assert.That(result.RewrittenSettingsFiles.Contains("accounts.json", StringComparer.OrdinalIgnoreCase), Is.EqualTo(overwrite),
                 "Возвращённый в прежний вид файл совпадает с тем, что стор держит в памяти: отнимать у него запись не за что, "
                 + "а переписанный разбором обязан остаться в списке");
+
+            var preMigrationBackups = Directory.GetFiles(Path.Combine(_target, "settings"), "accounts.pre-migration-*.json");
+            Assert.That(preMigrationBackups, overwrite ? Has.Length.EqualTo(1) : Is.Empty,
+                "При выключенной перезаписи ложные бэкапы отменённого сплита не создаются");
+        }
+    }
+
+    [Test]
+    public void BackupAndClearAppData_MovesExistingDataToBackupWithCollisionSuffix_AndLeavesTargetEmpty()
+    {
+        var sandbox = LegacyDataFixture.CreateDirectory("poproshayka-appdata-backup");
+        try
+        {
+            var fixedTime = new DateTime(2026, 11, 27, 17, 0, 0);
+            var appDataDir = Path.Combine(sandbox, "PoproshaykaBot");
+            Assert.That(LegacyDataImporter.BackupAndClearAppData(appDataDir, null, () => fixedTime), Is.Null);
+            Assert.That(Directory.Exists(appDataDir), Is.True);
+            Assert.That(LegacyDataImporter.BackupAndClearAppData(appDataDir, null, () => fixedTime), Is.Null);
+
+            LegacyDataFixture.Write(appDataDir, "settings/settings.json", """{"twitch":{"channel":"first"}}""");
+            var firstBackup = LegacyDataImporter.BackupAndClearAppData(appDataDir, null, () => fixedTime);
+
+            Assert.That(firstBackup, Is.EqualTo(Path.Combine(sandbox, "PoproshaykaBot.backup-20261127-170000")));
+            Assert.That(Directory.EnumerateFileSystemEntries(appDataDir), Is.Empty);
+            Assert.That(File.ReadAllText(Path.Combine(firstBackup!, "settings", "settings.json")), Does.Contain("first"));
+
+            LegacyDataFixture.Write(appDataDir, "settings/settings.json", """{"twitch":{"channel":"second"}}""");
+            var secondBackup = LegacyDataImporter.BackupAndClearAppData(appDataDir, null, () => fixedTime);
+
+            Assert.That(secondBackup, Is.EqualTo(Path.Combine(sandbox, "PoproshaykaBot.backup-20261127-170000-2")));
+            Assert.That(Directory.EnumerateFileSystemEntries(appDataDir), Is.Empty);
+            Assert.That(File.ReadAllText(Path.Combine(firstBackup!, "settings", "settings.json")), Does.Contain("first"));
+            Assert.That(File.ReadAllText(Path.Combine(secondBackup!, "settings", "settings.json")), Does.Contain("second"));
+        }
+        finally
+        {
+            LegacyDataFixture.Delete(sandbox);
+        }
+    }
+
+    [Test]
+    public void Import_FlatLayoutSource_CopiesSettingsAndCommandsIntoSettingsDirectory()
+    {
+        const string CommandsJson = """{"commands":{"!hi":{"enabled":true}}}""";
+        LegacyDataFixture.Write(_source, "settings.json", LegacyDataFixture.Settings);
+        LegacyDataFixture.Write(_source, "commands.json", CommandsJson);
+
+        var result = LegacyDataImporter.Import(_source, _target, overwrite: false, null);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.Failures, Is.Empty);
+            Assert.That(result.CopiedFiles, Is.EquivalentTo(new[]
+            {
+                Path.Combine("settings", "settings.json"),
+                Path.Combine("settings", "commands.json"),
+            }));
+            Assert.That(File.ReadAllText(TargetSettings("settings.json")), Is.EqualTo(LegacyDataFixture.Settings));
+            Assert.That(File.ReadAllText(TargetSettings("commands.json")), Is.EqualTo(CommandsJson));
+        }
+    }
+
+    [Test]
+    public void Import_MonolithAndAccountsIntoEmptyTarget_WhenOverwriteIsOff_SplitsMonolithOverCopiedAccounts()
+    {
+        LegacyDataFixture.Write(_source, Path.Combine("settings", "settings.json"), LegacyDataFixture.SettingsWithTokens);
+        LegacyDataFixture.Write(_source, Path.Combine("settings", "accounts.json"), LegacyDataFixture.LocalAccounts);
+
+        var result = LegacyDataImporter.Import(_source, _target, overwrite: false, null);
+        var accounts = File.ReadAllText(TargetSettings("accounts.json"));
+        var settings = File.ReadAllText(TargetSettings("settings.json"));
+        var preMigrationBackups = Directory.GetFiles(Path.Combine(_target, "settings"), "accounts.pre-migration-*.json");
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.Failures, Is.Empty);
+            Assert.That(result.SkippedFiles, Is.Empty);
+            Assert.That(result.CopiedFiles, Is.EquivalentTo(new[]
+            {
+                Path.Combine("settings", "settings.json"),
+                Path.Combine("settings", "accounts.json"),
+            }));
+            Assert.That(result.RewrittenSettingsFiles, Is.EquivalentTo(new[] { "settings.json", "accounts.json" }));
+            Assert.That(accounts, Does.Contain("thebot"));
+            Assert.That(accounts, Does.Not.Contain("local-access"));
+            Assert.That(settings, Does.Not.Contain("botAccount"));
+            Assert.That(preMigrationBackups, Has.Length.EqualTo(1));
+            Assert.That(File.ReadAllText(preMigrationBackups[0]), Does.Not.Contain("local-access"));
         }
     }
 
@@ -522,7 +610,7 @@ public sealed class LegacyDataImporterTests
         {
             Assert.That(result.Failures, Is.Empty);
             Assert.That(result.CopiedStatistics, Is.True);
-            Assert.That(result.ExternalWrite.Touches("youtube/users_statistics.json"), Is.True);
+            Assert.That(result.CopiedYouTubeUserStatistics, Is.True);
             Assert.That(File.ReadAllText(Path.Combine(_target, relative)), Is.EqualTo(YouTubeUsers));
         }
     }
@@ -546,8 +634,7 @@ public sealed class LegacyDataImporterTests
         {
             Assert.That(result.Failures, Is.Empty);
             Assert.That(result.RequiresReauthorization, Is.False);
-            Assert.That(result.ExternalWrite.Touches("settings/youtube.json"), Is.True);
-            Assert.That(result.ExternalWrite.Touches("settings/youtube-accounts.json"), Is.True);
+            Assert.That(result.CopiedSettingsFiles, Does.Contain("youtube.json").And.Contain("youtube-accounts.json"));
             Assert.That(File.ReadAllText(Path.Combine(_target, "settings", "youtube.json")), Is.EqualTo(YouTubeSettingsJson));
             Assert.That(File.ReadAllText(Path.Combine(_target, "settings", "youtube-accounts.json")), Is.EqualTo(ImportedYouTubeAccountsJson));
             Assert.That(File.Exists(Path.Combine(_target, "settings", "youtube-accounts.json.bak")), Is.False);
@@ -599,8 +686,7 @@ public sealed class LegacyDataImporterTests
         {
             Assert.That(result.Failures, Is.Empty);
             Assert.That(result.CopiedStatistics, Is.True);
-            Assert.That(result.ExternalWrite.Touches("users_statistics.json"), Is.True);
-            Assert.That(result.ExternalWrite.Touches("user_statistics_catalog.json"), Is.True);
+            Assert.That(result.CopiedTwitchUserStatistics, Is.True);
             Assert.That(File.Exists(Path.Combine(_target, "user_statistics_catalog.json")), Is.False);
             Assert.That(File.ReadAllText(Path.Combine(_target, "users_statistics.json")), Is.EqualTo(LegacyV1Users));
             Assert.That(catalogBackups, Has.Length.EqualTo(1));

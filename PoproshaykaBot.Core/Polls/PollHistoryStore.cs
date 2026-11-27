@@ -4,7 +4,8 @@ using PoproshaykaBot.Core.Debugging;
 using PoproshaykaBot.Core.Infrastructure;
 using PoproshaykaBot.Core.Infrastructure.Hosting;
 using PoproshaykaBot.Core.Infrastructure.Persistence;
-using PoproshaykaBot.Core.Settings.Migrations.LegacyImport;
+using PoproshaykaBot.Core.Polls;
+using PoproshaykaBot.Core.Settings;
 using PoproshaykaBot.Core.Settings.Stores;
 using PoproshaykaBot.Core.Statistics;
 using PoproshaykaBot.Core.Twitch;
@@ -23,7 +24,7 @@ public sealed class PollHistoryStore(
     ITargetChannelProvider targetChannelProvider,
     ILogger<PollHistoryStore> logger,
     string? filePath = null)
-    : IHostedComponent, IExternalWriteParticipant, IFlushableHistoryStore
+    : IHostedComponent, IFlushableHistoryStore
 {
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -36,7 +37,7 @@ public sealed class PollHistoryStore(
         },
     };
 
-    private readonly string _filePath = filePath ?? AppPaths.Combine("polls-history.json");
+    private readonly string _filePath = filePath ?? AppPaths.Combine(SettingsFileNames.PollsHistoryFileName);
 
     private readonly List<PollHistoryEntry> _entries = [];
     private readonly Lock _sync = new();
@@ -44,7 +45,6 @@ public sealed class PollHistoryStore(
     private Task? _backgroundTask;
     private StatisticsLoadState _readState = StatisticsLoadState.NotRead;
     private bool _canPersist;
-    private bool _rewrittenExternally;
     private bool _hasUnsavedChanges;
 
     public string Name => "История голосований";
@@ -66,7 +66,7 @@ public sealed class PollHistoryStore(
     {
         lock (_sync)
         {
-            return new(_readState, _canPersist, _rewrittenExternally, _hasUnsavedChanges, _entries.Count);
+            return new(_readState, _canPersist, _hasUnsavedChanges, _entries.Count);
         }
     }
 
@@ -126,8 +126,7 @@ public sealed class PollHistoryStore(
             if (!_canPersist)
             {
                 logger.LogWarning(
-                    "PollHistoryStore: {Reason} ({FilePath}), файл не переписывается – запись опроса {PollId} остаётся в памяти и попадёт в файл, только если право записи вернётся до перезапуска",
-                    DescribeLostWriteRight(),
+                    "PollHistoryStore: чтение файла сорвалось ({FilePath}), файл не переписывается – запись опроса {PollId} остаётся в памяти и попадёт в файл, только если право записи вернётся до перезапуска",
                     _filePath,
                     entry.PollId);
 
@@ -136,69 +135,6 @@ public sealed class PollHistoryStore(
 
             PersistNoThrow();
             return true;
-        }
-    }
-
-    public bool Invalidate()
-    {
-        lock (_sync)
-        {
-            EnsureLoadedUnderLock();
-
-            if (!_canPersist)
-            {
-                return false;
-            }
-
-            _canPersist = false;
-            _rewrittenExternally = true;
-
-            logger.LogInformation(
-                "PollHistoryStore: файл {FilePath} меняют мимо приложения, история голосований этого сеанса до перезапуска не сохраняется",
-                _filePath);
-
-            return true;
-        }
-    }
-
-    public void Restore(bool wasLoaded)
-    {
-        if (!wasLoaded)
-        {
-            return;
-        }
-
-        lock (_sync)
-        {
-            _canPersist = true;
-            _rewrittenExternally = false;
-
-            logger.LogInformation("PollHistoryStore: файл {FilePath} никто не менял, история голосований снова сохраняется", _filePath);
-
-            FlushUnsavedChanges();
-        }
-    }
-
-    IReadOnlyCollection<string> IExternalWriteParticipant.OwnedRelativePaths { get; } = [LegacyDataCatalog.PollsHistoryFileName];
-
-    ValueTask<bool> IExternalWriteParticipant.InvalidateAsync(CancellationToken cancellationToken)
-    {
-        cancellationToken.ThrowIfCancellationRequested();
-        return ValueTask.FromResult(Invalidate());
-    }
-
-    ValueTask IExternalWriteParticipant.RestoreAsync(bool wasLoaded)
-    {
-        Restore(wasLoaded);
-        return ValueTask.CompletedTask;
-    }
-
-    void IExternalWriteParticipant.LatchExternalRewrite()
-    {
-        lock (_sync)
-        {
-            _canPersist = false;
-            _rewrittenExternally = true;
         }
     }
 
@@ -380,11 +316,6 @@ public sealed class PollHistoryStore(
         _entries.Clear();
 
         JsonStoreBackup.CreateBackup(_filePath, "invalid", logger);
-    }
-
-    private string DescribeLostWriteRight()
-    {
-        return _rewrittenExternally ? "файл переписан мимо приложения" : "чтение файла сорвалось";
     }
 
     private bool FlushUnsavedChanges()

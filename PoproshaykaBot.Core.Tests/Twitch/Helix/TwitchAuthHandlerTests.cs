@@ -27,7 +27,7 @@ public sealed class TwitchAuthHandlerTests
 
         _oauthService = Substitute.For<ITwitchOAuthService>();
 
-        _settingsManager = Substitute.For<SettingsManager>(NullLogger<SettingsManager>.Instance, null, null);
+        _settingsManager = Substitute.For<SettingsManager>(NullLogger<SettingsManager>.Instance, null);
         _settings = new()
         {
             Twitch =

@@ -98,16 +98,10 @@ public class SettingsPageRanksSaveTests
         });
     }
 
-    [TestCase(false)]
-    [TestCase(true)]
-    public async Task Правка_рангов_применяется_и_объявляется_а_на_диск_ложится_только_при_открытом_гейте(bool gateClosed)
+    [Test]
+    public async Task Правка_рангов_применяется_и_объявляется_и_сохраняется_на_диск()
     {
         using var harness = new Harness(_root);
-
-        if (gateClosed)
-        {
-            await harness.CloseSettingsGateAsync();
-        }
 
         harness.Ranks.Entries[0].Name = "ИМПЕРАТОР";
         await harness.Page.SaveCommand.ExecuteAsync(null);
@@ -121,24 +115,18 @@ public class SettingsPageRanksSaveTests
 
         Assert.Multiple(() =>
         {
-            Assert.That(harness.SettingsManager.Current.Ranks.Ranks, Is.EqualTo(edited), "Правка действует в памяти в обоих исходах");
-            Assert.That(harness.RanksChanged, Is.EqualTo(1), "Лестница пересобирается по тому, что действует");
-            Assert.That(harness.ReadRanksFromDisk(), Is.EqualTo(gateClosed ? Saved : edited));
+            Assert.That(harness.SettingsManager.Current.Ranks.Ranks, Is.EqualTo(edited));
+            Assert.That(harness.RanksChanged, Is.EqualTo(1));
+            Assert.That(harness.ReadRanksFromDisk(), Is.EqualTo(edited));
             Assert.That(harness.Dialogs.Infos, Has.Count.EqualTo(1));
-            Assert.That(harness.Dialogs.Infos[0], gateClosed ? Does.Contain("не записаны") : Does.Contain("успешно сохранены"));
+            Assert.That(harness.Dialogs.Infos[0], Does.Contain("успешно сохранены"));
         });
     }
 
-    [TestCase(false)]
-    [TestCase(true)]
-    public async Task YouTube_настройки_сохраняются_и_уважают_гейт_записи(bool gateClosed)
+    [Test]
+    public async Task YouTube_настройки_сохраняются_на_диск()
     {
         using var harness = new Harness(_root);
-
-        if (gateClosed)
-        {
-            await harness.CloseYouTubeGateAsync();
-        }
 
         harness.YouTube.Enabled = true;
         harness.YouTube.ProjectId = "yt-project-1";
@@ -155,9 +143,9 @@ public class SettingsPageRanksSaveTests
             Assert.That(harness.YouTubeSettingsStore.Load().Enabled, Is.True);
             Assert.That(harness.YouTubeSettingsStore.Load().ProjectId, Is.EqualTo("yt-project-1"));
             Assert.That(harness.YouTubeAccountsStore.LoadClientSecret(), Is.EqualTo("yt-secret-1"));
-            Assert.That(File.Exists(harness.YouTubeSettingsPath), Is.EqualTo(!gateClosed));
+            Assert.That(File.Exists(harness.YouTubeSettingsPath), Is.True);
             Assert.That(harness.Dialogs.Infos, Has.Count.EqualTo(1));
-            Assert.That(harness.Dialogs.Infos[0], gateClosed ? Does.Contain("не записаны") : Does.Contain("успешно сохранены"));
+            Assert.That(harness.Dialogs.Infos[0], Does.Contain("успешно сохранены"));
         });
     }
 
@@ -197,19 +185,6 @@ public class SettingsPageRanksSaveTests
     }
 
     [Test]
-    public async Task Закрытый_гейт_другой_секции_не_оставляет_ранги_несохранёнными()
-    {
-        using var harness = new Harness(_root);
-        await harness.CloseYouTubeGateAsync();
-
-        harness.Ranks.Entries[0].Name = "ИМПЕРАТОР";
-        await harness.Page.SaveCommand.ExecuteAsync(null);
-        await harness.Page.SaveCommand.ExecuteAsync(null);
-
-        Assert.That(harness.RanksChanged, Is.EqualTo(1));
-    }
-
-    [Test]
     public async Task Смена_отладочного_канала_публикует_ChatDisplaySettingsChanged_с_новым_каналом()
     {
         using var harness = new Harness(_root);
@@ -223,27 +198,26 @@ public class SettingsPageRanksSaveTests
 
     private sealed class Harness : IDisposable
     {
-        private readonly SettingsWriteGate _gate = new();
         private readonly IDisposable _subscription;
         private readonly IDisposable _chatDisplaySubscription;
 
         public Harness(string root)
         {
             SettingsPath = Path.Combine(root, "settings.json");
-            SettingsManager = new(NullLogger<SettingsManager>.Instance, SettingsPath, _gate);
+            SettingsManager = new(NullLogger<SettingsManager>.Instance, SettingsPath);
             SettingsManager.SaveSettings(new() { Ranks = new() { Ranks = [.. Saved] } });
 
             var bus = new InMemoryEventBus(NullLogger<InMemoryEventBus>.Instance);
             _subscription = bus.Subscribe<RanksSettingsChanged>(_ => RanksChanged++);
             _chatDisplaySubscription = bus.Subscribe<ChatDisplaySettingsChanged>(e => ChatDisplayChannels.Add(e.Channel));
 
-            var accountsStore = new AccountsStore(null, Path.Combine(root, "accounts.json"), _gate);
-            var obsChatStore = new ObsChatStore(bus, null, Path.Combine(root, "obs-chat.json"), _gate);
-            var obsIntegrationStore = new ObsIntegrationStore(bus, null, Path.Combine(root, "obs-integration.json"), _gate);
-            var updateStore = UpdateStore = new(null, Path.Combine(root, "update.json"), _gate);
+            var accountsStore = new AccountsStore(null, Path.Combine(root, "accounts.json"));
+            var obsChatStore = new ObsChatStore(bus, null, Path.Combine(root, "obs-chat.json"));
+            var obsIntegrationStore = new ObsIntegrationStore(bus, null, Path.Combine(root, "obs-integration.json"));
+            var updateStore = UpdateStore = new(null, Path.Combine(root, "update.json"));
             var debugChannelStore = new DebugChannelStore(null, Path.Combine(root, "debug-channel.json"));
-            var pollsStore = new PollsStore(null, Path.Combine(root, "polls.json"), _gate);
-            var layoutStore = new DashboardLayoutStore(null, Path.Combine(root, "dashboard-layout.json"), _gate);
+            var pollsStore = new PollsStore(null, Path.Combine(root, "polls.json"));
+            var layoutStore = new DashboardLayoutStore(null, Path.Combine(root, "dashboard-layout.json"));
             var uiSettings = new MemorySettings();
             var mcpOptions = new McpServerOptions
             {
@@ -256,8 +230,8 @@ public class SettingsPageRanksSaveTests
             var mcpPreferences = new McpPreferences(uiSettings, mcpOptions);
             var kestrel = new KestrelHttpServer(null!, SettingsManager, [], NullLogger<KestrelHttpServer>.Instance, NullLoggerFactory.Instance);
             YouTubeSettingsPath = Path.Combine(root, "youtube.json");
-            YouTubeSettingsStore = new YouTubeSettingsStore(null, YouTubeSettingsPath, _gate);
-            YouTubeAccountsStore = new YouTubeAccountsStore(null, Path.Combine(root, "youtube-accounts.json"), _gate);
+            YouTubeSettingsStore = new YouTubeSettingsStore(null, YouTubeSettingsPath);
+            YouTubeAccountsStore = new YouTubeAccountsStore(null, Path.Combine(root, "youtube-accounts.json"));
             var targetChannelProvider = new StoreTargetChannelProvider(debugChannelStore);
 
             var oauth = new OAuthSettingsViewModel(
@@ -309,13 +283,12 @@ public class SettingsPageRanksSaveTests
                 new DebugChannelSettingsSectionContributor(debugChannel, debugChannelStore),
                 new McpSettingsSectionContributor(mcp),
                 new AppearanceSettingsSectionContributor(new AppearanceSettingsSectionViewModel(new(uiSettings), new(uiSettings))),
-                new MiscSettingsSectionContributor(new(SettingsManager, null!, Dialogs, null!, null!, null!)),
+                new MiscSettingsSectionContributor(new(SettingsManager, null!, Dialogs, null!, null!)),
             ];
 
             Page = new(
                 contributors,
                 SettingsManager,
-                _gate,
                 kestrel,
                 bus,
                 NullLogger<SettingsPageViewModel>.Instance,
@@ -350,16 +323,6 @@ public class SettingsPageRanksSaveTests
         public int RanksChanged { get; private set; }
 
         public List<string> ChatDisplayChannels { get; } = [];
-
-        public Task CloseSettingsGateAsync()
-        {
-            return _gate.RunExternalWriteAsync(() => Task.FromResult(0), _ => new[] { "settings.json" });
-        }
-
-        public Task CloseYouTubeGateAsync()
-        {
-            return _gate.RunExternalWriteAsync(() => Task.FromResult(0), _ => new[] { "youtube.json", "youtube-accounts.json" });
-        }
 
         public IReadOnlyList<UserRank> ReadRanksFromDisk()
         {

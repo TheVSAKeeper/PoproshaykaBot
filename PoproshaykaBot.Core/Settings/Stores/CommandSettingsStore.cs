@@ -11,14 +11,12 @@ public sealed class CommandSettingsStore
 
     public CommandSettingsStore(
         ILogger<CommandSettingsStore>? logger = null,
-        string? filePath = null,
-        SettingsWriteGate? gate = null)
+        string? filePath = null)
     {
-        _store = new(filePath ?? AppPaths.SettingsFile("commands.json"),
+        _store = new(filePath ?? AppPaths.SettingsFile(SettingsFileNames.CommandSettingsFileName),
             logger,
             parser: json => Parse(json, logger),
-            describe: Describe,
-            gate: gate);
+            describe: Describe);
     }
 
     public static string Describe(CommandSettings settings)

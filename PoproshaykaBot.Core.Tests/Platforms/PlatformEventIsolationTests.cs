@@ -88,7 +88,7 @@ public sealed class PlatformEventIsolationTests
             targetChannel,
             bus);
 
-        var settingsManager = Substitute.For<SettingsManager>(NullLogger<SettingsManager>.Instance, null, null);
+        var settingsManager = Substitute.For<SettingsManager>(NullLogger<SettingsManager>.Instance, null);
         settingsManager.Current.Returns(new AppSettings());
         var obsChatStore = new ObsChatStore(bus, NullLogger<ObsChatStore>.Instance, Path.Combine(root, "obs-chat.json"));
         var sseLogger = new RecordingLogger<SseService>();

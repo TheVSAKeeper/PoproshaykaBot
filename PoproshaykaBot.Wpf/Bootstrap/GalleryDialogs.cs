@@ -120,19 +120,19 @@ public static class GalleryDialogs
             Files = [new("settings.json", @"C:\Users\Streamer\AppData\Roaming\PoproshaykaBot\settings.json", "settings/settings.json", 4096, new DateTime(2026, 11, 20, 18, 0, 0, DateTimeKind.Utc))],
         };
 
-        return new FirstRunStartViewModel([candidate], services.GetRequiredService<IFilePicker>(), NullLogger.Instance);
+        return FirstRunStartViewModel.CreatePreview([candidate], services.GetRequiredService<IFilePicker>(), NullLogger.Instance);
     }
 
     private static IDialogViewModel CreateFirstRunInvalid(IServiceProvider services)
     {
-        var vm = new FirstRunStartViewModel([], services.GetRequiredService<IFilePicker>(), NullLogger.Instance);
+        var vm = FirstRunStartViewModel.CreatePreview([], services.GetRequiredService<IFilePicker>(), NullLogger.Instance);
         vm.ShowGalleryInvalidFolder("В выбранной папке не найдены данные PoproshaykaBot: отсутствуют настройки (settings.json или папка settings) и файлы статистики (users_statistics.json, bot_statistics.json).");
         return vm;
     }
 
     private static IDialogViewModel CreateFirstRunSummary(IServiceProvider services)
     {
-        var vm = new FirstRunStartViewModel([], services.GetRequiredService<IFilePicker>(), NullLogger.Instance);
+        var vm = FirstRunStartViewModel.CreatePreview([], services.GetRequiredService<IFilePicker>(), NullLogger.Instance);
         vm.ShowGallerySummary(new FirstRunImportSummary(
             "Данные успешно перенесены",
             [
@@ -150,7 +150,7 @@ public static class GalleryDialogs
 
     private static IDialogViewModel CreateFirstRunPartial(IServiceProvider services)
     {
-        var vm = new FirstRunStartViewModel([], services.GetRequiredService<IFilePicker>(), NullLogger.Instance);
+        var vm = FirstRunStartViewModel.CreatePreview([], services.GetRequiredService<IFilePicker>(), NullLogger.Instance);
         vm.ShowGallerySummary(new FirstRunImportSummary(
             "Данные перенесены частично",
             [

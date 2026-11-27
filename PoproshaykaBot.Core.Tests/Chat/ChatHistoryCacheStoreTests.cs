@@ -233,6 +233,46 @@ public sealed class ChatHistoryCacheStoreTests
     }
 
     [Test]
+    public async Task UnsupportedSchemaVersion_MovesFileToInvalidBackup_AndBlocksOverwrite()
+    {
+        var clock = new MutableTimeProvider(new DateTimeOffset(2026, 11, 16, 12, 0, 0, TimeSpan.Zero));
+        var settingsPath = Path.Combine(_directory.FullName, "settings.json");
+        var chatPath = Path.Combine(_directory.FullName, "chat.json");
+
+        var futureScope = ChatHistoryScope.ForTwitch("999", "future");
+        var fileName = futureScope.ComputeCacheFileName();
+        Directory.CreateDirectory(_cacheDir);
+        var path = Path.Combine(_cacheDir, fileName);
+        const string futureJson = """{"schemaVersion":2,"platform":0,"channelId":"999","messages":[]}""";
+        await File.WriteAllTextAsync(path, futureJson);
+
+        using var store = new ChatHistoryCacheStore(NullLogger<ChatHistoryCacheStore>.Instance, _cacheDir, clock);
+        using var manager = CreateManager(settingsPath, chatPath, store, clock, out _);
+
+        await store.LoadAndRestoreAsync(manager, CancellationToken.None);
+
+        manager.AddMessage(new()
+        {
+            Platform = StreamingPlatform.Twitch,
+            Channel = "future",
+            ChannelId = "999",
+            MessageId = "f1",
+            Timestamp = clock.UtcNowValue.UtcDateTime,
+            UserId = "u",
+            DisplayName = "U",
+            Message = "should-not-overwrite",
+        });
+
+        await store.FlushDirtyAsync(manager, CancellationToken.None);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(await File.ReadAllTextAsync(path), Is.EqualTo(futureJson));
+            Assert.That(Directory.GetFiles(_cacheDir, $"{Path.GetFileNameWithoutExtension(fileName)}.invalid-*"), Has.Length.EqualTo(1));
+        }
+    }
+
+    [Test]
     public async Task SizeLimit32MiB_EvictsOldestMessagesAcrossWritableScopes()
     {
         var clock = new MutableTimeProvider(new DateTimeOffset(2026, 11, 16, 12, 0, 0, TimeSpan.Zero));
@@ -274,60 +314,6 @@ public sealed class ChatHistoryCacheStoreTests
             Assert.That(totalBytes, Is.LessThanOrEqualTo(ChatHistoryCacheStore.MaxTotalCacheBytes));
             Assert.That(remainingIds, Does.Not.Contain("m-0"));
             Assert.That(remainingIds, Does.Contain("m-719"));
-        }
-    }
-
-    [Test]
-    public async Task RunExternalWriteAsync_RevokesWritesOnImportOrFailure_AndDoesNotReenableOnEmptyImport()
-    {
-        var clock = new MutableTimeProvider(new DateTimeOffset(2026, 11, 16, 12, 0, 0, TimeSpan.Zero));
-        var settingsPath = Path.Combine(_directory.FullName, "settings.json");
-        var chatPath = Path.Combine(_directory.FullName, "chat.json");
-
-        using var store = new ChatHistoryCacheStore(NullLogger<ChatHistoryCacheStore>.Instance, _cacheDir, clock);
-        using var manager = CreateManager(settingsPath, chatPath, store, clock, out _);
-
-        manager.AddMessage(new()
-        {
-            Platform = StreamingPlatform.Twitch,
-            Channel = "ch",
-            ChannelId = "1",
-            MessageId = "m1",
-            Timestamp = clock.UtcNowValue.UtcDateTime,
-            UserId = "u",
-            DisplayName = "U",
-            Message = "first",
-        });
-
-        await store.RunExternalWriteAsync(() => Task.FromResult(false), static copied => copied);
-        await store.FlushDirtyAsync(manager, CancellationToken.None);
-        Assert.That(Directory.GetFiles(_cacheDir), Has.Length.EqualTo(1));
-
-        await store.RunExternalWriteAsync(() => Task.FromResult(true), static copied => copied);
-
-        manager.AddMessage(new()
-        {
-            Platform = StreamingPlatform.Twitch,
-            Channel = "ch",
-            ChannelId = "1",
-            MessageId = "m2",
-            Timestamp = clock.UtcNowValue.AddSeconds(5).UtcDateTime,
-            UserId = "u",
-            DisplayName = "U",
-            Message = "blocked-after-import",
-        });
-
-        await store.FlushDirtyAsync(manager, CancellationToken.None);
-        await store.RunExternalWriteAsync(() => Task.FromResult(false), static copied => copied);
-        await store.FlushDirtyAsync(manager, CancellationToken.None);
-
-        var fileContent = await File.ReadAllTextAsync(Directory.GetFiles(_cacheDir).Single());
-
-        using (Assert.EnterMultipleScope())
-        {
-            Assert.That(store.IsWriteRevoked, Is.True);
-            Assert.That(fileContent, Does.Not.Contain("blocked-after-import"));
-            Assert.That(manager.ClearHistory().IsComplete, Is.False);
         }
     }
 

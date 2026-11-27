@@ -25,124 +25,93 @@ public sealed class SettingsWriteFactTests
 
     public static IEnumerable<TestCaseData> Writers()
     {
-        yield return Case("accounts.json", "AccountsStore.SaveAll", (path, gate) =>
-            new AccountsStore(null, path, gate).SaveAll(new() { Login = "bot" }, new() { Login = "streamer" }));
+        yield return Case("accounts.json", "AccountsStore.SaveAll", path =>
+            new AccountsStore(null, path).SaveAll(new() { Login = "bot" }, new() { Login = "streamer" }));
 
-        yield return Case("chat.json", "ChatSettingsStore.Save", (path, gate) =>
-            new ChatSettingsStore(null, null, path, gate).Save(new() { ShowHistoryInApp = true }));
+        yield return Case("chat.json", "ChatSettingsStore.Save", path =>
+            new ChatSettingsStore(null, null, path).Save(new() { ShowHistoryInApp = true }));
 
-        yield return Case("chat.json", "ChatSettingsStore.Mutate", (path, gate) =>
-            new ChatSettingsStore(null, null, path, gate).Mutate(settings => settings.ShowHistoryInObs = true));
+        yield return Case("chat.json", "ChatSettingsStore.Mutate", path =>
+            new ChatSettingsStore(null, null, path).Mutate(settings => settings.ShowHistoryInObs = true));
 
-        yield return Case("youtube.json", "YouTubeSettingsStore.Save", (path, gate) =>
-            new YouTubeSettingsStore(null, path, gate).Save(new() { Enabled = true }));
+        yield return Case("youtube.json", "YouTubeSettingsStore.Save", path =>
+            new YouTubeSettingsStore(null, path).Save(new() { Enabled = true }));
 
-        yield return Case("youtube.json", "YouTubeSettingsStore.Mutate", (path, gate) =>
-            new YouTubeSettingsStore(null, path, gate).Mutate(settings => settings.Enabled = true));
+        yield return Case("youtube.json", "YouTubeSettingsStore.Mutate", path =>
+            new YouTubeSettingsStore(null, path).Mutate(settings => settings.Enabled = true));
 
-        yield return Case("youtube-accounts.json", "YouTubeAccountsStore.SaveAll", (path, gate) =>
-            new YouTubeAccountsStore(null, path, gate).SaveAll("sec", new() { ChannelId = "bot" }, new() { ChannelId = "caster" }));
+        yield return Case("youtube-accounts.json", "YouTubeAccountsStore.SaveAll", path =>
+            new YouTubeAccountsStore(null, path).SaveAll("sec", new() { ChannelId = "bot" }, new() { ChannelId = "caster" }));
 
-        yield return Case("youtube-accounts.json", "YouTubeAccountsStore.SaveClientSecret", (path, gate) =>
-            new YouTubeAccountsStore(null, path, gate).SaveClientSecret("sec"));
+        yield return Case("youtube-accounts.json", "YouTubeAccountsStore.SaveClientSecret", path =>
+            new YouTubeAccountsStore(null, path).SaveClientSecret("sec"));
 
-        yield return Case("broadcast-profiles.json", "BroadcastProfilesStore.Save", (path, gate) =>
-            new BroadcastProfilesStore(null, path, gate).Save(new()));
+        yield return Case("broadcast-profiles.json", "BroadcastProfilesStore.Save", path =>
+            new BroadcastProfilesStore(null, path).Save(new()));
 
-        yield return Case("broadcast-profiles.json", "BroadcastProfilesStore.Mutate", (path, gate) =>
-            new BroadcastProfilesStore(null, path, gate).Mutate(settings => settings.LastAppliedProfileId = Guid.NewGuid()));
+        yield return Case("broadcast-profiles.json", "BroadcastProfilesStore.Mutate", path =>
+            new BroadcastProfilesStore(null, path).Mutate(settings => settings.LastAppliedProfileId = Guid.NewGuid()));
 
-        yield return Case("broadcast-profiles.json", "BroadcastProfilesManager.Upsert", (path, gate) =>
-            CreateProfilesManager(path, gate).Upsert(new() { Name = "Стрим" }));
+        yield return Case("broadcast-profiles.json", "BroadcastProfilesManager.Upsert", path =>
+            CreateProfilesManager(path).Upsert(new() { Name = "Стрим" }));
 
-        yield return Case("broadcast-profiles.json", "BroadcastProfilesManager.Remove", (path, gate) =>
-            CreateProfilesManager(path, gate).Remove(Guid.NewGuid()));
+        yield return Case("broadcast-profiles.json", "BroadcastProfilesManager.Remove", path =>
+            CreateProfilesManager(path).Remove(Guid.NewGuid()));
 
-        yield return Case("polls.json", "PollsStore.Save", (path, gate) =>
-            new PollsStore(null, path, gate).Save(new()));
+        yield return Case("polls.json", "PollsStore.Save", path =>
+            new PollsStore(null, path).Save(new()));
 
-        yield return Case("polls.json", "PollsStore.Mutate", (path, gate) =>
-            new PollsStore(null, path, gate).Mutate(settings => settings.HistoryMaxItems = 42));
+        yield return Case("polls.json", "PollsStore.Mutate", path =>
+            new PollsStore(null, path).Mutate(settings => settings.HistoryMaxItems = 42));
 
-        yield return Case("polls.json", "PollProfilesManager.Upsert", (path, gate) =>
-            CreatePollsManager(path, gate).Upsert(CreatePoll()));
+        yield return Case("polls.json", "PollProfilesManager.Upsert", path =>
+            CreatePollsManager(path).Upsert(CreatePoll()));
 
-        yield return Case("polls.json", "PollProfilesManager.ReplaceAll", (path, gate) =>
-            CreatePollsManager(path, gate).ReplaceAll([CreatePoll()]));
+        yield return Case("polls.json", "PollProfilesManager.ReplaceAll", path =>
+            CreatePollsManager(path).ReplaceAll([CreatePoll()]));
 
-        yield return Case("polls.json", "PollProfilesManager.Remove", (path, gate) =>
-            CreatePollsManager(path, gate).Remove(Guid.NewGuid()));
+        yield return Case("polls.json", "PollProfilesManager.Remove", path =>
+            CreatePollsManager(path).Remove(Guid.NewGuid()));
 
-        yield return Case("channels.json", "ChannelCatalogStore.Save", (path, gate) =>
-            new ChannelCatalogStore(null, path, gate).Save(new()));
+        yield return Case("channels.json", "ChannelCatalogStore.Save", path =>
+            new ChannelCatalogStore(null, path).Save(new()));
 
-        yield return Case("channels.json", "ChannelCatalogStore.Mutate", (path, gate) =>
-            new ChannelCatalogStore(null, path, gate).Mutate(settings => settings.Groups.Add(new() { Name = "Основные" })));
+        yield return Case("channels.json", "ChannelCatalogStore.Mutate", path =>
+            new ChannelCatalogStore(null, path).Mutate(settings => settings.Groups.Add(new() { Name = "Основные" })));
     }
 
     [TestCaseSource(nameof(Writers))]
-    public async Task Обёртка_отдаёт_наружу_факт_записи(string fileName, Func<string, SettingsWriteGate, bool> write)
+    public void Обёртка_отдаёт_наружу_факт_записи(string fileName, Func<string, bool> write)
     {
         var openPath = Path.Combine(_directory.FullName, "open", fileName);
-        var closedPath = Path.Combine(_directory.FullName, "closed", fileName);
         Directory.CreateDirectory(Path.GetDirectoryName(openPath)!);
-        Directory.CreateDirectory(Path.GetDirectoryName(closedPath)!);
 
-        var closedGate = await CreateClosedGateAsync(fileName);
-
-        var writtenOpen = write(openPath, new());
-        var writtenClosed = write(closedPath, closedGate);
+        var written = write(openPath);
 
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(writtenOpen, Is.True, "Открытый гейт – файл записан, и вызывающий об этом знает");
+            Assert.That(written, Is.True);
             Assert.That(File.Exists(openPath), Is.True);
-            Assert.That(writtenClosed, Is.False, "Закрытый гейт – вызывающий должен узнать, что файл не переписан");
-            Assert.That(File.Exists(closedPath), Is.False, "Гейт не пустил запись на диск");
         }
     }
 
-    [Test]
-    public async Task Незаписанная_правка_профиля_действует_в_памяти()
-    {
-        var path = Path.Combine(_directory.FullName, "broadcast-profiles.json");
-        var manager = CreateProfilesManager(path, await CreateClosedGateAsync("broadcast-profiles.json"));
-
-        var written = manager.Upsert(new() { Name = "Стрим" });
-
-        using (Assert.EnterMultipleScope())
-        {
-            Assert.That(written, Is.False);
-            Assert.That(manager.GetAll().Select(profile => profile.Name), Is.EquivalentTo(new[] { "Стрим" }),
-                "Снятое право отнимает запись на диск, а не правку в памяти");
-        }
-    }
-
-    private static TestCaseData Case(string fileName, string name, Func<string, SettingsWriteGate, bool> write)
+    private static TestCaseData Case(string fileName, string name, Func<string, bool> write)
     {
         return new TestCaseData(fileName, write).SetArgDisplayNames(name);
     }
 
-    private static async Task<SettingsWriteGate> CreateClosedGateAsync(string fileName)
+    private static BroadcastProfilesManager CreateProfilesManager(string path)
     {
-        var gate = new SettingsWriteGate();
-        await gate.RunExternalWriteAsync(() => Task.FromResult(0), _ => new[] { fileName });
-
-        return gate;
-    }
-
-    private static BroadcastProfilesManager CreateProfilesManager(string path, SettingsWriteGate gate)
-    {
-        return new(new(null, path, gate),
+        return new(new(null, path),
             Substitute.For<IChannelInformationApplier>(),
             new InMemoryEventBus(NullLogger<InMemoryEventBus>.Instance),
             TimeProvider.System,
             NullLogger<BroadcastProfilesManager>.Instance);
     }
 
-    private static PollProfilesManager CreatePollsManager(string path, SettingsWriteGate gate)
+    private static PollProfilesManager CreatePollsManager(string path)
     {
-        return new(new(null, path, gate),
+        return new(new(null, path),
             new InMemoryEventBus(NullLogger<InMemoryEventBus>.Instance),
             NullLogger<PollProfilesManager>.Instance);
     }

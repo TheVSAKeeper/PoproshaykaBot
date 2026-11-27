@@ -108,7 +108,7 @@ public class YouTubeStage7PipelineIntegrationTests
                 },
             },
         };
-        _settingsManager = Substitute.For<SettingsManager>(NullLogger<SettingsManager>.Instance, null, null);
+        _settingsManager = Substitute.For<SettingsManager>(NullLogger<SettingsManager>.Instance, null);
         _settingsManager.Current.Returns(appSettings);
 
         _eventBus = new InMemoryEventBus(NullLogger<InMemoryEventBus>.Instance);

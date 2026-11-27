@@ -465,14 +465,13 @@ public class CompactLayoutTests
         try
         {
             var bus = new InMemoryEventBus(NullLogger<InMemoryEventBus>.Instance);
-            var gate = new SettingsWriteGate();
-            var settingsManager = new SettingsManager(NullLogger<SettingsManager>.Instance, Path.Combine(dir.FullName, "settings.json"), gate);
+            var settingsManager = new SettingsManager(NullLogger<SettingsManager>.Instance, Path.Combine(dir.FullName, "settings.json"));
             var server = new KestrelHttpServer(null!, settingsManager, [], NullLogger<KestrelHttpServer>.Instance, NullLoggerFactory.Instance);
             var uiSettings = new MemorySettings();
             var dispatcher = new ManualUiDispatcher();
             var connection = new BotConnectionManager(new PoproshaykaBot.Core.Infrastructure.Hosting.AppHost([], NullLogger<PoproshaykaBot.Core.Infrastructure.Hosting.AppHost>.Instance), [], null, bus, NullLogger<BotConnectionManager>.Instance);
             var accounts = new AccountsStore(filePath: Path.Combine(dir.FullName, "accounts.json"));
-            var settingsPage = new SettingsPageViewModel([], settingsManager, gate, server, bus, NullLogger<SettingsPageViewModel>.Instance, System.Reflection.DispatchProxy.Create<IDialogService, SettingsNavigationSaveTests.InertProxy>(), uiSettings);
+            var settingsPage = new SettingsPageViewModel([], settingsManager, server, bus, NullLogger<SettingsPageViewModel>.Instance, System.Reflection.DispatchProxy.Create<IDialogService, SettingsNavigationSaveTests.InertProxy>(), uiSettings);
             var layoutStore = new DashboardLayoutStore(filePath: Path.Combine(dir.FullName, "layout.json"));
             using var overview = new DashboardViewModel([], new DashboardLayoutCoordinator(layoutStore), TimeProvider.System);
             var history = new BroadcastHistoryStore(null, Path.Combine(dir.FullName, "broadcasts.json"), Path.Combine(dir.FullName, "sessions.json"));

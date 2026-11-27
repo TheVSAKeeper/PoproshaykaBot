@@ -51,7 +51,7 @@ public sealed class MultiChannelBroadcastLifecycleTests
             Path.Combine(_directory, "active_session.json"));
 
         var targetChannel = new FakeTargetChannelProvider("tw_main");
-        var settingsManager = Substitute.For<SettingsManager>(NullLogger<SettingsManager>.Instance, null, null);
+        var settingsManager = Substitute.For<SettingsManager>(NullLogger<SettingsManager>.Instance, null);
         settingsManager.Current.Returns(new AppSettings { Twitch = { Channel = "tw_main" } });
 
         _drafts = new(_historyStore, _activeStore, targetChannel, _time, NullLogger<BroadcastDraftCoordinator>.Instance);

@@ -221,10 +221,9 @@ public sealed class Stage3MultiChannelWpfTests
     }
 
     [Test]
-    public async Task ChannelsContributor_saves_switch_mode_preselected_next_preserves_live_active_and_respects_SettingsWriteGate()
+    public async Task ChannelsContributor_saves_switch_mode_preselected_next_and_preserves_live_active()
     {
-        var gate = new SettingsWriteGate();
-        var catalog = new ChannelCatalogStore(null, Path.Combine(_root, "channels.json"), gate);
+        var catalog = new ChannelCatalogStore(null, Path.Combine(_root, "channels.json"));
         catalog.Mutate(s =>
         {
             s.Channels =
@@ -264,11 +263,6 @@ public sealed class Stage3MultiChannelWpfTests
             Assert.That(routing.PreselectedNextChannelId, Is.EqualTo("UC_B"));
             Assert.That(routing.ActiveChannelId, Is.EqualTo("UC_C"));
         });
-
-        await gate.RunExternalWriteAsync(() => Task.FromResult(0), static _ => ["channels.json"]);
-        catalogVm.SelectedSwitchModeOption = catalogVm.SwitchModeOptions.First(o => o.Mode == ChannelSwitchMode.Manual);
-        var blocked = await contributor.SaveAsync(new(), appSettingsWritten: true);
-        Assert.That(blocked.Written, Is.False);
     }
 
     [Test]
@@ -569,8 +563,7 @@ public sealed class Stage3MultiChannelWpfTests
     [Test]
     public async Task ChannelCatalogVm_rejects_unresolved_channel_input_and_preserves_externally_cleared_preselected_next()
     {
-        var gate = new SettingsWriteGate();
-        var catalog = new ChannelCatalogStore(null, Path.Combine(_root, "channels2.json"), gate);
+        var catalog = new ChannelCatalogStore(null, Path.Combine(_root, "channels2.json"));
         catalog.Mutate(s =>
         {
             s.Channels =
@@ -899,8 +892,7 @@ public sealed class Stage3MultiChannelWpfTests
     public async Task StreamInfoTile_and_StreamMonitoringViewModel_surface_active_channel_preselected_next_and_monitoring_issues()
     {
         var bus = new InMemoryEventBus(NullLogger<InMemoryEventBus>.Instance);
-        var gate = new SettingsWriteGate();
-        var catalog = new ChannelCatalogStore(null, Path.Combine(_root, "channels.json"), gate);
+        var catalog = new ChannelCatalogStore(null, Path.Combine(_root, "channels.json"));
         var ytA = new ChannelKey(StreamingPlatform.YouTube, "UC_A");
         var ytB = new ChannelKey(StreamingPlatform.YouTube, "UC_B");
         catalog.Mutate(s =>

@@ -1,13 +1,7 @@
-﻿using PoproshaykaBot.Core.Broadcast.Profiles;
-using PoproshaykaBot.Core.Chat.Commands;
-using PoproshaykaBot.Core.Settings;
+﻿using PoproshaykaBot.Core.Settings;
 using PoproshaykaBot.Core.Settings.Migrations.LegacyImport;
-using PoproshaykaBot.Core.Settings.Obs;
-using PoproshaykaBot.Core.Settings.Stores;
 using System.Globalization;
 using System.IO;
-using System.Text.Json;
-using System.Text.Json.Nodes;
 
 namespace PoproshaykaBot.Wpf.ViewModels.Migration;
 
@@ -22,46 +16,40 @@ public sealed record FirstRunImportSummary(
 public static class LegacyImportText
 {
     private static readonly CultureInfo Russian = CultureInfo.GetCultureInfo("ru-RU");
-    private static readonly JsonSerializerOptions ImportSummaryJsonOptions = new(JsonStoreOptions.Default)
-    {
-        PropertyNameCaseInsensitive = true,
-        ReadCommentHandling = JsonCommentHandling.Skip,
-        AllowTrailingCommas = true,
-    };
 
     private static readonly Dictionary<string, string> FileTitles = new(StringComparer.OrdinalIgnoreCase)
     {
-        ["settings.json"] = "Основные настройки",
-        ["channels.json"] = "Каналы и группы каналов",
-        ["chat.json"] = "Настройки чата",
-        ["accounts.json"] = "Данные входа в Twitch",
-        ["youtube.json"] = "Настройки YouTube",
-        ["youtube-accounts.json"] = "Данные входа в YouTube",
-        ["broadcast-profiles.json"] = "Профили трансляции",
-        ["broadcast-profile-platforms.json"] = "Площадки профилей рассылки",
-        ["broadcast-profile-youtube.json"] = "Параметры YouTube профилей рассылки",
-        ["commands.json"] = "Настройки команд чата",
-        ["command-usage.json"] = "Статистика использования команд",
-        ["dashboard-layout.json"] = "Раскладка обзора",
-        ["obs-chat.json"] = "Оформление чата для OBS",
-        ["obs-integration.json"] = "Подключение к OBS",
-        ["polls.json"] = "Профили голосований",
-        ["platform-lifecycle.json"] = "Автозапуск бота по площадкам",
-        ["polls-history.json"] = "История голосований",
-        ["recent-categories.json"] = "Недавние категории",
-        ["update.json"] = "Настройки обновлений",
-        ["ui-preferences.toml"] = "Вид приложения",
-        ["user_statistics_catalog.json"] = "Каталог статистики зрителей",
-        ["users_statistics.json"] = "Статистика зрителей",
-        ["youtube/users_statistics.json"] = "Статистика зрителей YouTube",
-        ["youtube/quota.json"] = "Расход квоты YouTube",
-        ["bot_statistics.json"] = "Статистика бота",
-        ["broadcasts.json"] = "История эфиров",
-        ["active_broadcast.json"] = "Активный эфир",
-        ["stream_sessions.json"] = "История стримов",
-        ["unknown_commands.txt"] = "Список неизвестных команд",
-        ["chat-blockers.txt"] = "Правила скрытия в чате",
-        ["chat-zoom.txt"] = "Масштаб чата",
+        [SettingsFileNames.SettingsFileName] = "Основные настройки",
+        [SettingsFileNames.ChannelsFileName] = "Каналы и группы каналов",
+        [SettingsFileNames.ChatSettingsFileName] = "Настройки чата",
+        [SettingsFileNames.AccountsFileName] = "Данные входа в Twitch",
+        [SettingsFileNames.YouTubeSettingsFileName] = "Настройки YouTube",
+        [SettingsFileNames.YouTubeAccountsFileName] = "Данные входа в YouTube",
+        [SettingsFileNames.BroadcastProfilesFileName] = "Профили трансляции",
+        [SettingsFileNames.BroadcastProfilePlatformsFileName] = "Площадки профилей рассылки",
+        [SettingsFileNames.BroadcastProfileYouTubeFileName] = "Параметры YouTube профилей рассылки",
+        [SettingsFileNames.CommandSettingsFileName] = "Настройки команд чата",
+        [SettingsFileNames.CommandUsageFileName] = "Статистика использования команд",
+        [SettingsFileNames.DashboardLayoutFileName] = "Раскладка обзора",
+        [SettingsFileNames.ObsChatFileName] = "Оформление чата для OBS",
+        [SettingsFileNames.ObsIntegrationFileName] = "Подключение к OBS",
+        [SettingsFileNames.PollsFileName] = "Профили голосований",
+        [SettingsFileNames.PlatformLifecycleFileName] = "Автозапуск бота по площадкам",
+        [SettingsFileNames.PollsHistoryFileName] = "История голосований",
+        [SettingsFileNames.RecentCategoriesFileName] = "Недавние категории",
+        [SettingsFileNames.UpdateFileName] = "Настройки обновлений",
+        [SettingsFileNames.UiPreferencesFileName] = "Вид приложения",
+        [SettingsFileNames.UserStatisticsCatalogFileName] = "Каталог статистики зрителей",
+        [SettingsFileNames.UserStatisticsFileName] = "Статистика зрителей",
+        [$"{SettingsFileNames.YouTubeFolderName}/{SettingsFileNames.UserStatisticsFileName}"] = "Статистика зрителей YouTube",
+        [SettingsFileNames.YouTubeQuotaFileName] = "Расход квоты YouTube",
+        [SettingsFileNames.BotStatisticsFileName] = "Статистика бота",
+        [SettingsFileNames.BroadcastsFileName] = "История эфиров",
+        [SettingsFileNames.ActiveBroadcastFileName] = "Активный эфир",
+        [SettingsFileNames.StreamSessionsFileName] = "История стримов",
+        [SettingsFileNames.UnknownCommandsFileName] = "Список неизвестных команд",
+        [SettingsFileNames.ChatBlockersFileName] = "Правила скрытия в чате",
+        [SettingsFileNames.ChatZoomFileName] = "Масштаб чата",
     };
 
     public static string DescribeKind(LegacyDataSourceKind kind)
@@ -139,142 +127,6 @@ public static class LegacyImportText
         return $"Последнее изменение: {modified.ToString("d MMMM yyyy, HH:mm", Russian)}";
     }
 
-    public static string BuildHeadline(LegacyImportResult result)
-    {
-        ArgumentNullException.ThrowIfNull(result);
-
-        if (result.Failures.Any(failure => !failure.DestinationWritten))
-        {
-            return result.HasChanges
-                ? "Данные перенесены не полностью."
-                : "Перенести данные не удалось.";
-        }
-
-        if (result.UnmigratedLegacyFiles.Count > 0)
-        {
-            return "Часть данных осталась на прежнем месте.";
-        }
-
-        if (result.Failures.Count > 0)
-        {
-            return "Данные перенесены. Часть исходных файлов сохранила прежние имена.";
-        }
-
-        if (result.IsInPlaceMigration && result.HasChanges)
-        {
-            return "Данные остались на месте и подготовлены к работе.";
-        }
-
-        return result.CopiedFiles.Count > 0
-            ? "Данные перенесены."
-            : "Переносить было нечего: все файлы уже на месте.";
-    }
-
-    public static string? BuildRestartNotice(LegacyImportResult result, bool isSettingsEntry)
-    {
-        ArgumentNullException.ThrowIfNull(result);
-
-        if (!isSettingsEntry || !result.HasChanges)
-        {
-            return null;
-        }
-
-        const string Restart = "Перенесённые данные вступят в силу после перезапуска приложения.";
-
-        var frozen = new List<string>();
-        var pluralName = false;
-
-        if (result.RewrittenSettingsFiles.Count > 0)
-        {
-            frozen.Add("настройки");
-            pluralName = true;
-        }
-
-        if (result.CopiedStatistics)
-        {
-            frozen.Add("статистика");
-        }
-
-        if (result.CopiedStreamHistory)
-        {
-            frozen.Add("история стримов");
-        }
-
-        if (result.CopiedPollHistory)
-        {
-            frozen.Add("история голосований");
-        }
-
-        if (result.CopiedYouTubeQuota)
-        {
-            frozen.Add("расход квоты YouTube");
-        }
-
-        if (result.CopiedChatHistory)
-        {
-            frozen.Add("кэш истории чата");
-        }
-
-        if (frozen.Count == 0)
-        {
-            return Restart;
-        }
-
-        var names = frozen.Count == 1
-            ? frozen[0]
-            : $"{string.Join(", ", frozen.Take(frozen.Count - 1))} и {frozen[^1]}";
-
-        var verb = frozen.Count == 1 && !pluralName ? "не сохраняется" : "не сохраняются";
-
-        return $"{Restart} До перезапуска {names} {verb} – чтобы не затереть перенесённое.";
-    }
-
-    public static IReadOnlyList<string> BuildCounts(LegacyImportResult result)
-    {
-        ArgumentNullException.ThrowIfNull(result);
-
-        var lines = new List<string>();
-
-        if (result.CopiedFiles.Count > 0)
-        {
-            lines.Add($"Перенесено: {Count(result.CopiedFiles.Count, "файл", "файла", "файлов")}.");
-        }
-
-        if (result.IsInPlaceMigration && result.MigratedSettingsFiles.Count > 0)
-        {
-            lines.Add($"Подготовлено на месте: {Count(result.MigratedSettingsFiles.Count, "файл", "файла", "файлов")}.");
-        }
-
-        if (result.SkippedFiles.Count > 0)
-        {
-            lines.Add($"Оставлено без изменений: {Count(result.SkippedFiles.Count, "файл", "файла", "файлов")} – такие данные здесь уже есть.");
-        }
-
-        var failedCopies = result.Failures.Count(failure => !failure.DestinationWritten);
-        if (failedCopies > 0)
-        {
-            lines.Add($"Не удалось перенести: {Count(failedCopies, "файл", "файла", "файлов")}.");
-        }
-
-        if (result.HasChanges && (result.Failures.Count > 0 || result.UnmigratedLegacyFiles.Count > 0))
-        {
-            var written = result.CopiedFiles.Concat(result.MigratedSettingsFiles)
-                .Select(DescribeFile)
-                .Select(Decapitalize)
-                .Distinct(StringComparer.CurrentCulture);
-            lines.Add($"Записано: {string.Join(", ", written)}.");
-        }
-
-        return lines;
-    }
-
-    public static IReadOnlyList<string> BuildFailures(LegacyImportResult result)
-    {
-        ArgumentNullException.ThrowIfNull(result);
-
-        return [.. result.Failures.Select(DescribeFailure)];
-    }
-
     public static string? DescribeUnmigrated(LegacyImportResult result)
     {
         ArgumentNullException.ThrowIfNull(result);
@@ -292,18 +144,6 @@ public static class LegacyImportText
 
         return $"Осталось на прежнем месте: {string.Join(", ", names)}. "
                + "В рабочей папке уже есть одноимённые файлы. Исходные и рабочие файлы сохранены.";
-    }
-
-    public static string? BuildAuthorizationNotice(LegacyImportResult result, bool isSettingsEntry)
-    {
-        ArgumentNullException.ThrowIfNull(result);
-
-        return BuildAuthorizationNotice(
-            result,
-            isSettingsEntry,
-            twitchEnabled: true,
-            twitchBotRequired: result.BotAuthorizationRequired,
-            youtubeBotRequired: false);
     }
 
     public static string? BuildAuthorizationNotice(
@@ -397,12 +237,12 @@ public static class LegacyImportText
             return "Не удалось прочитать содержимое папки. Проверьте права доступа или выберите другую папку.";
         }
 
-        var hasSettings = File.Exists(Path.Combine(fullPath, "settings.json"))
-            || Directory.Exists(Path.Combine(fullPath, "settings"));
+        var hasSettings = File.Exists(Path.Combine(fullPath, SettingsFileNames.SettingsFileName))
+            || Directory.Exists(Path.Combine(fullPath, SettingsFileNames.SettingsFolderName));
 
         return hasSettings
             ? "В выбранной папке не найдены подходящие файлы настроек или статистики PoproshaykaBot."
-            : "В выбранной папке не найдены данные PoproshaykaBot: отсутствуют настройки (settings.json или папка settings) и файлы статистики (users_statistics.json, bot_statistics.json).";
+            : $"В выбранной папке не найдены данные PoproshaykaBot: отсутствуют настройки ({SettingsFileNames.SettingsFileName} или папка {SettingsFileNames.SettingsFolderName}) и файлы статистики ({SettingsFileNames.UserStatisticsFileName}, {SettingsFileNames.BotStatisticsFileName}).";
     }
 
     public static string BuildInvalidImportReason(LegacyImportResult result)
@@ -433,24 +273,35 @@ public static class LegacyImportText
     {
         ArgumentNullException.ThrowIfNull(result);
 
+        var snapshot = FirstRunSummaryReader.Read(result) with
+        {
+            TwitchEnabled = twitchEnabled,
+            TwitchBotAuthMissing = twitchBotRequired,
+        };
+
+        return BuildFirstRunSummary(result, snapshot);
+    }
+
+    public static FirstRunImportSummary BuildFirstRunSummary(
+        LegacyImportResult result,
+        FirstRunImportSnapshot snapshot)
+    {
+        ArgumentNullException.ThrowIfNull(result);
+        ArgumentNullException.ThrowIfNull(snapshot);
+
         var transferred = new List<FirstRunSummaryItem>();
         var attention = new List<FirstRunSummaryItem>();
-        var copiedTargets = result.CopiedFiles
-            .Select(NormalizeRelativePath)
-            .ToHashSet(StringComparer.OrdinalIgnoreCase);
         var failedTargets = result.Failures
             .Where(static failure => !failure.DestinationWritten)
             .Select(static failure => NormalizeRelativePath(failure.RelativeTargetPath))
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
-        var targetPath = result.TargetPath;
-
-        AddBroadcastProfilesSummary(targetPath, copiedTargets, failedTargets, transferred, attention);
-        AddOverlayAndPortSummary(targetPath, copiedTargets, failedTargets, transferred, attention);
-        AddObsSummary(targetPath, copiedTargets, failedTargets, transferred, attention);
-        AddAutoBroadcastSummary(targetPath, copiedTargets, failedTargets, transferred, attention);
-        AddPhrasesAndRanksSummary(targetPath, copiedTargets, failedTargets, transferred, attention);
-        AddStatisticsSummary(targetPath, copiedTargets, failedTargets, transferred, attention);
+        AddBroadcastProfilesSummary(snapshot, failedTargets, transferred, attention);
+        AddOverlayAndPortSummary(snapshot, failedTargets, transferred, attention);
+        AddObsSummary(snapshot, failedTargets, transferred, attention);
+        AddAutoBroadcastSummary(snapshot, failedTargets, transferred, attention);
+        AddPhrasesAndRanksSummary(snapshot, failedTargets, transferred, attention);
+        AddStatisticsSummary(snapshot, failedTargets, transferred, attention);
 
         foreach (var failure in result.Failures)
         {
@@ -465,7 +316,12 @@ public static class LegacyImportText
             attention.Add(new("Файлы с прежними именами", unmigrated, IsWarning: true));
         }
 
-        if (BuildAuthorizationNotice(result, isSettingsEntry: false, twitchEnabled, twitchBotRequired, youtubeBotRequired: false) is { } authNotice)
+        if (BuildAuthorizationNotice(
+                result,
+                isSettingsEntry: false,
+                snapshot.TwitchEnabled,
+                snapshot.TwitchBotAuthMissing,
+                youtubeBotRequired: false) is { } authNotice)
         {
             attention.Add(new("Вход в Twitch", authNotice, IsWarning: true));
         }
@@ -482,26 +338,24 @@ public static class LegacyImportText
     }
 
     private static void AddBroadcastProfilesSummary(
-        string targetPath,
-        HashSet<string> copiedTargets,
+        FirstRunImportSnapshot snapshot,
         HashSet<string> failedTargets,
         List<FirstRunSummaryItem> transferred,
         List<FirstRunSummaryItem> attention)
     {
-        if (IsAnyFailed(failedTargets, "settings/broadcast-profiles.json", "broadcast-profiles.json"))
+        if (IsAnyFailed(failedTargets, SettingsPath(SettingsFileNames.BroadcastProfilesFileName), SettingsFileNames.BroadcastProfilesFileName))
         {
             attention.Add(new("Профили эфира", "Не удалось перенести файл профилей – создайте или восстановите их в разделе «Каналы и профили».", IsWarning: true));
             return;
         }
 
-        var profiles = ReadJson<BroadcastProfilesSettings>(ResolveCopiedTargetFile(targetPath, copiedTargets, "settings/broadcast-profiles.json", "broadcast-profiles.json"));
-        if (profiles is { Profiles.Count: > 0 })
+        if (snapshot.BroadcastProfilesCount is { } count and > 0)
         {
-            transferred.Add(new("Профили эфира", Count(profiles.Profiles.Count, "профиль", "профиля", "профилей")));
+            transferred.Add(new("Профили эфира", Count(count, "профиль", "профиля", "профилей")));
             return;
         }
 
-        if (profiles is not null)
+        if (snapshot.BroadcastProfilesCount is not null)
         {
             transferred.Add(new("Профили эфира", "Список профилей пуст – создать можно в разделе «Каналы и профили»"));
             return;
@@ -511,23 +365,16 @@ public static class LegacyImportText
     }
 
     private static void AddOverlayAndPortSummary(
-        string targetPath,
-        HashSet<string> copiedTargets,
+        FirstRunImportSnapshot snapshot,
         HashSet<string> failedTargets,
         List<FirstRunSummaryItem> transferred,
         List<FirstRunSummaryItem> attention)
     {
-        var obsChatFailed = IsAnyFailed(failedTargets, "settings/obs-chat.json", "obs-chat.json");
-        var settingsFailed = IsAnyFailed(failedTargets, "settings/settings.json", "settings.json");
+        var obsChatFailed = IsAnyFailed(failedTargets, SettingsPath(SettingsFileNames.ObsChatFileName), SettingsFileNames.ObsChatFileName);
+        var settingsFailed = IsAnyFailed(failedTargets, SettingsPath(SettingsFileNames.SettingsFileName), SettingsFileNames.SettingsFileName);
 
-        var obsChatPath = obsChatFailed
-            ? null
-            : ResolveCopiedTargetFile(targetPath, copiedTargets, "settings/obs-chat.json", "obs-chat.json");
-        var hasObsChat = obsChatPath is not null && ReadJsonNode(obsChatPath) is JsonObject;
-        var appSettings = settingsFailed
-            ? null
-            : ReadJson<AppSettings>(ResolveCopiedTargetFile(targetPath, copiedTargets, "settings/settings.json", "settings.json"));
-        var port = appSettings?.Twitch.HttpServerPort;
+        var hasObsChat = !obsChatFailed && snapshot.HasObsChat;
+        var port = settingsFailed ? null : snapshot.HttpServerPort;
         var hasPort = port is > 0;
 
         if (hasObsChat && hasPort)
@@ -562,20 +409,18 @@ public static class LegacyImportText
     }
 
     private static void AddObsSummary(
-        string targetPath,
-        HashSet<string> copiedTargets,
+        FirstRunImportSnapshot snapshot,
         HashSet<string> failedTargets,
         List<FirstRunSummaryItem> transferred,
         List<FirstRunSummaryItem> attention)
     {
-        if (IsAnyFailed(failedTargets, "settings/obs-integration.json", "obs-integration.json"))
+        if (IsAnyFailed(failedTargets, SettingsPath(SettingsFileNames.ObsIntegrationFileName), SettingsFileNames.ObsIntegrationFileName))
         {
             attention.Add(new("OBS и аудиоисточники", "Не удалось перенести настройки OBS – задайте подключение заново в разделе «Настройки».", IsWarning: true));
             return;
         }
 
-        var obs = ReadJson<ObsIntegrationSettings>(ResolveCopiedTargetFile(targetPath, copiedTargets, "settings/obs-integration.json", "obs-integration.json"));
-        if (obs is null)
+        if (!snapshot.HasObsIntegration)
         {
             attention.Add(new("OBS и аудиоисточники", "Настройки OBS в старой папке не найдены – при необходимости подключите OBS в Настройках."));
             return;
@@ -583,51 +428,50 @@ public static class LegacyImportText
 
         var parts = new List<string>
         {
-            obs.Enabled ? $"подключение {obs.Host}:{obs.Port}" : "параметры подключения сохранены",
+            snapshot.ObsEnabled ? $"подключение {snapshot.ObsHost}:{snapshot.ObsPort}" : "параметры подключения сохранены",
         };
 
-        if (!string.IsNullOrWhiteSpace(obs.DashboardMicrophoneName))
+        if (!string.IsNullOrWhiteSpace(snapshot.ObsDashboardMicrophoneName))
         {
-            parts.Add($"микрофон «{obs.DashboardMicrophoneName.Trim()}»");
+            parts.Add($"микрофон «{snapshot.ObsDashboardMicrophoneName.Trim()}»");
         }
 
-        var audioCount = obs.GetDashboardSourceNames().Count;
-        if (audioCount > 0)
+        if (snapshot.ObsAudioSourcesCount > 0)
         {
-            parts.Add(Count(audioCount, "аудиоисточник", "аудиоисточника", "аудиоисточников"));
+            parts.Add(Count(snapshot.ObsAudioSourcesCount, "аудиоисточник", "аудиоисточника", "аудиоисточников"));
         }
 
         transferred.Add(new("OBS и аудиоисточники", Capitalize(string.Join(", ", parts))));
     }
 
     private static void AddAutoBroadcastSummary(
-        string targetPath,
-        HashSet<string> copiedTargets,
+        FirstRunImportSnapshot snapshot,
         HashSet<string> failedTargets,
         List<FirstRunSummaryItem> transferred,
         List<FirstRunSummaryItem> attention)
     {
-        if (IsAnyFailed(failedTargets, "settings/settings.json", "settings.json", "settings/platform-lifecycle.json", "platform-lifecycle.json"))
+        if (IsAnyFailed(
+                failedTargets,
+                SettingsPath(SettingsFileNames.SettingsFileName),
+                SettingsFileNames.SettingsFileName,
+                SettingsPath(SettingsFileNames.PlatformLifecycleFileName),
+                SettingsFileNames.PlatformLifecycleFileName))
         {
             attention.Add(new("Авто-рассылка", "Не удалось перенести настройки авто-рассылки – проверьте раздел «Автоматика».", IsWarning: true));
             return;
         }
 
-        var appSettings = ReadJson<AppSettings>(ResolveCopiedTargetFile(targetPath, copiedTargets, "settings/settings.json", "settings.json"));
-        var hasLifecycle = ResolveCopiedTargetFile(targetPath, copiedTargets, "settings/platform-lifecycle.json", "platform-lifecycle.json") is not null;
-
-        if (appSettings is null && !hasLifecycle)
+        if (!snapshot.HasAutoBroadcast && !snapshot.HasPlatformLifecycle)
         {
             attention.Add(new("Авто-рассылка", "Параметры авто-рассылки в старой папке не найдены."));
             return;
         }
 
-        var auto = appSettings?.Twitch.AutoBroadcast;
-        if (auto is not null)
+        if (snapshot.HasAutoBroadcast)
         {
-            var status = auto.AutoBroadcastEnabled
-                ? $"включена, каждые {auto.BroadcastIntervalMinutes} мин"
-                : $"перенесена (сейчас выключена, интервал {auto.BroadcastIntervalMinutes} мин)";
+            var status = snapshot.AutoBroadcastEnabled
+                ? $"включена, каждые {snapshot.AutoBroadcastIntervalMinutes} мин"
+                : $"перенесена (сейчас выключена, интервал {snapshot.AutoBroadcastIntervalMinutes} мин)";
             transferred.Add(new("Авто-рассылка", Capitalize(status)));
             return;
         }
@@ -636,78 +480,79 @@ public static class LegacyImportText
     }
 
     private static void AddPhrasesAndRanksSummary(
-        string targetPath,
-        HashSet<string> copiedTargets,
+        FirstRunImportSnapshot snapshot,
         HashSet<string> failedTargets,
         List<FirstRunSummaryItem> transferred,
         List<FirstRunSummaryItem> attention)
     {
-        if (IsAnyFailed(failedTargets, "settings/settings.json", "settings.json", "settings/commands.json", "commands.json"))
+        if (IsAnyFailed(
+                failedTargets,
+                SettingsPath(SettingsFileNames.SettingsFileName),
+                SettingsFileNames.SettingsFileName,
+                SettingsPath(SettingsFileNames.CommandSettingsFileName),
+                SettingsFileNames.CommandSettingsFileName))
         {
             attention.Add(new("Фразы и ранги", "Не удалось перенести часть фраз или рангов – проверьте раздел «Настройки» и «Бот».", IsWarning: true));
             return;
         }
 
-        var appSettings = ReadJson<AppSettings>(ResolveCopiedTargetFile(targetPath, copiedTargets, "settings/settings.json", "settings.json"));
-        var commands = ReadJson<CommandSettings>(ResolveCopiedTargetFile(targetPath, copiedTargets, "settings/commands.json", "commands.json"));
-
-        if (appSettings is null && commands is null)
+        if (!snapshot.HasAppSettings && snapshot.CommandsCount is null)
         {
             attention.Add(new("Фразы и ранги", "Пользовательские фразы и ранги в старой папке не найдены."));
             return;
         }
 
         var parts = new List<string>();
-        if (appSettings is { Ranks.Ranks.Count: > 0 })
+        if (snapshot.RanksCount > 0)
         {
-            parts.Add(Count(appSettings.Ranks.Ranks.Count, "ранг", "ранга", "рангов"));
+            parts.Add(Count(snapshot.RanksCount, "ранг", "ранга", "рангов"));
         }
 
-        if (appSettings is not null)
+        if (snapshot.HasAppSettings)
         {
             parts.Add("фразы сообщений бота");
         }
 
-        if (commands is { Commands.Count: > 0 })
+        if (snapshot.CommandsCount is { } commandsCount and > 0)
         {
-            parts.Add(Count(commands.Commands.Count, "настроенная команда", "настроенные команды", "настроенных команд"));
+            parts.Add(Count(commandsCount, "настроенная команда", "настроенные команды", "настроенных команд"));
         }
 
         transferred.Add(new("Фразы и ранги", parts.Count > 0 ? Capitalize(string.Join(", ", parts)) : "Параметры рангов и фраз"));
     }
 
     private static void AddStatisticsSummary(
-        string targetPath,
-        HashSet<string> copiedTargets,
+        FirstRunImportSnapshot snapshot,
         HashSet<string> failedTargets,
         List<FirstRunSummaryItem> transferred,
         List<FirstRunSummaryItem> attention)
     {
-        if (IsAnyFailed(failedTargets, "users_statistics.json", "user_statistics_catalog.json", "stream_sessions.json", "broadcasts.json", "bot_statistics.json"))
+        if (IsAnyFailed(
+                failedTargets,
+                SettingsFileNames.UserStatisticsFileName,
+                SettingsFileNames.UserStatisticsCatalogFileName,
+                SettingsFileNames.StreamSessionsFileName,
+                SettingsFileNames.BroadcastsFileName,
+                SettingsFileNames.BotStatisticsFileName))
         {
             attention.Add(new("Статистика зрителей и сессий", "Часть файлов статистики не перенеслась и осталась в старой папке.", IsWarning: true));
             return;
         }
 
-        var viewersCount = CountViewers(targetPath, copiedTargets);
-        var sessionsCount = CountSessions(targetPath, copiedTargets);
-        var botNode = ReadJsonNode(ResolveCopiedTargetFile(targetPath, copiedTargets, "bot_statistics.json"));
-        var messagesProcessed = ReadUInt64Property(botNode, "totalMessagesProcessed");
-
         var parts = new List<string>();
-        if (viewersCount > 0)
+        if (snapshot.ViewersCount > 0)
         {
-            parts.Add(Count(viewersCount, "зритель", "зрителя", "зрителей"));
+            parts.Add(Count(snapshot.ViewersCount, "зритель", "зрителя", "зрителей"));
         }
 
-        if (sessionsCount > 0)
+        if (snapshot.SessionsCount > 0)
         {
-            parts.Add(Count(sessionsCount, "эфир", "эфира", "эфиров"));
+            parts.Add(Count(snapshot.SessionsCount, "эфир", "эфира", "эфиров"));
         }
 
-        if (parts.Count == 0 && messagesProcessed > 0)
+        if (parts.Count == 0 && snapshot.TotalMessagesProcessed > 0)
         {
-            parts.Add(Count((long)messagesProcessed, "сообщение", "сообщения", "сообщений"));
+            parts.Add(Count((long)snapshot.TotalMessagesProcessed, "сообщение", "сообщения", "сообщений"));
         }
 
         if (parts.Count > 0)
@@ -716,8 +561,7 @@ public static class LegacyImportText
             return;
         }
 
-        var hasAnyStatsFile = ResolveCopiedTargetFile(targetPath, copiedTargets, "users_statistics.json", "user_statistics_catalog.json", "stream_sessions.json", "broadcasts.json", "bot_statistics.json") is not null;
-        if (hasAnyStatsFile)
+        if (snapshot.HasAnyStatsFile)
         {
             transferred.Add(new("Статистика зрителей и сессий", "Файлы статистики перенесены"));
         }
@@ -727,88 +571,7 @@ public static class LegacyImportText
         }
     }
 
-    private static int CountViewers(string targetPath, HashSet<string> copiedTargets)
-    {
-        var catalog = ReadJsonNode(ResolveCopiedTargetFile(targetPath, copiedTargets, "user_statistics_catalog.json"));
-        if (GetJsonProperty(catalog, "accounts") is { } accounts)
-        {
-            var count = CountJsonItems(accounts);
-            if (count > 0)
-            {
-                return count;
-            }
-        }
-
-        var total = 0;
-        var twitchUsers = ReadJsonNode(ResolveCopiedTargetFile(targetPath, copiedTargets, "users_statistics.json"));
-        total += CountJsonItems(twitchUsers);
-
-        var youtubeUsers = ReadJsonNode(ResolveCopiedTargetFile(targetPath, copiedTargets, "youtube/users_statistics.json"));
-        total += CountJsonItems(youtubeUsers);
-
-        return total;
-    }
-
-    private static int CountSessions(string targetPath, HashSet<string> copiedTargets)
-    {
-        var broadcasts = ReadJsonNode(ResolveCopiedTargetFile(targetPath, copiedTargets, "broadcasts.json"));
-        var broadcastCount = CountJsonItems(GetJsonProperty(broadcasts, "records") ?? broadcasts);
-        if (broadcastCount > 0)
-        {
-            return broadcastCount;
-        }
-
-        var sessions = ReadJsonNode(ResolveCopiedTargetFile(targetPath, copiedTargets, "stream_sessions.json"));
-        return CountJsonItems(GetJsonProperty(sessions, "sessions") ?? sessions);
-    }
-
-    private static JsonNode? GetJsonProperty(JsonNode? node, string propertyName)
-    {
-        if (node is not JsonObject obj)
-        {
-            return null;
-        }
-
-        foreach (var pair in obj)
-        {
-            if (string.Equals(pair.Key, propertyName, StringComparison.OrdinalIgnoreCase))
-            {
-                return pair.Value;
-            }
-        }
-
-        return null;
-    }
-
-    private static int CountJsonItems(JsonNode? node)
-    {
-        return node switch
-        {
-            JsonArray array => array.Count,
-            JsonObject obj => obj.Count,
-            _ => 0,
-        };
-    }
-
-    private static ulong ReadUInt64Property(JsonNode? node, string propertyName)
-    {
-        if (GetJsonProperty(node, propertyName) is not JsonValue value)
-        {
-            return 0;
-        }
-
-        if (value.TryGetValue(out ulong parsed))
-        {
-            return parsed;
-        }
-
-        if (value.TryGetValue(out long signed) && signed > 0)
-        {
-            return (ulong)signed;
-        }
-
-        return 0;
-    }
+    private static string SettingsPath(string fileName) => $"{SettingsFileNames.SettingsFolderName}/{fileName}";
 
     private static bool IsAnyFailed(HashSet<string> failedTargets, params string[] relativePaths)
     {
@@ -826,72 +589,6 @@ public static class LegacyImportText
     private static string NormalizeRelativePath(string path)
     {
         return path.Replace('\\', '/').Trim('/');
-    }
-
-    private static string? ResolveCopiedTargetFile(
-        string targetPath,
-        HashSet<string> copiedTargets,
-        params string[] relativeCandidates)
-    {
-        if (string.IsNullOrWhiteSpace(targetPath) || copiedTargets.Count == 0)
-        {
-            return null;
-        }
-
-        const string settingsPrefix = "settings/";
-        foreach (var candidate in relativeCandidates)
-        {
-            var normalized = NormalizeRelativePath(candidate);
-            var wasCopied = copiedTargets.Contains(normalized)
-                || (normalized.StartsWith(settingsPrefix, StringComparison.OrdinalIgnoreCase)
-                    && copiedTargets.Contains(normalized[settingsPrefix.Length..]));
-            if (!wasCopied)
-            {
-                continue;
-            }
-
-            var full = Path.Combine(targetPath, candidate.Replace('/', Path.DirectorySeparatorChar));
-            if (File.Exists(full))
-            {
-                return full;
-            }
-        }
-
-        return null;
-    }
-
-    private static JsonNode? ReadJsonNode(string? filePath)
-    {
-        if (string.IsNullOrWhiteSpace(filePath) || !File.Exists(filePath))
-        {
-            return null;
-        }
-
-        try
-        {
-            return JsonNode.Parse(File.ReadAllText(filePath));
-        }
-        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or JsonException)
-        {
-            return null;
-        }
-    }
-
-    private static T? ReadJson<T>(string? filePath) where T : class
-    {
-        if (string.IsNullOrWhiteSpace(filePath) || !File.Exists(filePath))
-        {
-            return null;
-        }
-
-        try
-        {
-            return JsonSerializer.Deserialize<T>(File.ReadAllText(filePath), ImportSummaryJsonOptions);
-        }
-        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or JsonException)
-        {
-            return null;
-        }
     }
 
     private static string Capitalize(string text)

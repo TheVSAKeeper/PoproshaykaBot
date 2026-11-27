@@ -304,12 +304,6 @@ internal static partial class AppLog
     [LoggerMessage(EventId = 1409, Level = LogLevel.Warning, Message = "Не удалось управлять дополнительным выходом OBS «{OutputName}»")]
     public static partial void ObsSecondaryOutputActionFailed(this ILogger logger, Exception? exception, string outputName);
 
-    [LoggerMessage(EventId = 1207, Level = LogLevel.Information, Message = "Пользователь открыл перенос данных предыдущей версии из настроек: источников – {Count}")]
-    public static partial void LegacyImportOpenedFromSettings(this ILogger logger, int count);
-
-    [LoggerMessage(EventId = 1208, Level = LogLevel.Warning, Message = "Перенос данных предыдущей версии недоступен в автоматическом режиме")]
-    public static partial void LegacyImportSuppressedHeadless(this ILogger logger);
-
     [LoggerMessage(EventId = 1330, Level = LogLevel.Warning, Message = "Поиск данных предыдущей версии не завершился")]
     public static partial void LegacyImportSourceSearchFailed(this ILogger logger, Exception exception);
 

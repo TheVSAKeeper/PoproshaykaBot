@@ -18,11 +18,11 @@ public class SettingsManager
 
     private AppSettings? _currentSettings;
 
-    public SettingsManager(ILogger<SettingsManager> logger, string? settingsFilePath = null, SettingsWriteGate? gate = null)
+    public SettingsManager(ILogger<SettingsManager> logger, string? settingsFilePath = null)
     {
         _logger = logger;
-        _settingsFilePath = settingsFilePath ?? AppPaths.SettingsFile("settings.json");
-        _store = new(_settingsFilePath, logger, parser: ParseFile, describe: SettingsDescriber.Describe, gate: gate);
+        _settingsFilePath = settingsFilePath ?? AppPaths.SettingsFile(SettingsFileNames.SettingsFileName);
+        _store = new(_settingsFilePath, logger, parser: ParseFile, describe: SettingsDescriber.Describe);
     }
 
     public virtual AppSettings Current
@@ -38,31 +38,19 @@ public class SettingsManager
 
     public event Action? SettingsSaved;
 
-    public bool IsWriteRevoked => _store.IsWriteRevoked;
-
-    public virtual bool SaveSettings(AppSettings settings) => SaveSettingsCore(settings, applyWhenBlocked: true);
-
-    public bool SaveSettingsIfWritable(AppSettings settings) => SaveSettingsCore(settings, applyWhenBlocked: false);
-
-    private bool SaveSettingsCore(AppSettings settings, bool applyWhenBlocked)
+    public virtual bool SaveSettings(AppSettings settings)
     {
         ArgumentNullException.ThrowIfNull(settings);
 
         _logger.LogDebug("Начало сохранения user-настроек в {SettingsFilePath}", _settingsFilePath);
 
-        bool written;
-        var notify = false;
         lock (_syncLock)
         {
             try
             {
-                written = _store.Save(settings, applyWhenBlocked);
-                if (written || applyWhenBlocked)
-                {
-                    _currentSettings = _store.Load();
-                    LogApplied(written);
-                    notify = true;
-                }
+                _store.Save(settings);
+                _currentSettings = _store.Load();
+                _logger.LogInformation("User-настройки приложения сохранены");
             }
             catch (Exception exception)
             {
@@ -71,35 +59,21 @@ public class SettingsManager
             }
         }
 
-        if (notify)
-        {
-            NotifySettingsSaved();
-        }
-
-        return written;
+        NotifySettingsSaved();
+        return true;
     }
 
-    public virtual bool Mutate(Action<AppSettings> mutator) => MutateCore(mutator, applyWhenBlocked: true);
-
-    public bool MutateIfWritable(Action<AppSettings> mutator) => MutateCore(mutator, applyWhenBlocked: false);
-
-    private bool MutateCore(Action<AppSettings> mutator, bool applyWhenBlocked)
+    public virtual bool Mutate(Action<AppSettings> mutator)
     {
         ArgumentNullException.ThrowIfNull(mutator);
 
-        bool written;
-        var notify = false;
         lock (_syncLock)
         {
             try
             {
-                written = _store.Mutate(mutator, applyWhenBlocked);
-                if (written || applyWhenBlocked)
-                {
-                    _currentSettings = _store.Load();
-                    LogApplied(written);
-                    notify = true;
-                }
+                _store.Mutate(mutator);
+                _currentSettings = _store.Load();
+                _logger.LogInformation("User-настройки приложения сохранены");
             }
             catch (Exception exception)
             {
@@ -108,12 +82,8 @@ public class SettingsManager
             }
         }
 
-        if (notify)
-        {
-            NotifySettingsSaved();
-        }
-
-        return written;
+        NotifySettingsSaved();
+        return true;
     }
 
     private void NotifySettingsSaved()
@@ -148,18 +118,6 @@ public class SettingsManager
         }
     }
 
-    private void LogApplied(bool written)
-    {
-        if (written)
-        {
-            _logger.LogInformation("User-настройки приложения сохранены");
-            return;
-        }
-
-        _logger.LogInformation("User-настройки приложения приняты в памяти и действуют до перезапуска: файл {SettingsFilePath} переписан снаружи, и класть поверх него прочитанное раньше нельзя",
-            _settingsFilePath);
-    }
-
     private void SanitizeRanks(AppSettings settings)
     {
         var ranks = settings.Ranks.Ranks;
@@ -192,9 +150,7 @@ public class SettingsManager
             throw new InvalidOperationException("Корневой элемент settings.json не является JSON-объектом");
         }
 
-        var baseDirectory = Path.GetDirectoryName(_settingsFilePath)!;
-
-        if (SettingsMigrator.Migrate(root, _logger, baseDirectory).Changed)
+        if (SettingsMigrator.Migrate(root, _logger, baseDirectory: null).Changed)
         {
             JsonStoreBackup.CreateBackup(_settingsFilePath, "pre-migration", _logger, AccountsTokenRedactor.Redact);
             var migratedJson = root.ToJsonString(JsonStoreOptions.Default);

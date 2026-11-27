@@ -20,7 +20,7 @@ public sealed class FarewellMessageHandlerTests
         _twitchPlatform = new(StreamingPlatform.Twitch, "Twitch", isConnected: true);
         _platformRegistry = new([_twitchPlatform]);
 
-        _settingsManager = Substitute.For<SettingsManager>(NullLogger<SettingsManager>.Instance, null, null);
+        _settingsManager = Substitute.For<SettingsManager>(NullLogger<SettingsManager>.Instance, null);
         _settings = new();
         _settingsManager.Current.Returns(_settings);
 

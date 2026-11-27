@@ -29,7 +29,7 @@ public partial class App
                 return (headlessTarget is null, [], headlessTarget);
             }
 
-            var (candidates, target) = await LegacyImportViewModel.ScanAsync(logger);
+            var (candidates, target) = await FirstRunStartViewModel.ScanAsync(logger);
             var offerImport = target is null;
 
             if (offerImport)
@@ -66,6 +66,15 @@ public partial class App
             return uiSettings;
         }
 
+        return ReopenUiSettings(uiSettings, uiSettingsPath, themePackLoader, applyThemeAndFont: true);
+    }
+
+    internal static ISettingsStore ReopenUiSettings(
+        ISettingsStore uiSettings,
+        string uiSettingsPath,
+        ThemePackLoader themePackLoader,
+        bool applyThemeAndFont)
+    {
         uiSettings.Close();
 
         if (uiSettings is IDisposable disposable)
@@ -75,11 +84,13 @@ public partial class App
 
         ISettingsStore reloaded = new SettingsStore(uiSettingsPath);
 
-        var themeKey = themePackLoader.Restore(reloaded);
-        ThemeManager.Apply(themeKey ?? ThemeManager.DefaultLight.Key);
-        FontScaleManager.Apply(reloaded.GetDouble(SettingsKeys.FontScale, FontScaleManager.DefaultScale));
-
-        HostLog.Information("Перенесённые настройки вида перечитаны из {Path}", uiSettingsPath);
+        if (applyThemeAndFont)
+        {
+            var themeKey = themePackLoader.Restore(reloaded);
+            ThemeManager.Apply(themeKey ?? ThemeManager.DefaultLight.Key);
+            FontScaleManager.Apply(reloaded.GetDouble(SettingsKeys.FontScale, FontScaleManager.DefaultScale));
+            HostLog.Information("Настройки вида перечитаны из {Path}", uiSettingsPath);
+        }
 
         return reloaded;
     }
